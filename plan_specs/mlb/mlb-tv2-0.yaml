@@ -1,0 +1,135 @@
+# Plan spec — MLB-TV2-0 (FULL tier: the totals-ceiling diagnosis; gates the whole TV2 epic)
+# Authored by PM 2026-08-25. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: mlb-tv2-0
+  vertical: mlb
+  card: https://trello.com/c/pa4ii3tQ   # EPIC TV2; the TV2-0 card is pulled to the Sprint at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    TV2-0: diagnose WHICH LEVER binds the served totals distribution's
+    ceiling, with a pre-registered decision rule that routes the epic.
+    The served number is v6 NGBoost Normal point-and-scale (norm.sf, no
+    serve-time calibrator, ECE ~0.06-0.10, systematic OVER lean). The
+    recorded wall: V2 fixed MAE + mean-residual but FAILED the variance
+    gate (std_pred 0.773 vs >=2.0, deferred to Phase 9); MH2.6/8 measured
+    a symmetric Normal against a right-skewed target over-stating P(over)
+    ~5.6pts at the line; 487 features and three learner classes all hit
+    the same wall. The epic's thesis: the ceiling is (a) feature TYPE
+    (everything predicts the mean, nothing carries DISPERSION) and/or
+    (b) distributional ARCHITECTURE (a forced unimodal shape). TV2-0
+    measures which, without building either fix. best_alpha=0;
+    bet_paused stays true; market-blind; nothing serves; a
+    projection/pricing-quality diagnosis, never an edge claim.
+  acceptanceCriteria:
+    - description: >
+        PRE-REGISTER (commit before any scoring) the diagnostic battery AND
+        the decision rule that maps outcomes to routes. The battery must
+        separate the two levers with oracle-style bounds rather than fits:
+        (a) DISPERSION-ORACLE leg — hold the served mean, replace sigma
+        with a realized-variance-informed oracle (and a leaky-feature
+        oracle as the upper bound): how much of the std_pred/PIT failure
+        closes when sigma alone is fixed? That bounds the feature lever.
+        (b) SHAPE leg — after the sigma fix, measure the residual PIT
+        asymmetry / right-tail miss (the MH2.8 skew signature): what
+        remains that no scale can fix? That bounds the architecture lever.
+        (c) IRREDUCIBILITY leg — an oracle ceiling for both combined, so
+        "neither lever suffices" is a measurable outcome, not a shrug.
+        Exact estimators/metrics (PIT flatness, coverage, std_pred, CRPS)
+        and fold scheme are the session's to design INSIDE the registered
+        shape; the epic's design-of-record (production_model_state/
+        mlb_totals.md, MH2.6/8/10, Story 10.2) is the source.
+    - description: >
+        THE DECISION RULE, registered forward, with named outcomes:
+        FEATURE-BOUND -> TV2-1 (dispersion feature store) is funded first;
+        SHAPE-BOUND -> TV2-2 (mixture-density head) is funded first;
+        BOTH -> TV2-1 then TV2-2 in the epic's staged order;
+        IRREDUCIBLE -> neither is funded and E13.6b Part B (the HELD
+        serve-time calibrator) UN-HOLDS as the honest patch for the served
+        P(over). The rule binds the epic's routing — choosing a route the
+        outcomes don't license is the post-hoc trap this story exists to
+        prevent.
+    - description: >
+        POSITIVE CONTROL, per the standing recipe (HV2-1 ruling 3 /
+        cv_power card defect 4): inject a known dispersion deficit and a
+        known shape deficit into synthetic draws and show each diagnostic
+        leg detects ITS deficit and not the other's — a diagnosis whose
+        legs can't separate planted causes can't separate real ones.
+        RED-prove both directions.
+    - description: >
+        PROHIBITIONS: no new fitted arms competing to ship (this is a
+        diagnosis, not a bake-off — the HBART/A1 arm rides the LATER
+        registered battery, not here); no serve-time changes; no re-read
+        of MH2.8's skew-normal DSR failure (cited as evidence, not
+        re-opened); market-blind throughout — no odds-store reads (the
+        MLB-ODDS1 coverage defects make any market-referenced leg
+        unreliable and none is needed).
+    - description: >
+        Standing disciplines: reproduction pin 1e-9 on a committed
+        fixture; RED-proofs (mutation landed + predicate moved);
+        no bitwise artifact comparisons where a stochastic fit is
+        involved — tolerance-scoped; runtime handoff rule — time a small
+        slice first, hand anything expected >2 min to the operator as a
+        paste-ready command with runtime/artifact/success criteria.
+    - description: >
+        Decisive record in ablation_results (mlb_tv2_0_*) carrying the
+        measured bounds per lever, the triggered decision-rule outcome,
+        and the routing verdict stated loudly. classify_null applies to
+        each leg where a null is possible; hand-record any binding gate
+        the instrument cannot yet name (the cv_power card's interim rule).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: mlb-tv2-0
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "TV2" / "E13.6b calibrator" (board Credence Sports, 2026-08-25)'
+    duplicates: []
+    adjacent:
+      - "TV2-1 / TV2-2 (Backlog) — GATED ON THIS; not built here."
+      - "E13.6b Part B calibrator — HELD; this story's IRREDUCIBLE outcome is what un-holds it; do not build it here."
+      - "MLB-ODDS1 (To Do) — the odds-store defects; avoided entirely by the market-blind prohibition."
+      - "HV2-x — H2H; disjoint. TV2-3/TV2-4 — downstream epic stories; untouched."
+  triedLedger:
+    files:
+      - "production_model_state/mlb_totals.md (PROD-STATE-1a: the served contract, the variance-gate deferral)"
+      - "MH2.6 / MH2.8 / MH2.10 records (the skew measurement; the skew-normal recal's DSR failure); totals_v1_architecture_comparison.md (Story 10.2)"
+    recordedNulls:
+      - "MH2.8 skew-normal recal cleared the served-row gate but FAILED DSR — cited as shape-lever evidence; not re-read, not re-fit."
+      - "V2's variance-gate failure (std_pred 0.773 vs >=2.0) — the deferral this story finally adjudicates; the gate value is the target, not a bar to relax."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "The TV2 epic's routing (TV2-1 vs TV2-2 vs both vs calibrator un-hold); the served P(over)'s eventual honest fix"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: mlb-tv2-0-plan
+spec:
+  goalRef: { name: mlb-tv2-0 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-prereg
+        desc: "Diagnostic battery + decision rule + positive-control design, committed BEFORE scoring."
+      - id: 2-controls
+        desc: "Run the injected-deficit positive controls; both legs must separate planted causes."
+      - id: 3-diagnose
+        desc: "Dispersion-oracle, shape, and irreducibility legs on the real folds (slice-timed; operator handoff if >2 min)."
+      - id: 4-verdict
+        desc: "Trigger the registered decision rule; decisive record with the routing stated loudly."
+      - id: 5-closeout
+        desc: "Verdict + findings into closeout.followUps; operator summary naming the funded route."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

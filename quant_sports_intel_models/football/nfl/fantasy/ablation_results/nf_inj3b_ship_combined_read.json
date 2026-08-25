@@ -1,10 +1,10 @@
 {
   "story": "NF-INJ3b-SHIP",
   "read": "node 5 \u2014 the D10 COMBINED READ (placement + interval) on the publish candidate",
-  "generated_at": "2026-08-25T02:47:09.642303+00:00",
+  "generated_at": "2026-08-25T03:21:53.847277+00:00",
   "publish_state": {
     "season": 2026,
-    "generated_at": "2026-08-25T02:45:57.492382+00:00",
+    "generated_at": "2026-08-25T03:21:29.360257+00:00",
     "projection_source": "nf1_5",
     "n_players": 868,
     "n_rookie_rows": 81,
@@ -137,7 +137,7 @@
         "depth_chart_as_of": "2026-08-14 08:10:38",
         "sleeper_status_as_of": "2026-08-20T13:30:16.384327+00:00"
       },
-      "projection_built_at": "2026-08-25T02:45:41.565681+00:00",
+      "projection_built_at": "2026-08-25T03:20:50.014462+00:00",
       "market_refresh": true
     },
     "binds_to": "THE BOARD, NOT THE DATE. If `reported_absence_count` changes (NF-INJ-NEWS-1 overrides adopted or withdrawn), or `n_rookie_rows` changes (the roster cutdown), or `injury_games_policy` changes, the board that would publish is no longer the board this read covers and the combined read must be RE-RUN before it ships."
@@ -199,14 +199,14 @@
           {
             "band": "121-300",
             "n": 180,
-            "mean_abs_move": 6.74,
+            "mean_abs_move": 6.81,
             "median_abs_move": 5,
-            "max_abs_move": 41
+            "max_abs_move": 44
           },
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 23.39,
+            "mean_abs_move": 23.32,
             "median_abs_move": 16,
             "max_abs_move": 215
           }
@@ -342,8 +342,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 2.31,
-          "rookie_mean_move": -22.46,
+          "veteran_mean_move": 2.32,
+          "rookie_mean_move": -22.57,
           "rookie_top60": {
             "n": 4,
             "mean_move": -22.0,
@@ -351,16 +351,16 @@
           },
           "rookie_by_position": {
             "QB": 9.0,
-            "RB": -79.69,
+            "RB": -79.77,
             "TE": -0.41,
-            "WR": -24.0
+            "WR": -24.22
           }
         },
         "market_read_not_a_gate": {
           "n": 217,
-          "rho_incumbent": 0.6719,
-          "rho_recalibrated": 0.6496,
-          "delta": -0.0223
+          "rho_incumbent": 0.6716,
+          "rho_recalibrated": 0.6494,
+          "delta": -0.0222
         },
         "gates": {
           "within_position_order": true,
@@ -396,16 +396,16 @@
           {
             "band": "121-300",
             "n": 180,
-            "mean_abs_move": 6.97,
+            "mean_abs_move": 7.04,
             "median_abs_move": 3,
-            "max_abs_move": 62
+            "max_abs_move": 61
           },
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 23.06,
+            "mean_abs_move": 23.1,
             "median_abs_move": 15,
-            "max_abs_move": 209
+            "max_abs_move": 210
           }
         ],
         "composition": {
@@ -539,8 +539,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 1.77,
-          "rookie_mean_move": -17.2,
+          "veteran_mean_move": 1.78,
+          "rookie_mean_move": -17.31,
           "rookie_top60": {
             "n": 4,
             "mean_move": -16.25,
@@ -548,16 +548,16 @@
           },
           "rookie_by_position": {
             "QB": 6.8,
-            "RB": -82.31,
-            "TE": -1.64,
-            "WR": -9.86
+            "RB": -82.23,
+            "TE": -1.73,
+            "WR": -10.08
           }
         },
         "market_read_not_a_gate": {
           "n": 217,
-          "rho_incumbent": 0.7265,
-          "rho_recalibrated": 0.719,
-          "delta": -0.0075
+          "rho_incumbent": 0.7257,
+          "rho_recalibrated": 0.7185,
+          "delta": -0.0072
         },
         "gates": {
           "within_position_order": true,
@@ -593,14 +593,14 @@
           {
             "band": "121-300",
             "n": 180,
-            "mean_abs_move": 7.47,
+            "mean_abs_move": 7.49,
             "median_abs_move": 3,
             "max_abs_move": 40
           },
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 31.11,
+            "mean_abs_move": 31.1,
             "median_abs_move": 19,
             "max_abs_move": 250
           }
@@ -736,8 +736,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 3.15,
-          "rookie_mean_move": -30.59,
+          "veteran_mean_move": 3.16,
+          "rookie_mean_move": -30.69,
           "rookie_top60": {
             "n": 4,
             "mean_move": -14.25,
@@ -746,15 +746,15 @@
           "rookie_by_position": {
             "QB": 9.0,
             "RB": -176.69,
-            "TE": -4.23,
-            "WR": -4.94
+            "TE": -4.09,
+            "WR": -5.25
           }
         },
         "market_read_not_a_gate": {
           "n": 217,
-          "rho_incumbent": 0.7455,
-          "rho_recalibrated": 0.742,
-          "delta": -0.0034
+          "rho_incumbent": 0.7451,
+          "rho_recalibrated": 0.7415,
+          "delta": -0.0036
         },
         "gates": {
           "within_position_order": true,
@@ -790,14 +790,14 @@
           {
             "band": "121-300",
             "n": 180,
-            "mean_abs_move": 8.11,
+            "mean_abs_move": 7.99,
             "median_abs_move": 3,
             "max_abs_move": 77
           },
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 37.28,
+            "mean_abs_move": 37.26,
             "median_abs_move": 23,
             "max_abs_move": 294
           }
@@ -933,8 +933,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 1.85,
-          "rookie_mean_move": -17.99,
+          "veteran_mean_move": 1.86,
+          "rookie_mean_move": -18.04,
           "rookie_top60": {
             "n": 4,
             "mean_move": -15.0,
@@ -942,16 +942,16 @@
           },
           "rookie_by_position": {
             "QB": 7.0,
-            "RB": -97.08,
+            "RB": -97.15,
             "TE": 1.55,
-            "WR": -8.31
+            "WR": -8.39
           }
         },
         "market_read_not_a_gate": {
           "n": 217,
-          "rho_incumbent": 0.7993,
-          "rho_recalibrated": 0.7897,
-          "delta": -0.0096
+          "rho_incumbent": 0.7989,
+          "rho_recalibrated": 0.7891,
+          "delta": -0.0098
         },
         "gates": {
           "within_position_order": true,
@@ -987,14 +987,14 @@
           {
             "band": "121-300",
             "n": 180,
-            "mean_abs_move": 14.78,
+            "mean_abs_move": 14.72,
             "median_abs_move": 12,
             "max_abs_move": 53
           },
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 36.33,
+            "mean_abs_move": 36.32,
             "median_abs_move": 34,
             "max_abs_move": 310
           }
@@ -1139,16 +1139,16 @@
           },
           "rookie_by_position": {
             "QB": 8.9,
-            "RB": -54.38,
-            "TE": 16.64,
+            "RB": -54.23,
+            "TE": 16.55,
             "WR": -75.78
           }
         },
         "market_read_not_a_gate": {
           "n": 230,
-          "rho_incumbent": 0.6884,
-          "rho_recalibrated": 0.6605,
-          "delta": -0.0279
+          "rho_incumbent": 0.6881,
+          "rho_recalibrated": 0.66,
+          "delta": -0.0281
         },
         "gates": {
           "within_position_order": true,
@@ -1184,14 +1184,14 @@
           {
             "band": "121-300",
             "n": 180,
-            "mean_abs_move": 9.88,
+            "mean_abs_move": 9.93,
             "median_abs_move": 7,
             "max_abs_move": 61
           },
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 22.07,
+            "mean_abs_move": 22.03,
             "median_abs_move": 15,
             "max_abs_move": 247
           }
@@ -1327,8 +1327,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 2.61,
-          "rookie_mean_move": -25.37,
+          "veteran_mean_move": 2.63,
+          "rookie_mean_move": -25.51,
           "rookie_top60": {
             "n": 4,
             "mean_move": -17.75,
@@ -1337,15 +1337,15 @@
           "rookie_by_position": {
             "QB": 5.8,
             "RB": -8.54,
-            "TE": -17.86,
-            "WR": -44.69
+            "TE": -18.32,
+            "WR": -44.72
           }
         },
         "market_read_not_a_gate": {
           "n": 230,
-          "rho_incumbent": 0.7204,
-          "rho_recalibrated": 0.7244,
-          "delta": 0.0039
+          "rho_incumbent": 0.72,
+          "rho_recalibrated": 0.7241,
+          "delta": 0.004
         },
         "gates": {
           "within_position_order": true,
@@ -1381,14 +1381,14 @@
           {
             "band": "121-300",
             "n": 180,
-            "mean_abs_move": 6.66,
-            "median_abs_move": 3,
+            "mean_abs_move": 6.69,
+            "median_abs_move": 4,
             "max_abs_move": 91
           },
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 43.64,
+            "mean_abs_move": 43.65,
             "median_abs_move": 32,
             "max_abs_move": 290
           }
@@ -1524,8 +1524,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 2.16,
-          "rookie_mean_move": -21.01,
+          "veteran_mean_move": 2.17,
+          "rookie_mean_move": -21.05,
           "rookie_top60": {
             "n": 4,
             "mean_move": -12.25,
@@ -1534,15 +1534,15 @@
           "rookie_by_position": {
             "QB": 8.7,
             "RB": -129.77,
-            "TE": -0.68,
-            "WR": -2.42
+            "TE": -0.86,
+            "WR": -2.39
           }
         },
         "market_read_not_a_gate": {
           "n": 230,
-          "rho_incumbent": 0.7275,
-          "rho_recalibrated": 0.7309,
-          "delta": 0.0034
+          "rho_incumbent": 0.7271,
+          "rho_recalibrated": 0.7304,
+          "delta": 0.0033
         },
         "gates": {
           "within_position_order": true,
@@ -1578,14 +1578,14 @@
           {
             "band": "121-300",
             "n": 180,
-            "mean_abs_move": 7.84,
+            "mean_abs_move": 7.78,
             "median_abs_move": 4,
             "max_abs_move": 57
           },
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 15.29,
+            "mean_abs_move": 15.42,
             "median_abs_move": 5,
             "max_abs_move": 244
           }
@@ -1721,8 +1721,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 1.78,
-          "rookie_mean_move": -17.26,
+          "veteran_mean_move": 1.79,
+          "rookie_mean_move": -17.42,
           "rookie_top60": {
             "n": 4,
             "mean_move": -15.0,
@@ -1731,15 +1731,15 @@
           "rookie_by_position": {
             "QB": 6.2,
             "RB": -41.08,
-            "TE": -6.14,
-            "WR": -21.97
+            "TE": -6.36,
+            "WR": -22.19
           }
         },
         "market_read_not_a_gate": {
           "n": 230,
-          "rho_incumbent": 0.787,
-          "rho_recalibrated": 0.7866,
-          "delta": -0.0004
+          "rho_incumbent": 0.7866,
+          "rho_recalibrated": 0.7863,
+          "delta": -0.0002
         },
         "gates": {
           "within_position_order": true,
@@ -1784,7 +1784,7 @@
             "n": 568,
             "mean_abs_move": 29.02,
             "median_abs_move": 11,
-            "max_abs_move": 320
+            "max_abs_move": 321
           }
         ],
         "composition": {
@@ -1919,7 +1919,7 @@
         },
         "cohort_shift": {
           "veteran_mean_move": 3.6,
-          "rookie_mean_move": -34.98,
+          "rookie_mean_move": -34.94,
           "rookie_top60": {
             "n": 4,
             "mean_move": -12.5,
@@ -1928,14 +1928,14 @@
           "rookie_by_position": {
             "QB": 8.7,
             "RB": -85.23,
-            "TE": 26.95,
-            "WR": -66.81
+            "TE": 26.86,
+            "WR": -66.67
           }
         },
         "market_read_not_a_gate": {
           "n": 267,
-          "rho_incumbent": 0.7088,
-          "rho_recalibrated": 0.6644,
+          "rho_incumbent": 0.7085,
+          "rho_recalibrated": 0.664,
           "delta": -0.0444
         },
         "gates": {
@@ -2115,8 +2115,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 2.22,
-          "rookie_mean_move": -21.53,
+          "veteran_mean_move": 2.21,
+          "rookie_mean_move": -21.52,
           "rookie_top60": {
             "n": 4,
             "mean_move": -13.0,
@@ -2124,16 +2124,16 @@
           },
           "rookie_by_position": {
             "QB": 5.6,
-            "RB": -46.62,
-            "TE": -2.91,
-            "WR": -31.39
+            "RB": -46.69,
+            "TE": -2.95,
+            "WR": -31.31
           }
         },
         "market_read_not_a_gate": {
           "n": 267,
-          "rho_incumbent": 0.7252,
-          "rho_recalibrated": 0.7293,
-          "delta": 0.0041
+          "rho_incumbent": 0.7249,
+          "rho_recalibrated": 0.729,
+          "delta": 0.004
         },
         "gates": {
           "within_position_order": true,
@@ -2176,7 +2176,7 @@
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 15.07,
+            "mean_abs_move": 15.04,
             "median_abs_move": 12,
             "max_abs_move": 298
           }
@@ -2313,7 +2313,7 @@
         },
         "cohort_shift": {
           "veteran_mean_move": 2.02,
-          "rookie_mean_move": -19.62,
+          "rookie_mean_move": -19.59,
           "rookie_top60": {
             "n": 4,
             "mean_move": -13.25,
@@ -2321,16 +2321,16 @@
           },
           "rookie_by_position": {
             "QB": 8.6,
-            "RB": -59.0,
-            "TE": -2.41,
-            "WR": -23.75
+            "RB": -58.92,
+            "TE": -2.5,
+            "WR": -23.67
           }
         },
         "market_read_not_a_gate": {
           "n": 267,
-          "rho_incumbent": 0.7309,
-          "rho_recalibrated": 0.7325,
-          "delta": 0.0016
+          "rho_incumbent": 0.7305,
+          "rho_recalibrated": 0.7323,
+          "delta": 0.0017
         },
         "gates": {
           "within_position_order": true,
@@ -2366,14 +2366,14 @@
           {
             "band": "121-300",
             "n": 180,
-            "mean_abs_move": 9.54,
+            "mean_abs_move": 9.56,
             "median_abs_move": 7,
             "max_abs_move": 66
           },
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 27.91,
+            "mean_abs_move": 27.93,
             "median_abs_move": 26,
             "max_abs_move": 296
           }
@@ -2509,8 +2509,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 1.9,
-          "rookie_mean_move": -18.42,
+          "veteran_mean_move": 1.89,
+          "rookie_mean_move": -18.37,
           "rookie_top60": {
             "n": 4,
             "mean_move": -12.0,
@@ -2518,15 +2518,15 @@
           },
           "rookie_by_position": {
             "QB": 6.4,
-            "RB": -15.0,
-            "TE": -9.64,
-            "WR": -31.92
+            "RB": -14.85,
+            "TE": -9.68,
+            "WR": -31.83
           }
         },
         "market_read_not_a_gate": {
           "n": 267,
-          "rho_incumbent": 0.7806,
-          "rho_recalibrated": 0.7811,
+          "rho_incumbent": 0.7803,
+          "rho_recalibrated": 0.7808,
           "delta": 0.0005
         },
         "gates": {
@@ -2570,7 +2570,7 @@
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 34.28,
+            "mean_abs_move": 34.27,
             "median_abs_move": 19,
             "max_abs_move": 353
           }
@@ -2706,8 +2706,8 @@
           }
         },
         "cohort_shift": {
-          "veteran_mean_move": 3.56,
-          "rookie_mean_move": -34.54,
+          "veteran_mean_move": 3.55,
+          "rookie_mean_move": -34.51,
           "rookie_top60": {
             "n": 5,
             "mean_move": -9.0,
@@ -2716,14 +2716,14 @@
           "rookie_by_position": {
             "QB": 14.3,
             "RB": -86.46,
-            "TE": 27.82,
-            "WR": -67.47
+            "TE": 27.73,
+            "WR": -67.33
           }
         },
         "market_read_not_a_gate": {
           "n": 243,
-          "rho_incumbent": 0.7274,
-          "rho_recalibrated": 0.7052,
+          "rho_incumbent": 0.7272,
+          "rho_recalibrated": 0.705,
           "delta": -0.0222
         },
         "gates": {
@@ -2767,7 +2767,7 @@
           {
             "band": "301+",
             "n": 568,
-            "mean_abs_move": 19.39,
+            "mean_abs_move": 19.43,
             "median_abs_move": 11,
             "max_abs_move": 294
           }
@@ -2904,7 +2904,7 @@
         },
         "cohort_shift": {
           "veteran_mean_move": 1.97,
-          "rookie_mean_move": -19.15,
+          "rookie_mean_move": -19.14,
           "rookie_top60": {
             "n": 5,
             "mean_move": -10.6,
@@ -2912,16 +2912,16 @@
           },
           "rookie_by_position": {
             "QB": 36.0,
-            "RB": -49.0,
-            "TE": -4.27,
-            "WR": -32.78
+            "RB": -49.08,
+            "TE": -4.32,
+            "WR": -32.69
           }
         },
         "market_read_not_a_gate": {
           "n": 243,
-          "rho_incumbent": 0.7708,
-          "rho_recalibrated": 0.7817,
-          "delta": 0.0109
+          "rho_incumbent": 0.7707,
+          "rho_recalibrated": 0.7815,
+          "delta": 0.0108
         },
         "gates": {
           "within_position_order": true,
@@ -2975,7 +2975,7 @@
     },
     "written_to": "nf_inj3b_ship_combined_read_interval_revalidation.json",
     "stderr_tail": [
-      "2026-08-24 21:47:09,553 INFO    report \u2192 /Users/charlesclark/Documents/machine_learning/baseball_betting/nf-inj3b-ship/quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj3b_ship_combined_read_interval_revalidation.md"
+      "2026-08-24 22:21:53,746 INFO    report \u2192 /Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj3b_ship_combined_read_interval_revalidation.md"
     ],
     "why_it_gates": "a floor breach is a RE-SELECTION trigger for that population, never a reason to move the floor (E2.1-r / NF1.8 \u00a71)"
   },

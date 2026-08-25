@@ -1,6 +1,6 @@
 # NF-INJ3b-SHIP node 5 — the D10 COMBINED READ
 
-_generated 2026-08-25T02:47:09.642303+00:00_ · `best_alpha = 0` · **DEPLOY-HELD, nothing published**
+_generated 2026-08-25T03:21:53.847277+00:00_ · `best_alpha = 0` · **DEPLOY-HELD, nothing published**
 
 ## Verdict: **PASS**
 
