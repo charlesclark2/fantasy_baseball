@@ -2808,6 +2808,118 @@ const CASES = [
     grep: "the disclosure stamps the FEED",
   },
 
+  // ══ NCAAF-P3.2 — the college-football game-predictions surface ═════════════════════════════
+  {
+    id: "ncaaf-curve-falls-back-to-a-normal-silently",
+    shipped: "NCAAF-P3.2 — the shape the model does NOT serve, drawn as if it did",
+    // The served form is whatever the registered artifact is (`strength_posterior` today;
+    // `student_t` and `count` are declared forms, and P2.5 measured a real right-skew on the
+    // college total). Drawing μ/σ's normal instead of the served quantile ladder is a picture of a
+    // model we do not serve — and it looks like a perfectly good bell, which is why nothing but a
+    // provenance assertion can see it.
+    detail: "Forces `buildDistributionCurve` down the parametric branch on every payload.",
+    file: "lib/ncaaf-curve.ts",
+    from: "  const ladder = ladderOf(dist)",
+    to: "  const ladder = null as ReturnType<typeof ladderOf>",
+    grep: "drawn from the served quantiles",
+  },
+  {
+    id: "ncaaf-parametric-fallback-not-labelled",
+    shipped: "NCAAF-P3.2 — a fallback shape presented as the served one",
+    // The other half of the case above. Drawing the fallback is FINE — hiding that it is a
+    // fallback is not: a bell built from two parameters and a curve built from the model's own
+    // simulated quantiles are different pictures, and the reader is entitled to know which.
+    detail: "Drops the note that says the shape came from the parameters, not the ladder.",
+    file: "components/ncaaf/distribution-curve.tsx",
+    from: '      {curve.source === "parametric" && (',
+    to: "      {false && (",
+    grep: "draws the fallback AND labels it",
+  },
+  {
+    id: "ncaaf-market-spread-sign-not-converted",
+    shipped: "NCAAF-P3.2 — the market shown backing the WRONG TEAM",
+    // ⭐ THE MOST CONSEQUENTIAL SILENT ERROR AVAILABLE ON THIS PANEL. The book quotes a home
+    // SPREAD (negative = home favoured); the model publishes a home MARGIN (positive = home
+    // favoured). Forget the conversion and a −2.5 home favourite renders as the market having the
+    // home team losing by 2.5, beside our +12.8 — a plausible-looking number that inverts the
+    // comparison the panel exists for.
+    detail: "Renders the raw home spread in the model's margin column.",
+    file: "components/ncaaf/market-comparison.tsx",
+    from: "  const marketHomeMargin = available && isNum(market.home_spread) ? -market.home_spread : null",
+    to: "  const marketHomeMargin = available && isNum(market.home_spread) ? market.home_spread : null",
+    grep: "renders in the model's units",
+  },
+  {
+    id: "ncaaf-absent-market-renders-as-a-blank",
+    shipped: "NCAAF-P3.2 — an absent market line reading as PARITY",
+    // The branch nearly every reader meets: the only NCAAF odds capture scheduled for 2026 is the
+    // paid /historical catch-up, which cannot reach a kickoff until it is PAST (P3.1 closeout
+    // item 2). In a two-column comparison a blank cell reads as agreement — a fabricated market
+    // view, rendered by a component doing nothing at all.
+    detail: "Falls back to an em-dash instead of naming the absence.",
+    file: "components/ncaaf/market-comparison.tsx",
+    from: '      {market ?? <span className="text-[11px] text-gray-500">{MARKET_ABSENT_LABEL}</span>}',
+    to: '      {market ?? "\u2014"}',
+    grep: "never blanks or zeroes",
+  },
+  {
+    id: "ncaaf-market-null-causes-collapsed",
+    shipped: "NCAAF-P3.2 — two causes of a null market line rendered as one",
+    // NF-C6b/NF-K1: an empty state that means several things costs an investigation every time it
+    // recurs. "Nobody has priced this yet" and "we could not read the market" are different facts,
+    // and the contract carries the machine-readable `reason` precisely so a surface can say which.
+    detail: "Collapses every market-null reason into the single fallback sentence.",
+    file: "components/ncaaf/market-comparison.tsx",
+    from: "          {(market.reason && MARKET_REASON_COPY[market.reason]) || MARKET_REASON_FALLBACK}",
+    to: "          {MARKET_REASON_FALLBACK}",
+    grep: "reads differently from one that was never captured",
+  },
+  {
+    id: "ncaaf-empty-day-rendered-as-a-failure",
+    shipped: "NCAAF-P3.2 — the ordinary state of a Tuesday, reported as an outage",
+    // A day with nothing published answers 404, which on this surface is normal. Rendering it as
+    // "something went wrong" trains a reader to ignore the message that means it really did.
+    detail: "Treats every slate error, including the routine 404, as a failed read.",
+    file: "components/ncaaf/games-page.tsx",
+    from: "  const dayIsEmpty = slate.isError && slateStatus === 404
+  const slateFailed = slate.isError && slateStatus !== 404",
+    to: "  const dayIsEmpty = false
+  const slateFailed = slate.isError",
+    grep: "it is not the failure message",
+  },
+  {
+    id: "ncaaf-opens-on-a-day-with-no-slate",
+    shipped: "NCAAF-P3.2 — a working surface that 404s on open, most days of the week",
+    // ⭐ THE MEASURED CASE, not a hypothetical: the captured manifest's `current_game_day`
+    // (2026-08-24) is NOT in `game_days`, because before the opener "today" is a weekday. Opening
+    // on it renders the empty state over a perfectly good published slate.
+    detail: "Opens on `current_game_day` instead of the next PUBLISHED day.",
+    file: "lib/ncaaf.ts",
+    from: "  if (days.includes(today)) return today
+  return days.find((d) => d > today) ?? days[days.length - 1]",
+    to: "  return today",
+    grep: "opens on a published day even when",
+  },
+  {
+    id: "ncaaf-band-recomputed-from-the-parameters",
+    shipped: "NCAAF-P3.2 — the honest interval, quietly recomputed",
+    // ⭐⭐ AND A FINDING ABOUT WHERE THIS ONE IS CATCHABLE, recorded because it is the more useful
+    // half. This break is caught by `ncaaf-curve.spec.ts`, whose fixture carries an interval that
+    // is deliberately NOT μ ± 1.2816σ. It is NOT catchable by the rendered-band clause in
+    // `ncaaf-games.spec.ts`, and the reason is worth knowing: the CAPTURED payload is Gaussian-
+    // drawn, so μ ± 1.2816σ agrees with the served bounds to the first decimal the card prints.
+    // A rendered assertion over a Gaussian payload structurally cannot separate "served" from
+    // "recomputed" — which is exactly why the arithmetic has its own spec, and why that spec's
+    // fixture is deliberately non-Gaussian.
+    detail: "Reconstructs the 80% band from μ/σ instead of reading the served interval.",
+    file: "lib/ncaaf-curve.ts",
+    from: "  const band = bandOf(dist)",
+    to: "  const band = isNum(dist.mu) && isNum(dist.sigma)
+    ? { lo: dist.mu - 1.2816 * dist.sigma, hi: dist.mu + 1.2816 * dist.sigma, loLevel: 0.1, hiLevel: 0.9 }
+    : bandOf(dist)",
+    grep: "never reconstructed from the parameters",
+  },
+
 ]
 
 /**
@@ -2870,7 +2982,11 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 171, red: 165, notObservable: 6 }
+// NCAAF-P3.2 adds EIGHT cases, each RED-proven individually (`-- ncaaf-`) rather than by a full
+// board run, for the same reason every entry above records: 179 cases × a production build each
+// does not belong in a session. So 171/165/6 → 179/173/6, and the next full run CONFIRMS it.
+// ⛔ A projection is not a measurement.
+const RECORDED_BOARD = { total: 179, red: 173, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
