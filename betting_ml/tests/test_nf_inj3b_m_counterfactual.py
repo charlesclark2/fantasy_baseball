@@ -61,10 +61,18 @@ class TestTheWiringIsInertUntilTheOperatorFlipsIt:
         assert "injury_covariates" in code, "the covariate feed is gone"
 
     @pytest.mark.parametrize("blend", [0.7, 0.3, 1.0])
-    def test_with_the_policy_OFF_the_served_games_are_the_incumbent_byte_for_byte(self, blend):
+    def test_with_the_policy_OFF_the_served_games_are_the_incumbent_byte_for_byte(
+            self, blend, monkeypatch):
         """⭐ The rollback IS the same code path, at every blend the caller may pass — a wiring that
-        only matches at the DEFAULT blend would silently change any non-default caller."""
-        assert POLICY.SERVING_ENABLED is False
+        only matches at the DEFAULT blend would silently change any non-default caller.
+
+        ⭐ RE-ANCHORED by NF-INJ3b-SHIP. This clause used to read the AMBIENT flag (`assert
+        POLICY.SERVING_ENABLED is False`), which was true only while the story was deploy-held; once
+        operator ruling D5=A flipped it, that assertion described a retired world. The PROPERTY it
+        defends — the rollback path is byte-identical to the incumbent — did not change and is now
+        driven explicitly, which also makes it strictly stronger: it holds whatever the ambient flag
+        is, so it survives the next flip in either direction (MH2.7 (ii): re-anchor, never delete)."""
+        monkeypatch.setattr(POLICY, "SERVING_ENABLED", False)
         df = _board()
         got, prov = SERVE.served_injury_games(df, eg=df["proj_games"].to_numpy(), blend=blend)
         want = SP.injury_availability_games(df, blend=blend)
@@ -143,8 +151,17 @@ class TestNothingPublishes:
         assert not re.search(r'add_argument\(\s*[\'"]--publish', code), "a --publish flag exists"
         assert "s3io" not in code and "write_dataframe" not in code
 
-    def test_the_on_disk_flip_stays_off_and_is_only_forced_IN_MEMORY(self):
-        assert POLICY.SERVING_ENABLED is False
+    def test_the_counterfactual_forces_the_flag_IN_MEMORY_and_restores_it(self):
+        """⭐ RE-ANCHORED by NF-INJ3b-SHIP, and the rename is the honest part. While NF-INJ3b-M ran,
+        the on-disk flag was `False` and this clause asserted it — the counterfactual must not have
+        been a live flip. Operator ruling D5=A has since flipped it deliberately, so an assertion
+        that it is `False` would now pin a RETIRED decision and would fail for a reason that has
+        nothing to do with the counterfactual's own honesty.
+
+        What that honesty actually rests on is unchanged and is what is asserted here: the runner
+        forces the flag IN MEMORY and RESTORES THE PREVIOUS VALUE in a `finally` — so it can neither
+        leak a flip nor, now, leak a rollback. The on-disk flag's agreement with the recorded PM
+        ruling is pinned by `test_nf_inj3b_ship_flip.py`, where it belongs."""
         src = _code_only(inspect.getsource(CF.build_board_frame))
         # forced on, and restored in a finally — a counterfactual that leaked would be a live flip
         assert "POLICY.SERVING_ENABLED = bool(serving_on)" in src

@@ -60,6 +60,12 @@ from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
     veteran_level_policy as _LEVEL_POLICY,
 )
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    injury_covariate_feed as _IGF,
+)
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    injury_games_policy as _INJ_POLICY,
+)
 from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E402
 
@@ -191,6 +197,15 @@ OUTPUT_COLS = [
     "veteran_level_status", "veteran_level_form", "veteran_level_params", "veteran_level_window",
     "veteran_level_source_model", "veteran_level_decision_story",
     "veteran_level_statistically_selected", "level_model_version",
+    # ── NF-INJ3b-SHIP: the INJURY-GAMES policy stamp (board-wide, `POLICY.stamp()`) plus the
+    # PER-ROW evidence the D6 publish guard reads it against. `injury_games_served` is what the
+    # certified hurdle actually produced for a certified row, `injury_games_incumbent` what the
+    # shipped constants would have produced for the SAME row — both NaN everywhere else, so a
+    # flag-off board carries the incumbent stamp over two all-NaN columns and reads unambiguously.
+    "injury_games_status", "injury_games_form", "injury_games_arm", "injury_games_source_model",
+    "injury_games_decision_story", "injury_games_certified_statuses",
+    "injury_games_statistically_selected", "injury_games_model_version",
+    *_SP.INJURY_GAMES_EVIDENCE_COLS,
     # ── NF-INJ-NEWS-1: the REPORTED-ABSENCE provenance, on the rows an operator judgment actually
     # moved (NaN everywhere else → the exporter omits the key entirely, so an un-overridden player
     # is byte-identical to the pre-story board). Stamped from what was APPLIED, never from the
@@ -1043,6 +1058,31 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
         xfp = xfp_source.load_xfp_features(con, base_season, schema)
         if not xfp.empty:
             base = base.merge(xfp[["player_id", "xrush_td_pg", "xrec_td_pg"]], on="player_id", how="left")
+    # ── NF-INJ3b-SHIP (PM ruling D7): THE COVARIATE FEED, built HERE so the SERVED board has it ──
+    #    The certified hurdle is a GLM over covariates the board build has never produced. Building
+    #    the feed at the one place `base` exists (the board's OWN universe and the board's OWN
+    #    `position` — which is what the bake-off's population used, so `is_qb` means the same thing
+    #    on both sides) means EVERY caller gets it: `run_nf1_5.refined_board`, which builds the
+    #    board that actually publishes, as well as this module's own CLI. A feed that rode on a
+    #    flag one entry point happens to pass is how the served board and the studied board drift.
+    #
+    #    ⛔ IT IS SEASON-GATED, and the gate is a LEAKAGE rule read off the served artifact, never a
+    #    convenience: `build_veteran_panel_season` calls this function for target seasons 2019…2025,
+    #    every one inside the artifact's training window, so those panel builds are REFUSED a feed
+    #    and keep the incumbent caps — which is exactly what the NF1.9 band and the NF-TR2b level
+    #    constant require of the history they are fitted on. An explicit `injury_covariates=`
+    #    argument still wins (the NF-INJ3b-M counterfactual supplies its own).
+    if injury_covariates is None:
+        injury_covariates, _inj_feed_prov = _IGF.feed_for_board(
+            con, base, projection_season, schema=schema)
+        if _inj_feed_prov.get("supplied"):
+            log.info("NF-INJ3b: injury covariate feed BUILT for %d — %d rows, covariates %s "
+                     "(served artifact trained on %s)", projection_season,
+                     _inj_feed_prov["rows"], _inj_feed_prov["covariates"],
+                     _inj_feed_prov.get("train_seasons"))
+        else:
+            log.debug("NF-INJ3b: no injury covariate feed for %d — %s", projection_season,
+                      _inj_feed_prov.get("reason"))
     priors = positional_pergame_priors(base)
     kw = {} if usage_role_blend is None else {"usage_role_blend": usage_role_blend}
     # NF-D2 slice 3: the role→volume prior (in-fold from the base season) drives the team-changer
@@ -1279,6 +1319,15 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         season_level_recalibration as _SLR2,
     )
     proj["veteran_level_params"] = _SLR2.params_to_json(level_params) if _lvl_on else ""
+    # ── NF-INJ3b-SHIP: the INJURY-GAMES policy stamp, board-wide, the rookie/level stamps' sibling.
+    #    ⭐ `stamp()` is read UNCONDITIONALLY — with the policy off it stamps the INCUMBENT model
+    #    version, which is a positive statement ("this board's caps are the shipped constants"),
+    #    not an absence. The D6 publish guard then reads this back off the artifact and checks it
+    #    against `injury_games_served`/`injury_games_incumbent`: a stamp that claims the fitted arm
+    #    over rows the fitted arm never moved is a REFUSED publish, because that is precisely what a
+    #    build which lost its covariate feed looks like.
+    for _c, _v in _INJ_POLICY.stamp().items():
+        proj[_c] = _v
     # keep only draft-relevant offensive positions (drop K/DEF/defensive rows with no fantasy line)
     proj = proj[proj["position"].isin(("QB", "RB", "WR", "TE", "FB"))].copy()
     for c in OUTPUT_COLS:

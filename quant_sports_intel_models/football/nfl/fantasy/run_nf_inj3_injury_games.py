@@ -214,22 +214,11 @@ def build_population(con, art: Path, seasons: tuple[int, ...],
             flagged = flagged.merge(load_realized(con, y), on="player_id", how="left")
             flagged["realized_games"] = pd.to_numeric(
                 flagged["realized_games"], errors="coerce").fillna(0.0)
-        flagged["prior_games"] = pd.to_numeric(flagged["prior_games"], errors="coerce").fillna(0.0)
-        flagged["prior_fp"] = pd.to_numeric(flagged["prior_fp"], errors="coerce").fillna(0.0)
-        # PPR can go NEGATIVE (a QB with interceptions and no yardage), and log1p(x < -1) is
-        # NaN — clipped at 0 so the covariate is defined on every row rather than silently
-        # NaN-ing a real player out of the design matrix.
-        flagged["log1p_prior_fp"] = np.log1p(flagged["prior_fp"].clip(lower=0.0))
-        flagged["is_qb"] = (flagged["position"].astype(str).str.upper() == "QB").astype(float)
-        # ── the two DECLARED timing-proxy columns (preregistration §2) ────────────────────────
-        flagged["onset_carryover"] = flagged["prior_end_status"].astype(str).isin(
-            ("RES", "PUP", "NFI", "SUS", "INA")).astype(float)
-        lw = pd.to_numeric(flagged["last_week_played"], errors="coerce")
-        weeks = pd.to_numeric(flagged["prior_season_weeks"], errors="coerce")
-        # a player with NO prior-season game has the LONGEST possible absence, not a missing one —
-        # the sentinel is the full prior season, never a fillna(0) that would read as "just played".
-        flagged["weeks_since_last_game"] = (weeks - lw).fillna(weeks.max() if weeks.notna().any()
-                                                               else 18.0)
+        # ⭐ NF-INJ3b-SHIP: the five covariates are derived by `IG.derive_covariates`, the ONE
+        #    owner the SERVED feed (`injury_covariate_feed`) also calls. Extracted from here
+        #    verbatim so the arm cannot be fitted on one definition and served on another —
+        #    the same NF-C0e discipline `incumbent_games` already applies to the incumbent map.
+        flagged = IG.derive_covariates(flagged)
         prov["per_season"].append({"season": y, "board_rows": int(len(board)),
                                    "flagged": n_flagged, "rookies_excluded": rookies,
                                    "returners_excluded": returners, "scored": int(len(flagged))})

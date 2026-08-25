@@ -123,7 +123,8 @@ def predict_games(artifact: dict, df: pd.DataFrame) -> np.ndarray:
 def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
                         eg: np.ndarray | None = None,
                         blend: float | None = None,
-                        feed_supplied: bool | None = None) -> tuple[np.ndarray, dict]:
+                        feed_supplied: bool | None = None,
+                        row_log: dict | None = None) -> tuple[np.ndarray, dict]:
     """The SERVED expected games for a board frame, honouring the PM boundary and the flip.
 
     `df` needs `proj_status` and the design covariates; `eg` is the model's PRE-cap expected games
@@ -131,6 +132,18 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
 
     Returns `(games, provenance)`. Provenance names, per row-class, WHICH path produced the value —
     a served number whose origin is not recoverable is how a partial rollout becomes undebuggable.
+
+    ⭐ `row_log` is an OUT-PARAM (the INC-41 `run_ref` shape, and the same one `project_veterans`
+    already uses for the reported-absence decisions): a dict this fills with the PER-ROW evidence
+    `{"certified": bool[], "fitted": float[], "incumbent": float[]}`, aligned to `df`. It is an
+    out-param rather than a return value because this function returns the games array and every
+    existing caller unpacks exactly two values.
+
+    ⚠️⚠️ IT IS FILLED ON **EVERY** PATH, INCLUDING THE ONES THAT SERVE THE INCUMBENT — and that is
+    the load-bearing half. The D6 publish guard's whole job is to tell "the fitted arm ran and moved
+    these rows" apart from "the policy is ON but this build served the incumbent anyway", and a row
+    log that only existed on the happy path would leave the second case indistinguishable from a
+    board that was never asked to flip (NF1.7 (a)).
     """
     eg = (np.asarray(df["proj_games"], dtype=float) if eg is None
           else np.asarray(eg, dtype=float))
@@ -138,7 +151,25 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
     incumbent = (IG.incumbent_games(status, eg) if blend is None
                  else IG.incumbent_games(status, eg, blend=blend))
 
+    # ⭐ BOTH population boundaries, read from the policy, never restated here: the D2 status
+    #    boundary AND the returner exclusion (`RETURNER_BOUNDARY`). A returner's served games
+    #    compose this cap and NF-D11's absence prior, so NF-INJ3b never scored them.
+    certified = POLICY.certified_rows(df)
+
+    def _log_rows(fitted: np.ndarray | None) -> None:
+        """Fill the out-param. `fitted is None` ⇒ NO row on this frame was produced by the fitted
+        arm, which the log states as an all-NaN `fitted` column rather than by being absent."""
+        if row_log is None:
+            return
+        row_log.clear()
+        row_log.update(
+            certified=certified.copy(),
+            incumbent=np.asarray(incumbent, dtype=float).copy(),
+            fitted=(np.full(len(df), np.nan) if fitted is None
+                    else np.where(certified, np.asarray(fitted, dtype=float), np.nan)))
+
     if not POLICY.serving_enabled():
+        _log_rows(None)
         return incumbent, {"path": "incumbent", "reason": "injury_games_policy.SERVING_ENABLED is "
                                                           "False — DEPLOY-HELD",
                            "n_fitted": 0, "n_incumbent": int(len(df)),
@@ -157,6 +188,7 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
     #    served build that forgot its feed would quietly ship the incumbent. Guard the ARTIFACT at
     #    publish (does the board carry the fitted stamp?), the NF-K1 lesson.
     if feed_supplied is False:
+        _log_rows(None)
         return incumbent, {
             "path": "incumbent_no_feed",
             "reason": "the policy is ON but this call site supplied no covariate feed, so it is "
@@ -165,7 +197,27 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
             "n_fitted": 0, "n_incumbent": int(len(df)),
             "model_version": POLICY.INCUMBENT_MODEL_VERSION}
 
+    # ⚠️⚠️ A PRESENT-BUT-NON-FINITE COVARIATE IS SILENTLY ZERO, NOT LOUD — and it has already cost
+    #    a measurement. `nf_inj3_injury_games._design` does `.fillna(0.0)` on every covariate, so a
+    #    certified row whose feed missed it does not NaN and does not raise: it evaluates at the
+    #    intercept-only design and comes back with a plausible number. NF-INJ3b-M supplied a feed
+    #    covering only the study's 22 rows, so its 4 flagged RES **returners** were zero-filled and
+    #    every one collapsed to the SAME 0.47 games — including CHRIS COLLIER, whose −11.46 PPR is
+    #    the largest single point move in that record and is quoted there as an UNFLAGGED player's
+    #    move. Column PRESENCE was checked; VALUES were not. Both are checked now.
+    _cert_for_check = POLICY.certified_rows(df) if len(df) else np.zeros(0, dtype=bool)
     missing = missing_covariates(df)
+    if not missing and _cert_for_check.any():
+        bad = {c: int((~np.isfinite(pd.to_numeric(df.loc[_cert_for_check, c], errors="coerce")
+                                    .to_numpy(dtype=float))).sum())
+               for c in REQUIRED_COVARIATES}
+        bad = {c: n for c, n in bad.items() if n}
+        if bad:
+            raise ValueError(
+                f"injury_games_serving: {sum(bad.values())} certified row-values across {bad} are "
+                f"NOT FINITE. `_design` would silently fill them with 0.0 and return a plausible "
+                f"number from the intercept-only design — a served value nobody validated, under "
+                f"the fitted arm's stamp. The feed must COVER every certified row (NF1.7 (a)).")
     if missing:
         # ⛔ LOUD, never a silent fallback: serving the incumbent under the fitted arm's stamp is
         #    strictly worse than failing the build (NF1.7 (a) / NF-C0e).
@@ -176,12 +228,12 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
             f"covariate feed in first. ⛔ Refusing to fall back to the incumbent while stamping "
             f"{POLICY.MODEL_VERSION!r}.")
     a = artifact if artifact is not None else load_artifact()
-    certified = status.isin(POLICY.CERTIFIED_STATUSES).to_numpy()
     out = incumbent.copy()
     if certified.any():
         # ⭐ predict on the FULL frame then select: `_design` is row-wise, so a subset predicts
         #    identically, and doing it this way keeps the design construction on one code path.
         out = np.where(certified, predict_games(a, df), incumbent)
+    _log_rows(out)
     return out, {
         "path": "fitted_hurdle",
         "n_fitted": int(certified.sum()),
@@ -189,6 +241,7 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
         "certified_statuses": list(POLICY.CERTIFIED_STATUSES),
         "incumbent_statuses": list(POLICY.INCUMBENT_STATUSES),
         "pm_boundary": POLICY.PM_BOUNDARY,
+        "returner_boundary": POLICY.RETURNER_BOUNDARY,
         "model_version": POLICY.MODEL_VERSION,
         "artifact_fit_at": a.get("fit_at"),
     }

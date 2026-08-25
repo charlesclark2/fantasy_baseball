@@ -7,7 +7,7 @@ metadata:
   name: nf-inj3b-ship
   vertical: nfl_fantasy
   card: https://trello.com/c/oKvTkBsi   # continues the NF-INJ3b/-M thread; SHIP card linked on creation
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Execute operator ruling D5=A (2026-08-24): flip the certified
@@ -143,8 +143,90 @@ spec:
       - id: 6-packet-closeout
         desc: "Operator packet + drafted changelog + verdict + findings into closeout.followUps."
   closeout:
-    verdict: null
+    verdict: >
+      FLIPPED — DEPLOY-HELD, awaiting the operator's publish call. Every node ran and
+      passed. D7: the covariate feed is built INSIDE the board build (758 rows for 2026)
+      from ONE owner the study and the serving path share, leakage-gated off the served
+      artifact's own train_seasons so the NF1.9 band panel and every NF3.2 backtest board
+      keep the incumbent caps; the serving path reproduces the study's predict_hurdle at
+      1e-9. D6: the publish-time stamp guard is wired into export_draft_board_json, refuses
+      on a dry run, raises SystemExit so the exporter's own except cannot swallow it, and
+      FIRED ON THE REAL EXPORT PATH ([METRIC] nf_inj3b_injury_games_stamp=FLIPPED_AND_MOVED
+      certified=22 fitted=22 moved=22). The flip is ON for veteran RES/PUP only; SUS/NFI,
+      rookies and fitted_status are pinned two-sided. Node 4: mean Δgames -2.6104 reproduces
+      NF-INJ3b-M to four decimals; rookie-band motion NOT attributable against a 5-draw
+      control envelope. Node 5: combined read PASS (placement SANE on all four gates across
+      14 configs; interval ALL FLOORS MET; decided artifacts byte-identical). 47 RED-proof
+      clauses, all RED. best_alpha=0; nothing published; the changelog entry is DRAFTED only.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) ⚖️ NEEDS YOUR CALL — RETURNERS ARE NOT NAMED BY RULING D5=A, AND I TOOK THE
+      CONSERVATIVE READING. NF-INJ3b's preregistration §3 EXCLUDED returners
+      (seasons_missed >= 1) from the scored population, with a stated reason: their served
+      games compose this cap AND NF-D11's absence prior, so the arm's contribution is not
+      separably recoverable. The arm was therefore never evaluated on them. The live 2026
+      board carries FOUR flagged veterans who are returners, and ALL FOUR are RES — i.e.
+      certified status. D5=A says "veteran RES/PUP" and is silent on this. I held them on
+      the incumbent constants (identical in shape to D2's treatment of SUS/NFI), which makes
+      the served population exactly the population NF-INJ3b certified and exactly the 22
+      rows -M's headline was computed over. Recorded as a READING in
+      injury_games_policy.RETURNER_BOUNDARY, not as a ruling. If you want them served, it is
+      a one-line change plus a registered read.
+
+      (2) 🔴 A DEFECT IN NF-INJ3b-M's OWN MEASUREMENT, found by building the committed path,
+      now closed. nf_inj3_injury_games._design does .fillna(0.0) on every covariate, so a
+      certified row the feed missed does NOT NaN and does NOT raise — it evaluates at the
+      intercept-only design and returns a plausible number under the fitted arm's stamp.
+      -M supplied a feed covering only the study's 22 rows, so its four flagged RES returners
+      were zero-filled and EVERY ONE collapsed to the SAME 0.47 games. Three are in -M's top
+      four moved rows labelled "flagged? no", including CHRIS COLLIER at -11.46 PPR — which
+      that record's ⭐⭐ headline cites as the largest board move landing on an UNFLAGGED
+      player, evidence for the NF1.5 redistribution story. On the committed build the largest
+      unflagged move is 6.39. ⇒ -M's redistribution finding still stands qualitatively (515
+      unflagged rank moves, 340 point changes here) but that specific sentence should be
+      corrected where it is quoted. served_injury_games now checks covariate VALUES on
+      certified rows, not only column presence, and raises.
+
+      (3) ⚠️ THE FLIP ADDS +3 ROWS TO THE NF-INJ1 INCOHERENCE COUNT (9 → 12), and all three
+      are rows it moved (ALEC PIERCE, GEORGE KITTLE, JAYDEN HIGGINS); newly-violating and
+      NOT flagged is ZERO, so the count is fully attributable. Five of the 22 have games
+      nearly halved with points moving < 0.05 PPR — a drafter sees Kittle at 3.3 games beside
+      112.3 points. ALERT-tier by PM decision, so it will not block the export. Owned by
+      NF-INJ2b; nothing here touches NF1.5. This is the fact most worth your judgment before
+      publishing.
+
+      (4) 📏 THE GAMES EFFECT IS DETERMINISTIC; THE POINT EFFECT IS NOT. Mean Δgames was
+      -2.6104 on every run this session. Mean Δpts measured -1.44 and -1.35 across two runs
+      of the SAME commit whose only difference was a refreshed ADP cache, because the point
+      lands through NF1.5's re-order which reads the market vintage. Any future record
+      quoting a served-point delta for this family should quote it as a magnitude with its
+      market vintage, not as a constant.
+
+      (5) 🧪 A SINGLE SAME-COMMIT CONTROL CANNOT ESTABLISH THAT A COLUMN IS DETERMINISTIC,
+      and the first cut of node 4 reported a FALSE attribution because of it. The standing
+      rule states a RANGE (0-21 material cells); one draw that moves zero cells of a column
+      proves nothing about that column, and the flipped board's 3 fp_ppr_sd cells then read
+      as attributable to a flip that structurally cannot touch rookies. Against a 5-draw
+      envelope the columns measure 0-11 / 0-4 / 0-11 and the flipped board's 1 / 0 / 1 sits
+      inside every one. Worth adding to the QkpAHBYa card: the rule needs "against an
+      ENVELOPE, never one draw" beside it (NF-D20 / NF1.7 (a)).
+
+      (6) 🗂️ run_league_board REWRITES nf_c1_lite_league_board.md — a DECIDED artifact of
+      another story — as a side effect of the publish-candidate chain. Caught by git status
+      before committing and restored. The operator's chain command below passes --no-report.
+      A durable fix (scope the report path to the run, as NCAAF-P2.1 S1-serve did) is a
+      candidate checklist item.
+
+      (7) ⏭️ THE COMBINED READ MUST RE-RUN BEFORE THE FIRST PUBLISH IF THE BOARD STATE
+      CHANGES. It covers the flip and nothing else, because nothing else is live: ZERO
+      adopted NF-INJ-NEWS-1 overrides and PRE-cutdown rookie rows. Ruling D10 binds the read
+      to the board, not the date. The runner records that state on its artifact so the check
+      is a glance, not a reconstruction.
+
+      (8) ℹ️ My local injury snapshot is 109.3h old (bar 72h), so the staged board carries a
+      STALE injury-input verdict. That is a property of this worktree's data vintage, not of
+      the flip; the operator's real run will read a current snapshot. The 22-row cohort is
+      whatever the fresh snapshot flags.
