@@ -191,3 +191,117 @@ spec:
       different study (HV2-4's territory).
 
       No Trello cards were created by this session.
+    rulings: |
+      PM RULINGS 1-4, recorded 2026-08-25. All card actions are the PM's; this
+      session created none and appended nothing to CLAUDE.md.
+
+      ── RULING 1 — THE EPIC RE-RANKS (recorded verbatim) ────────────────────
+      Both measured value sources are now empty: model-side headroom capped at
+      ~0.002-0.005 Brier (E13.8), segment-bias-side GENUINE_ABSENCE within the
+      ~4.4% vig (this study). The epic's remaining EV, in order:
+
+        * HV2-2 — STAYS, UNAFFECTED. It ships on contract correctness, not
+          Brier, and a correct contract is owed regardless of edge.
+        * HV2-0 — STAYS, as cheap honest closure of the conditional-skill
+          question. A discriminating regime would now be bounded by the same
+          headroom, so it is LEDGER HYGIENE, not a value hunt; its EV is marked
+          down accordingly.
+        * HV2-4 — becomes the epic's ONLY remaining untested value source (this
+          study's closing-line-movement caveat points at exactly its territory).
+          Post-opener priority at most; its harness-soundness gate STANDS.
+        * HV2-3 and HV2-5 — stay HELD and are explicitly DEMOTED. An
+          architecture rebuild now has a measured-empty target on BOTH sides,
+          and funding one would be spending on the axis two studies just closed.
+
+      THREE SCOPE BOUNDS, recorded honestly beside the re-rank. The null is
+      BIAS-EXCEEDING-VIG, on THIS PARTITION, over the PRE-00:00-UTC POPULATION.
+      ⚠️ That population bound is NOT a free choice — it is the Ruling-2
+      coverage defect wearing a population's clothes. And ⛔ no new partition
+      may be probed without its own FORWARD pre-registration (the 28.2
+      subset-mining trap).
+
+      ── RULING 2 — NEW CARD: MLB-ODDS1 (PM creates it; audit-first) ─────────
+      The West-Coast-night hole is a CROSS-CUTTING DATA DEFECT, not this
+      study's footnote. Card scope as the PM will write it:
+        (a) AUDIT the consumers — every reader of mart_odds_outcomes over the
+            historical era (CLV marts, bookmaker-disagreement features,
+            edge-program backtests) and whether any RECORDED CONCLUSION leaned
+            on the skewed population;
+        (b) then a remediation DECISION (paid historical re-backfill vs
+            documented limitation) that goes to the operator with the audit in
+            hand.
+
+      THE EVIDENCE CHAIN STARTS HERE. Coverage of the completed regular-season
+      slate (mart_game_results, game_type='R', final score present), by season
+      and by first-pitch stratum; "early" = first pitch before 00:00 UTC:
+
+        season | early cov/slate  frac  | late cov/slate  frac  | all frac
+        2020   |   575 /  641    0.897  |    0 / 257     0.000  |  0.640
+        2021   | 1,652 / 1,732   0.954  |    1 / 697     0.001  |  0.681
+        2022   | 1,637 / 1,784   0.918  |    0 / 646     0.000  |  0.674
+        2023   |   126 / 1,800   0.070  |    0 / 630     0.000  |  0.052
+        2024   | 1,777 / 1,807   0.983  |    0 / 622     0.000  |  0.732
+        2025   | 1,839 / 1,841   0.999  |    0 / 589     0.000  |  0.757
+        2026   | 1,348 / 1,500   0.899  |  350 / 464     0.754  |  0.865
+
+      By first-pitch UTC hour, pooled (2023 excluded):
+        hours 15-23 (ET/CT starts) : 7,825 / 8,300 = 0.93 - 0.96
+        hours 00,01,02 (WC nights) :   351 / 3,275 = 0.098 - 0.119
+
+      Mechanism: the INC-22 UTC-date class — a per-UTC-day fetch covers that
+      UTC day's slate, and a game commencing after 00:00 UTC belongs to the
+      NEXT UTC day, so it was never requested. The historical backfill captured
+      LITERALLY ZERO late-stratum games in five of six seasons; only 2026's
+      live 30-minute capture reaches them.
+
+      Fingerprint in the pooled data is a TEAM skew, not an obvious time skew —
+      home games per team over the whole observed sample ran LAD 132, LAA 136,
+      AZ 164, SD 166, SEA 166, COL 179, SF 188 up to CIN 413, ATL 412, NYY 411.
+      Every under-covered club is Pacific/Mountain. Within the restricted
+      population West-Coast clubs appear disproportionately as ROAD teams
+      (LAD 97 home / 234 away vs NYY 404 / 322).
+
+      Full detail + the data-quality checks: ablation_results/
+      mlb_hv2_1_data_audit.md. Source: mart_odds_outcomes (_history 238.1 MiB
+      @ 2026-08-24 07:21Z, _current 944.8 KiB @ 2026-08-24 20:40Z).
+
+      ── RULING 3 — MERGE into the cv_power / instrument-hardening card ──────
+      (the one already carrying the VAL3 PBO blind spot and the MH2.7
+      classify_null work). This finding is the THIRD LEG of the same instrument
+      problem: a FIELD-LEVEL PBO applied as a PER-ARM gate, plus a uniform edge
+      inflating cross-trial dispersion V (the MH2.5 / NF-W6b-C mechanism) —
+      demonstrated by an injected 6pp bias that the METRIC gates caught (ROI to
+      +0.156, p to 1.4e-8, 6 of 8 arms passing roi_positive + fold_consistency
+      + BH-FDR) and BOTH DEFLATION GATES WRONGLY BLOCKED (PBO 0.426, DSR ~0).
+      The PM will append it to that card.
+
+      ⭐ THE REUSABLE RECIPE, recorded here so it is quotable before that card
+      lands: EVERY FUTURE §0.5 REGISTRATION WHOSE FAMILY CONTAINS NEAR-CLONES
+      SHOULD PRE-REGISTER AN INJECTED-EFFECT POSITIVE CONTROL AND STATE WHICH
+      GATES ARE EXPECTED TO PASS IT. A gate that BLOCKS A PLANTED TRUE EFFECT
+      is measuring the FIELD, not the ARM. (Companion to NF1.8's reading that a
+      high PBO over near-clones is a TIE rather than overfitting, and to the
+      MH2.6 vacuity floor: a harness that cannot FIRE returns a null for free,
+      exactly as one that cannot FAIL certifies noise.)
+
+      ── RULING 4 — BOTH ─────────────────────────────────────────────────────
+      (a) A CLAUDE.md LANDMINE ENTRY IS OWED, but ⛔ NOT appended by this
+          session — per the standing convention it routes to the next
+          repo-touching MLB session, which will be MLB-ODDS1. Wording the PM
+          will hand them, verbatim:
+
+            "On mart_odds_outcomes, ingestion_ts is NOT the capture time before
+            2026 — the 2020-2025 era is a one-shot backfill stamped
+            2026-04-23, so an ingestion_ts < commence_time pre-game guard
+            silently rejects the entire historical era and leaves a 2026-only
+            study. The true quote time is bookmaker_last_update (strictly
+            pre-first-pitch on every historical row)."
+
+      (b) The DURABLE FIX — a properly-named quote_ts column AT THE MART, so
+          the trap is unbuildable rather than merely documented — folds into
+          MLB-ODDS1's scope: same mart, same session.
+
+      ── CLOSEOUT STATE ──────────────────────────────────────────────────────
+      Rulings recorded; nothing else actioned. No Trello cards created, no
+      CLAUDE.md edit, no code change, no deploy. best_alpha=0 stands.
+
