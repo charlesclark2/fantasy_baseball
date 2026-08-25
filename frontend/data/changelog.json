@@ -3,8 +3,12 @@
     "week": "2026-08-24",
     "items": [
       {
+        "tag": "improved",
+        "text": "College football game cards can now be collapsed. A collapsed card keeps the win probability and swaps each curve for the same 80% range in words, so you can take in a whole Saturday without scrolling past eight full cards \u2014 on a phone the slate went from roughly nine screens to under three. Cards still open expanded, because the curves are the point; if you collapse them, we remember that on your next visit."
+      },
+      {
         "tag": "added",
-        "text": "College football is now in the app. Every projected FBS game gets a card that leads with the win probability for both teams, and shows the margin and the total as curves rather than as single numbers — the shaded part of each curve is the middle 80% of the outcomes our model simulated, so a wide curve is us telling you we are genuinely unsure. The curves are drawn from the model's own simulated quantiles, not from a bell shape we assumed, which is why a lopsided game looks lopsided. Where a closing line has been captured for a game we put it beside our own number so you can see where the two differ; for upcoming games we usually have not captured one yet, and the card says that in as many words rather than leaving a blank. We want to be exact about what this is: these are market-blind projections from a model that never sees a betting line, we make no claim to an advantage over the market, and we publish no picks. Pick a kickoff day at the top; team pages follow. Free, no account needed."
+        "text": "College football is now in the app. Every projected FBS game gets a card that leads with the win probability for both teams, and shows the margin and the total as curves rather than as single numbers \u2014 the shaded part of each curve is the middle 80% of the outcomes our model simulated, so a wide curve is us telling you we are genuinely unsure. The curves are drawn from the model's own simulated quantiles, not from a bell shape we assumed, which is why a lopsided game looks lopsided. Where a closing line has been captured for a game we put it beside our own number so you can see where the two differ; for upcoming games we usually have not captured one yet, and the card says that in as many words rather than leaving a blank. We want to be exact about what this is: these are market-blind projections from a model that never sees a betting line, we make no claim to an advantage over the market, and we publish no picks. Pick a kickoff day at the top; team pages follow. Free, no account needed."
       }
     ]
   },
@@ -13,51 +17,51 @@
     "items": [
       {
         "tag": "added",
-        "text": "College football is being wired up behind the scenes. Our model's projections for each upcoming FBS game — a win probability for both sides, and the full range of plausible margins and totals rather than a single number — now publish to the same serving layer the rest of the site reads, along with the season-long conference-title and playoff probabilities. Where a market line has been captured for a game we show it beside our own, so you can see where we differ. We want to be exact about what that is and is not: these are market-blind projections from a model that never sees a betting line, we make no claim to an advantage over the market, and we publish no picks. Nothing is visible in the app yet — the pages that read this land next."
+        "text": "College football is being wired up behind the scenes. Our model's projections for each upcoming FBS game \u2014 a win probability for both sides, and the full range of plausible margins and totals rather than a single number \u2014 now publish to the same serving layer the rest of the site reads, along with the season-long conference-title and playoff probabilities. Where a market line has been captured for a game we show it beside our own, so you can see where we differ. We want to be exact about what that is and is not: these are market-blind projections from a model that never sees a betting line, we make no claim to an advantage over the market, and we publish no picks. Nothing is visible in the app yet \u2014 the pages that read this land next."
       },
       {
         "tag": "added",
-        "text": "A small number of players can now carry a projected-games figure we lowered by hand, after a published report that they are expected to miss time when no official roster move had yet reflected it. Our projection only ever moved on a formal roster move — injured reserve, PUP, the non-football-injury list or a suspension — so a player reported to be out for two months was, until now, projected as though he were playing. Every row we adjust is marked on the board, the projections table and the player page, and carries a link to the report we read. We want to be exact about what this is: it is a person on our side reading a beat report and writing down a number, not a model output. It has not been tested against outcomes and we are not claiming it makes the projection better — it is a stopgap while we build the thing that would do this properly, which needs a measure of how long a reported absence actually lasts. It is not a medical opinion and carries no view on when anyone plays again. Each entry has a review date and stops applying once that date passes, and the moment a club makes a formal roster move our normal handling takes over and the manual entry is dropped. Every other player's projected games is produced by the model alone, exactly as before."
+        "text": "A small number of players can now carry a projected-games figure we lowered by hand, after a published report that they are expected to miss time when no official roster move had yet reflected it. Our projection only ever moved on a formal roster move \u2014 injured reserve, PUP, the non-football-injury list or a suspension \u2014 so a player reported to be out for two months was, until now, projected as though he were playing. Every row we adjust is marked on the board, the projections table and the player page, and carries a link to the report we read. We want to be exact about what this is: it is a person on our side reading a beat report and writing down a number, not a model output. It has not been tested against outcomes and we are not claiming it makes the projection better \u2014 it is a stopgap while we build the thing that would do this properly, which needs a measure of how long a reported absence actually lasts. It is not a medical opinion and carries no view on when anyone plays again. Each entry has a review date and stops applying once that date passes, and the moment a club makes a formal roster move our normal handling takes over and the manual entry is dropped. Every other player's projected games is produced by the model alone, exactly as before."
       },
       {
         "tag": "changed",
-        "text": "Where a player's projected stat line could not have happened in the number of games we project him for, we now withhold the stat detail rather than print it. The check that finds those rows shipped last week and reports them before we publish; this is the next step. On the handful of rows it flags — all backup quarterbacks — the projections table and the player page now show a dash in place of the counting stats, with a note explaining why. His projected points and projected games still show, because those are what a drafter is there for and neither is what fails the check. We would rather be plain about what this is: the projection itself is not corrected. The change that would correct it was built and tested and did not clear the bar we hold a ranking change to, so it has not shipped — and in the meantime we would rather show you nothing there than a number we would not stand behind."
+        "text": "Where a player's projected stat line could not have happened in the number of games we project him for, we now withhold the stat detail rather than print it. The check that finds those rows shipped last week and reports them before we publish; this is the next step. On the handful of rows it flags \u2014 all backup quarterbacks \u2014 the projections table and the player page now show a dash in place of the counting stats, with a note explaining why. His projected points and projected games still show, because those are what a drafter is there for and neither is what fails the check. We would rather be plain about what this is: the projection itself is not corrected. The change that would correct it was built and tested and did not clear the bar we hold a ranking change to, so it has not shipped \u2014 and in the meantime we would rather show you nothing there than a number we would not stand behind."
       },
       {
         "tag": "added",
-        "text": "Where a player is listed on the weekly game-status report — Questionable, Doubtful or Out — that designation now shows beside his projected-games figure on the rankings board, the projections table and his player page, together with a plain statement that our projection does not take it into account. It genuinely does not: the projected-games number moves only on a formal roster move (injured reserve, PUP, the non-football-injury list or a suspension), so a weekly designation currently applies no discount at all. We already held these designations and simply were not showing them, which meant a player listed Out could sit at a completely normal-looking projection with nothing on the row to say why. This closes that by showing what we know, not by changing any number — pricing a weekly designation into a season projection needs a measure of how long an absence actually lasts, which a one-game designation does not carry and which we have not built. A designation is what a club filed about one game; it is not a diagnosis and not our own read on any player's health. Where our feed carries a status we cannot interpret we say \"unknown\" rather than guess, and where it says nothing we show nothing rather than invent a clean bill of health."
+        "text": "Where a player is listed on the weekly game-status report \u2014 Questionable, Doubtful or Out \u2014 that designation now shows beside his projected-games figure on the rankings board, the projections table and his player page, together with a plain statement that our projection does not take it into account. It genuinely does not: the projected-games number moves only on a formal roster move (injured reserve, PUP, the non-football-injury list or a suspension), so a weekly designation currently applies no discount at all. We already held these designations and simply were not showing them, which meant a player listed Out could sit at a completely normal-looking projection with nothing on the row to say why. This closes that by showing what we know, not by changing any number \u2014 pricing a weekly designation into a season projection needs a measure of how long an absence actually lasts, which a one-game designation does not carry and which we have not built. A designation is what a club filed about one game; it is not a diagnosis and not our own read on any player's health. Where our feed carries a status we cannot interpret we say \"unknown\" rather than guess, and where it says nothing we show nothing rather than invent a clean bill of health."
       },
       {
         "tag": "added",
-        "text": "Players we project for less than a full season are now flagged on the rankings board, the projections table and the player page. Our point projections already price in the chance a player misses games, but nothing on the row said so — a lower ranking simply looked unexplained. The projected-games figure now carries a colour when it sits materially below a full slate, and tapping it explains that this is a statement about our projection rather than a view on any player's health, alongside the date of the roster and injury data behind it."
+        "text": "Players we project for less than a full season are now flagged on the rankings board, the projections table and the player page. Our point projections already price in the chance a player misses games, but nothing on the row said so \u2014 a lower ranking simply looked unexplained. The projected-games figure now carries a colour when it sits materially below a full slate, and tapping it explains that this is a statement about our projection rather than a view on any player's health, alongside the date of the roster and injury data behind it."
       },
       {
         "tag": "fixed",
-        "text": "Players who are currently on PUP or injured reserve now project down on the draft board. The injury feed was being read from a snapshot several weeks old, so a number of players who had since been placed on PUP or IR — including three inside the draftable range — were still projected as if they were healthy, while a few who had been cleared were still being marked down. The board now reads the current snapshot, and it reports how old that snapshot is before publishing."
+        "text": "Players who are currently on PUP or injured reserve now project down on the draft board. The injury feed was being read from a snapshot several weeks old, so a number of players who had since been placed on PUP or IR \u2014 including three inside the draftable range \u2014 were still projected as if they were healthy, while a few who had been cleared were still being marked down. The board now reads the current snapshot, and it reports how old that snapshot is before publishing."
       },
       {
         "tag": "fixed",
-        "text": "A handful of backup quarterbacks were shown with season stat lines that could not happen in the number of games they were projected to play — in one case about 80 pass attempts per game. The board now checks every projection against the most any real player has ever produced per game before it publishes, and reports any that fail."
+        "text": "A handful of backup quarterbacks were shown with season stat lines that could not happen in the number of games they were projected to play \u2014 in one case about 80 pass attempts per game. The board now checks every projection against the most any real player has ever produced per game before it publishes, and reports any that fail."
       },
       {
         "tag": "changed",
-        "text": "Where a fantasy league was imported from a platform whose terms require it, that credit now appears in the site footer — the placement those terms actually specify — and it shows on the league list while you are choosing which league to import, not only once you have opened one. It still appears only on pages showing that platform's data, and never on a page showing none."
+        "text": "Where a fantasy league was imported from a platform whose terms require it, that credit now appears in the site footer \u2014 the placement those terms actually specify \u2014 and it shows on the league list while you are choosing which league to import, not only once you have opened one. It still appears only on pages showing that platform's data, and never on a page showing none."
       },
       {
         "tag": "improved",
-        "text": "Rookie projections now carry a level correction we had been holding back. Our rookie numbers ran low as a group: across seven past draft classes a draftable rookie's projection was off by about 1.07 points on average, and a per-position correction cut that to about 0.94. We are applying it at half strength — a deliberately conservative setting chosen by judgement, not picked out by a search, and we say so wherever the board records how it was built. It touches running backs, receivers and tight ends only; rookie quarterbacks are left alone, because earlier testing showed the same correction double-counts there. It sat switched off since early August, and the reason is worth being straight about: our own coverage check refused it. That check turned out to reject a perfectly calibrated projection roughly half the time at the sample sizes a single rookie position actually gives us, so its refusals carried almost no information either way. We replaced it with one derived from sample size alone — written and reviewed before we looked at whether this correction would pass it — re-ran the gate, and it now clears every check we hold a projection to. About seventy rookies move; the top ten overall is unchanged, and so is the top three at each of quarterback, running back, receiver and tight end. As always, this is a projection for your league's scoring and not a claim about results."
+        "text": "Rookie projections now carry a level correction we had been holding back. Our rookie numbers ran low as a group: across seven past draft classes a draftable rookie's projection was off by about 1.07 points on average, and a per-position correction cut that to about 0.94. We are applying it at half strength \u2014 a deliberately conservative setting chosen by judgement, not picked out by a search, and we say so wherever the board records how it was built. It touches running backs, receivers and tight ends only; rookie quarterbacks are left alone, because earlier testing showed the same correction double-counts there. It sat switched off since early August, and the reason is worth being straight about: our own coverage check refused it. That check turned out to reject a perfectly calibrated projection roughly half the time at the sample sizes a single rookie position actually gives us, so its refusals carried almost no information either way. We replaced it with one derived from sample size alone \u2014 written and reviewed before we looked at whether this correction would pass it \u2014 re-ran the gate, and it now clears every check we hold a projection to. About seventy rookies move; the top ten overall is unchanged, and so is the top three at each of quarterback, running back, receiver and tight end. As always, this is a projection for your league's scoring and not a claim about results."
       },
       {
         "tag": "changed",
-        "text": "Disconnecting a fantasy platform now deletes the rosters we copied from it, not just our copy of the connection. Your league's own settings — scoring, roster slots, team count, depth targets — stay, because those are yours. And any roster we copy from a platform now expires 30 days after we copy it: after that it is no longer readable anywhere in the app and is deleted from our store. Re-importing takes a fresh copy and starts a new 30 days. If a roster has gone, My Teams now says so and says why, instead of telling you your league hasn't drafted yet."
+        "text": "Disconnecting a fantasy platform now deletes the rosters we copied from it, not just our copy of the connection. Your league's own settings \u2014 scoring, roster slots, team count, depth targets \u2014 stay, because those are yours. And any roster we copy from a platform now expires 30 days after we copy it: after that it is no longer readable anywhere in the app and is deleted from our store. Re-importing takes a fresh copy and starts a new 30 days. If a roster has gone, My Teams now says so and says why, instead of telling you your league hasn't drafted yet."
       },
       {
         "tag": "new",
-        "text": "The privacy policy now has a section covering fantasy league import: exactly what we read from Yahoo, ESPN and Sleeper, how long we keep it, what disconnecting deletes, and the four things we never do with it — no model training, no AI tools, no indexing, no sharing."
+        "text": "The privacy policy now has a section covering fantasy league import: exactly what we read from Yahoo, ESPN and Sleeper, how long we keep it, what disconnecting deletes, and the four things we never do with it \u2014 no model training, no AI tools, no indexing, no sharing."
       },
       {
         "tag": "new",
-        "text": "Player pages now show a short note on what actually builds the projection above it — our own baseline model, refined with market consensus where testing shows it helps, plus our live veteran season-rate recalibration. It sits beside the existing per-player \"what pushes his number up or down\" panel, which is a separate research model's read and is labelled as such."
+        "text": "Player pages now show a short note on what actually builds the projection above it \u2014 our own baseline model, refined with market consensus where testing shows it helps, plus our live veteran season-rate recalibration. It sits beside the existing per-player \"what pushes his number up or down\" panel, which is a separate research model's read and is labelled as such."
       },
       {
         "tag": "fixed",
@@ -65,59 +69,59 @@
       },
       {
         "tag": "new",
-        "text": "Mock Draft: finish a draft and you now get a share card — your finishing rank, projected points against the room, your strongest position and your best value pick, all in one branded image. Download it, copy a link, or use your device's share sheet. Anyone who opens the link sees the same card and the same honest framing we show you in the app: it ranks the room on our own projections, not a guarantee of how a real league goes. The share page itself needs no account to view."
+        "text": "Mock Draft: finish a draft and you now get a share card \u2014 your finishing rank, projected points against the room, your strongest position and your best value pick, all in one branded image. Download it, copy a link, or use your device's share sheet. Anyone who opens the link sees the same card and the same honest framing we show you in the app: it ranks the room on our own projections, not a guarantee of how a real league goes. The share page itself needs no account to view."
       },
       {
         "tag": "fixed",
-        "text": "Depth targets now work in both directions. Setting a position to a number you have already reached moves it DOWN the list, so telling us you want one quarterback stops us suggesting backup quarterbacks late in a draft — previously a target only ever pushed a position you were short of UP, so setting it to what you already had changed nothing. A position you leave at 0 is untouched either way: 0 means no opinion, not none wanted, and a target on one position never moves the others. Your league's required starters still come first — a target can never leave you unable to fill a lineup spot."
+        "text": "Depth targets now work in both directions. Setting a position to a number you have already reached moves it DOWN the list, so telling us you want one quarterback stops us suggesting backup quarterbacks late in a draft \u2014 previously a target only ever pushed a position you were short of UP, so setting it to what you already had changed nothing. A position you leave at 0 is untouched either way: 0 means no opinion, not none wanted, and a target on one position never moves the others. Your league's required starters still come first \u2014 a target can never leave you unable to fill a lineup spot."
       },
       {
         "tag": "improved",
-        "text": "Depth targets are now a saved setting, and the browser extension reads them. Set a default for every league under Settings → Fantasy Defaults, or give one league its own under League Settings — a league's own targets win, and a league you have not set keeps using your default. Previously they lived only in the browser you typed them into, which meant two leagues with the same scoring quietly shared one setting, nothing followed you to another device, and the live draft assistant in the extension could not see them at all. Wherever targets are in force we now say which screen they came from, so you always know where to change them. Your league's required starters still come first: a depth target can never leave you unable to fill a lineup spot."
+        "text": "Depth targets are now a saved setting, and the browser extension reads them. Set a default for every league under Settings \u2192 Fantasy Defaults, or give one league its own under League Settings \u2014 a league's own targets win, and a league you have not set keeps using your default. Previously they lived only in the browser you typed them into, which meant two leagues with the same scoring quietly shared one setting, nothing followed you to another device, and the live draft assistant in the extension could not see them at all. Wherever targets are in force we now say which screen they came from, so you always know where to change them. Your league's required starters still come first: a depth target can never leave you unable to fill a lineup spot."
       },
       {
         "tag": "improved",
-        "text": "Draft, Mock Draft and the live draft assistant: bench picks are now ranked on how much they would actually add to your lineup, and you can tell the tool how many of each position you want. Once your starting spots are filled, the next pick is a bench pick — and we were ranking those by value over replacement, which is a measure of how scarce STARTERS are at a position. Late in a draft the only players left above that line are backup quarterbacks and tight ends, because a 12-team league needs one of each and has already taken every startable running back and receiver. So the tool was structurally guaranteed to suggest a backup QB or TE in the back half of every draft, and it did: across 120 simulated drafts its bench came back 51% backup quarterback and 49% backup tight end, with no running backs and no receivers at all. That matches what a real mock draft reported to us — \"WRs seemed to really not even pop up\". A bench player is worth something only in the weeks you actually have to start him, so that is what we now measure: how often the players ahead of him on your roster are hurt or on bye, multiplied by how much better he is than whoever would otherwise cover that week. Running backs and receivers now make up more than a quarter of the bench where they used to make up none. Separately, you can now set a target count per position on the setup screen (say two quarterbacks and two tight ends): a position you are short of moves up the bench list and says so in its reason. It only ever reorders BENCH options — it can never outrank an open starting spot, and it can never leave you without a kicker or defense, which the tool still forces you to fill before your picks run out. All three surfaces run the same ranking and a test fails the build if they ever disagree. As always this ranks a projection for your league's scoring and makes no claim about results."
+        "text": "Draft, Mock Draft and the live draft assistant: bench picks are now ranked on how much they would actually add to your lineup, and you can tell the tool how many of each position you want. Once your starting spots are filled, the next pick is a bench pick \u2014 and we were ranking those by value over replacement, which is a measure of how scarce STARTERS are at a position. Late in a draft the only players left above that line are backup quarterbacks and tight ends, because a 12-team league needs one of each and has already taken every startable running back and receiver. So the tool was structurally guaranteed to suggest a backup QB or TE in the back half of every draft, and it did: across 120 simulated drafts its bench came back 51% backup quarterback and 49% backup tight end, with no running backs and no receivers at all. That matches what a real mock draft reported to us \u2014 \"WRs seemed to really not even pop up\". A bench player is worth something only in the weeks you actually have to start him, so that is what we now measure: how often the players ahead of him on your roster are hurt or on bye, multiplied by how much better he is than whoever would otherwise cover that week. Running backs and receivers now make up more than a quarter of the bench where they used to make up none. Separately, you can now set a target count per position on the setup screen (say two quarterbacks and two tight ends): a position you are short of moves up the bench list and says so in its reason. It only ever reorders BENCH options \u2014 it can never outrank an open starting spot, and it can never leave you without a kicker or defense, which the tool still forces you to fill before your picks run out. All three surfaces run the same ranking and a test fails the build if they ever disagree. As always this ranks a projection for your league's scoring and makes no claim about results."
       },
       {
         "tag": "fixed",
-        "text": "Draft and Mock Draft: two roster-counting mistakes that both showed up in the same live draft. A draft was ending with an empty defense and kicker slot. We hold back kickers and defenses until your roster actually needs them, and lift them back to the top the moment your remaining picks are all spoken for — but that count was including your league's injured-reserve spots, which you cannot draft into. On a 15-man roster with two IR spots we thought you had 17 picks, so the rule that is supposed to say \"take a kicker now\" only fired once your roster was already full. It never arrived in time. Every ESPN, Sleeper and Yahoo league has IR spots, and so does every custom league made here, so this affected essentially everyone. Separately, backup tight ends were ranking above clearly better bench running backs. Once your starters are set, a bench pick is discounted because it fills no starting spot — but the discount was reading your FLEX seat as still available to a tight end even when a running back was already sitting in it, so a second tight end kept more than three times as much credit as a bench back you could actually use. Bench depth is now ranked on what a player is worth, whatever position he plays. Both fixes apply to the draft tool on the site, the mock draft simulator and the live draft assistant together — they run the same ranking, and a test now fails the build if the two ever disagree."
+        "text": "Draft and Mock Draft: two roster-counting mistakes that both showed up in the same live draft. A draft was ending with an empty defense and kicker slot. We hold back kickers and defenses until your roster actually needs them, and lift them back to the top the moment your remaining picks are all spoken for \u2014 but that count was including your league's injured-reserve spots, which you cannot draft into. On a 15-man roster with two IR spots we thought you had 17 picks, so the rule that is supposed to say \"take a kicker now\" only fired once your roster was already full. It never arrived in time. Every ESPN, Sleeper and Yahoo league has IR spots, and so does every custom league made here, so this affected essentially everyone. Separately, backup tight ends were ranking above clearly better bench running backs. Once your starters are set, a bench pick is discounted because it fills no starting spot \u2014 but the discount was reading your FLEX seat as still available to a tight end even when a running back was already sitting in it, so a second tight end kept more than three times as much credit as a bench back you could actually use. Bench depth is now ranked on what a player is worth, whatever position he plays. Both fixes apply to the draft tool on the site, the mock draft simulator and the live draft assistant together \u2014 they run the same ranking, and a test now fails the build if the two ever disagree."
       },
       {
         "tag": "new",
-        "text": "Live draft assistant for ESPN (beta, Chrome extension): our pick recommendation on your actual ESPN draft board, with the reason beside it, your roster so far, and what is still on the board. It reads the draft you are already in — it never signs in as you, never sends anything to ESPN, and only ever sends us the draft state and player ids, never your ESPN session. It also always shows WHICH PICK it is reasoning about, so if we ever stop reading your draft you can see that at a glance instead of trusting advice that quietly went stale — and if we cannot read it, we say so and show no recommendation at all rather than a stale one. The numbers come from the same ranking the draft tool on the site uses, which is now pinned to it automatically so the two can never drift apart. Requires a subscription; the gate is on our server, not in the extension. Same honest framing as the rest of the fantasy product: it ranks a projection for your league's scoring, and makes no claim about results."
+        "text": "Live draft assistant for ESPN (beta, Chrome extension): our pick recommendation on your actual ESPN draft board, with the reason beside it, your roster so far, and what is still on the board. It reads the draft you are already in \u2014 it never signs in as you, never sends anything to ESPN, and only ever sends us the draft state and player ids, never your ESPN session. It also always shows WHICH PICK it is reasoning about, so if we ever stop reading your draft you can see that at a glance instead of trusting advice that quietly went stale \u2014 and if we cannot read it, we say so and show no recommendation at all rather than a stale one. The numbers come from the same ranking the draft tool on the site uses, which is now pinned to it automatically so the two can never drift apart. Requires a subscription; the gate is on our server, not in the extension. Same honest framing as the rest of the fantasy product: it ranks a projection for your league's scoring, and makes no claim about results."
       },
       {
         "tag": "improved",
-        "text": "My Big Board: your own notes on any player, tiers you can start from ours, a printable cheat sheet that prints like one, and every button on a row explained in words. A note is the thing a big board was missing — the reason you moved somebody, in your own words, next to him on the sheet you read at the table. Write one on anyone; it saves with the board and prints under his name. The scissors, star and slash on each row now say what they do in a line above the board rather than only in a tooltip, because there is no hover on a phone and a tier break is not something anyone reads off a pair of scissors. If you have not drawn any tiers the sheet no longer files all two hundred players under a heading called Tier 1 — it says you have not drawn any and offers to start you from ours, which you can then move or delete like any other break. Printing now prints the sheet instead of the web page: no nav bar, no format pickers, no save bar, no site footer, black ink on white paper, two columns, tiers kept whole across page breaks, and a header carrying our logo alongside the league and the day, so you can tell two printed boards apart. And a player's name opens in a new tab, so glancing at his page never costs you the changes you have not saved yet."
+        "text": "My Big Board: your own notes on any player, tiers you can start from ours, a printable cheat sheet that prints like one, and every button on a row explained in words. A note is the thing a big board was missing \u2014 the reason you moved somebody, in your own words, next to him on the sheet you read at the table. Write one on anyone; it saves with the board and prints under his name. The scissors, star and slash on each row now say what they do in a line above the board rather than only in a tooltip, because there is no hover on a phone and a tier break is not something anyone reads off a pair of scissors. If you have not drawn any tiers the sheet no longer files all two hundred players under a heading called Tier 1 \u2014 it says you have not drawn any and offers to start you from ours, which you can then move or delete like any other break. Printing now prints the sheet instead of the web page: no nav bar, no format pickers, no save bar, no site footer, black ink on white paper, two columns, tiers kept whole across page breaks, and a header carrying our logo alongside the league and the day, so you can tell two printed boards apart. And a player's name opens in a new tab, so glancing at his page never costs you the changes you have not saved yet."
       },
       {
         "tag": "new",
-        "text": "My Big Board: take our board, make it yours, and take it to draft day. Start from our projection scored for your league, then drag players where you think they belong, draw your own tier breaks, and flag who you are chasing and who you are passing on. Our rank, our projected points, our value over replacement and the market's ADP stay beside every row, along with how far you have moved each player from where we had him — so the places you disagree with us are visible rather than buried. That column describes the difference and does not grade it: we have no way to know which of us is right about any one player, and nothing here claims we do. Your board saves to your account, so it survives a reload and is waiting on draft morning, and the Cheat sheet view prints or copies it as a clean tiered list — your order, your tiers, your flags, and none of our numbers, because at pick 4.11 a projection beside a ranking you already overrode is just an invitation to second-guess yourself. Saving tells you exactly what happened — saving, saved, or what went wrong — and if a board is ever too large to store we refuse it whole and say so rather than quietly keeping part of it."
+        "text": "My Big Board: take our board, make it yours, and take it to draft day. Start from our projection scored for your league, then drag players where you think they belong, draw your own tier breaks, and flag who you are chasing and who you are passing on. Our rank, our projected points, our value over replacement and the market's ADP stay beside every row, along with how far you have moved each player from where we had him \u2014 so the places you disagree with us are visible rather than buried. That column describes the difference and does not grade it: we have no way to know which of us is right about any one player, and nothing here claims we do. Your board saves to your account, so it survives a reload and is waiting on draft morning, and the Cheat sheet view prints or copies it as a clean tiered list \u2014 your order, your tiers, your flags, and none of our numbers, because at pick 4.11 a projection beside a ranking you already overrode is just an invitation to second-guess yourself. Saving tells you exactly what happened \u2014 saving, saved, or what went wrong \u2014 and if a board is ever too large to store we refuse it whole and say so rather than quietly keeping part of it."
       },
       {
         "tag": "improved",
-        "text": "Auction Optimizer: one honest dollar value per player, and the projection's range where it belongs. Values shipped as a range — and the bottom of that range was $1 for every player on the board, Bijan Robinson and Ashton Jeanty included. That was arithmetically true and useless: the low end of a season projection is the season where a player gets hurt, and a player who misses ten games is worth the minimum, which is equally true of everybody. The top end was worse in a way that was harder to see — add up the high edges of the players who actually get bought and you get more than four times the money that exists in the room, so it was never a price either. An auction dollar is a share of a fixed pot rather than a level, so a projection's range cannot be converted into a range of prices without assuming how different players' seasons move together, and we do not model that. So the board now shows a single value — the players who get drafted add up to exactly the money in the room — and the projection's own 80% range is quoted in points, which is the unit it actually means something in."
+        "text": "Auction Optimizer: one honest dollar value per player, and the projection's range where it belongs. Values shipped as a range \u2014 and the bottom of that range was $1 for every player on the board, Bijan Robinson and Ashton Jeanty included. That was arithmetically true and useless: the low end of a season projection is the season where a player gets hurt, and a player who misses ten games is worth the minimum, which is equally true of everybody. The top end was worse in a way that was harder to see \u2014 add up the high edges of the players who actually get bought and you get more than four times the money that exists in the room, so it was never a price either. An auction dollar is a share of a fixed pot rather than a level, so a projection's range cannot be converted into a range of prices without assuming how different players' seasons move together, and we do not model that. So the board now shows a single value \u2014 the players who get drafted add up to exactly the money in the room \u2014 and the projection's own 80% range is quoted in points, which is the unit it actually means something in."
       },
       {
         "tag": "improved",
-        "text": "Auction Optimizer: record any nomination, at the price it actually sold for. An auction is driven by nominations, and the room nominates whoever it likes — so most of a real auction gets recorded from the searchable board rather than from the handful of names shortlisted for your roster. Every row on that board now has a price box beside its two buttons: search the player who was just put up, type what he went for, and record whether you won him or which team did. Leave the box empty and we record what he is worth at today's prices — the greyed-out number the box is already showing, so what you see is what gets written. It is the same box wherever a player appears, so a price typed in one place is the price recorded in the other. Prices are what drive everything else on the screen: a sale recorded at the wrong number moves the inflation multiplier, every team's remaining money and every max bid with it."
+        "text": "Auction Optimizer: record any nomination, at the price it actually sold for. An auction is driven by nominations, and the room nominates whoever it likes \u2014 so most of a real auction gets recorded from the searchable board rather than from the handful of names shortlisted for your roster. Every row on that board now has a price box beside its two buttons: search the player who was just put up, type what he went for, and record whether you won him or which team did. Leave the box empty and we record what he is worth at today's prices \u2014 the greyed-out number the box is already showing, so what you see is what gets written. It is the same box wherever a player appears, so a price typed in one place is the price recorded in the other. Prices are what drive everything else on the screen: a sale recorded at the wrong number moves the inflation multiplier, every team's remaining money and every max bid with it."
       },
       {
         "tag": "new",
-        "text": "Auction Optimizer: a live tool for auction leagues, beside the snake Draft Optimizer. An auction is not a draft with prices attached — it hands every team a fixed budget, and what your money is worth changes every time somebody else spends theirs, so it needs its own tool. Every player now carries a dollar value for your league size and budget: the room's money, minus the dollar every roster spot has to cost, shared out by how far each player is projected above the last startable player at his position. It is shown as a range rather than a single figure, because the range is the projection's own 80% interval priced in dollars — what he is worth if the season goes well or badly, not a guess at what he will go for. As players sell you record the price, and the board re-prices itself: if the room has overpaid there is less money left chasing the same players, so everyone remaining gets cheaper, and the tool says so in a single multiplier. Your max bid on anyone is the smaller of what he is worth at today's prices and the most you can pay while still leaving a dollar for every slot you have left to fill — so it will never walk you into an empty starting spot with no money to fill it. Each bid says which of those two numbers it came from. There is also a nomination panel: put up players you want when prices are soft, and expensive players you do not want when you are the one with money to spare. We do not model what your room will actually pay for anyone, so a value is what a player is worth, never a prediction of his price."
+        "text": "Auction Optimizer: a live tool for auction leagues, beside the snake Draft Optimizer. An auction is not a draft with prices attached \u2014 it hands every team a fixed budget, and what your money is worth changes every time somebody else spends theirs, so it needs its own tool. Every player now carries a dollar value for your league size and budget: the room's money, minus the dollar every roster spot has to cost, shared out by how far each player is projected above the last startable player at his position. It is shown as a range rather than a single figure, because the range is the projection's own 80% interval priced in dollars \u2014 what he is worth if the season goes well or badly, not a guess at what he will go for. As players sell you record the price, and the board re-prices itself: if the room has overpaid there is less money left chasing the same players, so everyone remaining gets cheaper, and the tool says so in a single multiplier. Your max bid on anyone is the smaller of what he is worth at today's prices and the most you can pay while still leaving a dollar for every slot you have left to fill \u2014 so it will never walk you into an empty starting spot with no money to fill it. Each bid says which of those two numbers it came from. There is also a nomination panel: put up players you want when prices are soft, and expensive players you do not want when you are the one with money to spare. We do not model what your room will actually pay for anyone, so a value is what a player is worth, never a prediction of his price."
       },
       {
         "tag": "fixed",
-        "text": "Draft recommendations: a tight end no longer wins your FLEX seat unless he actually out-projects the running backs and receivers beside him. Value over replacement compares a player to the last startable player at HIS OWN position, which is exactly right for a slot only he can fill — and the wrong yardstick for a FLEX, which does not care which position walks into it. On this year's board, replacement level sits about 19 points lower at tight end than at running back or receiver, so every tight end carried that much of a head start into a comparison he does not deliver in your lineup. A FLEX-only candidate is now measured against what could actually replace him in that seat, which makes the comparison a comparison of projected points. Measured over 200 simulated drafts on the served board, it changes the top recommendation on 3 to 6 percent of picks, all of them in rounds three through seven, and in every single case the pick it replaces is a tight end at FLEX. Your dedicated tight end starter is untouched — taking the best one before the cliff is still the advice there. This is the shared engine, so the live Draft Optimizer changes with it."
+        "text": "Draft recommendations: a tight end no longer wins your FLEX seat unless he actually out-projects the running backs and receivers beside him. Value over replacement compares a player to the last startable player at HIS OWN position, which is exactly right for a slot only he can fill \u2014 and the wrong yardstick for a FLEX, which does not care which position walks into it. On this year's board, replacement level sits about 19 points lower at tight end than at running back or receiver, so every tight end carried that much of a head start into a comparison he does not deliver in your lineup. A FLEX-only candidate is now measured against what could actually replace him in that seat, which makes the comparison a comparison of projected points. Measured over 200 simulated drafts on the served board, it changes the top recommendation on 3 to 6 percent of picks, all of them in rounds three through seven, and in every single case the pick it replaces is a tight end at FLEX. Your dedicated tight end starter is untouched \u2014 taking the best one before the cliff is still the advice there. This is the shared engine, so the live Draft Optimizer changes with it."
       },
       {
         "tag": "improved",
-        "text": "Mock draft: after the draft you can open every team's starting lineup, ranked by projected starter points, so you can see what the room actually built and judge for yourself whether it drafted like a draft room. Player names on the results screen and the roster panel open their player page in a new tab, and your roster now shows each player's bye week — amber when another player at the same position shares it, which is the clash that costs you a lineup slot."
+        "text": "Mock draft: after the draft you can open every team's starting lineup, ranked by projected starter points, so you can see what the room actually built and judge for yourself whether it drafted like a draft room. Player names on the results screen and the roster panel open their player page in a new tab, and your roster now shows each player's bye week \u2014 amber when another player at the same position shares it, which is the clash that costs you a lineup slot."
       },
       {
         "tag": "fixed",
-        "text": "Draft screens: a longer recommendation reason was widening the whole page, giving it a horizontal scrollbar and pushing the roster panel off the right edge. Fixed on both the mock draft and the live Draft Optimizer, and the reason itself is shorter now — it names the score and the player's published VOR, with the explanation moved into the panel's tooltip."
+        "text": "Draft screens: a longer recommendation reason was widening the whole page, giving it a horizontal scrollbar and pushing the roster panel off the right edge. Fixed on both the mock draft and the live Draft Optimizer, and the reason itself is shorter now \u2014 it names the score and the player's published VOR, with the explanation moved into the panel's tooltip."
       },
       {
         "tag": "fixed",
@@ -125,31 +129,31 @@
       },
       {
         "tag": "improved",
-        "text": "The NFL menu is grouped by what you are trying to do — Rankings & research, Draft, My leagues — rather than one list of twelve. Mock Draft now sits directly beside the Draft Optimizer, which is the pairing it should always have had."
+        "text": "The NFL menu is grouped by what you are trying to do \u2014 Rankings & research, Draft, My leagues \u2014 rather than one list of twelve. Mock Draft now sits directly beside the Draft Optimizer, which is the pairing it should always have had."
       },
       {
         "tag": "new",
-        "text": "Mock Draft: practise a full draft against CPU opponents, any time of year. Pick your format, league size and draft slot, and the room drafts around you — each seat with its own habits, blending market ADP with our projections, so players we like and the market does not actually fall to you. You draft with the same recommendations and the same reasoning the live Draft Optimizer gives you, then see how your roster came out: projected starter points against the rest of the room, position by position, and which of your picks fell furthest past ADP. Quick eight-round or full-roster, and a Skip button when you do not want to wait on the clock."
+        "text": "Mock Draft: practise a full draft against CPU opponents, any time of year. Pick your format, league size and draft slot, and the room drafts around you \u2014 each seat with its own habits, blending market ADP with our projections, so players we like and the market does not actually fall to you. You draft with the same recommendations and the same reasoning the live Draft Optimizer gives you, then see how your roster came out: projected starter points against the rest of the room, position by position, and which of your picks fell furthest past ADP. Quick eight-round or full-roster, and a Skip button when you do not want to wait on the clock."
       },
       {
         "tag": "improved",
-        "text": "The mock draft's results screen says plainly what it is measuring. It ranks the room on our own projections — the same numbers the recommendations use — while the CPU teams draft partly off market ADP, so following the board closely is most of what a high finish there means. That is on the screen beside the rank, not buried in a tooltip."
+        "text": "The mock draft's results screen says plainly what it is measuring. It ranks the room on our own projections \u2014 the same numbers the recommendations use \u2014 while the CPU teams draft partly off market ADP, so following the board closely is most of what a high finish there means. That is on the screen beside the rank, not buried in a tooltip."
       },
       {
         "tag": "fixed",
-        "text": "The draft board is rebuilding daily again. Since 16 August the automated rebuild had been unable to read the kicker and defence projections, and rather than publish a board missing two positions it published nothing — so the board you were reading was correct, but it had stopped picking up new market and depth-chart data. It is advancing again, and the check that stopped the bad board from shipping is unchanged."
+        "text": "The draft board is rebuilding daily again. Since 16 August the automated rebuild had been unable to read the kicker and defence projections, and rather than publish a board missing two positions it published nothing \u2014 so the board you were reading was correct, but it had stopped picking up new market and depth-chart data. It is advancing again, and the check that stopped the bad board from shipping is unchanged."
       },
       {
         "tag": "improved",
-        "text": "Behind the scenes: we fixed a statistical flaw in how we check our own projection ranges. Every range we publish is meant to contain the real season outcome 80% of the time, and we re-check that against what actually happened. The old check compared a group's measured rate against 80% as a flat cut-off — which, on a small group like rookie running backs (148 seasons of history), rejects a perfectly accurate range about half the time purely by chance. So a failure told us almost nothing while still reading like a problem. The check now asks the honest question — is this group's coverage meaningfully below 80%, or just normal small-sample wobble? — using a threshold derived from the group's size alone, decided before any result is looked at. Small groups get more room; large ones barely move. Nothing about the projections you see changed today: this only makes the quality check trustworthy in both directions, so a genuinely broken range still fails it."
+        "text": "Behind the scenes: we fixed a statistical flaw in how we check our own projection ranges. Every range we publish is meant to contain the real season outcome 80% of the time, and we re-check that against what actually happened. The old check compared a group's measured rate against 80% as a flat cut-off \u2014 which, on a small group like rookie running backs (148 seasons of history), rejects a perfectly accurate range about half the time purely by chance. So a failure told us almost nothing while still reading like a problem. The check now asks the honest question \u2014 is this group's coverage meaningfully below 80%, or just normal small-sample wobble? \u2014 using a threshold derived from the group's size alone, decided before any result is looked at. Small groups get more room; large ones barely move. Nothing about the projections you see changed today: this only makes the quality check trustworthy in both directions, so a genuinely broken range still fails it."
       },
       {
         "tag": "fixed",
-        "text": "Trying to save a second league on a free account now says so. A free account keeps one personalized league, and the server has always refused the second one — but the refusal came back to you as a generic \"could not save\", which reads as something broken rather than as a limit. You now get the limit stated plainly, a note that nothing was saved and your settings are still on screen, and the option to become a member if you want to keep several. A genuine save failure still shows the ordinary error, so the two are no longer the same message."
+        "text": "Trying to save a second league on a free account now says so. A free account keeps one personalized league, and the server has always refused the second one \u2014 but the refusal came back to you as a generic \"could not save\", which reads as something broken rather than as a limit. You now get the limit stated plainly, a note that nothing was saved and your settings are still on screen, and the option to become a member if you want to keep several. A genuine save failure still shows the ordinary error, so the two are no longer the same message."
       },
       {
         "tag": "improved",
-        "text": "The date stamp under the projected-games flag now reads \"Injury/roster feed as of\" instead of \"Injury and roster status as of\". It sits directly beneath the note explaining that we hold a player's weekly game-status designation and do not build it into his projection — and the old wording implied the opposite, that we knew his status and had acted on it. The line only ever meant one thing: when the feed we read was captured. It now says that and nothing more."
+        "text": "The date stamp under the projected-games flag now reads \"Injury/roster feed as of\" instead of \"Injury and roster status as of\". It sits directly beneath the note explaining that we hold a player's weekly game-status designation and do not build it into his projection \u2014 and the old wording implied the opposite, that we knew his status and had acted on it. The line only ever meant one thing: when the feed we read was captured. It now says that and nothing more."
       }
     ]
   },
@@ -162,19 +166,19 @@
       },
       {
         "tag": "improved",
-        "text": "When a player on your roster has no projection beside him, My Teams now says why: a position we have not published, a name we could not match, or a position we do not project at all. Those are three different things with three different answers — and only one of them is fixed by re-importing your league, which the page now tells you."
+        "text": "When a player on your roster has no projection beside him, My Teams now says why: a position we have not published, a name we could not match, or a position we do not project at all. Those are three different things with three different answers \u2014 and only one of them is fixed by re-importing your league, which the page now tells you."
       },
       {
         "tag": "fixed",
-        "text": "My Teams reads properly on a phone. The roster and summary tables had a fixed minimum width, so you had to drag them left and right to reach the points column — on the one page most likely to be opened on a phone. The tables now fit the screen, dropping the two least important columns on a narrow one so the projection and the bench figure are always in view."
+        "text": "My Teams reads properly on a phone. The roster and summary tables had a fixed minimum width, so you had to drag them left and right to reach the points column \u2014 on the one page most likely to be opened on a phone. The tables now fit the screen, dropping the two least important columns on a narrow one so the projection and the bench figure are always in view."
       },
       {
         "tag": "added",
-        "text": "My Teams now shows what each of your teams is projected to score — twice. \"Your current starters\" totals the lineup your platform reports; \"your best possible lineup\" totals the best legal one we could field from the same roster. The difference is the headline: how many projected points you are leaving on your bench, league by league. Both figures are full-season projections before kickoff, scored on that league's own rules, so the bench number is unaffected by the differences between your leagues. A summary at the top orders your teams by their best possible lineup — a rough guide only, since your leagues neither score the same way nor start the same number of players, and the page says so beside the table."
+        "text": "My Teams now shows what each of your teams is projected to score \u2014 twice. \"Your current starters\" totals the lineup your platform reports; \"your best possible lineup\" totals the best legal one we could field from the same roster. The difference is the headline: how many projected points you are leaving on your bench, league by league. Both figures are full-season projections before kickoff, scored on that league's own rules, so the bench number is unaffected by the differences between your leagues. A summary at the top orders your teams by their best possible lineup \u2014 a rough guide only, since your leagues neither score the same way nor start the same number of players, and the page says so beside the table."
       },
       {
         "tag": "added",
-        "text": "Memberships are open. The first 100 members pay $10/month, locked in for as long as the membership stays active; after that it is $20. Cancel any time from Settings — access runs to the end of the period you have already paid for, and the page tells you the exact date."
+        "text": "Memberships are open. The first 100 members pay $10/month, locked in for as long as the membership stays active; after that it is $20. Cancel any time from Settings \u2014 access runs to the end of the period you have already paid for, and the page tells you the exact date."
       },
       {
         "tag": "fixed",
@@ -182,79 +186,79 @@
       },
       {
         "tag": "fixed",
-        "text": "The player dropdown in \"Log a prop\" was empty for everyone, on every date — two stacked failures in the reads behind it, both fixed. Those reads now report why they failed instead of returning an empty list, which had looked exactly like a day with nothing scheduled yet."
+        "text": "The player dropdown in \"Log a prop\" was empty for everyone, on every date \u2014 two stacked failures in the reads behind it, both fixed. Those reads now report why they failed instead of returning an empty list, which had looked exactly like a day with nothing scheduled yet."
       },
       {
         "tag": "new",
-        "text": "Total Bases now has the same one-click \"Log this prop\" button as the strikeout pages. It copies the batter, the book you pick and its posted line into your Bet Log, where it settles against the batter’s real total bases once the game is final."
+        "text": "Total Bases now has the same one-click \"Log this prop\" button as the strikeout pages. It copies the batter, the book you pick and its posted line into your Bet Log, where it settles against the batter\u2019s real total bases once the game is final."
       },
       {
         "tag": "new",
-        "text": "You can now log a batter total-bases prop to your Bet Log. \"Log a prop\" only understood pitcher strikeouts, so a total-bases bet you had actually placed could not be recorded. It now asks which prop type you are logging and offers every batter in that day’s posted lineups. Bookkeeping only — not betting advice."
+        "text": "You can now log a batter total-bases prop to your Bet Log. \"Log a prop\" only understood pitcher strikeouts, so a total-bases bet you had actually placed could not be recorded. It now asks which prop type you are logging and offers every batter in that day\u2019s posted lineups. Bookkeeping only \u2014 not betting advice."
       },
       {
         "tag": "improved",
-        "text": "NFL draft-board point totals now sit at the level players actually produce. Our track record showed expected points running below realized totals for the draftable tier, and the cause was the per-game rate. A per-position correction, fitted only on finished seasons, moves running backs up about a quarter, receivers and tight ends about a tenth, and quarterbacks down about seven percent. Order within a position and the 80% range are unchanged — this corrects the number toward what happened, it does not make us better at ranking players."
+        "text": "NFL draft-board point totals now sit at the level players actually produce. Our track record showed expected points running below realized totals for the draftable tier, and the cause was the per-game rate. A per-position correction, fitted only on finished seasons, moves running backs up about a quarter, receivers and tight ends about a tenth, and quarterbacks down about seven percent. Order within a position and the 80% range are unchanged \u2014 this corrects the number toward what happened, it does not make us better at ranking players."
       },
       {
         "tag": "improved",
-        "text": "The draft board now rebuilds daily through draft season and reads the current market when it does. Average draft position and expert rankings had been coming from a cache nothing could refresh, so a board could be pricing against a market three weeks old — and those inputs feed the sort order, not just the ADP column. A fresher build is not a better model."
+        "text": "The draft board now rebuilds daily through draft season and reads the current market when it does. Average draft position and expert rankings had been coming from a cache nothing could refresh, so a board could be pricing against a market three weeks old \u2014 and those inputs feed the sort order, not just the ADP column. A fresher build is not a better model."
       },
       {
         "tag": "improved",
-        "text": "Every fantasy page now dates each input separately, not just the board build. One date used to stand for the projection, the ADP column beside it and the depth charts behind it — on the 10 August board that read 8/10 over a market snapshot from 25 July. Where we genuinely cannot tell how old an input is, it now says \"unknown\"."
+        "text": "Every fantasy page now dates each input separately, not just the board build. One date used to stand for the projection, the ADP column beside it and the depth charts behind it \u2014 on the 10 August board that read 8/10 over a market snapshot from 25 July. Where we genuinely cannot tell how old an input is, it now says \"unknown\"."
       },
       {
         "tag": "new",
-        "text": "The Roster Report now has a League tab: every team in your league, filled by our optimizer and totalled on your league’s own scoring. It ranks projected starting points — not a projected finish, and not a chance of winning anything. We do not know what lineup another manager will start, so every team is filled the same way yours is, and rosters are as they stood when you imported."
+        "text": "The Roster Report now has a League tab: every team in your league, filled by our optimizer and totalled on your league\u2019s own scoring. It ranks projected starting points \u2014 not a projected finish, and not a chance of winning anything. We do not know what lineup another manager will start, so every team is filled the same way yours is, and rosters are as they stood when you imported."
       },
       {
         "tag": "fixed",
-        "text": "Your league defence now scores. Your platform calls it \"Lions D/ST\" while our board calls it \"DET D/ST\", so no team defence ever matched by name — the D/ST slot sat empty and its points were missing from your projected team total. Defences are now matched by team."
+        "text": "Your league defence now scores. Your platform calls it \"Lions D/ST\" while our board calls it \"DET D/ST\", so no team defence ever matched by name \u2014 the D/ST slot sat empty and its points were missing from your projected team total. Defences are now matched by team."
       },
       {
         "tag": "improved",
-        "text": "The Roster Report’s wire section is now a real free-agent pool. We keep every team’s roster at import, so it lists players on nobody’s roster in your league rather than only players outside the pool a league your size drafts. It is the picture from when you imported — we never re-read your league."
+        "text": "The Roster Report\u2019s wire section is now a real free-agent pool. We keep every team\u2019s roster at import, so it lists players on nobody\u2019s roster in your league rather than only players outside the pool a league your size drafts. It is the picture from when you imported \u2014 we never re-read your league."
       },
       {
         "tag": "new",
-        "text": "The Props page has a Total Bases tab: our per-batter total-bases projection beside each sportsbook’s line. Each card opens a full distribution — the projected range, the chance of 1+, 2+, 3+ and 4+ bases, and our probability against each book’s de-vigged price. A projection and transparency comparison only, not betting advice."
+        "text": "The Props page has a Total Bases tab: our per-batter total-bases projection beside each sportsbook\u2019s line. Each card opens a full distribution \u2014 the projected range, the chance of 1+, 2+, 3+ and 4+ bases, and our probability against each book\u2019s de-vigged price. A projection and transparency comparison only, not betting advice."
       },
       {
         "tag": "improved",
-        "text": "The Props page is now organized by game rather than one long card grid — a full slate can be 100+ quoted batters. Games are collapsible sections in start-time order, plus a team filter, a name search and a Sportsbook filter. Sort still opens on slate order; you can instead order by projection, by our probability of 2+ bases, or by the gap to the book’s number — never a \"top plays\" pick."
+        "text": "The Props page is now organized by game rather than one long card grid \u2014 a full slate can be 100+ quoted batters. Games are collapsible sections in start-time order, plus a team filter, a name search and a Sportsbook filter. Sort still opens on slate order; you can instead order by projection, by our probability of 2+ bases, or by the gap to the book\u2019s number \u2014 never a \"top plays\" pick."
       },
       {
         "tag": "fixed",
-        "text": "Total Bases was missing entire games that Strikeouts still showed, including games already under way — a batter only appeared once a book had a currently-live line, so a game starting dropped every batter in it. It is now built from posted lineups, with a book line shown when one is available."
+        "text": "Total Bases was missing entire games that Strikeouts still showed, including games already under way \u2014 a batter only appeared once a book had a currently-live line, so a game starting dropped every batter in it. It is now built from posted lineups, with a book line shown when one is available."
       },
       {
         "tag": "new",
-        "text": "A Post-Draft Roster Report. Import your drafted league and one page reads your team back in your league’s own scoring: your starting lineup and its season projection with an 80% range, where you are strong and thin, what each bye week costs, the best names on the wire, and the trade shape your roster suggests. It will not grade your draft or predict where you finish, and it compares you to an average team with your settings rather than to the other managers in your league."
+        "text": "A Post-Draft Roster Report. Import your drafted league and one page reads your team back in your league\u2019s own scoring: your starting lineup and its season projection with an 80% range, where you are strong and thin, what each bye week costs, the best names on the wire, and the trade shape your roster suggests. It will not grade your draft or predict where you finish, and it compares you to an average team with your settings rather than to the other managers in your league."
       },
       {
         "tag": "fixed",
-        "text": "\"Our rank\" on the home page now means what it means on the rankings page. It had been our rank among the players the market actually drafts, while the rankings page ranks everyone we project — on the current board that is 23 tight ends against 169. The card now shows the full-board rank, so the number you read is the number you find when you click through."
+        "text": "\"Our rank\" on the home page now means what it means on the rankings page. It had been our rank among the players the market actually drafts, while the rankings page ranks everyone we project \u2014 on the current board that is 23 tight ends against 169. The card now shows the full-board rank, so the number you read is the number you find when you click through."
       },
       {
         "tag": "fixed",
-        "text": "Kickers and defenses no longer sit among the skill players in the board’s \"Available players\" list. Last week’s fix only covered the recommendations panel, so a defense you had just been steered away from reappeared near the top of best-available. Both surfaces now share one ordering rule. Their overall-rank number is blank rather than comparing them to skill players; position rank (DST4, K2) still sits beside the name."
+        "text": "Kickers and defenses no longer sit among the skill players in the board\u2019s \"Available players\" list. Last week\u2019s fix only covered the recommendations panel, so a defense you had just been steered away from reappeared near the top of best-available. Both surfaces now share one ordering rule. Their overall-rank number is blank rather than comparing them to skill players; position rank (DST4, K2) still sits beside the name."
       },
       {
         "tag": "fixed",
-        "text": "The draft optimizer no longer suggests a kicker or defense in the early rounds — on the current board, round six came back five-sixths kickers and defenses. Their value over replacement is real but smaller than the noise around it, so they are now held back until your roster actually needs them."
+        "text": "The draft optimizer no longer suggests a kicker or defense in the early rounds \u2014 on the current board, round six came back five-sixths kickers and defenses. Their value over replacement is real but smaller than the noise around it, so they are now held back until your roster actually needs them."
       },
       {
         "tag": "fixed",
-        "text": "The draft optimizer will no longer let you finish a draft with an empty starter slot. Recommendations could drift onto bench depth — a full 12-team test draft finished with both running-back spots empty. Once every remaining pick is needed to fill a slot, it only suggests players who fill one. The same draft now finishes nine of nine."
+        "text": "The draft optimizer will no longer let you finish a draft with an empty starter slot. Recommendations could drift onto bench depth \u2014 a full 12-team test draft finished with both running-back spots empty. Once every remaining pick is needed to fill a slot, it only suggests players who fill one. The same draft now finishes nine of nine."
       },
       {
         "tag": "fixed",
-        "text": "The draft optimizer’s recommendations had a ranking bug affecting every position: the scarcity bonus for a steep drop-off went to whoever sat directly above the cliff, regardless of how good he was. Across the board, 445 pairs ranked a worse player above a better one at the same position. The bonus now belongs to the position and goes to the best player still available there."
+        "text": "The draft optimizer\u2019s recommendations had a ranking bug affecting every position: the scarcity bonus for a steep drop-off went to whoever sat directly above the cliff, regardless of how good he was. Across the board, 445 pairs ranked a worse player above a better one at the same position. The bonus now belongs to the position and goes to the best player still available there."
       },
       {
         "tag": "added",
-        "text": "You can now sign in with just your email — we send a six-digit code, so there's no password to set or forget. Google sign-in still works as before."
+        "text": "You can now sign in with just your email \u2014 we send a six-digit code, so there's no password to set or forget. Google sign-in still works as before."
       }
     ]
   },
@@ -263,31 +267,31 @@
     "items": [
       {
         "tag": "new",
-        "text": "A free account now includes one personalized league. Import it from Sleeper, Yahoo or ESPN — or enter your scoring by hand — and your board is re-scored for your actual settings, with value over replacement computed against your real starting lineup. My League leads with what changed in your scoring, and why."
+        "text": "A free account now includes one personalized league. Import it from Sleeper, Yahoo or ESPN \u2014 or enter your scoring by hand \u2014 and your board is re-scored for your actual settings, with value over replacement computed against your real starting lineup. My League leads with what changed in your scoring, and why."
       },
       {
         "tag": "new",
-        "text": "The NFL fantasy rankings and projections are now free to read, with every number real — our projection, rank, 80% range and market ADP for every player, no account needed. The free board is full-PPR, twelve-team; other formats and league sizes are part of a membership."
+        "text": "The NFL fantasy rankings and projections are now free to read, with every number real \u2014 our projection, rank, 80% range and market ADP for every player, no account needed. The free board is full-PPR, twelve-team; other formats and league sizes are part of a membership."
       },
       {
         "tag": "added",
-        "text": "Rankings and the League Board now show how far each player has moved from our generic board once you select your own league — the \"vs our generic board\" comparison that used to live only on My League."
+        "text": "Rankings and the League Board now show how far each player has moved from our generic board once you select your own league \u2014 the \"vs our generic board\" comparison that used to live only on My League."
       },
       {
         "tag": "added",
-        "text": "A \"full-season rate\" column now sits beside expected points on the rankings, projections and player pages — what a player is worth in the weeks he plays, stretched over a full 17 games, so two players with different injury risk are easier to compare."
+        "text": "A \"full-season rate\" column now sits beside expected points on the rankings, projections and player pages \u2014 what a player is worth in the weeks he plays, stretched over a full 17 games, so two players with different injury risk are easier to compare."
       },
       {
         "tag": "changed",
-        "text": "Our projected points are now labelled \"Expected pts\" everywhere. They already price in the games we expect a player to miss, so they run lower than an \"if he plays every week\" number — the Track Record shows projected games beside them so you can see the discount. Point rankings are unchanged."
+        "text": "Our projected points are now labelled \"Expected pts\" everywhere. They already price in the games we expect a player to miss, so they run lower than an \"if he plays every week\" number \u2014 the Track Record shows projected games beside them so you can see the discount. Point rankings are unchanged."
       },
       {
         "tag": "added",
-        "text": "The membership page now shows the price, billing period and remaining founding-member seats before you sign up — read straight from Stripe, so what's advertised is what's billed."
+        "text": "The membership page now shows the price, billing period and remaining founding-member seats before you sign up \u2014 read straight from Stripe, so what's advertised is what's billed."
       },
       {
         "tag": "new",
-        "text": "You can now create an account yourself — one click with Google, or with your email. Signing up is free, you subscribe when you want to, and you land back on whatever page you started from."
+        "text": "You can now create an account yourself \u2014 one click with Google, or with your email. Signing up is free, you subscribe when you want to, and you land back on whatever page you started from."
       },
       {
         "tag": "improved",
@@ -295,11 +299,11 @@
       },
       {
         "tag": "fixed",
-        "text": "On a phone, the menu no longer runs off the bottom of the screen — Sign Out and Settings are always reachable, and it scrolls on its own without moving the page behind it."
+        "text": "On a phone, the menu no longer runs off the bottom of the screen \u2014 Sign Out and Settings are always reachable, and it scrolls on its own without moving the page behind it."
       },
       {
         "tag": "new",
-        "text": "My League now lets you switch between every saved league you have, instead of always showing whichever one happened to load first. If you've saved more than one league — a subscriber account can save several — a picker at the top of the page lists them by name; choosing a different one re-scores the whole page, board and all, for that league, and your choice sticks through a refresh. A free account only ever has one saved league, so nothing changes there."
+        "text": "My League now lets you switch between every saved league you have, instead of always showing whichever one happened to load first. If you've saved more than one league \u2014 a subscriber account can save several \u2014 a picker at the top of the page lists them by name; choosing a different one re-scores the whole page, board and all, for that league, and your choice sticks through a refresh. A free account only ever has one saved league, so nothing changes there."
       }
     ]
   },
@@ -308,27 +312,27 @@
     "items": [
       {
         "tag": "new",
-        "text": "A new My Teams page (NFL → Fantasy) shows every league you've imported in one place, each roster scored under that league's own format. Tell us which team is yours and your starters and bench show up with a season projection and 80% range. Per-game splits and waivers arrive with the weekly model."
+        "text": "A new My Teams page (NFL \u2192 Fantasy) shows every league you've imported in one place, each roster scored under that league's own format. Tell us which team is yours and your starters and bench show up with a season projection and 80% range. Per-game splits and waivers arrive with the weekly model."
       },
       {
         "tag": "new",
-        "text": "Opened three NFL fantasy pages under NFL → Fantasy — Projections, Rankings and the League Board. Every player's 2026 projection is re-scored for your league's format and size, with an 80% range on every number and value over replacement on the board."
+        "text": "Opened three NFL fantasy pages under NFL \u2192 Fantasy \u2014 Projections, Rankings and the League Board. Every player's 2026 projection is re-scored for your league's format and size, with an 80% range on every number and value over replacement on the board."
       },
       {
         "tag": "new",
-        "text": "Kickers and defenses (K and D/ST) are now projected, and your league's exact scoring applies precisely — field goals by distance, the points-allowed tier table, and yards-allowed tiers — because we emit raw components rather than a single total. These are the least predictable positions, so read them as a streaming tier with wide ranges, not a precise rank."
+        "text": "Kickers and defenses (K and D/ST) are now projected, and your league's exact scoring applies precisely \u2014 field goals by distance, the points-allowed tier table, and yards-allowed tiers \u2014 because we emit raw components rather than a single total. These are the least predictable positions, so read them as a streaming tier with wide ranges, not a precise rank."
       },
       {
         "tag": "new",
-        "text": "Every player now has his own page — full projected stat line, fantasy points under standard, half-PPR, full-PPR and your own league, his 80% range drawn as a band, position rank, value over replacement, tier, and where the market is drafting him. Reach it from any board or from Player Search."
+        "text": "Every player now has his own page \u2014 full projected stat line, fantasy points under standard, half-PPR, full-PPR and your own league, his 80% range drawn as a band, position rank, value over replacement, tier, and where the market is drafting him. Reach it from any board or from Player Search."
       },
       {
         "tag": "new",
-        "text": "Player pages gained a headshot and bio, a breakdown of what pushes each player's number up or down (in actual points, from a separate research model — a second independent read, not a receipt for the projection), and a subscriber History panel: how he finished each season back to 2019, that year's ADP, a weekly injury log, and a plain-language consistency read."
+        "text": "Player pages gained a headshot and bio, a breakdown of what pushes each player's number up or down (in actual points, from a separate research model \u2014 a second independent read, not a receipt for the projection), and a subscriber History panel: how he finished each season back to 2019, that year's ADP, a weekly injury log, and a plain-language consistency read."
       },
       {
         "tag": "new",
-        "text": "Added market ADP to the Rankings and League Board, with a \"vs ADP\" column showing where our board and the public disagree — matched to your scoring format and league size. It's a reference point, not a claim our order is the better one."
+        "text": "Added market ADP to the Rankings and League Board, with a \"vs ADP\" column showing where our board and the public disagree \u2014 matched to your scoring format and league size. It's a reference point, not a claim our order is the better one."
       },
       {
         "tag": "improved",
@@ -336,31 +340,31 @@
       },
       {
         "tag": "improved",
-        "text": "Players who sat out all of last season (Brandon Aiyuk, Tank Dell) are back on the board — projected off their most recent season played, with a hard availability discount and a Low-confidence badge, so they usually sit below where the market drafts them."
+        "text": "Players who sat out all of last season (Brandon Aiyuk, Tank Dell) are back on the board \u2014 projected off their most recent season played, with a hard availability discount and a Low-confidence badge, so they usually sit below where the market drafts them."
       },
       {
         "tag": "improved",
-        "text": "We recalibrated our 80% projection ranges against what players actually did. The old method under-covered badly — only ~55% of veterans finished inside their range — so ranges are now read from comparable players' real outcomes, position by position, and are honestly wider (a late-round veteran's floor is often zero). Point projections are unchanged."
+        "text": "We recalibrated our 80% projection ranges against what players actually did. The old method under-covered badly \u2014 only ~55% of veterans finished inside their range \u2014 so ranges are now read from comparable players' real outcomes, position by position, and are honestly wider (a late-round veteran's floor is often zero). Point projections are unchanged."
       },
       {
         "tag": "improved",
-        "text": "Pick email alerts now arrive as lineups confirm through the day, when your lineup-confirmed picks are ready — instead of a single morning email built on preliminary picks. Moneyline and totals only, each pick emailed once."
+        "text": "Pick email alerts now arrive as lineups confirm through the day, when your lineup-confirmed picks are ready \u2014 instead of a single morning email built on preliminary picks. Moneyline and totals only, each pick emailed once."
       },
       {
         "tag": "fixed",
-        "text": "Fixed a scoring bug where ESPN-imported leagues ignored passing, rushing and receiving yards — the bulk of fantasy scoring — so those boards had been ranking almost entirely on touchdowns and receptions. Every ESPN league is now corrected with no re-import needed. Sleeper and Yahoo were never affected."
+        "text": "Fixed a scoring bug where ESPN-imported leagues ignored passing, rushing and receiving yards \u2014 the bulk of fantasy scoring \u2014 so those boards had been ranking almost entirely on touchdowns and receptions. Every ESPN league is now corrected with no re-import needed. Sleeper and Yahoo were never affected."
       },
       {
         "tag": "fixed",
-        "text": "Fixed player pages showing an IL badge on healthy, playing players — 62 of the 187 flagged as injured had already played since. Status now clears whenever a player appears in a game, and is checked daily against that exact contradiction."
+        "text": "Fixed player pages showing an IL badge on healthy, playing players \u2014 62 of the 187 flagged as injured had already played since. Status now clears whenever a player appears in a game, and is checked daily against that exact contradiction."
       },
       {
         "tag": "fixed",
-        "text": "The MLB prospect board now shows a traded prospect's current organization and puts him on the right AL/NL sheet — org comes from MLB's own data instead of FanGraphs' editorial board, which doesn't repoint a player when he's traded."
+        "text": "The MLB prospect board now shows a traded prospect's current organization and puts him on the right AL/NL sheet \u2014 org comes from MLB's own data instead of FanGraphs' editorial board, which doesn't repoint a player when he's traded."
       },
       {
         "tag": "fixed",
-        "text": "The Settings page now tells you the truth about a canceled subscription — the exact date your access continues through, instead of still showing \"Active subscription\"."
+        "text": "The Settings page now tells you the truth about a canceled subscription \u2014 the exact date your access continues through, instead of still showing \"Active subscription\"."
       },
       {
         "tag": "fixed",
@@ -372,7 +376,7 @@
       },
       {
         "tag": "model",
-        "text": "We briefly swapped the model behind our projected run totals on August 2nd and reverted it the same day — re-scoring both showed the original was better calibrated, so we put it back. Neither model's per-game uncertainty is where we want it yet; that's what we're working on. Totals bets remain paused, and this was never a betting claim."
+        "text": "We briefly swapped the model behind our projected run totals on August 2nd and reverted it the same day \u2014 re-scoring both showed the original was better calibrated, so we put it back. Neither model's per-game uncertainty is where we want it yet; that's what we're working on. Totals bets remain paused, and this was never a betting claim."
       }
     ]
   },
@@ -381,15 +385,15 @@
     "items": [
       {
         "tag": "new",
-        "text": "Added a \"Predictive distribution\" section to the totals pick-detail page — the model's full calibrated view of how a game's scoring could land: the game-total distribution with the market line drawn on it, an 80% range, the probability of the over, and per-team and alternate-line ladders. It's a transparency view of the model's uncertainty, not a bet recommendation."
+        "text": "Added a \"Predictive distribution\" section to the totals pick-detail page \u2014 the model's full calibrated view of how a game's scoring could land: the game-total distribution with the market line drawn on it, an 80% range, the probability of the over, and per-team and alternate-line ladders. It's a transparency view of the model's uncertainty, not a bet recommendation."
       },
       {
         "tag": "new",
-        "text": "Added two-factor authentication (Settings → Two-Factor Authentication) — turn on an authenticator app and enter a 6-digit code alongside your password each sign-in. If you sign in with Google, 2FA is already handled by your Google account."
+        "text": "Added two-factor authentication (Settings \u2192 Two-Factor Authentication) \u2014 turn on an authenticator app and enter a 6-digit code alongside your password each sign-in. If you sign in with Google, 2FA is already handled by your Google account."
       },
       {
         "tag": "new",
-        "text": "Added \"Continue with Google\" to the sign-in page — sign in in one tap instead of typing an email and password. Credence never sees your Google password."
+        "text": "Added \"Continue with Google\" to the sign-in page \u2014 sign in in one tap instead of typing an email and password. Credence never sees your Google password."
       }
     ]
   },
@@ -398,7 +402,7 @@
     "items": [
       {
         "tag": "improved",
-        "text": "Win rate, record and ROI now mean exactly the same thing everywhere — win rate excludes pushes, records count one call per market, and ROI is your result net of the book's cut. Rates from only a handful of bets carry a plain \"small sample\" caveat, and the number of bets behind a rate is shown beside it."
+        "text": "Win rate, record and ROI now mean exactly the same thing everywhere \u2014 win rate excludes pushes, records count one call per market, and ROI is your result net of the book's cut. Rates from only a handful of bets carry a plain \"small sample\" caveat, and the number of bets behind a rate is shown beside it."
       }
     ]
   },
@@ -407,19 +411,19 @@
     "items": [
       {
         "tag": "new",
-        "text": "A Parlay Calculator is here (Betting → Parlay Calculator). Build a parlay from the day's slate and see our model's true combined probability next to the price the book implies, plus expected value per dollar and a plain verdict. Same-game legs are correlation-adjusted rather than naively multiplied. Most parlays are negative expected value once the vig is priced in, and this is built to show you that."
+        "text": "A Parlay Calculator is here (Betting \u2192 Parlay Calculator). Build a parlay from the day's slate and see our model's true combined probability next to the price the book implies, plus expected value per dollar and a plain verdict. Same-game legs are correlation-adjusted rather than naively multiplied. Most parlays are negative expected value once the vig is priced in, and this is built to show you that."
       },
       {
         "tag": "new",
-        "text": "You can now log a strikeout prop into your Bet Log — copied from a pitcher's projection, or back-logged for one you already placed — and it settles automatically against his actual strikeouts once the game is final."
+        "text": "You can now log a strikeout prop into your Bet Log \u2014 copied from a pitcher's projection, or back-logged for one you already placed \u2014 and it settles automatically against his actual strikeouts once the game is final."
       },
       {
         "tag": "new",
-        "text": "Bet alerts (Settings → Notifications) — opt in to be told by email or browser push when the model posts qualified plays for the day. Most days nothing fires. These are model outputs, not betting advice."
+        "text": "Bet alerts (Settings \u2192 Notifications) \u2014 opt in to be told by email or browser push when the model posts qualified plays for the day. Most days nothing fires. These are model outputs, not betting advice."
       },
       {
         "tag": "new",
-        "text": "Completed games now show a \"who called it\" scorecard — which side the model favored on the moneyline and total, and whether the call was right, shown as plainly for a miss as for a hit."
+        "text": "Completed games now show a \"who called it\" scorecard \u2014 which side the model favored on the moneyline and total, and whether the call was right, shown as plainly for a miss as for a hit."
       }
     ]
   },
@@ -432,15 +436,15 @@
       },
       {
         "tag": "new",
-        "text": "Starting pitcher pages now show our projected strikeout total for their next start, next to the book's line, with a per-book de-vigged Over% comparison. Single-game strikeout totals are high-variance — treat it as context, not a play."
+        "text": "Starting pitcher pages now show our projected strikeout total for their next start, next to the book's line, with a per-book de-vigged Over% comparison. Single-game strikeout totals are high-variance \u2014 treat it as context, not a play."
       },
       {
         "tag": "new",
-        "text": "The Performance page now shows a Bankroll by Sportsbook breakdown — balance, net deposits, betting P&L and growth per book. Growth is return on deposited funds, kept distinct from ROI (return on stake)."
+        "text": "The Performance page now shows a Bankroll by Sportsbook breakdown \u2014 balance, net deposits, betting P&L and growth per book. Growth is return on deposited funds, kept distinct from ROI (return on stake)."
       },
       {
         "tag": "new",
-        "text": "Each pick's detail page now shows a Line Movement chart across all seven books — how the moneyline and total drifted from open to current, with a de-vigged Over% view for totals. A market-context view, not an edge claim."
+        "text": "Each pick's detail page now shows a Line Movement chart across all seven books \u2014 how the moneyline and total drifted from open to current, with a de-vigged Over% view for totals. A market-context view, not an edge claim."
       }
     ]
   },
@@ -449,19 +453,19 @@
     "items": [
       {
         "tag": "new",
-        "text": "Matchup heatmaps are live on pick and player pages — a strike-zone heatmap of where a batter does damage, overlaid with where the pitcher actually locates each pitch type, with pitch-type toggles and per-cell detail. A show-your-work matchup view; the zone signal tested null for predictive edge."
+        "text": "Matchup heatmaps are live on pick and player pages \u2014 a strike-zone heatmap of where a batter does damage, overlaid with where the pitcher actually locates each pitch type, with pitch-type toggles and per-cell detail. A show-your-work matchup view; the zone signal tested null for predictive edge."
       },
       {
         "tag": "new",
-        "text": "Line Shopping on the EV Tracker — model-positive plays ranked by edge, with the best available US price and the book offering it highlighted per play, plus Pinnacle's fair-value anchor. On each pick, the best-priced book is marked with a \"BEST\" badge."
+        "text": "Line Shopping on the EV Tracker \u2014 model-positive plays ranked by edge, with the best available US price and the book offering it highlighted per play, plus Pinnacle's fair-value anchor. On each pick, the best-priced book is marked with a \"BEST\" badge."
       },
       {
         "tag": "new",
-        "text": "Settings now has a Sportsbooks section — add each book you use, set its balance, and record deposits and withdrawals, so bankroll growth reflects only betting results, not cash movement."
+        "text": "Settings now has a Sportsbooks section \u2014 add each book you use, set its balance, and record deposits and withdrawals, so bankroll growth reflects only betting results, not cash movement."
       },
       {
         "tag": "improved",
-        "text": "Book Comparison now shows a model breakeven price per pick — the price at which the model's edge reaches zero — alongside Pinnacle's no-vig fair value, and each book's hold (vig), with the tightest book flagged (Pinnacle ~2%, US books 4–8%)."
+        "text": "Book Comparison now shows a model breakeven price per pick \u2014 the price at which the model's edge reaches zero \u2014 alongside Pinnacle's no-vig fair value, and each book's hold (vig), with the tightest book flagged (Pinnacle ~2%, US books 4\u20138%)."
       },
       {
         "tag": "improved",
@@ -474,23 +478,23 @@
     "items": [
       {
         "tag": "improved",
-        "text": "Win probabilities are now calibrated to be honest about how close most MLB games are — numbers shown near 75–85% were really closer to a coin flip. When we say 55%, the home team wins about 55%. Treat every pick as a lean, not a lock."
+        "text": "Win probabilities are now calibrated to be honest about how close most MLB games are \u2014 numbers shown near 75\u201385% were really closer to a coin flip. When we say 55%, the home team wins about 55%. Treat every pick as a lean, not a lock."
       },
       {
         "tag": "new",
-        "text": "A Book Comparison panel on every game-detail page — pick a book and see its moneyline and totals prices alongside the model's probability, the book's de-vigged market %, and expected value per dollar, with Pinnacle as the sharp low-vig anchor."
+        "text": "A Book Comparison panel on every game-detail page \u2014 pick a book and see its moneyline and totals prices alongside the model's probability, the book's de-vigged market %, and expected value per dollar, with Pinnacle as the sharp low-vig anchor."
       },
       {
         "tag": "new",
-        "text": "Pick pages now show a model conviction score and an 80% win-probability range for moneyline picks — a confidence signal, showing how wide the model's uncertainty is, not a recommendation to bet."
+        "text": "Pick pages now show a model conviction score and an 80% win-probability range for moneyline picks \u2014 a confidence signal, showing how wide the model's uncertainty is, not a recommendation to bet."
       },
       {
         "tag": "new",
-        "text": "A Teams directory (/teams) — all 30 MLB teams by division with record, win %, and streak — plus team pages with ELO trend, platoon splits, recent form, upcoming schedule with probable starters, and key stats."
+        "text": "A Teams directory (/teams) \u2014 all 30 MLB teams by division with record, win %, and streak \u2014 plus team pages with ELO trend, platoon splits, recent form, upcoming schedule with probable starters, and key stats."
       },
       {
         "tag": "new",
-        "text": "A Players directory (/players) — searchable batter and pitcher lists with core stats, each linking through to a full player profile."
+        "text": "A Players directory (/players) \u2014 searchable batter and pitcher lists with core stats, each linking through to a full player profile."
       }
     ]
   },
@@ -499,7 +503,7 @@
     "items": [
       {
         "tag": "new",
-        "text": "Pick pages now show model reasoning — a plain-English narrative plus signed feature drivers grouped by category (starting pitcher, bullpen, team offense, park & weather)."
+        "text": "Pick pages now show model reasoning \u2014 a plain-English narrative plus signed feature drivers grouped by category (starting pitcher, bullpen, team offense, park & weather)."
       },
       {
         "tag": "new",

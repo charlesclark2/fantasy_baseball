@@ -10,6 +10,8 @@
 
 import { Badge } from "@/components/ui/badge"
 import {
+  CARD_COLLAPSE_LABEL,
+  CARD_EXPAND_LABEL,
   KICKED_OFF_LABEL,
   KICKED_OFF_NOTE,
   MARGIN_CURVE_HINT,
@@ -19,10 +21,11 @@ import {
   TEAM_PAGE_STUB_LABEL,
   TOTAL_CURVE_HINT,
   TOTAL_CURVE_HINT_NO_PACE,
+  SUMMARY_NO_PACE_MARKER,
   TOTAL_CURVE_LABEL,
 } from "@/lib/ncaaf-copy"
 import type { NcaafGamePrediction } from "@/lib/ncaaf"
-import { DistributionCurve } from "./distribution-curve"
+import { DistributionCurve, bandSummary } from "./distribution-curve"
 import { MarketComparison } from "./market-comparison"
 import { WinProbability } from "./win-probability"
 
@@ -68,7 +71,58 @@ export function hasKickedOff(commenceTime: string | null, now: number = Date.now
   return Number.isFinite(t) && t <= now
 }
 
-export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
+/** The collapsed stand-in for a curve: the SAME served band, in words.
+ *
+ * ⛔ It shows a RANGE, never a midpoint. Collapsing is a SPACE decision and must not become an
+ * EDITORIAL one — a collapsed row reading "Margin +20.2" would quietly convert an uncertainty-first
+ * surface into a point-prediction surface, which is the one thing the P3 directive forbids here. */
+function BandSummary({
+  testId,
+  label,
+  distribution,
+  marker,
+}: {
+  testId: string
+  label: string
+  distribution: Parameters<typeof bandSummary>[0]
+  marker?: string | null
+}) {
+  const band = bandSummary(distribution)
+  return (
+    <div
+      data-testid={testId}
+      data-has-band={band ? "true" : "false"}
+      className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]"
+    >
+      <span className="w-14 shrink-0 uppercase tracking-widest text-gray-500">{label}</span>
+      {band ? (
+        <span className="tabular-nums text-gray-300">
+          <span className="text-gray-500">{band.name} of outcomes</span> {band.lo} to {band.hi}
+        </span>
+      ) : (
+        // A distribution we could not draw says so HERE too — an empty cell in a collapsed row is
+        // indistinguishable from a range we simply chose not to print (NF-C6b).
+        <span className="text-gray-500">Not available</span>
+      )}
+      {marker && (
+        <span data-testid={`${testId}-marker`} className="text-amber-300/70">
+          {marker}
+        </span>
+      )}
+    </div>
+  )
+}
+
+export function NcaafGameCard({
+  game,
+  expanded = true,
+  onToggle,
+}: {
+  game: NcaafGamePrediction
+  /** Controlled by the page, so a slate-level expand/collapse has ONE source of truth. */
+  expanded?: boolean
+  onToggle?: (gameId: number, next: boolean) => void
+}) {
   const home = teamName(game.home)
   const away = teamName(game.away)
   const market = game.market
@@ -88,6 +142,7 @@ export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
     <article
       data-testid="ncaaf-game-card"
       data-game-id={game.game_id}
+      data-expanded={expanded ? "true" : "false"}
       className="flex flex-col gap-4 rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] p-4"
     >
       <header className="space-y-1.5">
@@ -126,19 +181,63 @@ export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
         {/* P3.3 is not built. ⛔ A CTA pointing at a route that does not exist is precisely the
             defect this suite exists to catch, so the affordance is present, named and INERT —
             a disabled button rather than an anchor to a 404. */}
-        <button
-          type="button"
-          disabled
-          data-testid="ncaaf-team-page-stub"
-          className="cursor-not-allowed text-[11px] text-gray-600 underline decoration-dotted underline-offset-2"
-          title={TEAM_PAGE_STUB_LABEL}
-        >
-          {TEAM_PAGE_STUB_LABEL}
-        </button>
+        {/* Hidden when collapsed: an INERT affordance is the first thing that should go when a
+            reader has asked for less. It stands in for a route that does not exist yet, so nothing
+            is lost by its absence — unlike a number or a caveat. */}
+        {expanded && (
+          <button
+            type="button"
+            disabled
+            data-testid="ncaaf-team-page-stub"
+            className="cursor-not-allowed text-[11px] text-gray-600 underline decoration-dotted underline-offset-2"
+            title={TEAM_PAGE_STUB_LABEL}
+          >
+            {TEAM_PAGE_STUB_LABEL}
+          </button>
+        )}
       </header>
 
-      <WinProbability winProbability={game.win_probability} homeTeam={home} awayTeam={away} />
+      <WinProbability
+        winProbability={game.win_probability}
+        homeTeam={home}
+        awayTeam={away}
+        showHint={expanded}
+      />
 
+      {/* ⭐ THE TOGGLE SITS BELOW THE PROBABILITY, NOT IN THE HEADER. Collapsed, a card is "who
+          wins, and by roughly how much" — so the control belongs at the seam between what stays
+          and what goes, where it reads as the boundary it is. */}
+      <div className="flex items-center justify-between gap-3 border-t border-[#1a1a1a] pt-3">
+        <div className="min-w-0 flex-1 space-y-1">
+          {!expanded && (
+            <>
+              <BandSummary
+                testId="ncaaf-summary-margin"
+                label={MARGIN_CURVE_LABEL}
+                distribution={game.margin}
+              />
+              <BandSummary
+                testId="ncaaf-summary-total"
+                label={TOTAL_CURVE_LABEL}
+                distribution={game.total}
+                marker={totalUndifferentiated ? SUMMARY_NO_PACE_MARKER : null}
+              />
+            </>
+          )}
+        </div>
+        <button
+          type="button"
+          data-testid="ncaaf-card-toggle"
+          aria-expanded={expanded}
+          onClick={() => onToggle?.(game.game_id, !expanded)}
+          className="shrink-0 rounded-md border border-[#2a2a2a] px-2 py-1 text-[11px] text-gray-400 transition-colors hover:border-[#3a3a3a] hover:text-gray-200"
+        >
+          {expanded ? CARD_COLLAPSE_LABEL : CARD_EXPAND_LABEL}
+        </button>
+      </div>
+
+      {expanded && (
+        <>
       <div className="grid gap-4 sm:grid-cols-2">
         <DistributionCurve
           testId="ncaaf-curve-margin"
@@ -184,6 +283,8 @@ export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
           </p>
         )}
       </details>
+        </>
+      )}
     </article>
   )
 }

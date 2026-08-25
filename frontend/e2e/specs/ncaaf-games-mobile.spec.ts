@@ -115,3 +115,57 @@ test("the win probability stays the biggest thing on the card at phone width", a
     .evaluateAll((els) => els.map((e) => parseFloat(getComputedStyle(e).fontSize)))
   expect(prob).toBeGreaterThan(Math.max(...sizes))
 })
+
+test("collapsing actually reclaims the height it exists to reclaim, on a phone", async ({ page }) => {
+  // ⭐ THE CLAUSE THAT TESTS THE POINT, NOT THE MECHANISM. Everything else about collapsing can be
+  // asserted at any viewport — that a class toggles, that a node disappears. The REASON it was
+  // built is that one expanded card is more than a phone viewport, so an eight-game slate is eight
+  // scrolls before a reader has seen the slate. So this measures the thing that was wrong: the
+  // rendered HEIGHT of the list, at a phone width, before and after.
+  //
+  // ⚠️ The bar is a RATIO, not a pixel count. A pixel expectation would be a second copy of the
+  // card's layout, red on any spacing change; the claim is "materially shorter", so that is what
+  // is asserted.
+  await mockApi(page)
+  await page.goto(PATH)
+  const list = page.getByTestId("ncaaf-game-list")
+  await expect(page.getByTestId("ncaaf-game-card")).toHaveCount(SLATE.games.length)
+
+  const expandedHeight = (await list.boundingBox())!.height
+  const viewport = page.viewportSize()!.height
+  // The premise, measured rather than assumed — if a card ever became short enough that collapsing
+  // stopped mattering, this clause should say so instead of quietly passing.
+  expect(
+    expandedHeight / SLATE.games.length,
+    `an expanded card is ${Math.round(expandedHeight / SLATE.games.length)}px against a ${viewport}px viewport`,
+  ).toBeGreaterThan(viewport * 0.6)
+
+  await page.getByTestId("ncaaf-toggle-all").click()
+  await expect(page.getByTestId("ncaaf-game-card").first()).toHaveAttribute("data-expanded", "false")
+  const collapsedHeight = (await list.boundingBox())!.height
+
+  expect(
+    collapsedHeight,
+    `collapsed ${Math.round(collapsedHeight)}px vs expanded ${Math.round(expandedHeight)}px`,
+  ).toBeLessThan(expandedHeight * 0.5)
+  // ...and the whole slate now fits in a couple of screens rather than eight.
+  expect(collapsedHeight).toBeLessThan(viewport * 3)
+  // Recorded rather than only asserted: the ratio is the claim, and a future reader wants the
+  // numbers this ran on, not a bar someone once chose.
+  test.info().annotations.push({
+    type: "collapse-height",
+    description:
+      `viewport ${viewport}px · expanded ${Math.round(expandedHeight)}px ` +
+      `(${(expandedHeight / viewport).toFixed(1)} screens, ${Math.round(expandedHeight / SLATE.games.length)}px/card) · ` +
+      `collapsed ${Math.round(collapsedHeight)}px ` +
+      `(${(collapsedHeight / viewport).toFixed(1)} screens, ${Math.round(collapsedHeight / SLATE.games.length)}px/card) · ` +
+      `${Math.round(100 - (100 * collapsedHeight) / expandedHeight)}% shorter`,
+  })
+
+
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }))
+  expect(scrollWidth, "collapsing must not push the document sideways").toBeLessThanOrEqual(clientWidth + 1)
+})
