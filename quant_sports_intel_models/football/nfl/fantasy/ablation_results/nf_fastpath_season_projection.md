@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-21T05:22:23.682844+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-25T04:03:57.592629+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -237,6 +237,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | TREY MCBRIDE      | TE         | ARI       | veteran  |         16.6 |         238.5 |         67.1 |        238.6 |
 | BROCK BOWERS      | TE         | LV        | veteran  |         15.1 |         188.0 |         65.4 |        223.8 |
 | TRAVIS KELCE      | TE         | KC        | veteran  |         16.6 |         180.7 |         65.4 |        223.8 |
+| GEORGE KITTLE     | TE         | SF        | veteran  |         15.1 |         178.0 |         67.1 |        224.8 |
 | HAROLD FANNIN JR. | TE         | CLE       | veteran  |         16.2 |         172.0 |         64.7 |        223.8 |
 | TYLER WARREN      | TE         | IND       | veteran  |         16.6 |         167.3 |         67.2 |        223.2 |
 | Kenyon Sadiq      | TE         | nan       | rookie   |         15.3 |         161.9 |         11.7 |        275.9 |
@@ -245,7 +246,6 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | JAKE FERGUSON     | TE         | DAL       | veteran  |         15.8 |         145.1 |         62.4 |        208.3 |
 | MARK ANDREWS      | TE         | BAL       | veteran  |         15.8 |         136.0 |         61.3 |        213.1 |
 | COLSTON LOVELAND  | TE         | CHI       | veteran  |         15.4 |         131.8 |         48.0 |        213.2 |
-| JUWAN JOHNSON     | TE         | NO        | veteran  |         15.5 |         131.6 |         48.0 |        214.6 |
 
 ## 5. Face validity — top 15 ROOKIES (P1A-attached)
 
@@ -298,23 +298,23 @@ The base-season anchor used to DELETE any player who missed the entire base seas
 
 **Rescued this run: 71** (rows anchored on a prior played season).
 
-| player_name        | position   | team_id   |   anchor_season |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 | confidence   |
-|:-------------------|:-----------|:----------|----------------:|-------------:|--------------:|-------------:|-------------:|:-------------|
-| DESHAUN WATSON     | QB         | CLE       |          2024.0 |          6.1 |          67.9 |          0.0 |        162.4 | low          |
-| TANK DELL          | WR         | HOU       |          2024.0 |          5.5 |          58.6 |          0.0 |        132.5 | low          |
-| BRANDON AIYUK      | WR         | SF        |          2024.0 |          4.7 |          48.4 |          0.0 |        109.5 | low          |
-| WILL LEVIS         | QB         | TEN       |          2024.0 |          3.7 |          39.1 |          0.0 |        104.3 | low          |
-| DESMOND RIDDER     | QB         | GB        |          2024.0 |          2.4 |          27.4 |          0.0 |         61.3 | low          |
-| A.T. PERRY         | WR         | PIT       |          2023.0 |          4.4 |          26.8 |          0.0 |         59.7 | low          |
-| EASTON STICK       | QB         | IND       |          2023.0 |          1.9 |          24.7 |          0.0 |         67.7 | low          |
-| TOMMY DEVITO       | QB         | NE        |          2024.0 |          1.9 |          20.9 |          0.0 |         43.5 | low          |
-| TREY PALMER        | WR         | NO        |          2024.0 |          5.1 |          20.6 |          0.0 |         31.4 | low          |
-| QUEZ WATKINS       | WR         | PHI       |          2023.0 |          4.2 |          20.4 |          0.0 |         32.8 | low          |
-| K.J. OSBORN        | WR         | TEN       |          2024.0 |          4.5 |          18.8 |          0.0 |         32.7 | low          |
-| MARSHAWN LLOYD     | RB         | GB        |          2024.0 |          3.0 |          18.3 |          0.0 |         29.7 | low          |
-| SALVON AHMED       | RB         | CHI       |          2023.0 |          3.3 |          18.1 |          0.0 |         29.5 | low          |
-| ERICK ALL JR.      | TE         | CIN       |          2024.0 |          4.7 |          18.0 |          0.0 |         36.5 | low          |
-| PATRICK TAYLOR JR. | RB         | SF        |          2024.0 |          4.3 |          17.7 |          0.0 |         27.4 | low          |
+| player_name       | position   | team_id   |   anchor_season |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 | confidence   |
+|:------------------|:-----------|:----------|----------------:|-------------:|--------------:|-------------:|-------------:|:-------------|
+| DESHAUN WATSON    | QB         | CLE       |          2024.0 |          6.1 |          67.9 |          0.0 |        162.4 | low          |
+| TANK DELL         | WR         | HOU       |          2024.0 |          5.5 |          58.6 |          0.0 |        132.5 | low          |
+| BRANDON AIYUK     | WR         | SF        |          2024.0 |          4.7 |          48.4 |          0.0 |        109.5 | low          |
+| WILL LEVIS        | QB         | TEN       |          2024.0 |          3.7 |          39.1 |          0.0 |        104.3 | low          |
+| DESMOND RIDDER    | QB         | GB        |          2024.0 |          2.4 |          27.4 |          0.0 |         61.3 | low          |
+| A.T. PERRY        | WR         | PIT       |          2023.0 |          4.4 |          26.8 |          0.0 |         59.7 | low          |
+| EASTON STICK      | QB         | IND       |          2023.0 |          1.9 |          24.7 |          0.0 |         67.7 | low          |
+| TOMMY DEVITO      | QB         | NE        |          2024.0 |          1.9 |          20.9 |          0.0 |         43.5 | low          |
+| TREY PALMER       | WR         | NO        |          2024.0 |          5.1 |          20.6 |          0.0 |         31.4 | low          |
+| QUEZ WATKINS      | WR         | PHI       |          2023.0 |          4.2 |          20.4 |          0.0 |         32.8 | low          |
+| K.J. OSBORN       | WR         | TEN       |          2024.0 |          4.5 |          18.8 |          0.0 |         32.7 | low          |
+| MARSHAWN LLOYD    | RB         | GB        |          2024.0 |          3.0 |          18.3 |          0.0 |         29.7 | low          |
+| SALVON AHMED      | RB         | CHI       |          2023.0 |          3.3 |          18.1 |          0.0 |         29.5 | low          |
+| ERICK ALL JR.     | TE         | CIN       |          2024.0 |          4.7 |          18.0 |          0.0 |         36.5 | low          |
+| SINCERE MCCORMICK | RB         | SF        |          2024.0 |          2.9 |          17.1 |          0.0 |         21.8 | low          |
 
 ### Standing ADP coverage audit (the check that found this)
 
@@ -332,72 +332,72 @@ Every ADP name is normalized and diffed against the projection's own (name, posi
   "alias_candidates": [],
   "by_sample": {
     "ppr/12": {
-      "n_adp_rows": 264,
-      "n_adp_covered_positions": 215,
-      "n_matched": 215,
+      "n_adp_rows": 267,
+      "n_adp_covered_positions": 220,
+      "n_matched": 220,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "ppr/10": {
-      "n_adp_rows": 264,
-      "n_adp_covered_positions": 215,
-      "n_matched": 215,
+      "n_adp_rows": 267,
+      "n_adp_covered_positions": 220,
+      "n_matched": 220,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "half-ppr/12": {
-      "n_adp_rows": 223,
-      "n_adp_covered_positions": 186,
-      "n_matched": 186,
+      "n_adp_rows": 230,
+      "n_adp_covered_positions": 191,
+      "n_matched": 191,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "half-ppr/10": {
-      "n_adp_rows": 223,
-      "n_adp_covered_positions": 186,
-      "n_matched": 186,
+      "n_adp_rows": 230,
+      "n_adp_covered_positions": 191,
+      "n_matched": 191,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "standard/12": {
-      "n_adp_rows": 211,
-      "n_adp_covered_positions": 177,
-      "n_matched": 177,
+      "n_adp_rows": 217,
+      "n_adp_covered_positions": 180,
+      "n_matched": 180,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "standard/10": {
-      "n_adp_rows": 211,
-      "n_adp_covered_positions": 177,
-      "n_matched": 177,
+      "n_adp_rows": 217,
+      "n_adp_covered_positions": 180,
+      "n_matched": 180,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "2qb/12": {
-      "n_adp_rows": 235,
-      "n_adp_covered_positions": 198,
-      "n_matched": 198,
+      "n_adp_rows": 243,
+      "n_adp_covered_positions": 202,
+      "n_matched": 202,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "2qb/10": {
-      "n_adp_rows": 235,
-      "n_adp_covered_positions": 198,
-      "n_matched": 198,
+      "n_adp_rows": 243,
+      "n_adp_covered_positions": 202,
+      "n_matched": 202,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,

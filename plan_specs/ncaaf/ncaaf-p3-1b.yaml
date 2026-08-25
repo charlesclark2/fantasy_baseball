@@ -1,0 +1,96 @@
+# Plan spec — NCAAF-P3.1b (MINI tier: serve the T-1 market snapshot; best-effort pre-8/29)
+# Authored by PM 2026-08-25 per P3.2 closeout ⑤ (PM-funded — the highest-value non-blocking item).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-p3-1b
+  vertical: ncaaf
+  card: https://trello.com/c/ikIt1qcm   # P3.2 record thread; P3.1b card linked at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    Serve the T-1 odds snapshot as the market line. The T-1 capture has
+    been live since P0.6c (NCAAF_ODDS_CAPTURE_T1=1, schedules RUNNING,
+    2020-2025 backfilled) but payloads._market() reads only close_* and
+    hardcodes MARKET_SOURCE_CLOSE — so the one snapshot that is genuinely
+    PRE-kickoff, the honest comparator for a pre-kickoff projection, is
+    stored and ignored, and every opener card says "unavailable" when a
+    real Friday line could stand beside the model. One serving change in
+    P3.1's payload module + a deploy.sh Lambda deploy. best_alpha=0;
+    transparency framing unchanged — a market line is context, never a
+    pick. ⏰ Best-effort pre-Sat 8/29; if any gate wobbles, it ships
+    post-opener instead — the deadline never relaxes a check.
+  acceptanceCriteria:
+    - description: >
+        _market() prefers the T-1 snapshot when present and pre-kickoff,
+        with market.source stamped honestly ("t1_snapshot" vs "close") and
+        market.as_of carrying the snapshot instant — a reader can always
+        tell WHICH line they are seeing and from when. Fallback order and
+        the absent state (status="unavailable" + machine-readable reason,
+        market_read_failed discriminator) unchanged. Response-model fields
+        ADDITIVE only (NF-C0); every new field declared on the Pydantic
+        contract (E9.41).
+    - description: >
+        LEAKAGE GUARD: a served T-1 line must be strictly pre-kickoff for
+        its game (assert the snapshot instant < kickoff on every attached
+        row; a violating row attaches NOTHING and logs loudly). Never a
+        post-kickoff line labeled as pre-game.
+    - description: >
+        The client (P3.2 surface) already renders model-vs-market and the
+        absent state; verify it renders the T-1-sourced line correctly
+        WITHOUT client changes — if any client change is needed, STOP and
+        flag (that's the P3.9 session's lane or a follow-up, not this one).
+        Verify the as-of/source is surfaced or gracefully ignored per the
+        existing contract.
+    - description: >
+        RUNTIME GATE: real box serving-write run + deployed-Lambda curls
+        showing a real game payload carrying the T-1 line with source +
+        as_of (OPERATOR-RUN steps, paste-ready, per the standing rule);
+        the P3.1 positive-control-per-key-shape lesson applies — prove the
+        date-keyed read specifically. deploy.sh is the ONLY deploy path;
+        merged never means served.
+    - description: >
+        Guards RED-proven both ways (a post-kickoff snapshot must be
+        refused; a valid T-1 must attach; absent stays absent). Changelog
+        entry only if the user-visible line actually appears (declaration
+        never outruns production).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-p3-1b
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "T-1" / "odds" / "market" NCAAF (board Credence Sports, 2026-08-25)'
+    duplicates: []
+    adjacent:
+      - "P3.1 (Done) — this edits its payload module only; the serving-write op, keys, and routers are untouched."
+      - "P3.9 bundle (in flight, frontend) — disjoint files; if a client change proves needed, flag rather than reach into its lane."
+      - "MLB-ODDS1 — MLB odds mart; disjoint store, but the SAME ingestion-honesty instincts apply (stamp source + as-of)."
+      - "The market-line opener framing ruling (render stated absence) — this story UPGRADES that ruling where a T-1 line exists; the absence rendering stays for games with no snapshot."
+  triedLedger:
+    files:
+      - "P3.2 closeout ⑤ (the finding + capture-state evidence); P0.6c record (T-1 capture live, credits measured); app/backend payloads module (MARKET_SOURCE_CLOSE hardcode)"
+    recordedNulls:
+      - "VAL1 CLV null untouched — a served market line is transparency, not an edge claim; no vs-close performance reading is produced here."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "The opener cards carrying a real model-vs-market comparison (the brand directive's transparency asset)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-p3-1b-plan
+spec:
+  goalRef: { name: ncaaf-p3-1b }
+  graph:
+    nodes: []   # MINI tier
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

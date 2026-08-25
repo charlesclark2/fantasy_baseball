@@ -1,0 +1,90 @@
+# Plan spec — NCAAF-P3.9 bundle (MINI tier: nav + logos + changelog-guard fix; pre-8/29)
+# Authored by PM 2026-08-25. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-p3-9
+  vertical: ncaaf
+  card: https://trello.com/c/ikIt1qcm   # P3.2 record; P3.9 card linked/pulled at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    Make the live NCAAF surface FINDABLE before Saturday, plus two cheap
+    riders. The flagship /ncaaf/games page is live and unreachable: no nav
+    entry, bare /ncaaf 404s, the footer still says "Coming this season."
+    PM positioning ruling: TOP-LEVEL nav item "NCAAF" (a free acquisition
+    surface at season start is not buried in a submenu); the footer line
+    becomes a live link in the same change; /ncaaf redirects to
+    /ncaaf/games. Rider 1: team logos on the game cards (P3.2 flag —
+    payload team_id IS the ESPN id, 16/16 opener teams verified resolving;
+    a.espncdn.com already in CSP img-src; frontend-only). Rider 2: close
+    the changelog-guard gap (P3.2 finding ⑧). best_alpha=0; frontend +
+    CI-config only; no backend, contract, or copy-posture changes.
+  acceptanceCriteria:
+    - description: >
+        Nav: top-level "NCAAF" entry, highlight via the existing
+        activeLink="ncaaf-games"; /ncaaf → /ncaaf/games redirect; footer
+        "NCAAF Betting Intelligence / Coming this season" replaced with the
+        live link. E2E asserts the entry renders, navigates, and highlights
+        on desktop + mobile (RENDERED output, NF-C4).
+    - description: >
+        Logos: header of each game card beside the team names, sized so the
+        win probability remains the largest element on the card (the mobile
+        suite's existing assertion must stay green). E9.46 lesson bound: the
+        error/missing state must be VISIBLY a fallback (a distinct
+        placeholder mark), never initials that read as data; E2E covers a
+        deliberately-broken logo URL rendering the fallback. Decorative
+        only — no layout shift that moves the probability or curves.
+    - description: >
+        Changelog guard: frontend-only PRs currently skip
+        test_changelog_guard.py (the changes filter resolves frontend/**
+        to backend=false — dateable to E9.63b). Fix by EITHER adding
+        frontend/data/changelog.json to the filter's backend-triggering
+        set OR porting the Monday-week invariant into an E2E clause —
+        state which and why in the closeout; prove it by showing the guard
+        RUNS (not skips) on this PR itself, which edits the changelog.
+    - description: >
+        Changelog entry for the nav+logos (user-facing); watch the
+        same-week-block merge conflict several stories are appending to.
+        Frontend auto-deploys on main — but per the operator's flow, dev →
+        main promotion is HIS step; verify the published surface by name
+        after he promotes. ⏰ Target: on main before Sat 8/29.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-p3-9
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "P3.9" / "nav" / "NCAAF" (board Credence Sports, 2026-08-25)'
+    duplicates: []
+    adjacent:
+      - "P3.2/P3.2b (Done, live) — this story touches nav/shell + card header only; the curves, empty states, and honest-frame panel are untouched and their 112 E2E clauses must stay green."
+      - "Edge-allowlist card (To Do, 5k1pnfQo) — deliberately OUT of scope (changes the verified read path); post-opener."
+      - "E9.45 entitlement — NCAAF is FREE; no entitlement work needed; do not add any gate."
+  triedLedger:
+    files:
+      - "P3.2 closeout (the nav gap, the logo verification, finding ⑧); next.config.mjs CSP (a.espncdn.com present); app/picks/[game_pk]/page.tsx:1628 (the MLB ESPN-logo precedent)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn:
+    - "P3.2b on main (operator promoted 2026-08-25)"
+  feedsInto:
+    - "The 8/29 opener being findable by an actual user — the last item on the MVP critical path"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-p3-9-plan
+spec:
+  goalRef: { name: ncaaf-p3-9 }
+  graph:
+    nodes: []   # MINI tier
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
