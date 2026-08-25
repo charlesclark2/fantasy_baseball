@@ -7,7 +7,7 @@ metadata:
   name: mlb-tv2-0
   vertical: mlb
   card: https://trello.com/c/pa4ii3tQ   # EPIC TV2; the TV2-0 card is pulled to the Sprint at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     TV2-0: diagnose WHICH LEVER binds the served totals distribution's
