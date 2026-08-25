@@ -25,6 +25,7 @@
 // ⛔ NO RANKING, NO SELECTION, NO PICK. Games are ordered by kickoff time. See `game-card.tsx`.
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Accordion } from "@/components/ui/accordion"
 import { apiErrorStatus } from "@/lib/api"
 import {
   defaultGameDay,
@@ -136,9 +137,19 @@ export function NcaafGamesPage() {
     (gameId: number) => overrides[gameId] ?? defaultExpanded,
     [overrides, defaultExpanded],
   )
-  const toggleOne = useCallback(
-    (gameId: number, next: boolean) => setOverrides((o) => ({ ...o, [gameId]: next })),
-    [],
+  // The Accordion is CONTROLLED: its `value` is the open set, and every change writes the whole set
+  // back as explicit per-game overrides. That keeps one source of truth — the primitive never holds
+  // state the page cannot see, which is what makes expand/collapse-all able to override it.
+  const openValues = useMemo(
+    () => games.filter((g) => isExpanded(g.game_id)).map((g) => String(g.game_id)),
+    [games, isExpanded],
+  )
+  const onOpenChange = useCallback(
+    (values: string[]) =>
+      setOverrides(
+        Object.fromEntries(games.map((g) => [g.game_id, values.includes(String(g.game_id))])),
+      ),
+    [games],
   )
   // Expand/collapse-all moves the DEFAULT and clears every per-card override, so the control means
   // what it says: afterwards ALL cards are in the named state, not "all except the ones you touched".
@@ -166,7 +177,11 @@ export function NcaafGamesPage() {
         {disclosure && (
           <p
             data-testid="ncaaf-disclosure"
-            className="max-w-2xl rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2 text-[11px] leading-relaxed text-gray-500"
+            // ⚠️ NO `max-w-2xl` HERE, unlike the standfirst above it. A narrower measure is right
+            // for unboxed prose — a ragged right edge reads as typography. A BORDERED box whose
+            // right edge stops short of the bordered cards below it reads as a broken layout, and
+            // that is what it looked like on the published surface.
+            className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2 text-[11px] leading-relaxed text-gray-500"
           >
             {disclosure}
           </p>
@@ -223,16 +238,17 @@ export function NcaafGamesPage() {
                 {anyExpanded ? COLLAPSE_ALL_LABEL : EXPAND_ALL_LABEL}
               </button>
             </div>
-            <section data-testid="ncaaf-game-list" className="space-y-4">
+            <Accordion
+              type="multiple"
+              value={openValues}
+              onValueChange={onOpenChange}
+              data-testid="ncaaf-game-list"
+              className="flex flex-col gap-4"
+            >
               {games.map((g) => (
-                <NcaafGameCard
-                  key={g.game_id}
-                  game={g}
-                  expanded={isExpanded(g.game_id)}
-                  onToggle={toggleOne}
-                />
+                <NcaafGameCard key={g.game_id} game={g} expanded={isExpanded(g.game_id)} />
               ))}
-            </section>
+            </Accordion>
           </>
         )}
       </div>

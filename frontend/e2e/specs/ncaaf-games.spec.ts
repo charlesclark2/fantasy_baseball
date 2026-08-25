@@ -731,7 +731,7 @@ test("a game whose kickoff has passed says so, and does not read as upcoming", a
   expect(await c.innerText()).not.toMatch(/\b\d{1,3}\s*[-–—]\s*\d{1,3}\b/)
   // Words that have no honest use on a card with no game state. ⚠️ "live" is deliberately NOT in
   // this list — see above.
-  const header = (await c.locator("header").innerText()).toLowerCase()
+  const header = (await c.getByTestId("ncaaf-card-header").innerText()).toLowerCase()
   for (const overreach of ["final", "won", "lost", "in progress", "halftime"]) {
     expect(header, `the card header claims "${overreach}" with no state on the wire`).not.toContain(
       overreach,

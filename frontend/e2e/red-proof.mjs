@@ -3027,8 +3027,8 @@ const CASES = [
     // i.e. invites the comparison — while the sentence explaining it lives on the hidden curve.
     detail: "Drops the pace marker from the collapsed summary, keeping it only on the curve.",
     file: "components/ncaaf/game-card.tsx",
-    from: "                marker={totalUndifferentiated ? SUMMARY_NO_PACE_MARKER : null}",
-    to: "                marker={null}",
+    from: "              marker={totalUndifferentiated ? SUMMARY_NO_PACE_MARKER : null}",
+    to: "              marker={null}",
     grep: "pace caveat SURVIVES collapse",
   },
   {

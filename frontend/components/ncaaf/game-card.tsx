@@ -8,10 +8,13 @@
 // selection — a pick expressed as an ordering — and `best_alpha = 0` (VAL1: ATS 0.496 against the
 // close, indistinguishable from a placebo). There is no badge, no star and no highlight.
 
+import {
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import {
-  CARD_COLLAPSE_LABEL,
-  CARD_EXPAND_LABEL,
   KICKED_OFF_LABEL,
   KICKED_OFF_NOTE,
   MARGIN_CURVE_HINT,
@@ -116,12 +119,11 @@ function BandSummary({
 export function NcaafGameCard({
   game,
   expanded = true,
-  onToggle,
 }: {
   game: NcaafGamePrediction
-  /** Controlled by the page, so a slate-level expand/collapse has ONE source of truth. */
+  /** Read from the controlled Accordion above, so a slate-level expand/collapse has ONE source of
+   *  truth. Open/close itself is the primitive's job — this only decides what the TRIGGER renders. */
   expanded?: boolean
-  onToggle?: (gameId: number, next: boolean) => void
 }) {
   const home = teamName(game.home)
   const away = teamName(game.away)
@@ -139,13 +141,33 @@ export function NcaafGameCard({
   const totalUndifferentiated = prov.pace_term_active === false
 
   return (
-    <article
+    // ⭐ THE SHARED ACCORDION, not a bespoke toggle. `app/props/page.tsx` already groups games this
+    // way — one bordered item per game, the header as the trigger — and inventing a second
+    // expand/collapse language for the same job is the "one logical thing, many owners" shape this
+    // repo keeps paying for. It also inherits the primitive's keyboard handling and ARIA rather
+    // than re-deriving them.
+    <AccordionItem
+      value={String(game.game_id)}
       data-testid="ncaaf-game-card"
       data-game-id={game.game_id}
       data-expanded={expanded ? "true" : "false"}
-      className="flex flex-col gap-4 rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] p-4"
+      className="rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] px-4 last:border-b"
     >
-      <header className="space-y-1.5">
+      {/* ⚠️ THE TRIGGER IS THE WHOLE SUMMARY, NOT JUST THE TEAM NAMES. The props page collapses a
+          game to its header alone; here the P3 directive says PROBABILITY FIRST, so the trigger
+          carries the probability (and, collapsed, each axis's band) and only the curves, the market
+          panel and the provenance live in the content. Same primitive, different fold line.
+          ⛔ NOTHING INTERACTIVE MAY GO INSIDE IT — a nested <button> is invalid HTML, which is why
+          the team-page stub moved down into the content. */}
+      <AccordionTrigger data-testid="ncaaf-card-toggle" className="py-4 hover:no-underline">
+        {/* ⚠️ A ROW, not a column. Overriding the trigger to `flex-col` makes the chevron its own
+            full-width row at the BOTTOM of the card — 32px per card with the gap, and it reads as a
+            stray glyph rather than as the affordance. Keeping the trigger's own row layout puts the
+            chevron top-right, where the props page puts it, and gives the content one flex child. */}
+        <div className="min-w-0 flex-1 space-y-4 text-left">
+        {/* ⚠️ A <div>, not a <header>: a sectioning element cannot be a descendant of the trigger's
+            <button> (whose content model is phrasing content), so the testid is what scopes it. */}
+        <div data-testid="ncaaf-card-header" className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
           <span data-testid="ncaaf-kickoff">{kickoffLabel(game.commence_time, game.start_time_tbd)}</span>
           {started && (
@@ -168,76 +190,62 @@ export function NcaafGameCard({
             </Badge>
           )}
         </div>
-        <h3 className="text-sm font-medium text-white">
+        {/* ⚠️ NOT an <h3>. Radix's `AccordionPrimitive.Header` already renders one around the
+            trigger, so a heading here nests a heading inside a heading — invalid, and it made every
+            `h3` locator on a card ambiguous. The Radix header carries the semantics; this carries
+            the words. */}
+        <div className="text-sm font-medium text-white">
           <span className="text-gray-300">{away}</span>
           <span className="px-1.5 text-gray-600">at</span>
           <span className="text-gray-300">{home}</span>
-        </h3>
+        </div>
         {started && (
           <p data-testid="ncaaf-kicked-off-note" className="text-[11px] leading-snug text-amber-300/70">
             {KICKED_OFF_NOTE}
           </p>
         )}
+        </div>
+
+        <WinProbability
+          winProbability={game.win_probability}
+          homeTeam={home}
+          awayTeam={away}
+          showHint={expanded}
+        />
+
+        {!expanded && (
+          <div className="space-y-1 border-t border-[#1a1a1a] pt-3 text-left">
+            <BandSummary
+              testId="ncaaf-summary-margin"
+              label={MARGIN_CURVE_LABEL}
+              distribution={game.margin}
+            />
+            <BandSummary
+              testId="ncaaf-summary-total"
+              label={TOTAL_CURVE_LABEL}
+              distribution={game.total}
+              marker={totalUndifferentiated ? SUMMARY_NO_PACE_MARKER : null}
+            />
+          </div>
+        )}
+        </div>
+      </AccordionTrigger>
+
+      <AccordionContent className="space-y-4 pb-4">
         {/* P3.3 is not built. ⛔ A CTA pointing at a route that does not exist is precisely the
             defect this suite exists to catch, so the affordance is present, named and INERT —
-            a disabled button rather than an anchor to a 404. */}
-        {/* Hidden when collapsed: an INERT affordance is the first thing that should go when a
-            reader has asked for less. It stands in for a route that does not exist yet, so nothing
-            is lost by its absence — unlike a number or a caveat. */}
-        {expanded && (
-          <button
-            type="button"
-            disabled
-            data-testid="ncaaf-team-page-stub"
-            className="cursor-not-allowed text-[11px] text-gray-600 underline decoration-dotted underline-offset-2"
-            title={TEAM_PAGE_STUB_LABEL}
-          >
-            {TEAM_PAGE_STUB_LABEL}
-          </button>
-        )}
-      </header>
-
-      <WinProbability
-        winProbability={game.win_probability}
-        homeTeam={home}
-        awayTeam={away}
-        showHint={expanded}
-      />
-
-      {/* ⭐ THE TOGGLE SITS BELOW THE PROBABILITY, NOT IN THE HEADER. Collapsed, a card is "who
-          wins, and by roughly how much" — so the control belongs at the seam between what stays
-          and what goes, where it reads as the boundary it is. */}
-      <div className="flex items-center justify-between gap-3 border-t border-[#1a1a1a] pt-3">
-        <div className="min-w-0 flex-1 space-y-1">
-          {!expanded && (
-            <>
-              <BandSummary
-                testId="ncaaf-summary-margin"
-                label={MARGIN_CURVE_LABEL}
-                distribution={game.margin}
-              />
-              <BandSummary
-                testId="ncaaf-summary-total"
-                label={TOTAL_CURVE_LABEL}
-                distribution={game.total}
-                marker={totalUndifferentiated ? SUMMARY_NO_PACE_MARKER : null}
-              />
-            </>
-          )}
-        </div>
+            a disabled button rather than an anchor to a 404. It lives HERE rather than in the
+            header because a <button> inside the trigger's <button> is invalid HTML. */}
         <button
           type="button"
-          data-testid="ncaaf-card-toggle"
-          aria-expanded={expanded}
-          onClick={() => onToggle?.(game.game_id, !expanded)}
-          className="shrink-0 rounded-md border border-[#2a2a2a] px-2 py-1 text-[11px] text-gray-400 transition-colors hover:border-[#3a3a3a] hover:text-gray-200"
+          disabled
+          data-testid="ncaaf-team-page-stub"
+          className="cursor-not-allowed text-[11px] text-gray-600 underline decoration-dotted underline-offset-2"
+          title={TEAM_PAGE_STUB_LABEL}
         >
-          {expanded ? CARD_COLLAPSE_LABEL : CARD_EXPAND_LABEL}
+          {TEAM_PAGE_STUB_LABEL}
         </button>
-      </div>
 
-      {expanded && (
-        <>
       <div className="grid gap-4 sm:grid-cols-2">
         <DistributionCurve
           testId="ncaaf-curve-margin"
@@ -283,8 +291,7 @@ export function NcaafGameCard({
           </p>
         )}
       </details>
-        </>
-      )}
-    </article>
+      </AccordionContent>
+    </AccordionItem>
   )
 }

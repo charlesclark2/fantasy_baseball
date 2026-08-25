@@ -209,9 +209,12 @@ export const PACE_INACTIVE_NOTE =
 //
 // ⛔ THE COLLAPSED SUMMARY SHOWS THE BAND, NEVER A POINT. "Never a point number" is the directive
 // for this axis, and a collapsed row is exactly where a single tidy number would be tempting.
+//
+// ⭐ THE PER-CARD CONTROL IS THE SHARED ACCORDION'S CHEVRON, so it needs no copy of its own —
+// `app/props/page.tsx` already collapses per-game groups exactly this way, and a second labelled
+// button for the same job would be a second interaction language for the same idea. Only the
+// slate-level control is worded, because "expand all" has no glyph.
 
-export const CARD_EXPAND_LABEL = "Show curves"
-export const CARD_COLLAPSE_LABEL = "Hide curves"
 export const EXPAND_ALL_LABEL = "Expand all"
 export const COLLAPSE_ALL_LABEL = "Collapse all"
 
