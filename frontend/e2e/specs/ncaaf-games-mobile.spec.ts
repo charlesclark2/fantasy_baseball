@@ -115,3 +115,83 @@ test("the win probability stays the biggest thing on the card at phone width", a
     .evaluateAll((els) => els.map((e) => parseFloat(getComputedStyle(e).fontSize)))
   expect(prob).toBeGreaterThan(Math.max(...sizes))
 })
+
+/** A height that has stopped moving.
+ *
+ * ⚠️ TWO things make a single `boundingBox()` unreliable here, and they are different. (1) Radix
+ * unmounts the accordion content a frame after `data-expanded` flips, so a read taken on the
+ * attribute is early. (2) ⭐ WEB FONTS: measured across four runs the same collapsed slate reported
+ * 2288 / 2531 / 2797px — a 20% spread — because fallback metrics differ from the loaded face. A
+ * layout assertion taken before `document.fonts.ready` is measuring the fallback font. */
+async function settledHeight(page: import("@playwright/test").Page, testId: string): Promise<number> {
+  await page.evaluate(() => document.fonts.ready)
+  const el = page.getByTestId(testId)
+  let last = -1
+  for (let i = 0; i < 25; i++) {
+    const h = (await el.boundingBox())!.height
+    if (Math.abs(h - last) < 1) return h
+    last = h
+    await page.waitForTimeout(80)
+  }
+  return last
+}
+
+test("collapsing actually reclaims the height it exists to reclaim, on a phone", async ({ page }) => {
+  // ⭐ THE CLAUSE THAT TESTS THE POINT, NOT THE MECHANISM. Everything else about collapsing can be
+  // asserted at any viewport — that a class toggles, that a node disappears. The REASON it was
+  // built is that one expanded card is more than a phone viewport, so an eight-game slate is eight
+  // scrolls before a reader has seen the slate. So this measures the thing that was wrong: the
+  // rendered HEIGHT of the list, at a phone width, before and after.
+  //
+  // ⚠️ The bar is a RATIO, not a pixel count. A pixel expectation would be a second copy of the
+  // card's layout, red on any spacing change; the claim is "materially shorter", so that is what
+  // is asserted.
+  await mockApi(page)
+  await page.goto(PATH)
+  await expect(page.getByTestId("ncaaf-game-card")).toHaveCount(SLATE.games.length)
+
+  const expandedHeight = await settledHeight(page, "ncaaf-game-list")
+  const viewport = page.viewportSize()!.height
+  // The premise, measured rather than assumed — if a card ever became short enough that collapsing
+  // stopped mattering, this clause should say so instead of quietly passing.
+  expect(
+    expandedHeight / SLATE.games.length,
+    `an expanded card is ${Math.round(expandedHeight / SLATE.games.length)}px against a ${viewport}px viewport`,
+  ).toBeGreaterThan(viewport * 0.6)
+
+  await page.getByTestId("ncaaf-toggle-all").click()
+  await expect(page.getByTestId("ncaaf-game-card").first()).toHaveAttribute("data-expanded", "false")
+  const collapsedHeight = await settledHeight(page, "ncaaf-game-list")
+
+  expect(
+    collapsedHeight,
+    `collapsed ${Math.round(collapsedHeight)}px vs expanded ${Math.round(expandedHeight)}px`,
+  ).toBeLessThan(expandedHeight * 0.5)
+  // ⚠️ PER CARD, NOT PER SLATE. The first cut bounded the whole list against three viewports, which
+  // is a bar that depends on how many games are on the board — fine for an 8-game opener, absurd
+  // for a 60-game October Saturday, so it would have had to be relaxed later for a reason that has
+  // nothing to do with this component. "At least two collapsed cards fit on a screen" is the claim
+  // that actually holds whatever the slate size.
+  expect(
+    collapsedHeight / SLATE.games.length,
+    `a collapsed card is ${Math.round(collapsedHeight / SLATE.games.length)}px of a ${viewport}px viewport`,
+  ).toBeLessThan(viewport * 0.5)
+  // Recorded rather than only asserted: the ratio is the claim, and a future reader wants the
+  // numbers this ran on, not a bar someone once chose.
+  test.info().annotations.push({
+    type: "collapse-height",
+    description:
+      `viewport ${viewport}px · expanded ${Math.round(expandedHeight)}px ` +
+      `(${(expandedHeight / viewport).toFixed(1)} screens, ${Math.round(expandedHeight / SLATE.games.length)}px/card) · ` +
+      `collapsed ${Math.round(collapsedHeight)}px ` +
+      `(${(collapsedHeight / viewport).toFixed(1)} screens, ${Math.round(collapsedHeight / SLATE.games.length)}px/card) · ` +
+      `${Math.round(100 - (100 * collapsedHeight) / expandedHeight)}% shorter`,
+  })
+
+
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }))
+  expect(scrollWidth, "collapsing must not push the document sideways").toBeLessThanOrEqual(clientWidth + 1)
+})

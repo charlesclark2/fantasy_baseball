@@ -24,7 +24,8 @@
 //
 // ⛔ NO RANKING, NO SELECTION, NO PICK. Games are ordered by kickoff time. See `game-card.tsx`.
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Accordion } from "@/components/ui/accordion"
 import { apiErrorStatus } from "@/lib/api"
 import {
   defaultGameDay,
@@ -33,7 +34,9 @@ import {
   type NcaafGamePrediction,
 } from "@/lib/ncaaf"
 import {
+  COLLAPSE_ALL_LABEL,
   EMPTY_DAY,
+  EXPAND_ALL_LABEL,
   NOTHING_PUBLISHED,
   PAGE_STANDFIRST,
   PAGE_TITLE,
@@ -83,6 +86,33 @@ function Skeleton({ testId }: { testId: string }) {
   )
 }
 
+/** Where the viewer's collapse preference lives.
+ *
+ * ⭐ `localStorage`, deliberately: this is a per-viewer convenience, it never leaves the browser,
+ * and nothing downstream reads it. Every access is wrapped because the accessor ITSELF throws in a
+ * private window or with site data blocked — and a page that cannot remember a preference must
+ * still render, defaulting to EXPANDED (the P3 directive's answer, not a stored one).
+ *
+ * ⛔ It stores the DEFAULT only, never per-game state. A remembered set of collapsed game ids would
+ * be stale the moment the slate changed, and would silently hide a card on a later week's board. */
+const COLLAPSE_PREF_KEY = "ncaaf.games.defaultExpanded"
+
+function readCollapsePref(): boolean {
+  try {
+    return window.localStorage.getItem(COLLAPSE_PREF_KEY) !== "0"
+  } catch {
+    return true
+  }
+}
+
+function writeCollapsePref(expanded: boolean): void {
+  try {
+    window.localStorage.setItem(COLLAPSE_PREF_KEY, expanded ? "1" : "0")
+  } catch {
+    // A viewer who cannot store a preference simply does not keep one.
+  }
+}
+
 export function NcaafGamesPage() {
   const manifest = useNcaafManifest()
   // `null` means "we have not chosen yet" and the manifest's default applies; once the reader
@@ -93,6 +123,42 @@ export function NcaafGamesPage() {
 
   const slate = useNcaafSlate(day)
   const games = useMemo(() => [...(slate.data?.games ?? [])].sort(byKickoff), [slate.data])
+
+  // ⚠️ SEEDED EXPANDED, THEN CORRECTED FROM STORAGE IN AN EFFECT — never read during render. This
+  // tree is a client component but Next still renders it on the SERVER, where `localStorage` does
+  // not exist; reading it in the initial state would either throw there or hand the client a first
+  // paint different from the server's (a hydration mismatch). The directive's default is the safe
+  // seed precisely because it is what a first-time viewer should see anyway.
+  const [defaultExpanded, setDefaultExpanded] = useState(true)
+  const [overrides, setOverrides] = useState<Record<number, boolean>>({})
+  useEffect(() => setDefaultExpanded(readCollapsePref()), [])
+
+  const isExpanded = useCallback(
+    (gameId: number) => overrides[gameId] ?? defaultExpanded,
+    [overrides, defaultExpanded],
+  )
+  // The Accordion is CONTROLLED: its `value` is the open set, and every change writes the whole set
+  // back as explicit per-game overrides. That keeps one source of truth — the primitive never holds
+  // state the page cannot see, which is what makes expand/collapse-all able to override it.
+  const openValues = useMemo(
+    () => games.filter((g) => isExpanded(g.game_id)).map((g) => String(g.game_id)),
+    [games, isExpanded],
+  )
+  const onOpenChange = useCallback(
+    (values: string[]) =>
+      setOverrides(
+        Object.fromEntries(games.map((g) => [g.game_id, values.includes(String(g.game_id))])),
+      ),
+    [games],
+  )
+  // Expand/collapse-all moves the DEFAULT and clears every per-card override, so the control means
+  // what it says: afterwards ALL cards are in the named state, not "all except the ones you touched".
+  const toggleAll = useCallback((next: boolean) => {
+    setDefaultExpanded(next)
+    setOverrides({})
+    writeCollapsePref(next)
+  }, [])
+  const anyExpanded = games.some((g) => isExpanded(g.game_id))
 
   // The disclosure is SERVED and rendered VERBATIM (see `lib/ncaaf-copy.ts` rule 3). Prefer the
   // slate's own copy of it so what a reader sees belongs to the payload in front of them; fall
@@ -111,7 +177,11 @@ export function NcaafGamesPage() {
         {disclosure && (
           <p
             data-testid="ncaaf-disclosure"
-            className="max-w-2xl rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2 text-[11px] leading-relaxed text-gray-500"
+            // ⚠️ NO `max-w-2xl` HERE, unlike the standfirst above it. A narrower measure is right
+            // for unboxed prose — a ragged right edge reads as typography. A BORDERED box whose
+            // right edge stops short of the bordered cards below it reads as a broken layout, and
+            // that is what it looked like on the published surface.
+            className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2 text-[11px] leading-relaxed text-gray-500"
           >
             {disclosure}
           </p>
@@ -157,11 +227,29 @@ export function NcaafGamesPage() {
         )}
 
         {games.length > 0 && (
-          <section data-testid="ncaaf-game-list" className="space-y-4">
-            {games.map((g) => (
-              <NcaafGameCard key={g.game_id} game={g} />
-            ))}
-          </section>
+          <>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                data-testid="ncaaf-toggle-all"
+                onClick={() => toggleAll(!anyExpanded)}
+                className="rounded-md border border-[#2a2a2a] px-2 py-1 text-[11px] text-gray-400 transition-colors hover:border-[#3a3a3a] hover:text-gray-200"
+              >
+                {anyExpanded ? COLLAPSE_ALL_LABEL : EXPAND_ALL_LABEL}
+              </button>
+            </div>
+            <Accordion
+              type="multiple"
+              value={openValues}
+              onValueChange={onOpenChange}
+              data-testid="ncaaf-game-list"
+              className="flex flex-col gap-4"
+            >
+              {games.map((g) => (
+                <NcaafGameCard key={g.game_id} game={g} expanded={isExpanded(g.game_id)} />
+              ))}
+            </Accordion>
+          </>
         )}
       </div>
     </main>

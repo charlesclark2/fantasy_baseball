@@ -23,11 +23,17 @@ export function WinProbability({
   homeTeam,
   awayTeam,
   testId = "ncaaf-win-probability",
+  showHint = true,
 }: {
   winProbability: NcaafWinProbability
   homeTeam: string
   awayTeam: string
   testId?: string
+  /** A COLLAPSED card drops the explanatory sentence — eight copies of it is most of what makes a
+   *  collapsed slate long. ⛔ It drops the EXPLANATION, never the number and never the bar; and the
+   *  publisher's SERVED disclosure sits above the list unconditionally, which is the honesty floor
+   *  a collapsed board still stands on (asserted, not assumed — see the games spec). */
+  showHint?: boolean
 }) {
   const home = isNum(winProbability.home) ? winProbability.home : null
   const away = isNum(winProbability.away) ? winProbability.away : null
@@ -76,7 +82,11 @@ export function WinProbability({
         <div className="h-full bg-sky-500/70" style={{ width: `${awayWidth}%` }} />
         <div className="h-full bg-emerald-500/70" style={{ width: `${100 - awayWidth}%` }} />
       </div>
-      <p className="text-[11px] leading-snug text-gray-500">{WIN_PROBABILITY_HINT}</p>
+      {showHint && (
+        <p data-testid={`${testId}-hint`} className="text-[11px] leading-snug text-gray-500">
+          {WIN_PROBABILITY_HINT}
+        </p>
+      )}
     </div>
   )
 }

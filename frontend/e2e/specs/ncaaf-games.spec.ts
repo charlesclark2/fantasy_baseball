@@ -215,6 +215,194 @@ test("an UNRECORDED pace flag is not read as an inactive one", async ({ page }) 
   await expect(c.getByTestId("ncaaf-curve-total")).toHaveAttribute("data-undifferentiated", "false")
 })
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// 1b. Collapsing a card — a SPACE decision that must not become an EDITORIAL one
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+test("cards open EXPANDED, so a first-time reader meets the curves", async ({ page }) => {
+  // ⭐ THE DEFAULT IS THE WHOLE POINT. The distributional curve is what this surface IS; a board
+  // that opened as a list of percentages would teach a new reader that we publish point-ish
+  // numbers. Collapsing is a preference a viewer opts INTO, never the state we hand them.
+  await open(page)
+  const c = card(page, SLATE.games[0].game_id)
+  await expect(c).toHaveAttribute("data-expanded", "true")
+  await expect(c.getByTestId("ncaaf-curve-margin")).toBeVisible()
+  await expect(c.getByTestId("ncaaf-summary-margin")).toHaveCount(0)
+})
+
+test("collapsing hides the curves, keeps the probability, and touches no other card", async ({ page }) => {
+  await open(page)
+  const first = card(page, SLATE.games[0].game_id)
+  const second = card(page, SLATE.games[1].game_id)
+  await first.getByTestId("ncaaf-card-toggle").click()
+
+  await expect(first).toHaveAttribute("data-expanded", "false")
+  await expect(first.getByTestId("ncaaf-curve-margin")).toHaveCount(0)
+  await expect(first.getByTestId("ncaaf-market-comparison")).toHaveCount(0)
+  // ⭐ The probability SURVIVES collapse: "probability first" is the directive, so the one thing a
+  // collapsed card must still lead with is the number the directive names.
+  await expect(first.getByTestId("ncaaf-win-probability")).toBeVisible()
+  // A per-card toggle is per-card.
+  await expect(second).toHaveAttribute("data-expanded", "true")
+  await expect(second.getByTestId("ncaaf-curve-margin")).toBeVisible()
+})
+
+test("the collapsed summary shows the SERVED band — the same numbers the curve showed", async ({ page }) => {
+  // ⭐ THE ANTI-DRIFT CLAUSE (E9.61). Two surfaces rendering one number are two rule sets free to
+  // disagree on a rounding, a sign or a level. This reads the band off the EXPANDED curve, collapses
+  // the card, and requires the collapsed row to carry the identical bounds — and both are checked
+  // against the payload, so a shared bug that moved BOTH would still fail.
+  await open(page)
+  const g = SLATE.games[0]
+  const c = card(page, g.game_id)
+  for (const [which, dist] of [["margin", g.margin], ["total", g.total]] as const) {
+    const expanded = await c.getByTestId(`ncaaf-curve-${which}-band`).innerText()
+    expect(expanded).toContain(dist.interval_lo.toFixed(1))
+    expect(expanded).toContain(dist.interval_hi.toFixed(1))
+  }
+  await c.getByTestId("ncaaf-card-toggle").click()
+  for (const [which, dist] of [["margin", g.margin], ["total", g.total]] as const) {
+    const summary = c.getByTestId(`ncaaf-summary-${which}`)
+    await expect(summary).toHaveAttribute("data-has-band", "true")
+    const text = await summary.innerText()
+    expect(text).toContain(dist.interval_lo.toFixed(1))
+    expect(text).toContain(dist.interval_hi.toFixed(1))
+    const pct = Math.round((dist.interval_hi_level - dist.interval_lo_level) * 100)
+    expect(text).toContain(`${pct}%`)
+  }
+})
+
+test("the collapsed summary shows a RANGE, never the midpoint", async ({ page }) => {
+  // ⛔ A collapsed row is exactly where one tidy number is tempting, and printing the median there
+  // would convert an uncertainty-first surface into a point-prediction surface one commit at a time.
+  // The median is a SERVED value, so this asserts its absence positively rather than by keyword.
+  await open(page)
+  const g = SLATE.games[0]
+  const c = card(page, g.game_id)
+  await c.getByTestId("ncaaf-card-toggle").click()
+  for (const [which, dist] of [["margin", g.margin], ["total", g.total]] as const) {
+    const mid = dist.quantiles[dist.quantile_levels.indexOf(0.5)]
+    const text = await c.getByTestId(`ncaaf-summary-${which}`).innerText()
+    expect(mid, "the fixture must carry a median for this clause to mean anything").toBeDefined()
+    expect(text).not.toContain(mid.toFixed(1))
+  }
+})
+
+test("the pace caveat SURVIVES collapse, and stays off the margin", async ({ page }) => {
+  // ⭐ COLLAPSING IS THE VIEW THAT MOST INVITES THE MISREADING. With pace inactive the eight totals
+  // span 2.4 points against a sigma of 17.2; a collapsed slate stacks those near-identical ranges
+  // in a vertical list while the sentence explaining why they are alike lives on the curve that
+  // collapsing just hid. So the marker has to ride the summary row.
+  await open(page)
+  const c = card(page, SLATE.games[0].game_id)
+  expect(SLATE.games[0].provenance.pace_term_active).toBe(false)
+  await c.getByTestId("ncaaf-card-toggle").click()
+  await expect(c.getByTestId("ncaaf-summary-total-marker")).toBeVisible()
+  await expect(c.getByTestId("ncaaf-summary-margin-marker")).toHaveCount(0)
+})
+
+test("with pace ACTIVE the collapsed summary carries no marker either", async ({ page }) => {
+  // The two-sided half: a marker that never lifts would still be on the board in November, when
+  // pace is exactly what makes totals differ.
+  await open(page, {
+    transform: (pathname, body) =>
+      pathname.startsWith("/ncaaf/games")
+        ? {
+            ...body,
+            games: body.games.map((g: any) => ({
+              ...g,
+              provenance: { ...g.provenance, pace_term_active: true },
+            })),
+          }
+        : body,
+  })
+  const c = card(page, SLATE.games[0].game_id)
+  await c.getByTestId("ncaaf-card-toggle").click()
+  await expect(c.getByTestId("ncaaf-summary-total")).toBeVisible()
+  await expect(c.getByTestId("ncaaf-summary-total-marker")).toHaveCount(0)
+})
+
+test("collapse-all and expand-all move every card, including ones already toggled", async ({ page }) => {
+  await open(page)
+  const cards = page.getByTestId("ncaaf-game-card")
+  await expect(cards).toHaveCount(SLATE.games.length)
+
+  // Toggle one card the OTHER way first — "collapse all" must mean all, not "all except the ones
+  // you touched", which is what a naive per-card override map produces.
+  await card(page, SLATE.games[2].game_id).getByTestId("ncaaf-card-toggle").click()
+
+  await page.getByTestId("ncaaf-toggle-all").click()
+  await expect
+    .poll(async () => (await cards.evaluateAll((n) => n.map((e) => e.getAttribute("data-expanded")))).join(","))
+    .toBe(new Array(SLATE.games.length).fill("false").join(","))
+
+  await page.getByTestId("ncaaf-toggle-all").click()
+  await expect
+    .poll(async () => (await cards.evaluateAll((n) => n.map((e) => e.getAttribute("data-expanded")))).join(","))
+    .toBe(new Array(SLATE.games.length).fill("true").join(","))
+})
+
+test("a collapse preference survives a reload, and an expand preference restores the curves", async ({ page }) => {
+  // Two-sided on purpose: a one-way persistence bug (remembers collapsed, never remembers expanded)
+  // would leave a reader permanently unable to get the surface's signature view back.
+  await open(page)
+  await page.getByTestId("ncaaf-toggle-all").click()
+  await page.reload()
+  await expect(card(page, SLATE.games[0].game_id)).toHaveAttribute("data-expanded", "false")
+
+  await page.getByTestId("ncaaf-toggle-all").click()
+  await page.reload()
+  await expect(card(page, SLATE.games[0].game_id)).toHaveAttribute("data-expanded", "true")
+})
+
+test("a fully collapsed board still carries the publisher's disclosure and no claim", async ({ page }) => {
+  // ⭐ THE HONESTY FLOOR, ASSERTED RATHER THAN ASSUMED. Collapsing drops explanatory copy — the
+  // win-probability sentence and the market panel's no-advantage framing both go — so the state
+  // with EVERY card collapsed is the least-worded this surface can ever be. That is exactly the
+  // state in which a claim would be least supervised, so the denylist runs over it, and the SERVED
+  // disclosure (which is page-level and unconditional) is required to still be there.
+  await open(page)
+  await page.getByTestId("ncaaf-toggle-all").click()
+  await expect(page.getByTestId("ncaaf-game-card").first()).toHaveAttribute("data-expanded", "false")
+
+  await expect(page.getByTestId("ncaaf-disclosure")).toHaveText(MANIFEST.framing.disclosure)
+  // The explanatory sentence is gone from the cards, and comes back the moment one is expanded.
+  await expect(page.getByTestId("ncaaf-win-probability-hint")).toHaveCount(0)
+  const body = await page.locator("main").innerText()
+  expect(forbiddenPhrasesIn(body), `collapsed board copy: ${body.slice(0, 400)}`).toEqual([])
+
+  await card(page, SLATE.games[0].game_id).getByTestId("ncaaf-card-toggle").click()
+  await expect(
+    card(page, SLATE.games[0].game_id).getByTestId("ncaaf-win-probability-hint"),
+  ).toBeVisible()
+})
+
+test("a collapsed card whose distribution is missing says so rather than showing an empty row", async ({ page }) => {
+  // NF-C6b: an empty cell and "we have no range for this" are different facts, and collapsing must
+  // not turn the second into the first.
+  // Both shapes matter and they are different facts: NOTHING published (no mu, no ladder) and a
+  // distribution with no SERVED INTERVAL (parameters, but nothing to draw a band from). Neither may
+  // collapse into a blank row.
+  const noDist = SLATE_DEGRADED.games.find(
+    (g: any) => g.margin.mu === null && g.margin.quantiles.length === 0,
+  )
+  const noBand = SLATE_DEGRADED.games.find(
+    (g: any) => g.margin.mu !== null && g.margin.interval_lo === null,
+  )
+  expect(noDist, "the degraded fixture must carry a game with no distribution").toBeTruthy()
+  expect(noBand, "the degraded fixture must carry a game with no served interval").toBeTruthy()
+  await open(page, { ncaafSlate: "degraded" })
+  for (const g of [noDist, noBand]) {
+    const cc = card(page, g.game_id)
+    await cc.getByTestId("ncaaf-card-toggle").click()
+    await expect(cc.getByTestId("ncaaf-summary-margin")).toHaveAttribute("data-has-band", "false")
+    await expect(cc.getByTestId("ncaaf-summary-margin")).toContainText("Not available")
+  }
+  const c = card(page, noDist.game_id)
+  // ...and the card keeps the part it HAS: a gap in one axis must not empty the whole row.
+  await expect(c.getByTestId("ncaaf-win-probability-home")).toBeVisible()
+})
+
 test("a margin curve carries the even-money reference and a total curve does not", async ({ page }) => {
   // Zero is meaningful on a margin (the win/loss boundary) and meaningless on a total. A component
   // that drew the reference on both would put a line labelled "even" at a total of zero points.
@@ -543,7 +731,7 @@ test("a game whose kickoff has passed says so, and does not read as upcoming", a
   expect(await c.innerText()).not.toMatch(/\b\d{1,3}\s*[-–—]\s*\d{1,3}\b/)
   // Words that have no honest use on a card with no game state. ⚠️ "live" is deliberately NOT in
   // this list — see above.
-  const header = (await c.locator("header").innerText()).toLowerCase()
+  const header = (await c.getByTestId("ncaaf-card-header").innerText()).toLowerCase()
   for (const overreach of ["final", "won", "lost", "in progress", "halftime"]) {
     expect(header, `the card header claims "${overreach}" with no state on the wire`).not.toContain(
       overreach,
