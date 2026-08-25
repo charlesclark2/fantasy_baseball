@@ -7,7 +7,7 @@ metadata:
   name: ncaaf-p3-2
   vertical: ncaaf
   card: https://trello.com/c/y0xpO30Y   # P3 epic thread; P3.2 card linked on creation
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     The flagship NCAAF game-predictions surface, probability-first and
@@ -109,8 +109,172 @@ spec:
       - id: 6-closeout
         desc: "Verdict + findings into closeout.followUps; session summary."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED, with the live-verify leg SPLIT and half of it PENDING. The surface is
+      built, guarded and RED-proven: /ncaaf/games renders the P3.1 payload
+      probability-first, draws margin and total as curves from the served quantile
+      ladder with the served 80% band, puts the model beside the market with no
+      difference column and no pick, and treats four distinct empty states as four
+      different facts, and BRANCHES on the payload's honest-frame flags rather than
+      merely carrying them — every claim-bearing sentence here is warranted by
+      `market_blind && projection_only && best_alpha === 0`, so on a payload that stops
+      saying those things the panel WITHDRAWS its own copy and shows the publisher's
+      disclosure instead (a refusal, never a re-interpretation). 25/25 RED-proven
+      deliberate breaks (10 Python, 15 E2E), each two-sided where a one-sided fix would
+      pass — the likelier mistake in the flag branch is a component that withdraws its
+      copy on EVERY card, which passes the first test while silently losing the one
+      sentence that makes the panel honest.
+      ⭐ THE SERVER HALF OF NODE 5 IS DONE AND WAS DONE AGAINST PRODUCTION: the four
+      /ncaaf/* routes went live on 2026-08-24 (P3.1's deploy.sh + the API-Gateway NONE
+      routes), so the happy-path fixture is a VERBATIM CAPTURE and a new @live spec
+      asserts the deployed API still sends what this surface reads — measured GREEN
+      against api.credencesports.com. ⏸️ THE CLIENT HALF CANNOT BE DONE FROM THIS
+      SESSION: frontend/ auto-deploys on merge to main, so "verify the published
+      surface by name" is a POST-MERGE operator step and is handed over as one rather
+      than faked against the fixture. ⚠️ It was ATTEMPTED PRE-MERGE and blocked, which
+      is worth recording because it is the cheaper path: the PR's Vercel PREVIEW
+      deployment renders this surface against the LIVE API, but it sits behind Vercel
+      SSO (an anonymous GET returns 302 to `vercel.com/sso-api`), so a session cannot
+      reach it. AN OPERATOR LOGGED INTO VERCEL CAN — and that makes the surface
+      verifiable BEFORE the merge rather than only after it. Both commands are in the
+      handoff.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      -2) 📌 PM ADDENDUM (2026-08-24), three live findings from P3.1's production gate — recorded
+      with what each one COST, because two of the three were already satisfied and saying so is
+      worth more than restating them.
+        (a) ✅ ALREADY BUILT — open on `game_days[0]`, never `current_game_day`. `defaultGameDay`
+        does exactly this and has both an E2E clause and a RED-proof case
+        (`ncaaf-opens-on-a-day-with-no-slate`); it was written against the same measured manifest
+        the PM cites. ⚠️ ONE PRECISION, so nobody reads the rule too literally later: the helper
+        DOES return `current_game_day` when that day is IN `game_days`, and must — the failure the
+        PM measured is a client keying on it BLINDLY, not the field being untouchable. Today, on a
+        slate day, is the correct default.
+        (b) ⭐ NEW, AND IMPLEMENTED — the pre-season total axis. MEASURED on the captured slate:
+        with `pace_term_active` false the eight totals span 2.4 points against a sigma of 17.2
+        (about a seventh of one standard deviation) while the margins span 31.6. So the total's
+        BAND is honest and its ORDERING is noise. The total curve now carries a caveat saying it
+        does not separate games yet and naming the margin as the axis that does; the band is
+        untouched, because the range is exactly as trustworthy as it ever was. ⭐ Keyed on the
+        SERVED `pace_term_active`, and on `=== false` rather than a truthiness test: a NULL means
+        the writer did not record whether pace acted, and "we do not know" is not "it did not" —
+        the absent-vs-null rule applied to a provenance field. Three RED-proven cases, all
+        two-sided, and the likelier defect is the one the second catches: a caveat that never lifts
+        would still be on the board in November, when pace is exactly what makes totals differ.
+        (c) ✅ ALREADY BUILT — render the stated absence, and render "absent" differently from
+        "broken". Two distinct sentences, an E2E clause and a RED-proof case
+        (`ncaaf-market-null-causes-collapsed`). ⚠️ CONTRACT PRECISION WORTH CARRYING: the
+        discriminator on the wire is `market.reason == "market_read_failed"` — a REASON VALUE beside
+        `status`, not a boolean field named `market_read_failed`. `NcaafMarketLine` declares no such
+        field, so a consumer coding against one would read `undefined` and silently take the
+        wrong branch.
+        (d) ✅ NO ACTION — 8 games is the full FBS-vs-FBS opener slate. Nothing here treats it as
+        low; the day picker renders the count as a plain fact.
+      -1) 🚨 THE TRANSPARENCY PANEL SHIPS WITH ITS PRIMARY BRANCH AS AN ABSENCE, and the
+      PM decision that fixes it is P3.1 closeout item 2, still open. Measured on the live
+      wire 2026-08-24: ALL EIGHT opener games are `market.status="unavailable"`,
+      `reason="no_line_captured_for_this_kickoff"`. The only NCAAF odds capture scheduled
+      for 2026 is the paid `/historical` catch-up, which by construction cannot reach a
+      kickoff until it is PAST — so on 8/29 the "MODEL line vs MARKET line side-by-side"
+      the brand directive names as this surface's transparency asset will render, for
+      every game, as a stated absence. ⭐ THE SURFACE IS BUILT FOR THAT AND SAYS SO IN
+      WORDS (never a blank, which reads as parity, and never a zero, which reads as a
+      line of zero) — but the market-AVAILABLE branch is proven only against a fixture
+      whose three market blocks are REAL 2025 closes fed through the shipping
+      `payloads._market()`. ⇒ if the PM wants the panel to actually DO ITS JOB on opening
+      day, a live `odds_ncaaf` capture cadence has to be scheduled before 8/29; if not,
+      the honest framing is already in place and nothing here blocks.
+      0) ⚠️ FLAGGED, NOT DONE — NCAAF HAS JOINED TWO OF G100-D1's THREE COST REGISTRIES.
+      P3.1 put `/ncaaf` in `_DEGRADE_ALLOWED_PREFIXES` and `_PUBLIC_CACHE_RULES`
+      (backend). The THIRD — the Vercel edge allowlist in
+      `frontend/app/api/public/[...path]/route.ts` — has NO NCAAF entry, and it is
+      FRONTEND code, i.e. it was in this story's scope. It was left undone deliberately
+      and the reasoning is the decision to review: the plan nodes do not include it;
+      adding it CHANGES THE READ PATH the whole surface was verified on (`apiFetch` →
+      `cdnFetch`) at the end of the session; and the slate read is DAY-PARAMETERISED,
+      which `resolve()` cannot express today (it handles a 1-segment key and
+      `track-record/<x>` only) — so it is a real change to a shared, cross-vertical-
+      guarded file rather than a line. COST OF LEAVING IT: every view of /ncaaf/games is
+      TWO API-Gateway requests and TWO Lambda invocations (manifest + slate), on a FREE,
+      anonymous, un-authenticated surface, on Saturdays. G100-D1's own measurement says
+      organic traffic is cheap (~$21/mo at 100k visitors) and the guardrails earn out
+      entirely on ABUSE/scraping — so this is a scraper-exposure decision, not a growth
+      one. Recommend a small follow-up before the traffic arrives.
+      1) 🚨 THERE IS NO GAME STATE AND NO SCORE ON THE WIRE, AND THIS SURFACE COULD ONLY
+      HALF-CLOSE IT. `game_prediction_snapshot` is pre-kickoff-only by design, so
+      `NcaafGamePrediction` carries no state and no score. Left alone, the evening of
+      8/29 would render eight cards of pre-kickoff projections for games that are
+      underway or finished, IDENTICAL to games that have not started — the most
+      misleading thing this surface could do on its opening day, and invisible to every
+      test written before that day. ⭐ WHAT SHIPPED: the kickoff INSTANT is derivable
+      from `commence_time` with no contract change, so a card whose kickoff has passed
+      carries a "Kicked off" chip and a sentence saying the projection was taken before
+      kickoff and is not updated. It claims NOTHING MORE, because the payload supports
+      nothing more (a positive assertion, not a token scan — see finding 4). ⏭️ THE
+      FULLER FIX IS A CONTRACT QUESTION FOR P3.1/P3.3: a live state + score beside the
+      projection. It is additive (NF-C0) and this client would need a deploy to read it.
+      2) ⚠️ THE SURFACE IS NOT REACHABLE FROM THE NAV — P3.9 IS LOAD-BEARING FOR THE 8/29
+      MVP, not a polish story. `/ncaaf/games` routes and renders, but NCAAF appears in no
+      nav item, so a user cannot find it; a bare `/ncaaf` 404s. The route already passes
+      `activeLink="ncaaf-games"`, so P3.9 has only to add the item and the highlight
+      works with no edit here. ⇒ P3.9 (or a one-line nav entry) is on the critical path
+      to the opener, and the epic ordering should say so.
+      3) ⭐ A MEASUREMENT FINDING FROM THE RED PROOF, worth carrying past this story: THE
+      RENDERED-BAND CLAUSE CANNOT SEPARATE "SERVED" FROM "RECOMPUTED" ON A GAUSSIAN
+      PAYLOAD. Breaking `buildDistributionCurve` to reconstruct the 80% band as
+      `mu ± 1.2816 sigma` — the exact defect the "never recompute a served number" rule
+      (E9.61) exists to prevent — is invisible to the E2E, because the captured payload
+      is Gaussian-drawn (`model_form=strength_posterior`) so the two derivations AGREE at
+      the decimal the card prints. It is caught only by `ncaaf-curve.spec.ts`, whose
+      fixture is deliberately NON-Gaussian. ⇒ generalisable: an assertion over a payload
+      whose values COINCIDE under two different derivations proves neither, and the
+      discriminating fixture has to be built non-coincident on purpose. This is the
+      NF1.7 (a) vacuous-anchor family with a new trigger — the vacuity comes from the
+      DATA, not from the clause.
+      4) ⭐ THE NEGATION-BLIND DENYLIST CLASS (NF-DS) REPRODUCED INSIDE A GUARD WRITTEN TO
+      HONOUR IT. The first cut of the "kicked off" clause scanned the card for words that
+      would overclaim a game state — and FAILED on the surface's own honest sentence,
+      "we do not show live scores here", because a substring scan cannot see a negation.
+      The cheapest way to pass it was to DELETE the disclaimer that makes the card
+      honest. Cured the way that lesson prescribes: assert what IS rendered (the chip's
+      exact text, the note's exact text, no score-shaped digits) rather than the absence
+      of a token.
+      5) ⭐ AND THREE EXTRACTOR FALSE POSITIVES IN `test_ncaaf_p3_2_surface.py`'s OWN FIRST
+      RUN — the same family facing the other way, because a guard that fails for the
+      WRONG reason is as useless as one that cannot fail. A Tailwind class list read as a
+      six-word sentence (`-mx-1 flex gap-1.5 …`); the words of a user-facing SENTENCE read
+      as identifiers, so "Pick another kickoff day above." refused the copy module for
+      declaring a `pick` and a `gap-x-3` refused the market panel for naming a difference;
+      and a `>…<` JSX-text regex matching a run of CODE between an arrow function's `>` and
+      a comparison's `<`, reading a whole `useMemo` block as a 34-word sentence. Each
+      extractor now documents what it excludes and why. ⇒ when a source-scanning guard
+      screens TSX, the substrate has to be separated first — prose, class names and
+      identifiers are three different questions and one regex cannot ask all three.
+      5b) ⭐ AND A CI-ONLY FLAKE THE LOCAL RUNS COULD NOT PRODUCE, paid for on the PR and
+      worth carrying because the method is generalisable. "The mixed slate prices some
+      games and not others" passed every local run and FAILED on CI: `locator.evaluateAll`
+      does NOT auto-retry — the NF-C6P2 finding, one method over from `locator.count()` —
+      so on a slower, contended runner it sampled the DOM while only the first cards had
+      rendered, saw nothing but `available`, and reported a one-sided slate. The defect
+      was in the ASSERTION'S TIMING, not in the page, and the tell is the shape of the
+      wrong answer (a PREFIX of the right one). ⇒ any read that collapses many elements
+      into one value (`evaluateAll`, `count`, `allTextContents`) needs a retrying wrapper
+      (`expect.poll`) or an explicit count wait first, and the way to find the rest is
+      `--workers=4 --repeat-each=2` locally rather than a CI cycle per attempt. Verified
+      84 clean under exactly that. ⚠️ Note the direction: the sibling read in the mobile
+      spec under-collects toward PASSING, which is the harder vacuity to notice — a
+      weaker test that still looks green — and it was hardened in the same change.
+      6) 🗓️ FIXTURE MAINTENANCE, so it is a known cost rather than a surprise: the slate
+      capture is DATE-PINNED (`NCAAF_CAPTURED_GAME_DAY = "2026-08-29"` in
+      `capture-fixtures.mjs`) because the NCAAF slate key IS the kickoff day — there is
+      no week parameter and there will not be one (the `season_order_week` alias
+      landmine). A re-capture in October needs that constant bumped to a day the
+      manifest still lists. `test_the_captured_slate_still_holds_the_state_the_specs_
+      reason_from` is what makes a CHARACTER change in a re-capture (a market line
+      landing; "today" becoming a published day) a red build rather than a silent
+      re-interpretation of every clause that reasons from the fixture.
+      7) ⛔ NOT DONE, recorded so the omission is not read as an oversight: no team logos
+      or colours (P3.8 owns the asset map — the cards are text-only by design); no
+      futures board (P3.6); no team pages (P3.3 — the link-out is a DISABLED affordance,
+      not an anchor to a 404, because a CTA pointing at a route that does not exist is
+      exactly what the E2E suite exists to catch); no backend, router or serving-store
+      change of any kind.
