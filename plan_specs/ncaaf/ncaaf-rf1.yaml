@@ -73,8 +73,144 @@ spec:
   graph:
     nodes: []   # MINI tier
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED (pending merge + box deploy — see followUps 0). The window is
+      extended, both acceptance verifications were MEASURED rather than assumed,
+      the docs move in the same change, and the guard is RED-proven 12/12.
+
+      FINAL EXPRESSION: NCAAF_ROLL_FORWARD_CRON = "0 6 * 2-12,1 1" (weekly Monday
+      06:00 America/Los_Angeles, February -> the following January — one full NCAAF
+      season cycle). It was "0 6 * 2-8 1". The `2-12,1` form is deliberately the
+      Aug-Jan convention the other NCAAF schedules write (NCAAF_CRON = "0 11 * 8-12,1 *",
+      NCAAF_SERVING_WRITE_CRON = "0 6 * 8-12,1 *", NCAAF_ODDS_CAPTURE_CRON = "0 8 * 8-12,1 1"),
+      rotated to this cadence's own start month — the same shape NF-FRESH2 P0 used for
+      NFL_ROLL_FORWARD_CRON ("15 6 * 3-12,1-2 1"). Cadence, hour, timezone and
+      default_status are UNCHANGED: only the month field moved.
+
+      ⭐ THE DEFECT AND THE FIX ARE BOTH DEMONSTRATED ON DAGSTER'S OWN CRON ENGINE
+      (`dagster._utils.schedules.cron_string_iterator` — the engine that actually fires;
+      ⛔ NOT `croniter`, which is not installed on the box — NF-FRESH2). Next six fires
+      after 2026-08-25, America/Los_Angeles:
+        OLD "0 6 * 2-8 1"    -> 2026-08-31, then 2027-02-01, 02-08, 02-15, 02-22, 03-01
+                                (a FIVE-MONTH hole spanning the entire season)
+        NEW "0 6 * 2-12,1 1" -> 2026-08-31, then 2026-09-07, 09-14, 09-21, 09-28, 10-05
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      0) ⏰ OPERATOR — THE DEADLINE STEP. Merge must reach the box before Mon 2026-08-31
+      06:00 PT (the last fire under the old window). The box deploy rides the merge to
+      `main` (`orchestration_cd.yml`); the API Lambda and `frontend/` are NOT involved —
+      this touches neither. Confirm in Dagit AFTER the deploy:
+        Dagit -> Automation -> Schedules -> `sports_ncaaf_roll_forward_schedule`
+        Expect: Cron `0 6 * 2-12,1 1`, timezone America/Los_Angeles, and the "Next tick"
+        showing **Mon 2026-09-07 06:00 PT** (under the old window the next tick after
+        8/31 reads Mon 2027-02-01 — that contrast is the whole check, so read the DATE,
+        not just the expression).
+      ⚠️ The schedule ships `default_status=STOPPED` (unchanged — the E11.23 operator-gated
+      carve-out this vertical takes) and BOX_OPERATIONS.md §10 still says "turn ON NOW".
+      A widened window on a STOPPED schedule fires nothing; if it is not already RUNNING
+      on the box, turning it ON is still the launch-critical action, and this change does
+      not alter that.
+
+      1) ✅ AC2 (a) — IDEMPOTENCY, CITED NOT ASSUMED. An in-season Monday fire on
+      already-ingested sources is a value-identical partition rewrite, which is the
+      existing designed behaviour and needed no change:
+        * `roll_forward.run_roll_forward` calls `handler.run_ingest` WITHOUT
+          `skip_existing` (`roll_forward.py` L~79) — so it always re-fetches; the
+          idempotency is in the WRITE, not in a skip.
+        * `s3io.write_records` -> `s3io.write_season_partition` writes
+          `mode="overwrite", predicate="season = <YYYY>"` with `schema_mode="merge"`
+          (`s3io.py` L165-205) — an atomic single-season `replaceWhere`, O(current
+          season), explicitly documented as "re-pulling a season is a value-identical
+          rewrite". An additive upstream field is a metadata commit, not a break.
+        * Per-source failures are ALERT-loud-but-continue inside `run_ingest`
+          (`handler.py` L111-113); the job raises ONLY on a TOTAL failure
+          (`sports_ncaaf_rollforward_job.py`), so one unpublished covariate cannot
+          sink an in-season batch.
+        * ⭐ NOTHING IN THE REPO ASSUMES THESE FEEDS ARE QUIET IN-SEASON. The raw tier
+          is a latest-snapshot tier by construction; the forward track record's fidelity
+          comes from the NCAAF-PS snapshot tables, which are written by a SEPARATE job
+          to a SEPARATE store with their own snapshot instant — a raw overwrite cannot
+          damage them (the same audit NF-FRESH2 P0 ran for the NFL analog).
+
+      2) ✅ AC2 (b) — THE TALENT LEG, MEASURED LIVE 2026-08-24 (8 real CFBD calls):
+        games 200/3610 · teams 200/138 · returning_production 200/136 ·
+        transfer_portal 200/4460 · roster 200/15496 · coaches 200/138 ·
+        recruiting_players 200/3987 · **talent 200/0**
+      Seven of eight roll-forward sources are published for 2026; `talent` alone is the
+      0-row absence, confirming the spec's premise exactly. Control: `/talent?year=2024`
+      and `?year=2025` both return 200 with 134 rows, so the endpoint and the key are
+      healthy and 2026 is a genuine upstream absence, not a broken call.
+        * WHILE 0 ROWS: `s3io.write_records` returns early on an empty record list
+          ("0 records — skip", `s3io.py` L230-233) — it does NOT write an empty
+          partition, so a fire while CFBD is still empty can never overwrite a good
+          partition with nothing. `run_roll_forward` counts it as `empty` and WARNs
+          ("not yet published by CFBD"), the job logs it loud and does not fail.
+        * WHEN ROWS APPEAR: the same code path is a plain `replaceWhere season = 2026`
+          write of whatever CFBD returns — no flag, no backfill, no code change. The
+          first Monday after CFBD publishes, talent lands.
+      ⇒ the leg is dormant-but-armed today, which is precisely why the window mattered:
+      under `2-8` the arming expired on 8/31.
+
+      3) 🔎 FINDING (benign, stated rather than assumed) — A NEW IN-SEASON CO-FIRE.
+      From September this schedule co-fires at exactly 06:00 PT on Mondays with
+      `sports_ncaaf_serving_write_schedule` (`0 6 * 8-12,1 *`, daily). Audited and
+      harmless: no shared writer (the serving write is lake-only and explicitly touches
+      no `sports.duckdb`, while the roll-forward's rebuild is the only DuckDB writer),
+      both are cheap, they use different `dagster.yaml` tag values so neither queues the
+      other, and `max_concurrent_runs: 5` has ample room. NOT changed here because the
+      spec scopes RF1 to the month field and the minute is pinned by the guard and §10 —
+      but the NFL siblings are deliberately offset (06:00 / 06:15 / 06:30) and this one
+      no longer is. ⏭️ PM: a one-character offset (e.g. `5 6 …`) is the tidy follow-up if
+      you want the NFL convention held across the box; it is not a defect today.
+
+      4) 🔎 FINDING — JANUARY IS CORRECT BY CONSTRUCTION, and it is worth recording why
+      because it looks like an off-by-one. `current_season()` is
+      `last_completed_season() + 1`, and `last_completed_season` falls back an extra year
+      during JANUARY (`sources.py` L55-70) — so a January 2027 fire targets season 2026,
+      the season still playing its bowls/CFP, NOT 2027. The window therefore rolls the
+      IN-PROGRESS season forward through the CFP and only advances to the next season in
+      February, exactly as the annual cadence intends. Already pinned by the pre-existing
+      `test_current_season_is_clock_derived`.
+
+      5) ✅ AC3 — DOCS AND SCHEDULE PINNED TO EACH OTHER. `BOX_OPERATIONS.md §10`'s
+      intended-state row now states the window AND quotes the cron literally
+      ("declared cron `0 6 * 2-12,1 1`"), and
+      `test_ncaaf_roll_forward.py::test_the_documented_window_matches_the_cron_constant`
+      asserts the doc's quoted literal EQUALS the constant parsed out of the schedule
+      source. Drift in either direction fails CI — the `W7B_LAKEHOUSE_S3`
+      documented-but-never-set class closed mechanically rather than by convention.
+      Four guards in total, all source-read (the constant lives in `pipeline/`, and a
+      fast-gate test that imports `pipeline` dies at COLLECTION — E11.23):
+        * the cron covers a full season cycle (asserted on the VALUE, so no comment can
+          satisfy it — INC-38);
+        * the retired `2-8` expression is ABSENT from the month field, while the comment
+          stays free to NAME it (NF-DTB-1: a presence-only pin cannot see a partial edit);
+        * the doc/code pin above;
+        * the comment block immediately above the constant names NCAAF-RF1 / E9.48 /
+          INC-37 / talent. ⚠️ This one is deliberately a COMMENT scan because the
+          requirement IS about the comment — it is scoped to the CONTIGUOUS block above
+          the constant, not the module docstring (which already says "talent" for
+          unrelated reasons and would have made it pass on irrelevant prose).
+      RED proof: `uv run python betting_ml/tests/ncaaf_rf1_red_proof.py` — **12/12
+      deliberate breaks caught RED**, one isolating break per clause (NF-D17).
+      ⚠️ THE RED PROOF CAUGHT THREE DEFECTS IN ITSELF, all in the vacuous-guard family
+      and all worth carrying: (a) a file-wide "token is gone" check FALSE-ALARMED because
+      `E9.48` legitimately appears elsewhere in the same file (the NFL cron cites the same
+      class) — the check must be scoped to where the GUARD looks; (b) a hand-written
+      excerpt stripped `talent` from three of the FIVE lines that carry it, so the break
+      landed and the assertion did not move (E11.24 #815) — the fix computes the whole
+      comment block and scrubs it; (c) a "delete the note" break that merely prepended a
+      line left the note fully intact and read GREEN. None of the three was visible from
+      a green suite.
+
+      6) ⛔ NOT DONE, deliberately: no model, ingest-logic, serving or `frontend/` change;
+      `ROLL_FORWARD_SOURCES` is untouched; `default_status` is untouched; the roadmap
+      files are untouched (FROZEN); no Trello card was created.
+
+      7) ⏭️ PM — THE ADJACENCY THE SPEC FLAGGED IS NOW LIVE. The pre-opener checklist's
+      optional second P1.2 re-fit ("if CFBD publishes talent before 8/29") is no longer
+      bounded by 8/29: talent can now land any week of the season, so the open question
+      becomes WHETHER a mid-season covariate arrival should trigger a P1.2 re-fit at all,
+      and if so under what rule. ⚠️ Worth deciding rather than defaulting: the NCAAF-PS
+      snapshots are IMMUTABLE, so a mid-season re-fit changes the model behind a forward
+      track record that already has weeks in it — the ingest being armed is a data
+      decision, the re-fit is a modelling one, and RF1 only settles the first.

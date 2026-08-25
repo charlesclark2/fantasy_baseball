@@ -5,12 +5,18 @@ board + the live P1.4 board can RUN before kickoff. Fires the `sports_ncaaf_roll
 (ingest → mart rebuild) on a clock-derived `current_season()` — the exact same schedule lands 2027
 next August with no code change (the annual cadence; NEVER pin the season — the P0.6 landmine).
 
-⏰ WINDOW: weekly Mondays, FEBRUARY–AUGUST. That is the pre-season churn window — CFBD publishes /
-moves games and fills covariates (returning production, talent, coaches, roster) on a rolling basis
-from late winter through fall camp (verified 2026-07-24: half the covariates were still unpublished
-in July). Once the season opens (Sep+), the game-day `sports_ncaaf_dbt_schedule` takes over the
-mart rebuilds off real game data, so the roll-forward pull stops for the season and resumes the next
-February for the following season.
+⏰ WINDOW (widened by NCAAF-RF1, 2026-08-24): weekly Mondays, FEBRUARY → the following JANUARY —
+one full NCAAF season cycle. Feb–Aug is the pre-season churn window (CFBD publishes / moves games
+and fills covariates — returning production, talent, coaches, roster — on a rolling basis from late
+winter through fall camp; verified 2026-07-24: half the covariates were still unpublished in July),
+and Sep–Jan carries that same refresh through the regular season, bowls and the CFP.
+
+It USED to be FEBRUARY–AUGUST, on the reasoning that once the season opens the game-day
+`sports_ncaaf_dbt_schedule` takes over the mart rebuilds off real game data. That is true of the
+REBUILD and false of the INGEST: the game-day schedule rebuilds MARTS and ingests NOTHING, so under
+the old window every roll-forward feed would have frozen after Mon 2026-08-31 until February 2027.
+See the ⚠️ NCAAF-RF1 note at `NCAAF_ROLL_FORWARD_CRON` for the leg that made that bite (`talent`)
+and for the in-season-safety audit.
 
 ⛔ SHIPS `default_status=STOPPED` — the SAME operator-gated exception the sports dbt schedules take
 (E11.23 carves out operator-gated schedules that need a prereq / can spend an external budget): this
@@ -20,7 +26,8 @@ STOPPED is the "silently never runs" class, so the intended state is recorded in
 `BOX_OPERATIONS.md §10` and the P0.7 handoff makes ENABLING THIS the launch-critical action —
 turn it ON in Dagit well before the Aug-29 opener.
 
-Cron 06:00 America/Los_Angeles Monday, Feb–Aug: a quiet-hours weekly pull; ~8 cheap CFBD calls.
+Cron 06:00 America/Los_Angeles Monday, Feb → the following Jan: a quiet-hours weekly pull;
+~8 cheap CFBD calls.
 
 ═══════════════════════════════════════════════════════════════════════════════════════════════
 NF-D1 — the NFL season roll-forward schedule (below): a weekly refresh of rosters/schedule/
@@ -100,8 +107,28 @@ from pipeline.jobs.sports_nfl_board_publish_job import sports_nfl_board_publish_
 from pipeline.jobs.sports_nfl_rollforward_job import sports_nfl_roll_forward_job
 from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
 
-# Weekly Monday 06:00 PT, months February–August (the pre-season roll-forward window).
-NCAAF_ROLL_FORWARD_CRON = "0 6 * 2-8 1"
+# Weekly Monday 06:00 PT, months February → the following January — i.e. ONE FULL NCAAF SEASON
+# CYCLE, pre-season churn (Feb–Aug) straight through the regular season, bowls and the CFP
+# (Sep–Jan). The `2-12,1` form is the Aug–Jan convention every other NCAAF schedule in this repo
+# writes (`NCAAF_CRON = "0 11 * 8-12,1 *"`), rotated to this cadence's own start month.
+# ⚠️ NCAAF-RF1 (2026-08-24) — this used to be `2-8` (Feb–August) and that was a SEASONAL BOUNDARY
+# HOLE of exactly the E9.48(c) / INC-37 month-scoped-cron class, caught BEFORE it fired: the last
+# fire under the old window was Mon 2026-08-31, after which every roll-forward feed would have
+# STOPPED advancing until February 2027 — through the whole season. The leg that made it bite is
+# `talent`: it is in `ROLL_FORWARD_SOURCES` and is an honest upstream absence today (verified live
+# 2026-08-24: CFBD `/talent?year=2026` → HTTP 200 with 0 rows, while 2024/2025 return 134 each),
+# so if CFBD publishes 2026 talent in September NOTHING would have ingested it all season — and
+# because the NCAAF-PS pre-kickoff snapshots are IMMUTABLE, the forward track record would have
+# been permanently talent-free. A month-range cron is a seasonal hole; grep a schedule's month
+# range before trusting it covers the season you need.
+# ⭐ WHY RUNNING IT IN-SEASON IS SAFE (audited, NCAAF-RF1 — the same audit NF-FRESH2 P0 ran for
+# the NFL analog): the raw tier is a LATEST-SNAPSHOT tier by construction — `run_roll_forward`
+# does NOT pass `skip_existing`, so every fire is a value-identical `replaceWhere season = YYYY`
+# partition overwrite (`s3io.write_season_partition`), and a source CFBD has not published lands
+# 0 records, which `s3io.write_records` SKIPS outright rather than overwriting a good partition
+# with an empty one. So an in-season fire on already-ingested sources is a clean no-op-in-effect,
+# and the talent leg starts landing rows the first Monday after CFBD publishes them.
+NCAAF_ROLL_FORWARD_CRON = "0 6 * 2-12,1 1"
 # Weekly Monday 06:15 PT (offset from the NCAAF pull), months March → the following February —
 # i.e. ONE FULL NFL SEASON CYCLE, free agency (Mar) through the Super Bowl (Feb).
 # ⚠️ NF-FRESH2 P0 — this used to be `3-8` (March–August) and that was a SEASONAL BOUNDARY HOLE of
