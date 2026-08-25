@@ -115,7 +115,15 @@ spec:
       probability-first, draws margin and total as curves from the served quantile
       ladder with the served 80% band, puts the model beside the market with no
       difference column and no pick, and treats four distinct empty states as four
-      different facts. 18/18 RED-proven deliberate breaks (10 Python, 8 E2E).
+      different facts, and BRANCHES on the payload's honest-frame flags rather than
+      merely carrying them — every claim-bearing sentence here is warranted by
+      `market_blind && projection_only && best_alpha === 0`, so on a payload that stops
+      saying those things the panel WITHDRAWS its own copy and shows the publisher's
+      disclosure instead (a refusal, never a re-interpretation). 22/22 RED-proven
+      deliberate breaks (10 Python, 12 E2E), each two-sided where a one-sided fix would
+      pass — the likelier mistake in the flag branch is a component that withdraws its
+      copy on EVERY card, which passes the first test while silently losing the one
+      sentence that makes the panel honest.
       ⭐ THE SERVER HALF OF NODE 5 IS DONE AND WAS DONE AGAINST PRODUCTION: the four
       /ncaaf/* routes went live on 2026-08-24 (P3.1's deploy.sh + the API-Gateway NONE
       routes), so the happy-path fixture is a VERBATIM CAPTURE and a new @live spec
