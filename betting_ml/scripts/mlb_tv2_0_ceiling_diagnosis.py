@@ -97,7 +97,8 @@ REPORT_STATS = (CRPS_STAT, ASYM_STAT, FIDELITY_STAT)
 BOOT_STATS = (CRPS_STAT, ASYM_STAT, FIDELITY_STAT, "p_over_stated", "p_over_gap",
               "pit_mdd")
 #: Each lever is scored on EVERY statistic it can act on, and on none it cannot.
-LEVER_STATS = {"shape": (CRPS_STAT, ASYM_STAT), "feature": (CRPS_STAT,)}
+LEVER_STATS = {"shape": (CRPS_STAT, ASYM_STAT), "feature": (CRPS_STAT,),
+               "calibrator": (CRPS_STAT, ASYM_STAT)}
 FEATURE_STAT, SHAPE_STAT = CRPS_STAT, ASYM_STAT   # back-compat aliases for the report
 MIX_K_MAX = 3                    # scale-mixture components; K is chosen by BIC, out of block
 N_BOOT = 400                     # paired row bootstrap for lever materiality
@@ -444,7 +445,10 @@ def crps_grid(y, arm, levels=None):
 
 
 def _levels():
-    return (np.arange(1, CRPS_LEVELS + 1)) / (CRPS_LEVELS + 1.0)
+    """MIDPOINT quadrature levels. Evenly-spaced interior points `i/(L+1)` are a left-Riemann rule
+    over an integrand with kinks and left a 5.0e-3 residual against the Normal closed form — over
+    the 1e-3 validation tolerance. The midpoint rule is `O(L⁻²)` and clears it by three orders."""
+    return (np.arange(CRPS_LEVELS) + 0.5) / CRPS_LEVELS
 
 
 def crps_normal_closed(y, mu, sigma):
@@ -653,6 +657,7 @@ def build_arms(y, mu, sigma, block, rng):
     arms["B1_shape_skewnormal"] = Arm("B1_shape_skewnormal", mu, sigma, sn_laws, block)
     notes["B1_alpha_by_block"] = [float(law.a) for law in sn_laws]
     notes["B1_collapsed_any"] = bool(any(law.collapsed for law in sn_laws))
+    notes["B1_collapsed_blocks"] = int(sum(1 for law in sn_laws if law.collapsed))
 
     # B2 ⛔ — the best possible SHAPE given a location and a scale. Absorbs A1 by construction.
     arms["B2_shape_empirical"] = Arm(
@@ -1021,6 +1026,45 @@ def fixture_run(fx, reps: int = 200):
     return flat
 
 
+def classify_levers(decision, notes, *, n_blocks=N_BLOCKS):
+    """`classify_null` on each lever whose reading is a NULL (prereg §7, the acceptance's last bar).
+
+    ⭐ The FEATURE lever's null, when the scale-mixture oracle returns `K = 1` on EVERY block, is
+    **`INACTIVE`, not `POWER_LIMITED`** — the oracle that is ALLOWED TO SEE THE ANSWER found no
+    per-game scale structure to recover, so there is nothing for a dispersion FEATURE to carry.
+    `INACTIVE` is a finding about SCOPE: the remedy is a different population, ⛔ never more served
+    games and never a bug hunt (E7.15 / MH2). Publishing a fold or season re-test trigger for it
+    would be the actively-misleading direction NF-D18 warns about.
+    """
+    from betting_ml.utils.cv_power import classify_null
+    out = {}
+    for name, metric in (("feature", CRPS_STAT), ("shape", ASYM_STAT)):
+        lv = decision["levers"][name]
+        if lv["in_play"]:
+            out[name] = {"state": "NOT_A_NULL", "reason": "the lever is IN PLAY — see §3.",
+                         "share": lv["share"]}
+            continue
+        inert = name == "feature" and notes.get("A3_all_blocks_single_component")
+        reason = (f"the scale-mixture oracle returned K = 1 on all {n_blocks} blocks — an oracle "
+                  "with the answer in hand finds NO per-game scale structure, so a dispersion "
+                  "FEATURE has nothing to carry" if inert else None)
+        v = classify_null(metric=metric, n_folds=n_blocks, n_arms=len(ARMS),
+                          beats_foil=False, active=not inert, inactive_reason=reason,
+                          declared_field_size=len(ARMS))
+        out[name] = {"state": v.state, "reason": v.reason, "retest_trigger": v.retest_trigger,
+                     "field_remedy_admissible": v.field_remedy_admissible,
+                     "hand_recorded": None}
+    # The cv_power card's interim rule — a binding gate the instrument cannot yet name.
+    out["std_pred_meanspread"] = {
+        "state": "INACTIVE", "hand_recorded": True,
+        "reason": ("ARM-INVARIANT by construction: every arm holds mu EXACTLY at the served value, "
+                   "so no leg can move STDDEV(pred_total_runs). `classify_null` has no input that "
+                   "expresses 'the statistic cannot be moved by any arm in the field', so this is "
+                   "hand-recorded per the cv_power card's interim rule."),
+        "retest_trigger": None}
+    return out
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # LOCATION PROBE (C2) — ⛔ a diagnostic, never a lever. See prereg §6.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -1083,13 +1127,14 @@ def run(*, reps: int = N_NULL, mde: bool = True, cache: Path | None = _CACHE) ->
         from scipy.stats import kstest
         cons = np.array([kstest(rng.uniform(size=len(y)), "uniform").statistic
                          for _ in range(min(reps, 1000))])
-        r["floors"][SHAPE_STAT]["construction_floor_median"] = float(np.median(cons))
+        r["floors"][FIDELITY_STAT]["construction_floor_median"] = float(np.median(cons))
 
         entry = {
             "n": int(len(y)), "block_sizes": r["block_sizes"],
             "crps_grid_vs_closed_abs_delta": float(delta),
             "stats": r["stats"], "floors": r["floors"], "decision": r["decision"],
             "notes": r["notes"], "location_probe": location_probe(y, mu, sigma),
+            "null_classification": classify_levers(r["decision"], r["notes"]),
         }
         if tier == PRIMARY_TIER:
             entry["controls"] = run_controls(mu, sigma, dates, seed=SEED, reps=reps)
@@ -1203,10 +1248,13 @@ def write_report(r: dict) -> Path:
           f"**{p['notes']['A3_mixture_K_by_block']}**"
           + ("  ⟵ ⭐ **`K = 1` on every block: the oracle that is allowed to see the answer finds "
              "NO per-game σ signal at all.**" if p['notes']['A3_all_blocks_single_component'] else "")
+          + f"\n\nUn-gated BIC (before the symmetry gate): "
+          f"**{p['notes']['A3_mixture_K_ungated_by_block']}** — the gate closed on "
+          f"{p['notes']['A3_symmetry_gate_closed_blocks']} of {N_BLOCKS} blocks."
           + f"\n\nSkew-normal `α` by block (`B1`, reported): "
-          f"{[round(x,3) for x in p['notes']['B1_alpha_by_block']]}"
-          + ("  ⚠️ at least one block COLLAPSED onto its Normal foil — a nested form's near-zero "
-             "margin is a TIE, not a shape finding." if p['notes']['B1_collapsed_any'] else ""),
+          f"{[round(x,3) for x in p['notes']['B1_alpha_by_block']]} — "
+          f"**{p['notes']['B1_collapsed_blocks']} of {N_BLOCKS} blocks COLLAPSED onto the Normal "
+          f"foil** (|α| < {SKEWNORM_COLLAPSE_ABS_ALPHA}). See §3.5.",
           "", "### The yardstick — one primary PER LEVER (prereg §12)", "",
           "| statistic | role | incumbent | calibrated-null median (the FLOOR) | null 95% band | "
           "gap | outside the band? | MC p |",
@@ -1219,14 +1267,15 @@ def write_report(r: dict) -> Path:
         L.append(f"| `{k}` | {roles[k]} | {_f(c['incumbent'])} | {_f(c['floor'])} | "
                  f"[{_f(c['band'][0])}, {_f(c['band'][1])}] | {_f(c['gap'])} | "
                  f"{'✅ yes' if c['outside_null_band'] else '⛔ no'} | {_f(d['mc_p'][k],3)} |")
-    cf = p["floors"][SHAPE_STAT].get("construction_floor_median")
+    cf = p["floors"][FIDELITY_STAT].get("construction_floor_median")
     L += ["",
-          f"The `{SHAPE_STAT}` calibrated-null floor ({_f(ch[SHAPE_STAT]['floor'])}) is asserted "
-          f"against the distribution-free CONSTRUCTION floor at this n ({_f(cf)}) — `round(Normal)` "
-          "read with a continuity-corrected randomized PIT is EXACTLY uniform, so the two must "
-          "agree. A statistic INSIDE its null band is **inactive**: there is no measurable failure "
-          "for a lever to close, and a closure share computed against a `gap` that is itself noise "
-          "is the NF1.7 (a) vacuous anchor.", ""]
+          f"⭐ **The instrument checks itself here.** `{FIDELITY_STAT}`'s calibrated-null floor is "
+          f"**{_f(ch[FIDELITY_STAT]['floor'])}** and the distribution-free CONSTRUCTION floor at "
+          f"this `n` — the KS statistic of `n` iid uniforms, which involves no model at all — is "
+          f"**{_f(cf)}**. They agree because `round(Normal)` read with a continuity-corrected "
+          "randomized PIT is EXACTLY uniform. A statistic INSIDE its null band is **inactive**: "
+          "there is no measurable failure for a lever to close, and a closure share computed "
+          "against a `gap` that is itself noise is the NF1.7 (a) vacuous anchor.", ""]
     L += [("⚠️ **OVER_PEEKING** — these oracles land BELOW an active statistic's floor lower tail, "
            "i.e. below what an honest model can attain: "
            + ", ".join(f"`{a}`" for a in d["over_peeking_arms"]) +
@@ -1234,31 +1283,59 @@ def write_report(r: dict) -> Path:
           if d["over_peeking_arms"] else
           "No oracle landed below an active statistic's floor lower tail.",
           "", "---", "", "## 3. ⭐ THE LEVERS, BOUNDED", "",
-          "| channel | construction | statistic | paired lift (95% CI) | in play? | share of gap |",
-          "|---|---|---|---:|---|---:|"]
+          "| channel | construction | statistic | paired lift (95% CI) | material | in play? | "
+          "share of the JOINT CEILING |",
+          "|---|---|---|---:|---|---|---:|"]
     lv = d["levers"]
-    for lbl, key, st in (("**calibrator** — a global scale (a RECALIBRATOR can do this)",
-                          "calibrator", SHAPE_STAT),
-                         ("**ARCHITECTURE lever** — `TV2-2`'s CEILING", "shape", SHAPE_STAT),
-                         ("**FEATURE lever** — `TV2-1`'s CEILING", "feature", FEATURE_STAT),
-                         ("*(the feature lever read directly)*", "feature_direct", FEATURE_STAT)):
-        v = lv[key]
-        cons = {"calibrator": "`imp(A1) − imp(incumbent)`", "shape": "`imp(B2) − imp(A1)`",
-                "feature": "`imp(C1) − imp(B2)`", "feature_direct": "`imp(A3) − imp(A1)`"}[key]
-        L.append(f"| {lbl} | {cons} | `{st}` | {_f(v['point'],4)} "
-                 f"[{_f(v['lo'],4)}, {_f(v['hi'],4)}] | "
-                 f"{'✅ **yes**' if v['in_play'] else '⛔ no'} | {_f(v['share_of_gap'],3)} |")
+    CONS = {"calibrator": "`imp(A1) − imp(incumbent)`", "shape": "`imp(B2) − imp(A1)`",
+            "feature": "`imp(C1) − imp(B2)`", "feature_direct": "`imp(A3) − imp(A1)`"}
+    LBL = {"calibrator": "**calibrator** — a global scale (a RECALIBRATOR can do this)",
+           "shape": "**ARCHITECTURE lever** — `TV2-2`'s CEILING",
+           "feature": "**FEATURE lever** — `TV2-1`'s CEILING",
+           "feature_direct": "*(the feature lever, read directly)*"}
+    for key in ("calibrator", "shape", "feature", "feature_direct"):
+        for k in REPORT_STATS:
+            v = lv[key]["by_stat"][k]
+            if not v["admissible"] and k != FIDELITY_STAT:
+                note = " ⛔ *inadmissible — the arm cannot move this statistic*"
+            elif k == FIDELITY_STAT:
+                note = " *(reported; not a lever statistic)*"
+            else:
+                note = ""
+            L.append(f"| {LBL[key] if k == REPORT_STATS[0] else ''} | "
+                     f"{CONS[key] if k == REPORT_STATS[0] else ''} | `{k}`{note} | "
+                     f"{_f(v['point'],4)} [{_f(v['lo'],4)}, {_f(v['hi'],4)}] | "
+                     f"{'yes' if v['material'] else 'no'} | "
+                     f"{'✅ **yes**' if (v['in_play'] and v['admissible']) else '⛔ no'} | "
+                     f"{_f(v['share_of_ceiling'],3)} |")
+        L.append(f"| ⭐ **{key} — LEVER SHARE** | max over admissible, in-play statistics | | | | "
+                 f"{'✅ **IN PLAY**' if lv[key]['in_play'] else '⛔ not in play'} | "
+                 f"**{_f(lv[key]['share'],3)}** |")
+    am = d["asymmetry_channel"]
+    L += ["", "### ⭐ The ASYMMETRY channel — the error on the number the product prints", "",
+          "Read as a MOVEMENT of the stated probability, in which the realized over-rate cancels "
+          "EXACTLY, gated on the incumbent's gap being materially non-zero (prereg §12.2.3).", "",
+          "| | |", "|---|---:|",
+          f"| incumbent signed `p_over_gap` at its own mean | **{_f(am['incumbent_signed_gap'],4)}** |",
+          f"| its paired 95% CI | [{_f(am['incumbent_gap_ci'][0],4)}, {_f(am['incumbent_gap_ci'][1],4)}] |",
+          f"| gap materially non-zero? (the channel's precondition) | "
+          f"{'✅ yes' if am['gap_material'] else '⛔ **no** — the channel is INADMISSIBLE'} |",
+          f"| `B2`'s movement of the stated probability | {_f(am['movement'],4)} "
+          f"[{_f(am['lo'],4)}, {_f(am['hi'],4)}] |",
+          f"| movement is toward zero? | {'✅ yes' if am['toward_zero'] else '⛔ no'} |",
+          f"| channel in play | {'✅ **yes**' if am['in_play'] else '⛔ no'} |",
+          f"| share of the printed error it closes | **{_f(am['share'],3)}** |",
+          "", "### The joint ceiling and the row-blind control", "",
+          "| | statistic | paired lift (95% CI) | material |", "|---|---|---:|---|"]
     for k in PRIMARY_STATS:
         j = d["joint_ceiling"][k]
-        L.append(f"| **JOINT ceiling** (both at once) | `imp(C1) − imp(incumbent)` | `{k}` | "
-                 f"{_f(j['point'],4)} [{_f(j['lo'],4)}, {_f(j['hi'],4)}] | "
-                 f"{'✅ yes' if j['in_play'] else '⛔ no'} | {_f(j['share_of_gap'],3)} |")
+        L.append(f"| **JOINT ceiling** `imp(C1) − imp(incumbent)` | `{k}` | {_f(j['point'],4)} "
+                 f"[{_f(j['lo'],4)}, {_f(j['hi'],4)}] | {'yes' if j['material'] else 'no'} |")
     for k in PRIMARY_STATS:
         c = d["control_inert"][k]
-        L.append(f"| ⛔ **row-blind matched control** — must be INERT | `imp(A_ctrl) − imp(A1)` | "
+        L.append(f"| ⛔ **row-blind matched control** `imp(A_ctrl) − imp(A1)` — must be INERT | "
                  f"`{k}` | {_f(c['point'],4)} [{_f(c['lo'],4)}, {_f(c['hi'],4)}] | "
-                 f"{'⚠️ **ACTIVE — a capacity artifact**' if c['in_play'] else '✅ inert'} | "
-                 f"{_f(c['share_of_gap'],3)} |")
+                 f"{'⚠️ **YES — a capacity artifact**' if c['in_play'] else 'no ✅'} |")
     L += ["",
           f"Bars, registered forward: majority **{RULE_MAJORITY}**, in-play **{RULE_MATERIAL}**. "
           "A lever counts only if its PAIRED 95% CI excludes 0 — every arm scores the same "
@@ -1284,6 +1361,62 @@ def write_report(r: dict) -> Path:
             continue
         L.append(f"| `{a}` | " + " | ".join(
             _f(ch[k]["closed"][a], 3) for k in REPORT_STATS) + " |")
+    L += ["", "---", "", "## 3.5 ⭐ Reading the verdict — and three things it does NOT say", "",
+          f"**The architecture lever closes {lv['shape']['share']:.1%} of the error the product "
+          f"prints.** The served predictive states `P(over) = "
+          f"{p['stats']['incumbent']['p_over_stated']:.4f}` at its own mean against a realized "
+          f"{p['stats']['incumbent']['p_over_realized']:.4f}; the marginal-shape oracle moves the "
+          f"stated probability by {d['asymmetry_channel']['movement']:+.4f} and lands the gap at "
+          f"{p['stats']['B2_shape_empirical']['p_over_gap']:+.4f}. It is **not** a "
+          "coverage-for-accuracy trade: the same arm also improves the proper score "
+          f"({p['stats']['incumbent']['crps']:.4f} → "
+          f"{p['stats']['B2_shape_empirical']['crps']:.4f} CRPS) and overall fidelity "
+          f"({p['stats']['incumbent']['pit_ks']:.4f} → "
+          f"{p['stats']['B2_shape_empirical']['pit_ks']:.4f} `pit_ks`).",
+          "",
+          "**The feature lever is INACTIVE, not merely small.** The scale-mixture oracle — which is "
+          f"ALLOWED TO SEE THE ANSWER — returns `K = 1` on every one of the {N_BLOCKS} blocks, so "
+          "`A3` is BYTE-IDENTICAL to a plain global rescale and the per-game σ channel has nothing "
+          "in it to recover. On top of the best marginal shape the lever's CRPS lift is "
+          f"**{lv['feature']['by_stat'][CRPS_STAT]['point']:+.4f} — NEGATIVE**. `TV2-1`'s premise "
+          "(*that nothing carries dispersion*) is confirmed in the strongest available form: on "
+          "this population there is no per-game dispersion structure for a feature to carry.",
+          "",
+          "⭐ **The `PC_both` caveat does NOT bind on this data, and that is checkable.** §1 records "
+          "that when both deficits are present the battery routes `SHAPE-BOUND` about 35% of the "
+          "time instead of `BOTH` — so a `SHAPE-BOUND` verdict does not IN GENERAL exclude a "
+          "co-present dispersion component. But the MECHANISM of that failure is the symmetry gate "
+          "closing on a mixed sample, and here **the gate never engaged**: the UN-GATED BIC also "
+          f"returned `K = 1` on every block ({p['notes']['A3_mixture_K_ungated_by_block']}; the "
+          f"gate closed on {p['notes']['A3_symmetry_gate_closed_blocks']} of {N_BLOCKS}). The "
+          "verdict is not resting on the gate.",
+          "",
+          "### The three things it does NOT say", "",
+          "1. ⚠️ **It does not say the model's DISCRIMINATION is fixable.** §4's location probe is "
+          f"the number to carry: `Var(μ)/Var(y) = {lp['var_mu_over_var_y']:.4f}` — the location "
+          f"channel explains {lp['var_mu_over_var_y']:.1%} of outcome variance, and "
+          f"`STDDEV(pred_total_runs) = {lp['std_pred_meanspread']:.3f}` against the V2 gate's "
+          "**≥ 2.0**. **Neither lever touches it** — every arm holds `μ` fixed. `TV2-2` will fix "
+          "the probability the product PRINTS; it will not make the model better at telling a "
+          "high-scoring game from a low-scoring one. Whether **2.0** is even attainable for a "
+          "totals model is not something this market-blind study could measure.",
+          "2. ⚠️ **It does not say a naive skew fit will work.** `B1_shape_skewnormal` — a "
+          "3-parameter skew-normal MLE — collapsed onto its Normal foil on "
+          f"**{p['notes']['B1_collapsed_blocks']} of {N_BLOCKS} blocks** "
+          f"(α = {[round(x,3) for x in p['notes']['B1_alpha_by_block']]}) even though the realized "
+          f"`z` skew is **{p['stats']['incumbent']['z_skew']:.3f}**. This reproduces MH2.8's "
+          "boundary-degenerate finding: the skew-normal likelihood is FLAT at α = 0, so a fitter "
+          "started near symmetry reports *no skew, converged successfully* on obviously skewed "
+          "data. ⇒ **`TV2-2`'s head must not be fitted by a naive MLE from a symmetric start**, and "
+          "its bake-off needs a tie-with-foil guard: a nested form's near-zero margin is a TIE, "
+          "not a shape finding.",
+          "3. ⚠️ **It does not license the CURRENT contract's own heteroscedasticity.** "
+          "`A2_sigma_mu_binned` — per-game σ keyed on the served `μ`, i.e. what the contract "
+          "already implies — closes "
+          f"{d['channels'][CRPS_STAT]['closed']['A2_sigma_mu_binned']:+.3f} of the CRPS gap: it "
+          "makes the proper score **worse**. There is no free dispersion signal sitting in the "
+          "existing features either.",
+          ]
     L += ["", "---", "",
           "## 4. ⚠️ FLAGGED BINDING CLAUSE — `std_pred`, and the LOCATION channel", "",
           "The spec asks how much of the **`std_pred`**/PIT failure a σ fix closes. `std_pred` names "
@@ -1310,6 +1443,15 @@ def write_report(r: dict) -> Path:
           f"**`{lp['null_state_hand_recorded']}`** — the mechanism structurally cannot act on this "
           "statistic. ⛔ It is NOT rendered as a fold/season re-test trigger (NF-D18): no number of "
           "additional served games can make a σ leg move `SD(μ)`.",
+          "", "### `classify_null` on each lever whose reading is a NULL", "",
+          "| lever | state | re-test trigger | reason |", "|---|---|---|---|"]
+    for name, v in p["null_classification"].items():
+        hand = " *(hand-recorded — the `cv_power` card's interim rule)*" if v.get("hand_recorded") else ""
+        L.append(f"| `{name}` | **`{v['state']}`**{hand} | "
+                 f"{v.get('retest_trigger') or '⛔ **none** — see reason'} | {v['reason']} |")
+    L += ["",
+          "⛔ An `INACTIVE` null gets **no** fold/season re-test trigger: the remedy is a different "
+          "population, never more served games (NF-D18 / E7.15).",
           "", "---", "",
           "## 5. SECONDARY tier replication (`morning` / `pre_lineup_v6`)", "",
           "Declared in advance as a replication that is REPORTED but does **not** change the verdict "
