@@ -219,11 +219,13 @@ class TestItIsWiredIntoThePublishPath:
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # THE FLIP — every boundary pinned TWO-SIDED
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def _serving_frame(statuses: list[str]) -> pd.DataFrame:
+def _serving_frame(statuses: list[str], seasons_missed: list[float] | None = None) -> pd.DataFrame:
     n = len(statuses)
     return pd.DataFrame({
         "player_id": [f"p{i}" for i in range(n)],
         "proj_status": statuses,
+        "seasons_missed": (np.zeros(n) if seasons_missed is None
+                           else np.asarray(seasons_missed, dtype=float)),
         "proj_games": np.full(n, 14.0),
         "onset_carryover": np.ones(n),
         "weeks_since_last_game": np.full(n, 12.0),
@@ -284,6 +286,34 @@ class TestTheFlipIsON:
         df = _serving_frame(["RES", None])
         got, _ = SERVE.served_injury_games(df)
         assert float(got[1]) == 14.0
+
+    def test_a_flagged_RETURNER_keeps_the_incumbent_cap(self, monkeypatch):
+        """⚠️ A READING of ruling D5=A, flagged for the PM, not a ruling — see
+        `injury_games_policy.RETURNER_BOUNDARY`. NF-INJ3b's preregistration §3 EXCLUDED returners
+        from the scored population (their served games compose this cap AND NF-D11's absence prior,
+        so this arm's contribution is not separably recoverable), so the arm is uncertified on them.
+        The live 2026 board carries FOUR such rows, and holding them makes the served population
+        exactly the 22 NF-INJ3b-M measured."""
+        monkeypatch.setattr(POLICY, "SERVING_ENABLED", True)
+        df = _serving_frame(["RES", "RES"], seasons_missed=[0.0, 2.0])
+        got, prov = SERVE.served_injury_games(df)
+        inc = SP.injury_availability_games(df)
+        assert prov["n_fitted"] == 1, "only the non-returner may take the fitted arm"
+        assert abs(float(got[0]) - float(inc[0])) > GUARD.MATERIAL_ATOL
+        assert float(got[1]) == float(inc[1]), "the returner must keep the incumbent constant"
+        assert "seasons_missed" in prov["returner_boundary"]
+
+    def test_the_returner_boundary_lives_in_the_POLICY_not_restated_in_the_server(self):
+        """Both population boundaries have exactly one home, so a future change moves one line."""
+        code = _code_only(inspect.getsource(SERVE.served_injury_games))
+        assert "POLICY.certified_rows(df)" in code
+        assert "CERTIFIED_STATUSES" not in code.split("certified = ")[1].split("\n")[0]
+
+    def test_a_frame_without_seasons_missed_is_not_silently_broken(self):
+        """A research frame that cannot express the returner condition has no returners to protect;
+        it must not raise, and it must not lose the STATUS boundary either."""
+        df = _serving_frame(["RES", "SUS"]).drop(columns=["seasons_missed"])
+        assert list(POLICY.certified_rows(df)) == [True, False]
 
     def test_the_refused_arm_stays_refused_AND_unreachable(self):
         """⛔ `fitted_status` wins 4/7 folds at p=0.1265 and is far cheaper to serve, which is

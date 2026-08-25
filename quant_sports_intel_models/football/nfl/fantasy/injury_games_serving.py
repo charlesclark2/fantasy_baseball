@@ -151,7 +151,10 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
     incumbent = (IG.incumbent_games(status, eg) if blend is None
                  else IG.incumbent_games(status, eg, blend=blend))
 
-    certified = status.isin(POLICY.CERTIFIED_STATUSES).to_numpy()
+    # ⭐ BOTH population boundaries, read from the policy, never restated here: the D2 status
+    #    boundary AND the returner exclusion (`RETURNER_BOUNDARY`). A returner's served games
+    #    compose this cap and NF-D11's absence prior, so NF-INJ3b never scored them.
+    certified = POLICY.certified_rows(df)
 
     def _log_rows(fitted: np.ndarray | None) -> None:
         """Fill the out-param. `fitted is None` ⇒ NO row on this frame was produced by the fitted
@@ -218,6 +221,7 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
         "certified_statuses": list(POLICY.CERTIFIED_STATUSES),
         "incumbent_statuses": list(POLICY.INCUMBENT_STATUSES),
         "pm_boundary": POLICY.PM_BOUNDARY,
+        "returner_boundary": POLICY.RETURNER_BOUNDARY,
         "model_version": POLICY.MODEL_VERSION,
         "artifact_fit_at": a.get("fit_at"),
     }
