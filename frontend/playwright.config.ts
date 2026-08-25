@@ -66,7 +66,7 @@ export default defineConfig({
       // proving nothing about the viewport they exist for.
       // ⭐ E5.10 joins for the same reason: `props-slate-nav-mobile.spec.ts` drives the game-header
       // accordion and the Sort Picker with `page.tap()`, which throws on a touch-incapable browser.
-      testIgnore: /(home-mobile|props-slate-nav-mobile)\.spec\.ts/,
+      testIgnore: /(home-mobile|props-slate-nav-mobile|ncaaf-games-mobile)\.spec\.ts/,
     },
     // E9.58's second defect was mobile-only — the logged-out nav had no signup affordance on a
     // small screen because the whole block was `hidden sm:flex`. A desktop-only suite cannot see
@@ -112,8 +112,15 @@ export default defineConfig({
     // ⭐ NF-INJ-NEWS-1 joins because its tap hides the CITATION. The chip says a human lowered this
     // number; the link proving a human had something to read is behind the popover, and a manual
     // adjustment whose evidence a phone reader cannot reach is a bare assertion.
+    // ⭐ NCAAF-P3.2 joins for a SIXTH reason, and it is the plainest: the surface's whole content is
+    // two SVG curves and a three-column comparison inside a card, and every way those fail is
+    // invisible at 1280px — an SVG whose container collapses to zero renders as nothing while still
+    // passing every text assertion on the card, and a day strip that pushes the document sideways
+    // is a page-level fact no desktop viewport ever reaches. `ncaaf-games-mobile.spec.ts` is scoped
+    // to what only a small viewport can tell you; the correctness suite stays desktop-only rather
+    // than doubling.
       testMatch:
-        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|reported-absence|stat-line-suppression|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
+        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|reported-absence|stat-line-suppression|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile|ncaaf-games-mobile)\.spec\.ts/,
     },
   ],
 
