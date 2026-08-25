@@ -237,17 +237,51 @@ def test_pbo_is_UNDEFINED_at_three_folds_and_evaluable_at_eight():
     assert cv_power.pbo_evaluable(8, 4) is True
 
 
-def test_a_null_names_which_of_the_seven_states_it_is_in():
-    fs = _fold_scores(n=8)
+def _null_at(n_folds: int, *, margin: float, n_arms: int = 4):
+    fs = _fold_scores(n=n_folds)
     good = e79.dsr_gate(fs, "incumbent::ngboost_normal", "plus_eb::glm_elasticnet", n_trials=4)
+    return e79.classify_the_null(metric="crps", n_folds=n_folds, n_arms=n_arms,
+                                 margin=margin, dsr_fixed=good)
 
-    # a negative point estimate is never rescued by n or by field size (NF-D15 g")
-    absent = e79.classify_the_null(metric="crps", n_folds=8, n_arms=4, margin=-0.01,
-                                   dsr_fixed=good)
-    assert absent["state"] == "GENUINE_ABSENCE"
-    assert absent["retest_trigger"] is None, "a genuine absence must NOT carry a re-test trigger"
+
+def test_a_null_names_which_of_the_states_it_is_in():
+    """⭐ PLAT-CVP1 RE-ANCHOR — same property, now two-sided, because the instrument's rule changed.
+
+    The property is unchanged and is the one NF-D15 (g″) states: **a genuine absence must NOT carry
+    a re-test trigger**, because no `n` flips a negative point estimate. What PLAT-CVP1 (defect 1,
+    NCAAF-VAL1) added is the PRECONDITION that was missing: a below-foil point estimate certifies
+    an absence only once something on record says the design could have RESOLVED the
+    pre-registered meaningful effect. At low power a true, decision-changing effect routinely
+    presents as a negative margin, so "do NOT re-test" over-claims — VAL1 mislabelled 5 of 6
+    buckets that way.
+
+    E7.9's own consumer is what proves it here, in both directions and with the numbers named, so
+    the clause cannot be satisfied by a constant:
+
+      * **8 folds** — the design resolves 0.02079 CRPS against a pre-registered meaningful lift of
+        0.0200 (`NOISE_FLOOR['crps']`, fixed long before this story). It does NOT reach the bar,
+        so a negative margin there is `POWER_LIMITED`, and the honest re-test trigger is the one
+        the design can actually act on. ⛔ This is the state that used to read `GENUINE_ABSENCE`.
+      * **16 folds** — the same generator resolves well inside the bar, so a negative margin IS a
+        genuine absence, and it carries no trigger. Without this half the fix would have traded
+        one over-claim for its mirror image (never certifying an absence at all).
+    """
+    short = _null_at(8, margin=-0.01)
+    assert short["state"] == "POWER_LIMITED"
+    assert short["detail"]["mde_sd_units"] > short["detail"]["meaningful_sd_units"], \
+        "the fixture no longer straddles the bar in the direction this half asserts"
+    assert short["detail"]["min_detectable_crps_lift"] > \
+        short["detail"]["pre_registered_meaningful_crps_lift"]
+
+    resolved = _null_at(16, margin=-0.01)
+    assert resolved["detail"]["mde_sd_units"] < resolved["detail"]["meaningful_sd_units"], \
+        "the fixture no longer straddles the bar in the direction this half asserts"
+    assert resolved["state"] == "GENUINE_ABSENCE"
+    assert resolved["retest_trigger"] is None, "a genuine absence must NOT carry a re-test trigger"
 
     # and at 3 folds the deflation requirement was never evaluated at all
+    good = e79.dsr_gate(_fold_scores(n=8), "incumbent::ngboost_normal",
+                        "plus_eb::glm_elasticnet", n_trials=4)
     undef = e79.classify_the_null(metric="crps", n_folds=3, n_arms=28, margin=0.01,
                                   dsr_fixed=good)
     assert undef["state"] == "UNDEFINED"

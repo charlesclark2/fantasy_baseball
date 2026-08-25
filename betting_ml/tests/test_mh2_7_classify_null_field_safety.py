@@ -270,6 +270,11 @@ class TestNothingWasReDecided:
         ("GENUINE_ABSENCE", dict(n_folds=11, n_arms=7, beats_foil=False)),
         ("DSR_UNREACHABLE", dict(n_folds=11, n_arms=7, beats_foil=True, observed_sr=0.05,
                                  var_trials_sr=0.5)),
+        # ⭐ PLAT-CVP1 defect 2 — the 8th state. Added here (rather than pinned only in its own
+        # suite) because THIS table is the non-vacuity check: a state absent from it is a state
+        # nothing in the re-decision guard exercises.
+        ("DEFLATION_REFUSED", dict(n_folds=11, n_arms=5, beats_foil=True, pbo=0.53,
+                                   pbo_application="field")),
         ("POWER_LIMITED", dict(n_folds=11, n_arms=3, beats_foil=True, observed_sr=1.0060938409711933,
                                var_trials_sr=0.5930582588508395, skew=0.05207384948567502,
                                kurt=1.7721389477213283)),
@@ -285,8 +290,14 @@ class TestNothingWasReDecided:
     def test_every_state_is_still_reached(self, expected, kw):
         assert classify_null(metric="m", **kw).state == expected
 
-    def test_all_seven_states_are_covered_by_the_table(self):
-        """Non-vacuity: a table that silently stopped exercising a state would pin nothing about it."""
+    def test_every_state_is_covered_by_the_table(self):
+        """Non-vacuity: a table that silently stopped exercising a state would pin nothing about it.
+
+        ⭐ PLAT-CVP1 re-anchor — the property is UNCHANGED (the table must exercise EVERY declared
+        state, so none can be added or removed without a pin moving with it); only the state count
+        moved, from seven to eight (`DEFLATION_REFUSED`). Asserting against `NULL_STATES` rather
+        than a hard-coded seven is what made this re-anchor a one-line addition instead of a
+        rewrite — and it is why the guard caught the new state on the first run."""
         assert {s for s, _ in self.STATE_TABLE} == set(cv_power.NULL_STATES)
 
     def test_the_four_record_reproduction_validations_still_agree(self):
