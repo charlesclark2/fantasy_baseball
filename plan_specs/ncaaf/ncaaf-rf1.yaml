@@ -7,7 +7,7 @@ metadata:
   name: ncaaf-rf1
   vertical: ncaaf
   card: https://trello.com/c/TrUc4Zat   # pre-opener operator thread; RF1 card linked on creation
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     PM ruling on P3.1 closeout decision ①: EXTEND the NCAAF roll-forward
