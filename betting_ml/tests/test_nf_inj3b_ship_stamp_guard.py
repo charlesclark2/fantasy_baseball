@@ -303,11 +303,35 @@ class TestTheFlipIsON:
         assert float(got[1]) == float(inc[1]), "the returner must keep the incumbent constant"
         assert "seasons_missed" in prov["returner_boundary"]
 
+    def test_a_certified_row_with_a_NON_FINITE_covariate_RAISES(self, monkeypatch):
+        """⚠️⚠️ MEASURED, NOT HYPOTHETICAL. `nf_inj3_injury_games._design` does `.fillna(0.0)` on
+        every covariate, so a certified row the feed missed does NOT NaN and does NOT raise — it
+        evaluates at the intercept-only design and returns a plausible number under the fitted
+        arm's stamp. NF-INJ3b-M's feed covered only the study's 22 rows, so its FOUR flagged RES
+        returners were zero-filled and every one collapsed to the SAME 0.47 games, including the
+        row carrying that record's largest single point move. Column PRESENCE was checked; VALUES
+        were not."""
+        monkeypatch.setattr(POLICY, "SERVING_ENABLED", True)
+        df = _serving_frame(["RES", "RES"])
+        df.loc[1, "onset_carryover"] = np.nan
+        with pytest.raises(ValueError, match="NOT FINITE"):
+            SERVE.served_injury_games(df)
+
+    def test_a_non_finite_value_on_an_UNCERTIFIED_row_is_fine(self):
+        """Two-sided: the check must not refuse a board over a row the arm will never touch."""
+        df = _serving_frame(["RES", "SUS"])
+        df.loc[1, "onset_carryover"] = np.nan
+        got, prov = SERVE.served_injury_games(df)
+        assert prov["path"] == "fitted_hurdle" and prov["n_fitted"] == 1
+
     def test_the_returner_boundary_lives_in_the_POLICY_not_restated_in_the_server(self):
         """Both population boundaries have exactly one home, so a future change moves one line."""
         code = _code_only(inspect.getsource(SERVE.served_injury_games))
-        assert "POLICY.certified_rows(df)" in code
-        assert "CERTIFIED_STATUSES" not in code.split("certified = ")[1].split("\n")[0]
+        # ⚠️ the SERVED mask specifically, not the name anywhere in the function: the finiteness
+        # pre-check also calls `certified_rows`, so a bare name match would stay GREEN with the
+        # real boundary reverted (the RED proof caught exactly that).
+        assert "certified = POLICY.certified_rows(df)" in code
+        assert "certified = status.isin(" not in code
 
     def test_a_frame_without_seasons_missed_is_not_silently_broken(self):
         """A research frame that cannot express the returner condition has no returners to protect;

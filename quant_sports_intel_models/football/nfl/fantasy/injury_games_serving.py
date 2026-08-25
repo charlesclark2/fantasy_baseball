@@ -197,7 +197,27 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
             "n_fitted": 0, "n_incumbent": int(len(df)),
             "model_version": POLICY.INCUMBENT_MODEL_VERSION}
 
+    # ⚠️⚠️ A PRESENT-BUT-NON-FINITE COVARIATE IS SILENTLY ZERO, NOT LOUD — and it has already cost
+    #    a measurement. `nf_inj3_injury_games._design` does `.fillna(0.0)` on every covariate, so a
+    #    certified row whose feed missed it does not NaN and does not raise: it evaluates at the
+    #    intercept-only design and comes back with a plausible number. NF-INJ3b-M supplied a feed
+    #    covering only the study's 22 rows, so its 4 flagged RES **returners** were zero-filled and
+    #    every one collapsed to the SAME 0.47 games — including CHRIS COLLIER, whose −11.46 PPR is
+    #    the largest single point move in that record and is quoted there as an UNFLAGGED player's
+    #    move. Column PRESENCE was checked; VALUES were not. Both are checked now.
+    _cert_for_check = POLICY.certified_rows(df) if len(df) else np.zeros(0, dtype=bool)
     missing = missing_covariates(df)
+    if not missing and _cert_for_check.any():
+        bad = {c: int((~np.isfinite(pd.to_numeric(df.loc[_cert_for_check, c], errors="coerce")
+                                    .to_numpy(dtype=float))).sum())
+               for c in REQUIRED_COVARIATES}
+        bad = {c: n for c, n in bad.items() if n}
+        if bad:
+            raise ValueError(
+                f"injury_games_serving: {sum(bad.values())} certified row-values across {bad} are "
+                f"NOT FINITE. `_design` would silently fill them with 0.0 and return a plausible "
+                f"number from the intercept-only design — a served value nobody validated, under "
+                f"the fitted arm's stamp. The feed must COVER every certified row (NF1.7 (a)).")
     if missing:
         # ⛔ LOUD, never a silent fallback: serving the incumbent under the fitted arm's stamp is
         #    strictly worse than failing the build (NF1.7 (a) / NF-C0e).

@@ -284,6 +284,12 @@ CASES = [
      "return injury_availability_games(_frame, blend=injury_override_blend)", SUITE_GUARD,
      "TestTheFlipIsON::test_the_rookie_frame_still_never_reaches_the_certified_veteran_hurdle"),
 
+    ("a certified row with a NON-FINITE covariate is silently zero-filled by _design", SERVING,
+     "    if not missing and _cert_for_check.any():",
+     "    if False:",
+     "if not missing and _cert_for_check.any():", SUITE_GUARD,
+     "TestTheFlipIsON::test_a_certified_row_with_a_NON_FINITE_covariate_RAISES"),
+
     ("a flagged RETURNER is served the arm the study never scored him with", POLICY,
      "    if CERTIFIED_EXCLUDES_RETURNERS and \"seasons_missed\" in getattr(df, \"columns\", ()):",
      "    if False:",
@@ -293,7 +299,7 @@ CASES = [
     ("the returner boundary is restated in the server instead of read from the policy", SERVING,
      "    certified = POLICY.certified_rows(df)",
      "    certified = status.isin(POLICY.CERTIFIED_STATUSES).to_numpy()",
-     "POLICY.certified_rows(df)", SUITE_GUARD,
+     "certified = POLICY.certified_rows(df)", SUITE_GUARD,
      "TestTheFlipIsON::test_the_returner_boundary_lives_in_the_POLICY_not_restated_in_the_server"),
 
     ("the refused arm becomes the served one without a fresh registration", POLICY,
