@@ -57,14 +57,19 @@ def _run_serving_write(context) -> None:
 
     context.log.info(
         "NCAAF serving write: %s game(s) across %s LA game-day(s) %s → %s blob(s) "
-        "(%s DynamoDB / %s S3). Futures board: %s team(s). Market lines attached: %s "
-        "(read_failed=%s). Model %s, snapshot vintage %s. best_alpha=0 — market-blind "
-        "projections, no pick or edge claim is served.",
+        "(%s DynamoDB / %s S3). Futures board: %s team(s). Market lines attached: %s by source %s "
+        "(read_failed=%s); market nulls by reason %s. Model %s, snapshot vintage %s. "
+        "best_alpha=0 — market-blind projections, no pick or edge claim is served.",
         manifest.get("n_games"), manifest.get("n_game_days"), manifest.get("game_days"),
         manifest.get("n_blobs"), manifest.get("dynamo_writes"), manifest.get("s3_writes"),
         manifest.get("futures_teams"), manifest.get("market_lines_attached"),
-        manifest.get("market_read_failed"), manifest.get("model_version"),
-        manifest.get("snapshot_ts"))
+        # NCAAF-P3.1b: WHICH line, per key shape. "12 lines attached" cannot answer "did the T-1
+        # leg fire?", which is the only question this story's runtime gate asks — and a REFUSED
+        # line (a leakage-guard refusal = a defect in our odds join) must be legible here rather
+        # than looking like a kickoff nobody priced.
+        manifest.get("market_lines_by_source"),
+        manifest.get("market_read_failed"), manifest.get("market_reasons"),
+        manifest.get("model_version"), manifest.get("snapshot_ts"))
 
     if manifest.get("market_read_failed"):
         context.log.warning(
