@@ -7,7 +7,7 @@ metadata:
   name: ncaaf-rf1
   vertical: ncaaf
   card: https://trello.com/c/TrUc4Zat   # pre-opener operator thread; RF1 card linked on creation
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     PM ruling on P3.1 closeout decision ①: EXTEND the NCAAF roll-forward
@@ -74,9 +74,20 @@ spec:
     nodes: []   # MINI tier
   closeout:
     verdict: >
-      SHIPPED (pending merge + box deploy — see followUps 0). The window is
+      SHIPPED — ON THE BOX AND CONFIRMED 2026-08-25, six days inside the Mon 2026-08-31
+      06:00 PT deadline. PR #1031 -> `dev`, promoted via PR #1030 (`dev` -> `main`);
+      Orchestration CD SUCCESS on the merge commit; `main` verified by FILE CONTENT (not
+      merge status — the E11.24 stale-snapshot class) to carry the constant, the §10 pin
+      and both guard files. The operator confirmed in Dagit that the schedule shows the
+      new window AND is RUNNING — both halves matter, because a widened window on a
+      STOPPED schedule fires nothing. ⏭️ The remaining proof is the first fire the OLD
+      window could not have produced: Mon 2026-09-07 06:00 PT.
+
+      The verdict as originally written, retained verbatim because a superseded status is
+      history, not a line to overwrite:
+      "SHIPPED (pending merge + box deploy — see followUps 0). The window is
       extended, both acceptance verifications were MEASURED rather than assumed,
-      the docs move in the same change, and the guard is RED-proven 12/12.
+      the docs move in the same change, and the guard is RED-proven 12/12."
 
       FINAL EXPRESSION: NCAAF_ROLL_FORWARD_CRON = "0 6 * 2-12,1 1" (weekly Monday
       06:00 America/Los_Angeles, February -> the following January — one full NCAAF
@@ -95,7 +106,15 @@ spec:
                                 (a FIVE-MONTH hole spanning the entire season)
         NEW "0 6 * 2-12,1 1" -> 2026-08-31, then 2026-09-07, 09-14, 09-21, 09-28, 10-05
     followUps: >
-      0) ⏰ OPERATOR — THE DEADLINE STEP. Merge must reach the box before Mon 2026-08-31
+      0) ✅ DEADLINE STEP — DONE (2026-08-25). Retained as written because the CHECK is the
+      reusable part. ⭐ TWO THINGS THIS STORY GOT RIGHT BY VERIFYING RATHER THAN ASSUMING,
+      both worth carrying forward: (a) THE BOX DEPLOY RIDES THE MERGE TO `main`, NOT `dev` —
+      `main` was 19 commits behind at the moment `dev` was merged, so "merged" was NOT "on
+      the box", and a deadline story would have looked complete while missing its deadline;
+      (b) `orchestration_cd.yml`'s trigger paths were CHECKED to cover this change rather
+      than assumed (`pipeline/**` is the first entry) — the NF-K1 path-filter class, where a
+      box-run change reaches the box only by accident. Original text follows.
+      ⏰ OPERATOR — THE DEADLINE STEP. Merge must reach the box before Mon 2026-08-31
       06:00 PT (the last fire under the old window). The box deploy rides the merge to
       `main` (`orchestration_cd.yml`); the API Lambda and `frontend/` are NOT involved —
       this touches neither. Confirm in Dagit AFTER the deploy:
