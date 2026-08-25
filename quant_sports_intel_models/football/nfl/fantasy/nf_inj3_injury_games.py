@@ -76,6 +76,64 @@ TIMING_FEATURES: tuple[str, ...] = ("onset_carryover", "weeks_since_last_game")
 #: the non-timing covariates BOTH the primary and its matched foil carry.
 BASE_FEATURES: tuple[str, ...] = ("prior_games", "log1p_prior_fp", "is_qb")
 
+#: the RAW prior-season columns `derive_covariates` consumes — the output of
+#: `run_nf_inj3_injury_games.load_prior_features` (the study's own SQL), plus the board's `position`.
+#: Declared so a caller can check its frame BEFORE deriving rather than discovering a silent NaN
+#: column in the design matrix (NF1.7 (a)).
+COVARIATE_INPUT_COLUMNS: tuple[str, ...] = (
+    "position", "prior_games", "prior_fp", "last_week_played", "prior_season_weeks",
+    "prior_end_status")
+
+#: the prior-season END statuses that count as designation CARRY-OVER (preregistration §2).
+ONSET_CARRYOVER_STATUSES: tuple[str, ...] = ("RES", "PUP", "NFI", "SUS", "INA")
+
+#: the `weeks_since_last_game` sentinel when NO row of the frame carries a prior-season week count
+#: at all — a whole regular season plus one. Only reachable on a frame with no prior-season data.
+NO_PRIOR_SEASON_WEEKS = 18.0
+
+
+def derive_covariates(df: pd.DataFrame) -> pd.DataFrame:
+    """The FIVE design covariates, derived in ONE place, on a COPY of `df`.
+
+    ⭐ THIS IS THE STUDY'S OWN DEFINITION AND THERE IS EXACTLY ONE OF IT. `run_nf_inj3_injury_games
+    .build_population` (which fitted and scored every arm) and `injury_covariate_feed` (which feeds
+    the SERVED board) both call this, so the covariates the hurdle was FITTED on and the ones it is
+    SERVED on cannot drift — the NF-C0e "a study that re-derives the logic it scored measures
+    something else" rule, applied to the serving direction.
+
+    ⚠️ `weeks_since_last_game`'s no-prior-game sentinel is `weeks.max()` — the prior season's own
+    week count, which `load_prior_features` emits as a per-SEASON constant, so it is invariant to
+    which subset of one season's players the frame holds. That invariance is what lets the served
+    feed (the whole board) and the study population (the flagged veterans) agree to the last bit,
+    and `betting_ml/tests/test_nf_inj3b_ship_covariate_feed.py` PINS it against the study artifact
+    at 1e-9 rather than asserting it from this docstring."""
+    missing = [c for c in COVARIATE_INPUT_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"nf_inj3_injury_games.derive_covariates: the frame is missing {missing}. These come "
+            f"from `run_nf_inj3_injury_games.load_prior_features` plus the board's own `position`; "
+            f"deriving covariates from a frame that lacks them would silently emit NaN columns and "
+            f"NaN a real player out of the design matrix.")
+    out = df.copy()
+    out["prior_games"] = pd.to_numeric(out["prior_games"], errors="coerce").fillna(0.0)
+    out["prior_fp"] = pd.to_numeric(out["prior_fp"], errors="coerce").fillna(0.0)
+    # PPR can go NEGATIVE (a QB with interceptions and no yardage), and log1p(x < -1) is
+    # NaN — clipped at 0 so the covariate is defined on every row rather than silently
+    # NaN-ing a real player out of the design matrix.
+    out["log1p_prior_fp"] = np.log1p(out["prior_fp"].clip(lower=0.0))
+    out["is_qb"] = (out["position"].astype(str).str.upper() == "QB").astype(float)
+    # ── the two DECLARED timing-proxy columns (preregistration §2) ────────────────────────
+    out["onset_carryover"] = out["prior_end_status"].astype(str).isin(
+        ONSET_CARRYOVER_STATUSES).astype(float)
+    lw = pd.to_numeric(out["last_week_played"], errors="coerce")
+    weeks = pd.to_numeric(out["prior_season_weeks"], errors="coerce")
+    # a player with NO prior-season game has the LONGEST possible absence, not a missing one —
+    # the sentinel is the full prior season, never a fillna(0) that would read as "just played".
+    out["weeks_since_last_game"] = (weeks - lw).fillna(weeks.max() if weeks.notna().any()
+                                                       else NO_PRIOR_SEASON_WEEKS)
+    return out
+
+
 #: eval folds — expanding window, fit on 2016…Y−1. Burn-in 2016–2018.
 FOLDS: tuple[int, ...] = (2019, 2020, 2021, 2022, 2023, 2024, 2025)
 #: the era restriction, derived from a snapshot-FIDELITY design quantity (preregistration §3).

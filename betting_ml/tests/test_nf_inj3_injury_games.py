@@ -22,6 +22,19 @@ from quant_sports_intel_models.football.nfl.fantasy import run_nf_inj3_injury_ga
 from quant_sports_intel_models.football.nfl.fantasy import season_projection as SP
 
 
+def _code_only(src: str) -> str:
+    """Source with comments and docstrings removed. A source-inspection clause must not be
+    satisfiable — or falsifiable — by PROSE (INC-38)."""
+    tree = ast.parse(textwrap.dedent(src))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if (node.body and isinstance(node.body[0], ast.Expr)
+                    and isinstance(node.body[0].value, ast.Constant)
+                    and isinstance(node.body[0].value.value, str)):
+                node.body[0].value.value = ""
+    return ast.unparse(tree)
+
+
 def _pop(n=120, seed=0):
     """A minimal in-fold population: every column the arms read, nothing they do not."""
     rng = np.random.default_rng(seed)
@@ -201,10 +214,40 @@ class TestPermutationAnchor:
 class TestPopulation:
     def test_no_prior_game_means_the_LONGEST_absence_not_a_missing_one(self):
         """A `fillna(0)` here would read as 'he just played', which is the exact opposite of the
-        truth for a player with no prior-season game at all."""
-        src = inspect.getsource(R.build_population)
-        assert 'weeks_since_last_game' in src and '.fillna(weeks.max()' in src, (
+        truth for a player with no prior-season game at all.
+
+        ⭐ RE-ANCHORED by NF-INJ3b-SHIP onto `IG.derive_covariates`, the ONE owner the served feed
+        also calls (the derivation was extracted verbatim from `build_population`). Re-anchoring an
+        existing property onto a new implementation is the correct move; deleting or weakening it
+        because the source moved is how a retired guard silently stops guarding (MH2.7 (ii)).
+
+        ⭐ AND IT NOW MEASURES THE SENTINEL RATHER THAN GREPPING FOR IT: a source-text assertion
+        cannot tell `fillna(weeks.max())` apart from a comment mentioning it (INC-38)."""
+        src = inspect.getsource(IG.derive_covariates)
+        assert '.fillna(weeks.max()' in src, (
             "the sentinel for 'never played last season' must be the FULL prior season, never 0")
+        # played through week 3 of an 18-week season, vs never played at all
+        frame = pd.DataFrame({
+            "position": ["RB", "RB"], "prior_games": [3.0, 0.0], "prior_fp": [10.0, 0.0],
+            "last_week_played": [3.0, np.nan], "prior_season_weeks": [18.0, 18.0],
+            "prior_end_status": ["ACT", "ACT"]})
+        w = IG.derive_covariates(frame)["weeks_since_last_game"].to_numpy()
+        assert w[0] == 15.0
+        assert w[1] == 18.0, ("a player with NO prior-season game must take the FULL prior season "
+                              "as his absence, not 0 and not NaN")
+
+    def test_the_covariate_derivation_has_exactly_ONE_owner(self):
+        """NF-INJ3b-SHIP: the arm was FITTED on `build_population`'s covariates and is now SERVED on
+        `injury_covariate_feed`'s. Both must be the same function, or the served model is not the
+        certified one (NF-C0e)."""
+        pop = _code_only(inspect.getsource(R.build_population))
+        assert "IG.derive_covariates(" in pop, (
+            "build_population no longer derives its covariates through the shared owner — the "
+            "fitted and served definitions can now drift")
+        for banned in ("log1p_prior_fp\"] = ", "onset_carryover\"] = ", "weeks_since_last_game\"] = "):
+            assert banned not in pop, (
+                f"build_population re-derives {banned!r} inline again — there must be exactly one "
+                f"definition of each covariate in the repo")
 
     def test_the_era_floor_is_a_constant_not_a_result(self):
         assert IG.ERA_MIN_SEASON == 2016
