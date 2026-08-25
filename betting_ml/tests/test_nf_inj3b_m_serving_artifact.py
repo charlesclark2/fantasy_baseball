@@ -153,8 +153,12 @@ class TestThePMBoundary:
         assert prov["path"] == "fitted_hurdle"
         assert prov["n_incumbent"] == int((~cert).sum())
 
-    def test_with_serving_OFF_the_board_is_the_incumbent_byte_for_byte(self):
-        assert POLICY.SERVING_ENABLED is False, "the flip is DEPLOY-HELD until the operator says so"
+    def test_with_serving_OFF_the_board_is_the_incumbent_byte_for_byte(self, monkeypatch):
+        """⭐ RE-ANCHORED by NF-INJ3b-SHIP: the ambient-flag assertion described the deploy-held
+        world and would now fail on the recorded D5=A flip for a reason unrelated to the property.
+        The property — serving OFF is the incumbent path byte-for-byte, i.e. the rollback — is
+        driven explicitly instead, which makes it hold in either flag state."""
+        monkeypatch.setattr(POLICY, "SERVING_ENABLED", False)
         ev = _frame(40, seed=4)
         got, prov = SERVE.served_injury_games(ev)
         inc = IG.incumbent_games(ev["proj_status"], ev["proj_games"].to_numpy())
@@ -180,10 +184,17 @@ class TestThePolicyRefusesAnIncoherentFlip:
         with pytest.raises(RuntimeError, match="disposition"):
             POLICY.assert_coherent()
 
-    def test_the_stamp_carries_a_model_version_in_BOTH_states(self):
+    def test_the_stamp_carries_a_model_version_in_BOTH_states(self, monkeypatch):
+        """BOTH states, driven explicitly — the name always promised two and the body only ever
+        exercised whichever one the ambient flag happened to be in (NF-INJ3b-SHIP)."""
+        monkeypatch.setattr(POLICY, "SERVING_ENABLED", False)
         off = POLICY.stamp()
         assert off["injury_games_model_version"] == POLICY.INCUMBENT_MODEL_VERSION
         assert off["injury_games_status"] == "incumbent"
+        monkeypatch.setattr(POLICY, "SERVING_ENABLED", True)
+        on = POLICY.stamp()
+        assert on["injury_games_model_version"] == POLICY.MODEL_VERSION
+        assert on["injury_games_status"] == "fitted_hurdle"
 
 
 class TestTheArtifactIsCommittedNotGitignored:

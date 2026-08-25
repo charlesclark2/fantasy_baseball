@@ -2,6 +2,46 @@
 
 _generated 2026-08-23T07:04:15.438188+00:00_ · season 2026 · `best_alpha = 0` · **DEPLOY-HELD** (`SERVING_ENABLED` on disk = False) · **nothing published**
 
+> ## ⚠️ CORRECTION — 2026-08-25, NF-INJ3b-SHIP (PM ruling 4). THE ⭐⭐ HEADLINE'S EVIDENCE ROW IS AN ARTIFACT OF THIS STUDY'S OWN FEED.
+>
+> Nothing below is edited. This block is prepended so a reader meets the correction before the claim
+> (NF-C8: **corrected, never silently repaired**).
+>
+> **WHAT IS WRONG.** The largest point move recorded below — **CHRIS COLLIER, −11.46 PPR, labelled
+> "flagged? no"** — is not a measurement of NF1.5 redistribution. `nf_inj3_injury_games._design`
+> applies `.fillna(0.0)` to every covariate, so a certified row the feed does **not** cover neither
+> NaNs nor raises: it evaluates at the **intercept-only design** and returns a plausible number under
+> the fitted arm's stamp. This run hand-supplied a feed covering only the study's 22 rows, so the
+> board's flagged RES **returners** — which NF-INJ3b's preregistration §3 excluded from the scored
+> population — were zero-filled. Three appear in the moved-row table below, and all three collapse to
+> the *identical* value **0.4673070118875485 games**. An identical output across unrelated players is
+> the signature; it is arithmetically impossible for a fitted design and could not be a projection.
+>
+> | row recorded below | here | on the committed serving path |
+> |---|---|---|
+> | CHRIS COLLIER | 2.25 → 0.47 g, **−11.46 PPR** | **not served — does not move** |
+> | DANTE MILLER | 1.33 → 0.47 g, −8.67 PPR | **not served — does not move** |
+> | TANNER MCLACHLAN | 2.15 → 0.47 g, −6.73 PPR | **not served — does not move** |
+>
+> **WHAT STILL STANDS — the finding, qualitatively.** Unflagged redistribution is real and was
+> re-measured on the committed build: **519 unflagged rank moves and 340 unflagged point changes**.
+> ⛔ What does **not** stand is the specific sentence that the largest board move lands on an
+> UNFLAGGED player at ~9× the flagged mean. The largest unflagged move on the committed build is
+> **−6.3966 PPR (MICHAEL MAYER)** — and Mayer's games do not change **at all** (12.09 → 12.09), which
+> makes him *cleaner* evidence for the same mechanism than Collier ever was: a pure re-order effect,
+> with no cap change on the row to confound it.
+>
+> **WHY IT CANNOT RECUR.** `injury_games_serving.served_injury_games` now validates covariate
+> **VALUES** on certified rows — not merely column presence — and **raises** on a non-finite value.
+> A feed that misses a certified row is now a loud failure instead of a plausible number.
+>
+> **WHY THOSE THREE ROWS DO NOT MOVE AT ALL NOW.** PM ruling (2026-08-25) confirmed
+> `injury_games_policy.RETURNER_BOUNDARY`: returners are **held on the incumbent constants**, because
+> their served games compose this cap with NF-D11's absence prior and the arm's contribution is not
+> separably recoverable. Serving them would put an unevaluated composition behind a certified stamp.
+>
+> Source: `nf_inj3b_ship_flipped_diff.{json,md}` · spec `plan_specs/nfl_fantasy/nf-inj3b-ship.yaml`.
+
 ## What this measures, and why it could not be estimated
 
 NF-INJ3b already published the GAMES change. The open question — the one blocking the ship decision — was the **POINT and RANK** a drafter sees. `pts` is **not** `rate × games`: NF1.5 permutes the within-position POINT MULTISET, so moving the flagged players' games changes the multiset the permutation re-assigns (NF-INJ1 measured that step handing **+36.4%** of an availability discount back). Both boards are therefore **BUILT**, through the same shipped assembly, in one process. ⛔ No proportional shortcut anywhere.
@@ -43,16 +83,18 @@ Regression vs the incumbent board: **False**.
 
 ⭐⭐ **THE HEADLINE, AND IT IS NOT THE FLAGGED PLAYERS.** 517 UNFLAGGED players change overall rank and 348 change POINTS — and the largest single point move on the whole board, **11.46 PPR**, lands on an **UNFLAGGED** player, roughly 9× the MEAN move on a flagged one (-1.234). NF1.5 re-assigns each position's POINT MULTISET in learned-rank order, so moving the flagged players' games moves points onto UNFLAGGED players too. A proportional estimate cannot see this.
 
+⭐ **CORRECTED 2026-08-25 — see the CORRECTION block at the top of this file.** The **11.46 PPR** row (CHRIS COLLIER) is a zero-fill artifact of this run's hand-supplied feed, not a redistribution measurement. The redistribution finding itself STANDS (519 unflagged rank moves / 340 unflagged point changes on the committed build); the largest unflagged move is **−6.3966 PPR**, not 11.46, so the "~9× the flagged mean" clause does **not** stand.
+
 ⭐ And the give-back is enormous: with NF1.5's re-order DISABLED the same cap change moves the flagged players by **−12.06** PPR; with it enabled, **-1.234**. ~90% of the raw point impact is absorbed and REDISTRIBUTED. That ratio is the single strongest argument for why §5(d) forbade a proportional estimate — and it was measured by accident, when a wrong report suffix made the re-order a no-op (§5).
 
 ### The moved rows (largest point drops first)
 
 | player | pos | flagged? | games inc→cf | pts inc→cf | Δpts | rank inc→cf | pos-rank inc→cf |
 |---|---|---|---|---|---|---|---|
-| CHRIS COLLIER | RB | no | 2.25 → 0.47 | 15.7 → 4.3 | **-11.5** | 605 → 784 | 159 → 180 |
+| ⚠️ CHRIS COLLIER *(zero-fill artifact — see CORRECTION)* | RB | **returner, held on the committed path** | 2.25 → 0.47 | 15.7 → 4.3 | **-11.5** | 605 → 784 | 159 → 180 |
 | ISAAC GUERENDO | RB | **FLAGGED** | 5.19 → 2.05 | 37.6 → 28.6 | **-9.0** | 348 → 430 | 90 → 104 |
-| DANTE MILLER | RB | no | 1.33 → 0.47 | 16.0 → 7.3 | **-8.7** | 603 → 753 | 157 → 177 |
-| TANNER MCLACHLAN | TE | no | 2.15 → 0.47 | 9.1 → 2.4 | **-6.7** | 743 → 788 | 150 → 170 |
+| ⚠️ DANTE MILLER *(zero-fill artifact — see CORRECTION)* | RB | **returner, held on the committed path** | 1.33 → 0.47 | 16.0 → 7.3 | **-8.7** | 603 → 753 | 157 → 177 |
+| ⚠️ TANNER MCLACHLAN *(zero-fill artifact — see CORRECTION)* | TE | **returner, held on the committed path** | 2.15 → 0.47 | 9.1 → 2.4 | **-6.7** | 743 → 788 | 150 → 170 |
 | MICHAEL MAYER | TE | no | 12.09 → 12.09 | 73.8 → 67.4 | **-6.4** | 201 → 212 | 37 → 37 |
 | COLE KMET | TE | no | 13.15 → 13.15 | 65.2 → 60.2 | **-5.0** | 220 → 229 | 39 → 40 |
 | PAT FREIERMUTH | TE | no | 14.78 → 14.78 | 86.5 → 81.8 | **-4.7** | 170 → 181 | 29 → 29 |

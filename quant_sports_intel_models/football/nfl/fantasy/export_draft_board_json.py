@@ -941,6 +941,52 @@ def veteran_level_stamp(pdf: pd.DataFrame) -> dict | None:
     return stamp or None
 
 
+#: NF-INJ3b-SHIP — the INJURY-GAMES policy stamp columns → payload keys (the rookie/level siblings).
+_INJURY_GAMES_COLUMNS: dict[str, str] = {
+    "injury_games_status": "status",
+    "injury_games_form": "form",
+    "injury_games_arm": "arm",
+    "injury_games_source_model": "source_model",
+    "injury_games_decision_story": "decision_story",
+    "injury_games_certified_statuses": "certified_statuses",
+    "injury_games_statistically_selected": "statistically_selected",
+    "injury_games_model_version": "injury_games_model_version",
+}
+
+
+def injury_games_stamp(pdf: pd.DataFrame) -> dict | None:
+    """The INJURY-GAMES policy block for the published payload, READ OFF THE BOARD's own stamp
+    columns — `rookie_policy_stamp`/`veteran_level_stamp`'s sibling, same three rules: None for a
+    board built before NF-INJ3b-SHIP (an honest absence), ⛔ never the policy module's values, and a
+    board carrying two distinct policies is a hard error rather than a majority vote.
+
+    ⛔ The per-row `injury_games_served`/`injury_games_incumbent` evidence is deliberately NOT
+    published. It is build provenance for the D6 publish guard; a drafter has no use for what the
+    incumbent cap would have said, and shipping it would invite a surface to render it.
+
+    ⚠️ ENTITLEMENT, recorded so the default does not later read as an oversight (the allowlists are
+    the E9.41 dropped-field class in allowlist form): `injury_games_policy` is NOT added to
+    `entitlement._PUBLIC_PROJECTIONS_META_FIELDS`, which is exactly where its two siblings
+    `rookie_policy` and `veteran_level_policy` already sit — i.e. the methodology stamp is an
+    ENTITLED field for all three, and this one follows them rather than opening a new door on its
+    own. A future decision to disclose model provenance publicly moves all three together."""
+    present = [c for c in _INJURY_GAMES_COLUMNS if c in pdf.columns]
+    if not present:
+        return None
+    stamp: dict = {}
+    for col in present:
+        vals = pdf[col].dropna().unique()
+        if len(vals) > 1:
+            raise ValueError(
+                f"board carries {len(vals)} distinct values for {col} ({list(vals)[:4]}) — two "
+                f"builds appear to have been concatenated; refusing to stamp one of them")
+        v = vals[0] if len(vals) else None
+        if hasattr(v, "item"):
+            v = v.item()
+        stamp[_INJURY_GAMES_COLUMNS[col]] = v
+    return stamp or None
+
+
 def player_bio_map() -> dict[str, dict]:
     """`{player_id -> bio dict}` for the NF3.1 player page — birth date, height, weight, college,
     years of NFL experience and an official headshot URL, all PASSED THROUGH from `nflverse_players`
@@ -1534,6 +1580,43 @@ def assert_published_position_coverage(out_dir: Path, season: int) -> None:
              "in all %d staged board/projections file(s)", ", ".join(PROJECTABLE), len(checked))
 
 
+def assert_injury_games_stamp_coherent(pdf: "pd.DataFrame | None", season: int) -> dict | None:
+    """🔒 NF-INJ3b-SHIP D6 PUBLISH GUARD — REFUSE to ship a board whose injury-games stamp is not
+    supported by its own rows.
+
+    THE FAILURE IT CATCHES: a served build that lost its covariate feed serves the INCUMBENT caps
+    while the board-wide policy stamp still claims the certified hurdle. Neither half is visible
+    alone — the stamp is identical on a good flip, and a flagged veteran is capped either way, just
+    at a different number. See `injury_games_publish_guard` for why that residual risk exists and
+    why this is where it belongs.
+
+    ⛔ IT RAISES ON A DRY RUN TOO (NF-K1's rule): a board whose provenance stamp is wrong is
+    defective whether or not it is uploaded, and staging is where the operator can still act.
+
+    ⚠️ SCOPE, stated because it is easy to over-read. It reads the PROJECTION artifact the exporter
+    already loaded from disk — the board this export publishes — and not the staged JSON, because
+    the per-row evidence is build provenance and has no business in a public payload. When the
+    projections artifact could not be read at all (the exporter tolerates that by design; the browse
+    surface 404s) this guard CANNOT RUN, and it says so LOUDLY rather than returning a pass: a check
+    that did not run is not a pass (NF1.7 (a)). It does not, in that case, block the boards — that
+    would be a new refusal in a path this story did not measure."""
+    from quant_sports_intel_models.football.nfl.fantasy import (
+        injury_games_publish_guard as _IGPG,
+    )
+    if pdf is None or not len(pdf):
+        log.warning("[ALERT] NF-INJ3b-SHIP injury-games stamp guard DID NOT RUN — the projection "
+                    "artifact for %d was not readable, so whether the served caps match the board's "
+                    "own stamp is UNVERIFIED (not verified-clean).", season)
+        return None
+    result = _IGPG.evaluate(pdf)
+    log.info("[METRIC] nf_inj3b_injury_games_stamp=%s certified=%s fitted=%s moved=%s",
+             result["verdict"], result["n_certified"], result["n_fitted"], result["n_moved"])
+    if not result["passed"]:
+        raise SystemExit(_IGPG.refusal_message(result, season))
+    log.info("NF-INJ3b-SHIP injury-games stamp OK — %s: %s", result["verdict"], result["detail"])
+    return result
+
+
 def report_publish_coherence(out_dir: Path, season: int, freshness: dict | None,
                              now_iso: str, strict: bool = False) -> dict:
     """🔶 NF-INJ1 PUBLISH CHECK — does the staged board serve a physically possible (games, line) pair,
@@ -1772,6 +1855,10 @@ def main(argv: list[str] | None = None) -> int:
     # the draft-critical output. The endpoint 404s until it lands (the UI shows an honest empty state).
     projections: list[dict] = []
     proj_meta: dict = {}
+    # NF-INJ3b-SHIP: hoisted so the D6 stamp guard at the end can read the artifact this export
+    # loaded. `None` means the projection artifact was never readable — a state the guard reports as
+    # UNVERIFIED rather than as a pass.
+    pdf = None
     try:
         pdf = (load_projections_lake(args.season, args.projection_source) if args.from_lake
                else load_projections_local(args.season, args.projection_source))
@@ -1866,6 +1953,10 @@ def main(argv: list[str] | None = None) -> int:
             "rookie_policy": rookie_policy_stamp(pdf),
             # ── NF-TR2b — the VETERAN-LEVEL policy stamp, READ OFF THE BUILT BOARD (same rule).
             "veteran_level_policy": veteran_level_stamp(pdf),
+            # ── NF-INJ3b-SHIP — the INJURY-GAMES policy stamp, same rule again. Which availability
+            # cap model produced this board's expected games. ⛔ The per-row evidence the D6 guard
+            # checks it against stays OFF the payload: it is build provenance, not a served field.
+            "injury_games_policy": injury_games_stamp(pdf),
         }
         payload = {
             "season": args.season,
@@ -1934,6 +2025,11 @@ def main(argv: list[str] | None = None) -> int:
     # fail the export, not reach users as "not matched" beside every kicker and defence.
     assert_published_position_coverage(out_dir, args.season)
 
+    # 🔒 NF-INJ3b-SHIP D6 — beside NF-K1, and for the same reason: the last point at which the
+    # operator can still act. It asks whether the board's injury-games STAMP is supported by what
+    # the cap actually did to the board's own rows.
+    _inj_stamp = assert_injury_games_stamp_coherent(pdf, args.season)
+
     # 🔶 NF-INJ1 — beside NF-K1 and for the same reason: it opens the staged bytes. ALERT-tier by
     # default (see `report_publish_coherence` for why this one measures where NF-K1 refuses); the
     # result is written back onto the manifest so the count is visible on the served payload rather
@@ -1942,6 +2038,10 @@ def main(argv: list[str] | None = None) -> int:
                                     datetime.now(timezone.utc).isoformat(),
                                     strict=args.strict_coherence)
     manifest["coherence"] = _coh
+    # NF-INJ3b-SHIP: the D6 verdict rides on the manifest so "we checked, it came back clean" is
+    # visible on the served artifact rather than only in a build log nobody keeps (E11.30). `None`
+    # means the guard could not run — an honest UNVERIFIED, never rendered as a pass.
+    manifest["injuryGamesStamp"] = _inj_stamp
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
     # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45) — gated behind

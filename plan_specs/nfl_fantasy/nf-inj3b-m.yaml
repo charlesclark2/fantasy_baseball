@@ -109,6 +109,39 @@ spec:
       - id: 5-packet-closeout
         desc: "Ship-decision packet to the operator; verdict + findings into closeout.followUps."
   closeout:
+    correction:
+      recordedOn: '2026-08-25'
+      by: NF-INJ3b-SHIP (PM ruling 4, 2026-08-25)
+      severity: HEADLINE_EVIDENCE_ROW_WITHDRAWN
+      summary: >
+        This record's decisive artifact (ablation_results/nf_inj3b_m_counterfactual.md) carries a
+        CORRECTION block as of 2026-08-25. Its ⭐⭐ headline cited the largest single board point
+        move — CHRIS COLLIER, -11.46 PPR, labelled "flagged? no" — as evidence that the biggest move
+        lands on an UNFLAGGED player at ~9x the flagged mean. That row is a ZERO-FILL ARTIFACT of
+        this study's own hand-supplied feed, not a measurement: nf_inj3_injury_games._design applies
+        .fillna(0.0) to every covariate, so a certified row the feed does not cover evaluates at the
+        intercept-only design and returns a plausible number under the fitted arm's stamp. The feed
+        here covered only the study's 22 rows, so the board's flagged RES RETURNERS (excluded from
+        the scored population by NF-INJ3b's preregistration §3) were zero-filled; three appear in
+        the moved-row table and ALL THREE collapse to the identical 0.4673070118875485 games, which
+        is the signature.
+      stillStands: >
+        The redistribution FINDING stands qualitatively and was re-measured on the committed serving
+        path: 519 unflagged rank moves and 340 unflagged point changes. The give-back ratio and the
+        §5(d) conclusion that a proportional estimate cannot see this effect are untouched.
+      doesNotStand: >
+        The specific claim that the largest board move lands on an UNFLAGGED player at ~9x the
+        flagged mean. On the committed build the largest unflagged move is -6.3966 PPR (MICHAEL
+        MAYER), whose games do not change at all (12.09 -> 12.09) — a pure re-order effect, and
+        cleaner evidence for the same mechanism than the artifact row ever was.
+      cannotRecur: >
+        injury_games_serving.served_injury_games now validates covariate VALUES on certified rows,
+        not merely column presence, and RAISES on a non-finite value. A feed that misses a certified
+        row is now a loud failure instead of a plausible number.
+      returnerDisposition: >
+        PM ruling 2026-08-25 confirmed injury_games_policy.RETURNER_BOUNDARY — returners are HELD on
+        the incumbent constants, so those three rows do not move at all on the served board. Future
+        path carded by the PM as NF-INJ3e (Backlog).
     verdict: >
       MEASURED — NF-INJ3b §5(d) is CLOSED. Nothing shipped; nothing published;
       `injury_games_policy.SERVING_ENABLED` is False on disk. The ship/no-ship is
