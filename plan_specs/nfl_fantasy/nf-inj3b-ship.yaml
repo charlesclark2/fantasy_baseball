@@ -1,0 +1,150 @@
+# Plan spec — NF-INJ3b-SHIP (FULL tier: the D5=A flip — feed, stamp guard, flip, combined read)
+# Authored by PM 2026-08-24 per operator ruling D5=A and PM rulings D6/D7/D10.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj3b-ship
+  vertical: nfl_fantasy
+  card: https://trello.com/c/oKvTkBsi   # continues the NF-INJ3b/-M thread; SHIP card linked on creation
+  status: ACCEPTED
+spec:
+  description: >
+    Execute operator ruling D5=A (2026-08-24): flip the certified
+    hurdle_transfer injury-games caps ON for the veteran RES/PUP
+    population, with the D6 stamp guard and D7 covariate feed as
+    prerequisites IN THIS CHANGE, and the D10 combined read gating the
+    first publish. Basis: NF-INJ3b CLEARED 9/9; NF-INJ3b-M measured the
+    served impact (flagged veterans -2.61 games / -1.23 PPR mean; ~90% of
+    the raw point impact absorbed by NF1.5's re-order; 517 unflagged rank
+    moves; largest point move 11.46 PPR on an unflagged player). The
+    operator accepted that trade with eyes open; this story makes the flip
+    real and safe, and hands the operator the final publish decision with
+    the combined evidence. best_alpha=0. DEPLOY-HELD until the D10 read
+    passes AND the operator approves; ⛔ no --publish from this session.
+  acceptanceCriteria:
+    - description: >
+        D7 — THE COVARIATE FEED: onset_carryover, weeks_since_last_game,
+        prior_games, log1p_prior_fp built into the BOARD BUILD and supplied
+        to the availability chain (apply_availability_chain /
+        injury_games_serving) with feed_supplied=True on the serving path.
+        NF1.5's internal research-frame call sites keep feed_supplied=False
+        on their recorded path. Feed values must reproduce the study's
+        covariate definitions (cite the prereg definitions; pin one known
+        row per covariate against the study artifact at 1e-9).
+    - description: >
+        D6 — THE PUBLISH-TIME STAMP GUARD, in the same change and RED-proven
+        BOTH ways: the published artifact must (a) carry the fitted
+        injury_games_model_version, AND (b) show flagged veteran rows
+        actually differing from the incumbent caps. The named failure mode
+        it kills: a served build that forgot its feed quietly shipping the
+        incumbent under the fitted arm's stamp. RED legs: stamp present +
+        rows unchanged -> FAIL; stamp absent + rows changed -> FAIL;
+        legitimate flip -> PASS; legitimate flag-off build -> PASS with no
+        stamp.
+    - description: >
+        THE FLIP: injury_games_policy.SERVING_ENABLED=True for veteran
+        RES/PUP only. Boundaries enforced in code and pinned two-sided:
+        SUS/NFI retain incumbent constants (exploratory channels, zero live
+        rows); rookies retain incumbent constants via the NF-INJ3c routing
+        (injury_games_serving never reached from the rookie frame — do not
+        alter that); fitted_status remains REFUSED and unreachable.
+    - description: >
+        BOARD COMPARISONS under the standing non-determinism rule
+        (NF-INJ3c §6, card QkpAHBYa): material tolerance rtol/atol 1e-9,
+        scoped by population, NEVER bitwise; any moved rookie-band cell is
+        read against a SAME-COMMIT control before being attributed to this
+        change. Reproduce the -M measurement's headline figures on the
+        flipped build as the sanity anchor (flagged ~-2.61 games / ~-1.23
+        PPR; materially divergent numbers HALT the story, not the gate).
+    - description: >
+        D10 — THE COMBINED READ gates the first publish: one placement read
+        + one interval revalidation on the exact board the operator would
+        publish — carrying this flip PLUS whatever else is live at publish
+        time (adopted NF-INJ-NEWS-1 overrides; NF-INJ3c rookie routing,
+        active post-cutdown). Per-story reads cannot attribute a board that
+        moved for two reasons; only the combined read counts. Use the
+        --out stems; never touch decided artifacts.
+    - description: >
+        OPERATOR PACKET to close: top-25 rank moves by config (incl.
+        superflex_10/12) with names, the flagged-cohort table, the combined
+        read verdicts, the stamp-guard proof, and the publish/hold call
+        left explicitly to the operator. Changelog entry DRAFTED but
+        committed only on the publish path (a declaration must not outrun
+        production — the NF-INJ3c convention).
+    - description: >
+        CLAUDE.md append (separate commit): the NF-INJ3c landmine — "No
+        board comparison in this repo may be bitwise: same-commit rebuilds
+        differ in the rookie band (fp_ppr_sd/p10/p90) at 0-21 material
+        cells. Compare at material tolerance scoped by population, and read
+        any rookie-band move against a same-commit control first. (Located?
+        remove this note via the QkpAHBYa card.)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj3b-ship
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ" / "caps" / "serving" (board Credence Sports, 2026-08-24)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ3c (Done, merged) — this story builds ON its extracted chain; the rookie boundary it pinned must remain untouched."
+      - "NF-INJ-NEWS-1 (Done, deploy-held) — its overrides step sits in the same chain; the combined read covers the interaction; do not modify its loader/guards."
+      - "NF-INJ2b (To Do) — the ordering-learner successor; the 517-rank-move redistribution measured by -M is ITS evidence base; nothing here touches NF1.5."
+      - "NF-INFRA2 (Done) — the scheduled publish will carry this change once the operator merges to main post-approval; no schedule changes here."
+      - "🚨 rookie-band non-determinism (To Do, QkpAHBYa) — consumed as a standing rule here, not fixed here."
+  triedLedger:
+    files:
+      - "ablation_results/nf_inj3b_injury_games.md §12 (rulings D1-D4), nf_inj3b_ship_path.md, the -M measurement artifacts"
+      - "plan_specs/nfl_fantasy/nf-inj3b-m.yaml + nf-inj3c.yaml closeouts (boundaries, chain ownership, non-determinism rule)"
+    recordedNulls:
+      - "fitted_status REFUSED (4/7, p 0.1265) — must remain unreachable; not re-read."
+      - "NF-INJ2 CONSTRAINT_REFUSED at QB ordering — acknowledged as the known mis-specification the operator accepted in D5=A; nothing here relaxes or re-reads it (NF-INJ2b owns it)."
+  supersedes: []
+  dependsOn:
+    - "NF-INJ3c merged (chain extraction; verified dev @ fef9e267)"
+    - "NF-INJ3b-M serving artifact (dev @ 5052f74a)"
+  feedsInto:
+    - "The first post-cutdown publish (with adopted overrides + active rookie routing) — one combined read, one operator approval"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj3b-ship-plan
+spec:
+  goalRef: { name: nf-inj3b-ship }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 0b-claude-md
+        desc: "Separate commit: the no-bitwise-board-comparison landmine."
+      - id: 1-covariate-feed
+        desc: "D7 feed into the board build; definition pins vs the study artifact."
+      - id: 2-stamp-guard
+        desc: "D6 publish-time guard; four RED legs."
+      - id: 3-flip
+        desc: "SERVING_ENABLED=True (veteran RES/PUP); boundaries pinned two-sided."
+      - id: 4-flipped-build-and-diff
+        desc: >
+          Dry-run flipped rebuild + population-scoped material diff +
+          same-commit control for any rookie-band motion; sanity-anchor
+          against the -M figures. (Rebuild measured at ~3.3s — in-session;
+          anything genuinely >2 min goes to the operator per the rule.)
+      - id: 5-combined-read
+        desc: >
+          D10: placement read + interval reval on the publish-candidate
+          board (flip + adopted overrides + post-cutdown rookie rows as
+          applicable) via --out stems. If adoption/cutdown state changes
+          after this runs, it re-runs — the read binds to the board that
+          publishes, not to a date.
+      - id: 6-packet-closeout
+        desc: "Operator packet + drafted changelog + verdict + findings into closeout.followUps."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

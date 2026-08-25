@@ -181,6 +181,25 @@ spec:
       (5) NF-INJ3b-M coordination: its D4 `--out` stem fix IS on this branch, so
       the ship-path reads can write `nf_inj3c_*` stems without touching a
       decided record.
+      (7) ⚠️⚠️ PM OWNS THIS — LOCATE THE ROOKIE-BAND NON-DETERMINISM. Found while
+      validating this story, and it INVALIDATED this story's first ship gate, so
+      it is not a curiosity. MEASURED: building the SAME COMMIT five times and
+      diffing all ten pairings gives 0-21 material differences (rtol/atol 1e-9)
+      and ~1100-1900 bitwise, with ZERO veterans moved in any pairing. It
+      survives BOTH `PYTHONHASHSEED=0` (15) and single-threaded BLAS/OMP (4), so
+      it is neither string-hash iteration order nor thread reassociation. Every
+      observed difference is in `fp_ppr_sd`/`fp_ppr_p10`/`fp_ppr_p90` — the
+      ROOKIE BAND — at the rounding granularity those fields are emitted at; it
+      has never been observed to move a veteran row, a `proj_games`, or a point.
+      Suspected home is the rookie band's cross-conformal calibration
+      (`_ROOKIE_BAND_CQR_*`), whose fold assignment the code documents as
+      DETERMINISTIC — so the source is elsewhere in that fit and is NOT located.
+      ⛔ CONSEQUENCE FOR EVERY FUTURE STORY: no board comparison in this repo can
+      be made BITWISE, and any story claiming byte-identity on a rebuilt board
+      will hit this. Until it is fixed, a moved rookie band must be read against
+      a same-commit control before anything is concluded from it. Full
+      measurement + the corrected gate: `ablation_results/
+      nf_inj3c_rookie_availability.md` §7.
       (6) ⚠️ PRE-EXISTING, FOUND IN PASSING, NOT THIS BRANCH'S DOING —
       `betting_ml/tests/nf_inj1_c_red_proof.py`'s `short-label-stops-saying-withheld`
       case has a ROTTED ANCHOR and reports 0 occurrences. It expects
