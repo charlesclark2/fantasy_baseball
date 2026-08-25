@@ -1,0 +1,80 @@
+# Plan spec — NCAAF-RF1 (MINI tier: roll-forward window extension; ⏰ before Mon 8/31)
+# Authored by PM 2026-08-24 per P3.1 closeout decision ①.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-rf1
+  vertical: ncaaf
+  card: https://trello.com/c/TrUc4Zat   # pre-opener operator thread; RF1 card linked on creation
+  status: ACCEPTED
+spec:
+  description: >
+    PM ruling on P3.1 closeout decision ①: EXTEND the NCAAF roll-forward
+    window through the season. NCAAF_ROLL_FORWARD_CRON = "0 6 * 2-8 1"
+    (Mondays, Feb-Aug) fires once more (Mon 8/31) then shuts until Feb
+    2027. covariate_component_talent is an honest upstream absence today
+    (CFBD /talent?year=2026 returns 200 with 0 rows), but talent is in
+    ROLL_FORWARD_SOURCES — if CFBD publishes 2026 talent in September,
+    nothing ingests it all season, and because snapshots are IMMUTABLE the
+    forward track record is permanently talent-free. This is the recorded
+    month-scoped-cron class (E9.48c / INC-37) caught BEFORE it fired.
+    best_alpha=0; data-infra only; no model or serving change.
+  acceptanceCriteria:
+    - description: >
+        NCAAF_ROLL_FORWARD_CRON months extended 2-8 -> 2-12 plus January
+        (match the Aug-Jan convention of the other NCAAF schedules; state
+        the exact final expression in the closeout). A comment at the
+        constant names this incident and the E9.48c class.
+    - description: >
+        Idempotency confirmed, not assumed: an in-season Monday fire on
+        already-ingested sources must no-op cleanly (the roll-forward's
+        existing behavior — verify, cite where). The talent leg must ingest
+        WHEN rows appear and no-op while CFBD still returns 0 rows.
+    - description: >
+        BOX_OPERATIONS.md §10's intended-state table updated in the same
+        change (docs and schedule must not disagree — one thing, one
+        owner). Guard: a test pinning the cron constant against the
+        documented window so drift between them fails CI; RED-proven.
+    - description: >
+        ⏰ Must merge AND reach the box before Mon 2026-08-31 06:00 PT
+        (the last fire under the old window). Box deploy rides merge to
+        main; the operator confirms the schedule shows the new window in
+        Dagit — hand him that check as a paste-ready step.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-rf1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "roll-forward" / "talent" / "cron" (board Credence Sports, 2026-08-24)'
+    duplicates: []
+    adjacent:
+      - "⏰ pre-opener operator checklist (Sprint) — its optional 2nd P1.2 re-fit 'if CFBD publishes talent before 8/29' becomes reachable in-season via this window; note the linkage."
+      - "🗓️ 9/1 INC-37 month-boundary tests (Sprint) — same defect class, different schedules; no file overlap."
+      - "P0.7 record (the roll-forward story) — this amends its schedule constant only; no ingest-logic changes."
+  triedLedger:
+    files:
+      - "ncaaf_story_prompts.md P0.7 record; BOX_OPERATIONS.md §10; plan_specs/ncaaf/ncaaf-p3-1.yaml closeout (decision ① evidence)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "The forward track record carrying talent from the week CFBD publishes it; the 2027 covariate set"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-rf1-plan
+spec:
+  goalRef: { name: ncaaf-rf1 }
+  graph:
+    nodes: []   # MINI tier
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
