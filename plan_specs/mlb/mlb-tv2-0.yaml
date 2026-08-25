@@ -7,7 +7,7 @@ metadata:
   name: mlb-tv2-0
   vertical: mlb
   card: https://trello.com/c/pa4ii3tQ   # EPIC TV2; the TV2-0 card is pulled to the Sprint at kickoff
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     TV2-0: diagnose WHICH LEVER binds the served totals distribution's
@@ -128,8 +128,80 @@ spec:
       - id: 5-closeout
         desc: "Verdict + findings into closeout.followUps; operator summary naming the funded route."
   closeout:
-    verdict: null
+    verdict: |
+      SHAPE-BOUND. The registered decision rule fires on the ARCHITECTURE lever:
+      TV2-2 (mixture-density head) is FUNDED FIRST; TV2-1 (dispersion feature
+      store) is NOT funded; E13.6b Part B stays HELD (the IRREDUCIBLE branch did
+      not fire). Both served tiers agree. best_alpha=0, bet_paused stays true,
+      market-blind, nothing serves, nothing shipped.
+
+      Measured on the SERVED post_lineup rows (n=758, 2026-06-23..08-23, the whole
+      era out of sample by construction; morning n=765 replicates it):
+        * ARCHITECTURE ceiling closes 100.3% of the error the product prints. The
+          served predictive states P(over)=0.5000 at its own mean against a
+          realized 0.4274 (gap +0.0726, paired CI [0.0369,0.1095], MC p=0.001);
+          the marginal-shape oracle moves the stated probability +0.0728
+          [+0.0724,+0.0732] and lands the gap at -0.0002. Not a
+          coverage-for-accuracy trade: CRPS 2.5301->2.5114, pit_ks 0.0891->0.0149.
+        * FEATURE ceiling is INACTIVE, not small. The scale-mixture oracle -- which
+          is allowed to SEE THE ANSWER -- returns K=1 on all 5 blocks, so A3 is
+          byte-identical to a plain global rescale; its lift on top of the best
+          marginal shape is -0.0006 CRPS (NEGATIVE). classify_null: INACTIVE, and
+          the remedy is a DIFFERENT POPULATION, never more served games (NF-D18).
+        * The calibrator channel (a global sigma scale) closes only 0.029, so
+          CALIBRATOR-SUFFICIENT did not fire either.
+        * Row-blind matched control: exactly 0.0000 on both primaries.
+
+      Instrument: 26 guards green, 23/23 deliberate breaks RED, reproduction pin
+      1e-9 on a committed fixture. Controls PC_clean 0.90, PC_dispersion 0.90
+      (cross-detection 0.00), PC_shape 0.90 (cross 0.00); PC_both 0.60 against its
+      0.80 bar is left FAILING and reported -- its error is one-directional
+      (under-credits the expensive lever) and its mechanism (the symmetry gate)
+      provably did not engage on this data.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      1. FUND TV2-2 FIRST; DO NOT FUND TV2-1. The rule fired SHAPE-BOUND and the
+         feature lever is INACTIVE by an oracle that sees the answer. TV2-1's own
+         premise ("nothing carries dispersion") is confirmed -- which means the
+         story it motivates has nothing to build against on this population, not
+         that it is merely low-priority.
+      2. TV2-2 IMPLEMENTATION CONSTRAINT, measured here and cheap to honour: a
+         3-parameter skew-normal MLE collapsed onto its Normal foil on 5 of 5
+         blocks at a realized z skew of 0.749 (MH2.8's flat-likelihood trap,
+         reproduced). The mixture head must not be fitted by a naive MLE from a
+         symmetric start, and its bake-off needs a tie-with-foil guard -- a nested
+         form's near-zero margin is a TIE, not a shape finding.
+      3. ⚠️ SCOPE THE CLAIM WHEN TV2-2 SHIPS. The lever fixes the probability the
+         product PRINTS. It does not touch DISCRIMINATION: Var(mu)/Var(y)=0.0142
+         and STDDEV(pred_total_runs)=0.544 against the V2 gate's >=2.0. Every arm
+         in this battery holds mu fixed, so that statistic is ARM-INVARIANT by
+         construction -- hand-recorded INACTIVE (structural), no re-test trigger.
+      4. ⚠️ SPEC CLAUSE FLAGGED, NOT EDITED (prereg 6). "std_pred" names two
+         different statistics in this repo, and the 0.773-vs-2.0 figure the spec
+         cites is the MEAN-SPREAD one (STDDEV(pred_total_runs),
+         validate_v2_gates.py:34) -- a property of mu -- while Story 10.2's
+         train_totals.py:121 std_pred is the mean per-game predictive SD. A future
+         story quoting "std_pred" must say which. PM may want the V2 gate itself
+         re-examined: whether >=2.0 is attainable for a totals model at all was
+         not measurable here (market-blind -- it would need the line's own spread).
+      5. E13.6b PART B STAYS HELD. The IRREDUCIBLE branch did not fire, and a
+         global sigma rescale closes only 0.029, so a scale recalibrator is not
+         the fix. Whether a serve-time P(over) calibrator is still worth
+         un-holding as an INTERIM patch while TV2-2 is built is a PM call this
+         study did not register a route for.
+      6. CANDIDATE FOR THE STANDING RECIPE (PM to place): the four control
+         failures this story hit are reusable across any oracle-bounded
+         diagnosis -- (a) a row-level peek is a degenerate, not a ceiling, and a
+         SHRUNK BAYES peek that collapses to inert under a null truth is the fix;
+         (b) a pooled PIT statistic is near-blind to a per-game sigma deficit
+         (planting sigma-CV 0.35 moved pit_ks 0.0302 -> 0.0241), so one yardstick
+         cannot separate two levers; (c) materiality must be PAIRED when every arm
+         scores the same outcomes -- an unpaired null band called a 0.12-CRPS
+         oracle win "inside noise"; (d) a folded |gap| statistic loses the power a
+         signed MOVEMENT keeps, because the shared realized rate cancels exactly.
+      7. A SECOND-READER ITEM, stated plainly: this verdict rests on a 2-month
+         window under ONE champion. It does not generalise to a different
+         champion, and the record says so.
