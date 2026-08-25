@@ -137,7 +137,10 @@ spec:
         desc: "Verdict + findings into closeout.followUps; session summary."
   closeout:
     verdict: >
-      SHIPPED-PENDING-RUNTIME-GATE. All three deliverables are built, CI-gated and
+      SHIPPED. The runtime gate was MET on 2026-08-24 against production — see
+      followUps -3. The verdict as originally written, retained verbatim because a
+      superseded status is history, not a line to overwrite:
+      "SHIPPED-PENDING-RUNTIME-GATE. All three deliverables are built, CI-gated and
       RED-proven (20/20 deliberate breaks caught): the payload contract, the box
       serving-write op + schedule, and the four public FastAPI routes. The runtime
       gate is NOT met and could not be met by this session — the two NCAAF-PS lake
@@ -145,8 +148,53 @@ spec:
       there is nothing to publish until the operator fires the snapshot job. The
       laptop dry-run DID reach the real lake end-to-end and returned the honest
       `status="no_snapshots"` no-op, which proves the read path, the LA game-day
-      resolution and the absent-table handling against production data.
+      resolution and the absent-table handling against production data."
     followUps: >
+      -3) ✅ RUNTIME GATE MET (2026-08-24, operator-run on the box + anonymous curls against
+      production). The chain was proven END TO END, not by parts: lake → snapshot (8 rows, all
+      2026-08-29, leakage gate PASSED, `strength_as_of_week=1`, futures 138 teams) → serving write
+      (`status="ok"`, 11 blobs, `dynamo_writes == s3_writes == 11`, `n_game_days=1`) → `deploy.sh`
+      → the four `--authorization-type NONE` gateway routes → anonymous 200s. The served
+      TCU/North Carolina payload REPRODUCES the dry run exactly (P(home) 0.78, margin interval
+      [-8.639, +34.080] width 42.72, total mu 54.51), which is what makes this a gate rather than a
+      smoke: the number a reader sees is the number the model computed.
+        (a) ⭐ THE TWO-SIDED CHECK IS WHAT CERTIFIED IT, and it nearly did not happen. The first
+        curl sweep returned 200/404/200/404, and BOTH 404s were correct — `/ncaaf/games` with no
+        param defaults to the LA game-day (INC-22), which on 8/24 has no slate, and the game id in
+        the smoke loop was an invented placeholder. But a 404 alone CANNOT distinguish "correctly
+        absent" from "the date-keyed read is broken", and the two 200s were both PERMANENT-key
+        blobs (manifest, futures) which exercise a different key shape entirely. The positive
+        control (`?game_day=2026-08-29` → 200, then a REAL game id → 200) is the only thing that
+        proved the date-grained path. ⇒ a serving gate needs a positive control per KEY SHAPE, not
+        per route — and the 404 BODY must be read, not just the code: ours names the game-day
+        (`… (game_day=2026-08-24)`), whereas a gateway 404 is a bare `{"message":"Not Found"}`, so
+        the body is what separates "our router answered" from "the route target is wrong".
+        (b) ⚠️ `market.status="unavailable"` ON EVERY GAME IS THE EXPECTED, HONEST STATE — and the
+        discriminator is `market_read_failed=false`, NOT the attach count. `market_lines_attached=0`
+        alone cannot separate "the read ran and there is genuinely no line" from "the read threw and
+        we swallowed it into a zero" (the E9.26b silent-empty class); the writer reports both, and
+        the payload carries a machine-readable `reason` with all seven line fields present as
+        explicit `null`. The cause is structural, not a defect: the only NCAAF odds capture
+        scheduled for 2026 is the paid `/historical` catch-up, which can only reach a kickoff AFTER
+        its snapshot instant. ⇒ the spec's "market line beside the model line" is NOT satisfied on
+        the wire until either a live-odds cadence exists or P3.2 renders the stated absence.
+        (c) ⚠️ TOTALS ARE NEARLY FLAT ACROSS THE SLATE (54.2–56.7) AND THAT IS CERTIFIED
+        BEHAVIOUR, NOT A STARVED FIT. `pace_term_active=false` pre-season, and pace is the
+        POSSESSIONS channel — the total axis's only real discriminator (NCAAF-P2.1 S1: "~zero
+        margin content"). S1-serve PROVED a 100%-NULL-pace board is byte-identical to the pre-S1
+        board, so this is the NULL-inertness result working as designed. The MARGIN axis IS
+        discriminating (-4.6..+26.9, P(home) 0.393..0.945), which is the tell that the P1.2 re-fit
+        is live rather than cold-start (a cold start presents as COMPRESSION on BOTH axes).
+        ⇒ P3.2 must not present a 2.5-point spread of totals as if it discriminated between games.
+      -3b) 🧭 CONTRACT NOTE FOR P3.2 (and any future NCAAF client) — DO NOT OPEN ON
+      `manifest.current_game_day`. That field is "today" in LA at write time; it is NOT a promise
+      that a slate exists for it, and between seasons/weeks it usually does not — measured live on
+      2026-08-24, `current_game_day="2026-08-24"` while `game_days=[{"2026-08-29", 8}]`, so a client
+      opening on it 404s every day until the opener. A selector must open on the first entry of
+      `game_days` (falling back to `current_game_day` only when it appears there). This is exactly
+      why the manifest hands over the DAY LIST rather than a week (the `season_order_week` alias
+      landmine) — the list is the authority on what exists; `current_game_day` only says where
+      "now" sits relative to it.
       -1) 🔎 PRE-FLIGHT OF THE RUNTIME GATE (2026-08-24, measured on the real lake after the
       operator's C bootstrap landed). Recorded because two of these numbers would otherwise be
       ambiguous the moment the operator reads them, and one is a live PM decision.
