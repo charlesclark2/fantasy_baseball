@@ -219,6 +219,20 @@ spec:
       extractor now documents what it excludes and why. ⇒ when a source-scanning guard
       screens TSX, the substrate has to be separated first — prose, class names and
       identifiers are three different questions and one regex cannot ask all three.
+      5b) ⭐ AND A CI-ONLY FLAKE THE LOCAL RUNS COULD NOT PRODUCE, paid for on the PR and
+      worth carrying because the method is generalisable. "The mixed slate prices some
+      games and not others" passed every local run and FAILED on CI: `locator.evaluateAll`
+      does NOT auto-retry — the NF-C6P2 finding, one method over from `locator.count()` —
+      so on a slower, contended runner it sampled the DOM while only the first cards had
+      rendered, saw nothing but `available`, and reported a one-sided slate. The defect
+      was in the ASSERTION'S TIMING, not in the page, and the tell is the shape of the
+      wrong answer (a PREFIX of the right one). ⇒ any read that collapses many elements
+      into one value (`evaluateAll`, `count`, `allTextContents`) needs a retrying wrapper
+      (`expect.poll`) or an explicit count wait first, and the way to find the rest is
+      `--workers=4 --repeat-each=2` locally rather than a CI cycle per attempt. Verified
+      84 clean under exactly that. ⚠️ Note the direction: the sibling read in the mobile
+      spec under-collects toward PASSING, which is the harder vacuity to notice — a
+      weaker test that still looks green — and it was hardened in the same change.
       6) 🗓️ FIXTURE MAINTENANCE, so it is a known cost rather than a surprise: the slate
       capture is DATE-PINNED (`NCAAF_CAPTURED_GAME_DAY = "2026-08-29"` in
       `capture-fixtures.mjs`) because the NCAAF slate key IS the kickoff day — there is

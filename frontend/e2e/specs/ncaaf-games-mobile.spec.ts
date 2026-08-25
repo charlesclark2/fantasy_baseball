@@ -103,6 +103,10 @@ test("the win probability stays the biggest thing on the card at phone width", a
   await mockApi(page, { ncaafSlate: "market" })
   await page.goto(PATH)
   const c = page.getByTestId("ncaaf-game-card").first()
+  // ⚠️ Wait for the panel BEFORE measuring. `evaluateAll` does not auto-retry, and an under-collected
+  // size list would make this clause pass more easily rather than fail — a weaker test that still
+  // looks green, which is the harder kind of vacuity to notice.
+  await expect(c.getByTestId("ncaaf-market-comparison")).toBeVisible()
   const prob = await c
     .getByTestId("ncaaf-win-probability-home")
     .evaluate((el) => parseFloat(getComputedStyle(el).fontSize))

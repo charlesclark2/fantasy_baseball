@@ -208,11 +208,26 @@ test("the mixed slate prices some games and not others", async ({ page }) => {
   // A fixture where every game had a line could not tell "the panel renders a line" from "the panel
   // renders whatever it is handed" — and a mixed slate is also the state a real in-season Saturday
   // will be in.
+  //
+  // ⚠️ `expect.poll` RATHER THAN A BARE `evaluateAll`, and this one was PAID FOR: the first cut read
+  // the attributes once and passed locally on every run, then failed on CI. `evaluateAll` does NOT
+  // auto-retry (the NF-C6P2 finding, one method over from `locator.count()`) — so on a slower,
+  // contended runner it sampled the DOM while only the first cards had rendered, saw nothing but
+  // `available`, and reported a one-sided slate. The defect was in the assertion's timing, not in
+  // the page; a retrying read is what makes it a statement about the finished render.
   await open(page, { ncaafSlate: "market" })
-  const statuses = await page
-    .getByTestId("ncaaf-market-comparison")
-    .evaluateAll((els) => els.map((e) => e.getAttribute("data-market-status")))
-  expect(new Set(statuses)).toEqual(new Set(["available", "unavailable"]))
+  await expect(page.getByTestId("ncaaf-game-card")).toHaveCount(SLATE_MARKET.games.length)
+  await expect
+    .poll(async () =>
+      [
+        ...new Set(
+          await page
+            .getByTestId("ncaaf-market-comparison")
+            .evaluateAll((els) => els.map((e) => e.getAttribute("data-market-status"))),
+        ),
+      ].sort(),
+    )
+    .toEqual(["available", "unavailable"])
 })
 
 test("a market read that FAILED reads differently from one that was never captured", async ({ page }) => {
