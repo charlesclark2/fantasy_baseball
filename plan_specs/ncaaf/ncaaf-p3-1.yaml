@@ -147,6 +147,46 @@ spec:
       `status="no_snapshots"` no-op, which proves the read path, the LA game-day
       resolution and the absent-table handling against production data.
     followUps: >
+      -1) 🔎 PRE-FLIGHT OF THE RUNTIME GATE (2026-08-24, measured on the real lake after the
+      operator's C bootstrap landed). Recorded because two of these numbers would otherwise be
+      ambiguous the moment the operator reads them, and one is a live PM decision.
+        (a) ✅ THE SEEDED TABLES BEHAVE. Both NCAAF-PS tables now read as a PRESENT-BUT-EMPTY
+        frame (`rows=0 empty=True cols=['season']`) rather than raising — a state neither the
+        writer nor the serving path had ever actually met. Verified end-to-end: the serving write
+        returns `status="no_snapshots"` and touches nothing. The seed's one-column schema is
+        irrelevant by design — `merge_snapshot_rows` short-circuits on `existing.empty`, and the
+        first real write replaces the season partition, so the seed leaves NO residue (rehearsed
+        on scratch prefixes: final table = 1 real row, real schema).
+        (b) ⭐ THE OPENER SLATE IS 8 GAMES, AND THAT IS CORRECT — NOT UNDER-COVERAGE. A snapshot
+        run on 8/24 selects 8 FBS-vs-FBS kickoffs (all on 2026-08-29, none `start_time_tbd`), out
+        of 761 in the lake for the season. It reads low only because the FBS-vs-FBS filter drops
+        the opener's many FBS-vs-FCS games; the following Saturdays are 30 (9/05) and 45 (9/12).
+        ⇒ "wrote 8 rows" is the SUCCESS criterion for the first fire, not a red flag. Stated here
+        because a plausible-but-wrong number is the thing an operator cannot adjudicate alone.
+        (c) ✅ THE P1.2 RE-FIT LANDED — `as_of_week=1`, 138 teams, `covariate_component_coaching`
+        and `covariate_component_roster_flux` non-zero on 136 of 138, `strength_margin` spanning
+        -25.9..21.2. Per NCAAF-PS's own discriminator that is a real re-fit, not the cold start,
+        and the 47-point span is the SPREAD test (a cold start presents as COMPRESSION toward the
+        mean, not as a wrong leader).
+        (d) ⚠️ BUT ONE COVARIATE IS ZERO ON EVERY TEAM: `covariate_component_talent`. Diagnosed to
+        the source rather than guessed — the lake's `talent` table has NO 2026 rows (newest 2025),
+        and CFBD `/talent?year=2026` returns **HTTP 200 with 0 rows** while 2025 returns 134. So
+        this is an HONEST UPSTREAM ABSENCE, not a stale mart and not an un-run ingest; every other
+        covariate feed HAS 2026 (returning_production 136, coaches 138, recruiting_players 3987,
+        transfer_portal 4445). A zero covariate contributes exactly 0.0 to a mean-imputed ridge, so
+        the served board is honest — just built without talent. ⛔ Not a blocker.
+      -2) 🚨 PM DECISION — A SEASONAL WINDOW WILL SILENTLY CLOSE OVER THE TALENT GAP, and this one
+      IS actionable. `talent` is in `ROLL_FORWARD_SOURCES`, so the P0.7 roll-forward WOULD ingest
+      2026 talent the moment CFBD publishes it — but `NCAAF_ROLL_FORWARD_CRON = "0 6 * 2-8 1"` is
+      Monday-only, **months Feb-AUGUST**. From 2026-08-24 that leaves exactly ONE more fire
+      (Mon 8/31); after it the window is shut until Feb 2027. ⇒ if CFBD publishes 2026 talent in
+      September — which is when a fall-camp covariate would land — NOTHING ingests it for the whole
+      season, and because snapshots are IMMUTABLE the forward track record is permanently
+      talent-free. This is the recorded month-scoped-cron class (E9.48 (c) / INC-37, and NF-FRESH1
+      names an NFL `3-8` window as exactly this shape). Options for the PM: extend the NCAAF
+      roll-forward window through the season; or add a talent-only in-season top-up; or accept the
+      absence explicitly and record that the 2026 board ships without talent. ⛔ Not touched here —
+      it is the P0.7 schedule, not a serving story's to change.
       0) ⭐ RESOLVED (2026-08-24) — item (1) below is FIXED by NCAAF-LAKE1, and its
       DIAGNOSIS as written below is WRONG. It is not that delta-kernel reworded
       anything: the local wording is unchanged across duckdb 1.5.3 and 1.5.5. The two
