@@ -39,9 +39,14 @@ EXPORT = _F / "export_draft_board_json.py"
 STUDY = _F / "nf_inj3_injury_games.py"
 STUDY_RUNNER = _F / "run_nf_inj3_injury_games.py"
 
-FILES = (GUARD, FEED, POLICY, SERVING, SEASON, RUNNER, EXPORT, STUDY, STUDY_RUNNER)
+FLIPPED_DIFF = _F / "run_nf_inj3b_ship_flipped_diff.py"
+COMBINED_READ = _F / "run_nf_inj3b_ship_combined_read.py"
+
+FILES = (GUARD, FEED, POLICY, SERVING, SEASON, RUNNER, EXPORT, STUDY, STUDY_RUNNER,
+         FLIPPED_DIFF, COMBINED_READ)
 
 SUITE_GUARD = "betting_ml/tests/test_nf_inj3b_ship_stamp_guard.py"
+SUITE_RUNNERS = "betting_ml/tests/test_nf_inj3b_ship_runners.py"
 SUITE_FEED = "betting_ml/tests/test_nf_inj3b_ship_covariate_feed.py"
 SUITE_STUDY = "betting_ml/tests/test_nf_inj3_injury_games.py"
 
@@ -255,6 +260,77 @@ CASES = [
      '                      "projection_season": int(projection_season),',
      '"supplied": False, "reason": reason,', SUITE_FEED,
      "TestTheLeakageGate::test_a_refusal_is_RECORDED_never_silent"),
+
+    # ══ THE FLIP AND ITS BOUNDARIES ═════════════════════════════════════════════════════════════
+    # ══ NODES 4+5 — THE RUNNERS ═════════════════════════════════════════════════════════════════
+    ("the rookie-band control collapses to a SINGLE draw (the story's own false positive)",
+     _F / "run_nf_inj3b_ship_flipped_diff.py",
+     '            "attributable_to_the_flip": bool(\n'
+     '                fl[c]["n_moved"] > max(counts) and fl[c]["max_abs"] > max(max(mags), ATOL)),',
+     '            "attributable_to_the_flip": bool(\n'
+     '                fl[c]["n_moved"] > counts[0] and fl[c]["max_abs"] > max(mags[0], ATOL)),',
+     'fl[c]["n_moved"] > max(counts)', SUITE_RUNNERS,
+     "TestTheRookieBandControlIsAnEnvelope::"
+     "test_a_move_INSIDE_the_control_envelope_is_NOT_attributed"),
+
+    ("the envelope can never fire — attribution is hardwired off",
+     _F / "run_nf_inj3b_ship_flipped_diff.py",
+     '            "attributable_to_the_flip": bool(\n'
+     '                fl[c]["n_moved"] > max(counts) and fl[c]["max_abs"] > max(max(mags), ATOL)),',
+     '            "attributable_to_the_flip": False,',
+     'fl[c]["n_moved"] > max(counts)', SUITE_RUNNERS,
+     "TestTheRookieBandControlIsAnEnvelope::test_a_move_OUTSIDE_the_envelope_IS_attributed"),
+
+    ("the flipped diff stops refusing to run with the policy OFF (a vacuous measurement)",
+     _F / "run_nf_inj3b_ship_flipped_diff.py",
+     "    if not POLICY.serving_enabled():\n        raise RuntimeError(",
+     "    if False:\n        raise RuntimeError(",
+     "if not POLICY.serving_enabled():\n        raise RuntimeError(", SUITE_RUNNERS,
+     "TestNeitherRunnerPublishes::test_the_flipped_diff_REFUSES_to_run_with_the_policy_OFF"),
+
+    ("the flipped board is built with the policy FORCED, i.e. it re-measures NF-INJ3b-M",
+     _F / "run_nf_inj3b_ship_flipped_diff.py",
+     "    cap: dict = {}\n    board = NF15.build_season_projection(",
+     "    cap: dict = {}\n    serving_on = True\n    board = NF15.build_season_projection(",
+     None, SUITE_RUNNERS,
+     "TestTheFlippedBoardIsTheCommittedOne::test_it_forces_nothing_and_supplies_no_feed"),
+
+    ("the material comparison becomes BITWISE in the runner",
+     _F / "run_nf_inj3b_ship_flipped_diff.py",
+     "RTOL = ATOL = 1e-9", "RTOL = ATOL = 0.0", "RTOL = ATOL = 1e-9", SUITE_RUNNERS,
+     "TestTheComparisonIsMaterialAndScoped::"
+     "test_material_treats_a_sub_tolerance_move_as_unchanged"),
+
+    ("the combined read is pointed at S3 (the board already published, not the candidate)",
+     _F / "run_nf_inj3b_ship_combined_read.py",
+     "    return PR.run(staged, origin=None)",
+     "    import tempfile, pathlib as _pl\n"
+     "    return PR.run(PR._fetch(_pl.Path(tempfile.mkdtemp())), origin=PR._S3)",
+     "return PR.run(staged, origin=None)", SUITE_RUNNERS,
+     "TestTheCombinedReadBindsToABoard::test_it_reads_a_STAGED_directory_not_S3"),
+
+    ("the combined read stops recording the publish state it is valid FOR",
+     _F / "run_nf_inj3b_ship_combined_read.py",
+     '        "reported_absence_count": manifest.get("reportedAbsenceCount"),',
+     "",
+     '"reported_absence_count": manifest.get("reportedAbsenceCount"),', SUITE_RUNNERS,
+     "TestTheCombinedReadBindsToABoard::"
+     "test_it_records_the_publish_state_the_read_is_valid_FOR"),
+
+    ("the combined read writes to NF1.9's DECIDED interval stem", 
+     _F / "run_nf_inj3b_ship_combined_read.py",
+     '_INTERVAL_STEM = "nf_inj3b_ship_combined_read_interval_revalidation"',
+     '_INTERVAL_STEM = IV.DECIDED_STEM',
+     '_INTERVAL_STEM = "nf_inj3b_ship', SUITE_RUNNERS,
+     "TestTheCombinedReadBindsToABoard::test_it_writes_under_its_OWN_stem_never_a_decided_one"),
+
+    ("a missing staged board is reported as a clean read instead of refused",
+     _F / "run_nf_inj3b_ship_combined_read.py",
+     '    if not (staged / "projections.json").exists():',
+     "    if False:",
+     'if not (staged / "projections.json").exists():', SUITE_RUNNERS,
+     "TestTheCombinedReadBindsToABoard::"
+     "test_a_missing_staged_board_RAISES_rather_than_reporting_a_pass"),
 
     # ══ THE FLIP AND ITS BOUNDARIES ═════════════════════════════════════════════════════════════
     ("the flip is silently reverted, contradicting the recorded operator ruling", POLICY,
