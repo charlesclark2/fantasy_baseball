@@ -10,6 +10,8 @@
 
 import { Badge } from "@/components/ui/badge"
 import {
+  KICKED_OFF_LABEL,
+  KICKED_OFF_NOTE,
   MARGIN_CURVE_HINT,
   MARGIN_CURVE_LABEL,
   PACE_INACTIVE_NOTE,
@@ -49,6 +51,22 @@ function kickoffLabel(commenceTime: string | null, startTimeTbd: boolean | null)
   })
 }
 
+/** Has the kickoff INSTANT passed?
+ *
+ * ⚠️ `now` is a parameter with a default rather than a bare `Date.now()` buried in the component,
+ * and that is a testability decision with teeth: the whole point of this state is what the surface
+ * does on the EVENING OF A SLATE, and a component that reads the wall clock directly can only be
+ * tested on a day that happens to be one. The E2E drives it with `page.clock.setFixedTime`.
+ *
+ * ⛔ It answers ONE question — has the clock passed the kickoff — and never "is this game over".
+ * The payload carries no game state and no score (see `lib/ncaaf-copy.ts`), so any stronger reading
+ * would be invented. */
+export function hasKickedOff(commenceTime: string | null, now: number = Date.now()): boolean {
+  if (!commenceTime) return false
+  const t = Date.parse(commenceTime)
+  return Number.isFinite(t) && t <= now
+}
+
 export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
   const home = teamName(game.home)
   const away = teamName(game.away)
@@ -57,6 +75,7 @@ export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
     market.status === "available" && isNum(market.home_spread) ? -market.home_spread : null
   const marketTotal = market.status === "available" && isNum(market.total) ? market.total : null
   const prov = game.provenance
+  const started = hasKickedOff(game.commence_time)
 
   return (
     <article
@@ -67,6 +86,15 @@ export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
       <header className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
           <span data-testid="ncaaf-kickoff">{kickoffLabel(game.commence_time, game.start_time_tbd)}</span>
+          {started && (
+            <Badge
+              data-testid="ncaaf-kicked-off"
+              variant="outline"
+              className="border-amber-900/60 px-1.5 py-0 text-[10px] text-amber-300/90"
+            >
+              {KICKED_OFF_LABEL}
+            </Badge>
+          )}
           {game.is_neutral_site && (
             <Badge variant="outline" className="border-[#2a2a2a] px-1.5 py-0 text-[10px] text-gray-400">
               Neutral site
@@ -83,6 +111,11 @@ export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
           <span className="px-1.5 text-gray-600">at</span>
           <span className="text-gray-300">{home}</span>
         </h3>
+        {started && (
+          <p data-testid="ncaaf-kicked-off-note" className="text-[11px] leading-snug text-amber-300/70">
+            {KICKED_OFF_NOTE}
+          </p>
+        )}
         {/* P3.3 is not built. ⛔ A CTA pointing at a route that does not exist is precisely the
             defect this suite exists to catch, so the affordance is present, named and INERT —
             a disabled button rather than an anchor to a 404. */}

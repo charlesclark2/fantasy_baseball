@@ -392,6 +392,58 @@ test("no link on the surface points at a route that does not exist", async ({ pa
   expect(hrefs.filter((h) => h.startsWith("/ncaaf/teams"))).toEqual([])
 })
 
+test("a game whose kickoff has passed says so, and does not read as upcoming", async ({ page }) => {
+  // ⭐ THE OPENING-DAY CASE, and it is invisible to every other clause here because they all run on
+  // a day when the captured slate is still in the future.
+  //
+  // The served payload is a PRE-KICKOFF snapshot with no game state and no score, so on the evening
+  // of a slate the cards would otherwise show projections for games that are underway or finished,
+  // rendered identically to games that have not started. `page.clock` is what lets that day be
+  // tested on any other day.
+  const kickoff = Date.parse(SLATE.games[0].commence_time)
+  await page.clock.install({ time: new Date(kickoff + 45 * 60_000) }) // 45 minutes in
+  const { errors } = await open(page)
+  const c = card(page, SLATE.games[0].game_id)
+  await expect(c.getByTestId("ncaaf-kicked-off")).toBeVisible()
+  await expect(c.getByTestId("ncaaf-kicked-off-note")).toContainText("not updated once a game starts")
+
+  // ⛔ AND IT MUST NOT CLAIM MORE THAN THE PAYLOAD SUPPORTS. There is no score and no state on the
+  // wire, so nothing may read as a result or as a live game.
+  //
+  // ⭐ ASSERTED POSITIVELY — the chip says EXACTLY this and the note says EXACTLY that — rather
+  // than by scanning the card for words like "live". The first cut did scan, and it FAILED on the
+  // surface's own honest sentence ("we do not show live scores here"): a substring scan is
+  // NEGATION-BLIND, so the cheapest way to satisfy it was to delete the disclaimer that makes the
+  // card honest. That is the NF-DS finding reproduced inside the guard written to honour it, and
+  // the cure is the one that lesson names — assert what IS rendered, not the absence of a token.
+  await expect(c.getByTestId("ncaaf-kicked-off")).toHaveText("Kicked off")
+  // No score anywhere on the card: the payload carries none, so a "24–17" could only be invented.
+  expect(await c.innerText()).not.toMatch(/\b\d{1,3}\s*[-–—]\s*\d{1,3}\b/)
+  // Words that have no honest use on a card with no game state. ⚠️ "live" is deliberately NOT in
+  // this list — see above.
+  const header = (await c.locator("header").innerText()).toLowerCase()
+  for (const overreach of ["final", "won", "lost", "in progress", "halftime"]) {
+    expect(header, `the card header claims "${overreach}" with no state on the wire`).not.toContain(
+      overreach,
+    )
+  }
+  // A LATER game on the same slate has NOT kicked off — a component that flagged every card would
+  // pass the assertion above and be just as wrong.
+  const later = SLATE.games[SLATE.games.length - 1]
+  expect(Date.parse(later.commence_time)).toBeGreaterThan(kickoff + 45 * 60_000)
+  await expect(card(page, later.game_id).getByTestId("ncaaf-kicked-off")).toHaveCount(0)
+  expectNoPageErrors(errors)
+})
+
+test("before kickoff no card is flagged as started", async ({ page }) => {
+  // The two-sided half. Without it, "flag a started game" is satisfied by a component that flags
+  // everything, which is the failure that would land on every card the day the surface ships.
+  await page.clock.install({ time: new Date(Date.parse(SLATE.games[0].commence_time) - 3600_000) })
+  await open(page)
+  await expect(page.getByTestId("ncaaf-kicked-off")).toHaveCount(0)
+  await expect(page.getByTestId("ncaaf-kicked-off-note")).toHaveCount(0)
+})
+
 test("the pace note explains an inactive term rather than leaving it silent", async ({ page }) => {
   // `pace_term_active: false` at week 1 is CORRECT by construction (week-1 team-weeks carry no pace
   // input), and an unexplained false in a provenance list reads as a broken model.

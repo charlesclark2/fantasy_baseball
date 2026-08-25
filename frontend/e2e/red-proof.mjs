@@ -2921,6 +2921,32 @@ const CASES = [
       "    : bandOf(dist)",
     grep: "never reconstructed from the parameters",
   },
+  {
+    id: "ncaaf-started-game-not-flagged",
+    shipped: "NCAAF-P3.2 — a finished game rendered exactly like an upcoming one",
+    // The served payload is a PRE-KICKOFF snapshot with no game state and no score, so without
+    // this a Saturday evening shows projections for games that are underway or over, identical to
+    // games that have not started — and it is invisible to every clause that runs on a day when
+    // the slate is still in the future. `page.clock` is what makes that day testable.
+    detail: "Never flags a game whose kickoff instant has passed.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const started = hasKickedOff(game.commence_time)",
+    to: "  const started = false",
+    grep: "kickoff has passed says so",
+  },
+  {
+    id: "ncaaf-every-game-flagged-as-started",
+    shipped: "NCAAF-P3.2 — the one-sided fix, i.e. the defect the FIX itself invites",
+    // ⭐ THE OTHER HALF. "Flag a started game" is satisfied by a component that flags EVERY game,
+    // which passes the case above and puts a "Kicked off" chip on a slate that has not begun —
+    // the same one-sided shape `quota-notice-shown-for-every-save-failure` records above. The
+    // before-kickoff twin clause is what refuses it, and this is what proves it can.
+    detail: "Flags every card as started, whatever the kickoff instant.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const started = hasKickedOff(game.commence_time)",
+    to: "  const started = true",
+    grep: "before kickoff no card is flagged",
+  },
 
 ]
 
@@ -2988,7 +3014,9 @@ const CASES = [
 // board run, for the same reason every entry above records: 179 cases × a production build each
 // does not belong in a session. So 171/165/6 → 179/173/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 179, red: 173, notObservable: 6 }
+// NCAAF-P3.2's kicked-off state adds TWO more (the same story, a defect found after its first
+// eight cases were proven), each RED-proven individually. So 179/173/6 → 181/175/6.
+const RECORDED_BOARD = { total: 181, red: 175, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

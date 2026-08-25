@@ -138,6 +138,29 @@ export const MARKET_REASON_COPY: Record<string, string> = {
 }
 export const MARKET_REASON_FALLBACK = "No market line is available for this game."
 
+// ══ a game that has already started ═══════════════════════════════════════════════════════════
+//
+// ⚠️ A GAP THIS SURFACE FOUND AND CAN ONLY HALF-CLOSE, said plainly because the half matters.
+//
+// The served payload is a PRE-KICKOFF snapshot and carries no game state and no score — that is
+// `game_prediction_snapshot`'s design, not an oversight. So on the evening of a slate the cards
+// would show projections for games that are underway or over, rendered identically to games that
+// have not started: the single most misleading thing this surface could do on its opening day, and
+// invisible to every test written before that day.
+//
+// What IS derivable with no contract change is whether the kickoff INSTANT has passed, and that is
+// what these two strings say — no more. ⛔ They do not claim to know a score, a state or a result,
+// because the payload does not carry one. The fuller fix (a live game state beside the projection)
+// is a P3.1/P3.3 contract question and is recorded in the spec's closeout.
+
+/** The chip on a card whose kickoff instant is in the past. */
+export const KICKED_OFF_LABEL = "Kicked off"
+
+/** ⭐ The sentence that stops a stale-looking card from reading as a live one. It states what the
+ *  number IS — a snapshot taken before the game — rather than apologising for what it is not. */
+export const KICKED_OFF_NOTE =
+  "This projection was taken before kickoff and is not updated once a game starts. We do not show live scores here."
+
 // ══ provenance + the stubbed onward links ════════════════════════════════════════════════════
 
 export const PROVENANCE_LABEL = "How this was produced"
