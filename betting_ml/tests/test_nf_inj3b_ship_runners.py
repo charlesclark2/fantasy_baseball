@@ -175,6 +175,38 @@ class TestTheAnchorCheck:
         assert FD.ANCHOR["mean_d_pts_ppr"] == -1.2341
 
 
+class TestTheOperatorPacketLegs:
+    def test_the_flagged_cohort_is_EVERY_served_row_not_a_top_N_slice(self):
+        """A ship decision about a 22-row cohort must see all 22. `_point_diff`'s `rows` is a
+        top-40 slice for readability, and the rows that BARELY moved are as much a part of the
+        picture as the ones that moved most."""
+        code = _code_only(inspect.getsource(FD._flagged_cohort))
+        assert ".head(" not in code and "[:2" not in code
+        inc = pd.DataFrame({"player_id": ["a", "b", "c"], "player_name": list("ABC"),
+                            "position": ["RB"] * 3, "proj_games": [10.0, 9.0, 8.0],
+                            "proj_fp_ppr": [50.0, 40.0, 30.0]})
+        flip = inc.assign(proj_games=[5.0, 9.0, 8.0], proj_fp_ppr=[25.0, 40.0, 30.0])
+        rows = FD._flagged_cohort(inc, flip, {"a", "b"})
+        assert len(rows) == 2 and {r["player_name"] for r in rows} == {"A", "B"}
+
+    def test_the_coherence_delta_reports_BOTH_boards_and_attributes_the_new_rows(self):
+        """⭐ The decision-relevant question is not "is the NF-INJ1 incoherence there" — the
+        published board already carries an ALERT-tier check for it — but how much of it is THIS
+        change's doing, and on whom."""
+        code = _code_only(inspect.getsource(FD._coherence_delta))
+        assert "('incumbent', inc)" in code and "('flipped', flip)" in code
+        assert "newly_violating_are_flagged" in code
+        assert "newly_violating_not_flagged" in code, (
+            "splitting the newly-violating rows by whether the flip touched them is what makes the "
+            "count attributable rather than merely reported")
+
+    def test_the_coherence_delta_does_not_HALT_the_story(self):
+        """PM decision: ALERT-tier on the published board, never a HALT. A runner that raised on it
+        would take that decision back by the side door."""
+        code = _code_only(inspect.getsource(FD._coherence_delta))
+        assert "raise" not in code
+
+
 class TestTheCombinedReadBindsToABoard:
     def test_it_reads_a_STAGED_directory_not_S3(self):
         """⚠️ The S3 read is the board already PUBLISHED and structurally cannot show a change that

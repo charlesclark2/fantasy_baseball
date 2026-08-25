@@ -281,6 +281,21 @@ CASES = [
      'fl[c]["n_moved"] > max(counts)', SUITE_RUNNERS,
      "TestTheRookieBandControlIsAnEnvelope::test_a_move_OUTSIDE_the_envelope_IS_attributed"),
 
+    ("the flagged cohort is truncated to a top-N slice", FLIPPED_DIFF,
+     '    return m.sort_values("d_proj_fp_ppr")[',
+     '    return m.sort_values("d_proj_fp_ppr").head(5)[',
+     None, SUITE_RUNNERS,
+     "TestTheOperatorPacketLegs::"
+     "test_the_flagged_cohort_is_EVERY_served_row_not_a_top_N_slice"),
+
+    ("the coherence delta stops attributing the newly-violating rows", FLIPPED_DIFF,
+     '    out["newly_violating_not_flagged"] = sorted(\n'
+     '        n for i, n in seen.items() if i in new_ids and i not in flagged_ids)',
+     '    pass',
+     'out["newly_violating_not_flagged"]', SUITE_RUNNERS,
+     "TestTheOperatorPacketLegs::"
+     "test_the_coherence_delta_reports_BOTH_boards_and_attributes_the_new_rows"),
+
     ("the flipped diff stops refusing to run with the policy OFF (a vacuous measurement)",
      _F / "run_nf_inj3b_ship_flipped_diff.py",
      "    if not POLICY.serving_enabled():\n        raise RuntimeError(",

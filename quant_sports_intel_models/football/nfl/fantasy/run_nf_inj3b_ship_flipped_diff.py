@@ -187,6 +187,74 @@ def _rookie_band_attribution(flip_vs_inc: dict, control_diffs: list[dict]) -> di
     }
 
 
+def _flagged_cohort(inc: pd.DataFrame, flip: pd.DataFrame, flagged_ids: set) -> list[dict]:
+    """EVERY row the fitted arm served, named — the operator packet's cohort table.
+
+    ⭐ Not the top-N by magnitude. `_point_diff`'s `rows` is a top-40 slice for readability, and a
+    ship decision about a 22-row cohort must be able to see all 22: the rows that BARELY moved are
+    as much a part of the picture as the ones that moved most."""
+    cols = ["proj_games", "proj_fp_ppr"]
+    b = inc[["player_id", "player_name", "position", *cols]].copy()
+    c = flip[["player_id", *cols]].copy()
+    m = b.merge(c, on="player_id", suffixes=("_inc", "_cf"))
+    m = m[m["player_id"].astype(str).isin(flagged_ids)].copy()
+    for col in cols:
+        m[f"d_{col}"] = m[f"{col}_cf"] - m[f"{col}_inc"]
+
+    def _rank(frame):
+        return frame.sort_values("proj_fp_ppr", ascending=False).reset_index(drop=True).assign(
+            r=lambda d: np.arange(1, len(d) + 1)).set_index("player_id")["r"]
+    m["rank_inc"] = m["player_id"].map(_rank(inc))
+    m["rank_cf"] = m["player_id"].map(_rank(flip))
+    m["d_rank"] = m["rank_inc"] - m["rank_cf"]
+    return m.sort_values("d_proj_fp_ppr")[
+        ["player_name", "position", "proj_games_inc", "proj_games_cf", "d_proj_games",
+         "proj_fp_ppr_inc", "proj_fp_ppr_cf", "d_proj_fp_ppr", "rank_inc", "rank_cf",
+         "d_rank"]].to_dict("records")
+
+
+def _coherence_delta(inc: pd.DataFrame, flip: pd.DataFrame, flagged_ids: set) -> dict:
+    """⭐ DOES THIS FLIP MOVE THE NF-INJ1 (games, stat-line) INCOHERENCE, AND ON WHOM?
+
+    NF-INJ1 measured that NF1.5 rescales the stat line to a re-assigned POINT but leaves
+    `proj_games` alone, so a board can serve a physically impossible pair. This flip moves
+    `proj_games` for the flagged cohort WITHOUT moving the points NF1.5 hands them — which is the
+    same defect, driven harder, on exactly the rows the flip touches. The published board already
+    carries an ALERT-tier check for it (`report_publish_coherence`), so the decision-relevant
+    question is not "is it there" but "how much of it is THIS change's doing" — and that is a
+    before/after both operators and a future reader need stated rather than inferred."""
+    from quant_sports_intel_models.football.nfl.fantasy import projection_coherence as PC
+
+    out: dict = {}
+    summ = {}
+    for lab, frame in (("incumbent", inc), ("flipped", flip)):
+        summ[lab] = PC.frame_coherence_summary(frame)
+        out[lab] = {"violating": int(summ[lab].get("n_violating_players") or 0),
+                    "violations": int(summ[lab].get("n_violations") or 0),
+                    "in_scope": int(summ[lab].get("n_in_scope") or 0),
+                    "by_position": summ[lab].get("by_position") or {}}
+    inc_ids = {str(v.get("id")) for v in (summ["incumbent"].get("violations_list")
+                                          or summ["incumbent"].get("violations") or [])}
+    flip_v = summ["flipped"].get("violations") or []
+    seen: dict[str, str] = {}
+    for v in flip_v:
+        seen.setdefault(str(v.get("id")), str(v.get("name")))
+    new_ids = set(seen) - inc_ids
+    out["delta_violating"] = out["flipped"]["violating"] - out["incumbent"]["violating"]
+    out["newly_violating_are_flagged"] = sorted(
+        n for i, n in seen.items() if i in new_ids and i in flagged_ids)
+    out["newly_violating_not_flagged"] = sorted(
+        n for i, n in seen.items() if i in new_ids and i not in flagged_ids)
+    out["what_it_is"] = (
+        "NF-INJ1: the served (games, stat-line) pair must be physically possible. NF1.5 rescales "
+        "the line to a re-assigned POINT and leaves `proj_games` where the availability chain put "
+        "it, so moving a flagged veteran's games without moving his point widens that gap. "
+        "ALERT-tier on the published board by PM decision, never a HALT — but a change that moves "
+        "the count owes the operator the number.")
+    out["owned_by"] = "NF-INJ2b (the ordering-learner successor). ⛔ Nothing here touches NF1.5."
+    return out
+
+
 def _anchor_check(flagged: dict) -> dict:
     """Reproduce NF-INJ3b-M's headline on the COMMITTED flip. Materially divergent numbers HALT the
     story — they mean the flip is not the thing that was measured — and this is NOT a gate."""
@@ -273,6 +341,8 @@ def run(con, art: Path, schema: str, top_n: int, n_controls: int = 3) -> dict:
              len(flagged_ids), stamp["verdict"])
 
     points = CF._point_diff(inc, flip, flagged_ids)
+    points["flagged_rows"] = _flagged_cohort(inc, flip, flagged_ids)
+    coherence = _coherence_delta(inc, flip, flagged_ids)
     noise = CF._noise_floor(inc, ctl)
     flip_vs_inc = _scoped_diff(inc, flip, "flipped vs incumbent")
     control_diffs = [_scoped_diff(inc, c, f"SAME-COMMIT control {i + 1} vs incumbent")
@@ -298,6 +368,7 @@ def run(con, art: Path, schema: str, top_n: int, n_controls: int = 3) -> dict:
                           "n_controls": len(control_diffs)},
         "rookie_band_attribution": _rookie_band_attribution(flip_vs_inc, control_diffs),
         "served_point_impact": points,
+        "coherence_delta": coherence,
         "anchor_check": _anchor_check(points["flagged"] | {"n_flagged": points["n_flagged"]}),
         "per_config_placement": per_config,
         "top_rank_moves": _top_moves_by_config(per_config, inc, flip, top_n),
@@ -403,15 +474,50 @@ def _md(r: dict) -> str:
         "|---|---|---|---|---|---|",
     ] + [
         f"| `{s}`{' ⭐SF' if v['is_superflex'] else ''} | {v['n_rank_moved']}/{v['n']} | "
-        f"{v['max_abs_move']} | {v['top60_n_moved']} | {v['within_position_order']} | "
-        f"{v['rookie_placement_cap']} |"
+        f"{v['max_abs_move']} | {v['top60_n_moved']} | "
+        f"{(v['within_position_order'] or {}).get('pass')} | "
+        f"{(v['rookie_placement_cap'] or {}).get('pass')} |"
         for s, v in r["per_config_placement"].items()
+    ] + [
+        "",
+        "⚠️ `within-pos order` is **False at RB/TE/WR on every config, and that is the measured, "
+        "expected consequence of the flip** — NF1.5 re-assigns each position's POINT MULTISET in "
+        "learned-rank order, so moving a flagged veteran's games moves which player gets which "
+        "level. NF-INJ3b-M measured exactly the same. It is NOT a regression introduced here, and "
+        "it is the mis-specification NF-INJ2b owns.",
+        "",
+        "## 6. The FLAGGED COHORT — every row the fitted arm served",
+        "",
+        "| player | pos | games inc→flip | Δgames | pts inc→flip | Δpts | rank inc→flip |",
+        "|---|---|---|---|---|---|---|",
+    ] + [
+        f"| {x['player_name']} | {x['position']} | {x['proj_games_inc']:.2f} → "
+        f"{x['proj_games_cf']:.2f} | **{x['d_proj_games']:+.2f}** | {x['proj_fp_ppr_inc']:.1f} → "
+        f"{x['proj_fp_ppr_cf']:.1f} | **{x['d_proj_fp_ppr']:+.1f}** | {int(x['rank_inc'])} → "
+        f"{int(x['rank_cf'])} |"
+        for x in (r["served_point_impact"].get("flagged_rows") or [])
     ] + [
         "",
         "⚠️ Superflex is read on its OWN rows: NF-TR2b's VOR shield is ADDITIVE-ONLY and assumes "
         "the group is not cross-pooled, and QB IS cross-pooled there.",
         "",
-        "## 6. What is still the OPERATOR's",
+        "## 7. NF-INJ1 coherence — does this flip widen the (games, stat-line) gap?",
+        "",
+        r["coherence_delta"]["what_it_is"],
+        "",
+        "| board | violating players | rows in scope |", "|---|---|---|",
+        f"| incumbent | {r['coherence_delta']['incumbent']['violating']} | "
+        f"{r['coherence_delta']['incumbent']['in_scope']} |",
+        f"| flipped | {r['coherence_delta']['flipped']['violating']} | "
+        f"{r['coherence_delta']['flipped']['in_scope']} |",
+        "",
+        f"Δ violating: **{r['coherence_delta']['delta_violating']:+d}**. Newly violating and "
+        f"FLAGGED: {r['coherence_delta']['newly_violating_are_flagged'] or 'none'}. Newly violating "
+        f"and unflagged: {r['coherence_delta']['newly_violating_not_flagged'] or 'none'}.",
+        "",
+        f"Owned by {r['coherence_delta']['owned_by']}",
+        "",
+        "## 8. What is still the OPERATOR's",
         "",
         "This is a DRY RUN. Nothing was published, no lake write, no `--publish` flag exists on "
         "this runner, and the D10 combined read gates the first publish. The ship/hold call is the "
