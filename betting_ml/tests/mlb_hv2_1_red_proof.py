@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 REPO = Path(__file__).resolve().parents[2]
 STUDY = REPO / "betting_ml" / "scripts" / "mlb_hv2_1_market_bias.py"
@@ -36,6 +38,19 @@ class Break:
     path: Path
     old: str
     new: str
+    expect_red: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JsonBreak:
+    """A break applied to the decisive RECORD rather than to source.
+
+    The record-pinning guards read `mlb_hv2_1_market_bias.json`, so no source edit
+    can move what they assert. Breaking the artifact is what actually proves them —
+    and it is the failure mode they exist to catch: a record whose numbers no longer
+    match the code, or one that has been edited to overclaim."""
+    name: str
+    mutate: "Callable[[dict], None]"
     expect_red: tuple[str, ...]
 
 
@@ -70,7 +85,15 @@ BREAKS: tuple[Break, ...] = (
     Break("Shin collapses onto the proportional method", STUDY,
           "    out_h, out_a = _p(ph, z), _p(pa, z)",
           "    out_h, out_a = ph / ov, pa / ov",
-          ("test_shin_and_proportional_differ_on_a_lopsided_price",)),
+          ("test_shin_stays_close_to_proportional_but_is_not_equal_to_it",)),
+    Break("Shin's bisection updates are inverted (the shipped defect)", STUDY,
+          "        lo = np.where(f_mid > 0, mid, lo)\n        hi = np.where(f_mid > 0, hi, mid)",
+          "        hi = np.where(f_mid > 0, mid, hi)\n        lo = np.where(f_mid > 0, lo, mid)",
+          ("test_shin_probabilities_sum_to_one",)),
+    Break("Shin shades the DOG up instead of the favorite", STUDY,
+          "    out_h, out_a = _p(ph, z), _p(pa, z)\n",
+          "    out_h, out_a = _p(pa, z), _p(ph, z)\n",
+          ("test_shin_shades_the_favorite_up_relative_to_proportional",)),
     Break("BH-FDR is computed over the surviving subset", STUDY,
           "    m = len(p)", "    m = max(1, int((p < 0.5).sum()))",
           ("test_benjamini_hochberg_is_computed_over_the_full_declared_field",)),
@@ -93,8 +116,41 @@ BREAKS: tuple[Break, ...] = (
 )
 
 
+ARTIFACT = REPO / "ablation_results" / "mlb_hv2_1_market_bias.json"
+
+
+def _first_arm(doc: dict) -> dict:
+    return doc["gates"]["arms"][0]
+
+
+JSON_BREAKS: tuple[JsonBreak, ...] = (
+    # ⚠️ The drift must EXCEED the pin's declared resolution. The first version of
+    # this break used a 1e-8 RELATIVE nudge, which on an ROI of ~-0.09 is a 9e-10
+    # ABSOLUTE move — below the 1e-9 absolute tolerance, so it landed on disk and
+    # never moved the assertion. The harness reported it VACUOUS, which is #815
+    # working: a break that writes but does not bite is not a proof.
+    JsonBreak("the recorded ROI drifts past the 1e-9 pin",
+              lambda d: _first_arm(d).__setitem__("roi", _first_arm(d)["roi"] + 1e-8),
+              ("test_the_committed_result_reproduces_from_the_committed_fixture_to_1e_9",)),
+    JsonBreak("the record credits an arm with positive ROI",
+              lambda d: (_first_arm(d).__setitem__("roi", 0.05),
+                         _first_arm(d)["gates"].__setitem__("roi_positive", True)),
+              ("test_the_null_rests_on_the_point_estimate_not_on_a_deflation_gate",)),
+    JsonBreak("the record claims an arm cleared the efficient-market band",
+              lambda d: d["efficient_market_null_band"].__setitem__("arms_above_band", ["road_all"]),
+              ("test_every_arm_sits_inside_the_efficient_market_null_band",)),
+    JsonBreak("the efficient-market control stops pricing the vig",
+              lambda d: d["controls"]["negative_efficient_market"].__setitem__(
+                  "roi", {k: 0.0 for k in d["controls"]["negative_efficient_market"]["roi"]}),
+              ("test_the_amended_negative_control_prices_the_vig_and_certifies_nothing",)),
+    JsonBreak("the recorded verdict no longer matches the gates under it",
+              lambda d: d["verdict"].__setitem__("state", "POWER_LIMITED"),
+              ("test_the_recorded_verdict_is_the_one_the_gates_imply",)),
+)
+
+
 def _restore_stale() -> None:
-    for path in (STUDY, TESTS):
+    for path in (STUDY, TESTS, ARTIFACT):
         bak = path.with_suffix(path.suffix + ".redproof.bak")
         if bak.exists():
             print(f"  restoring stale backup for {path.name}")
@@ -146,12 +202,31 @@ def main() -> int:
             brk.path.write_text(bak.read_text())
             bak.unlink()
 
+    for jbrk in JSON_BREAKS:
+        src = ARTIFACT.read_text()
+        doc = json.loads(src)
+        jbrk.mutate(doc)
+        mutated = json.dumps(doc, indent=2)
+        assert mutated != src, f"{jbrk.name}: JSON mutation did not land (#682)"
+        bak = ARTIFACT.with_suffix(ARTIFACT.suffix + ".redproof.bak")
+        bak.write_text(src)
+        try:
+            ARTIFACT.write_text(mutated)
+            red = _run(jbrk.expect_red)
+            print(f"  {'RED  ' if red else 'GREEN'}  {jbrk.name}")
+            if not red:
+                failures.append(f"{jbrk.name}: guard(s) {jbrk.expect_red} stayed GREEN "
+                                "on a deliberately corrupted RECORD — VACUOUS")
+        finally:
+            ARTIFACT.write_text(bak.read_text())
+            bak.unlink()
+
     print()
     if failures:
         for f in failures:
             print(f"VACUOUS: {f}")
         return 1
-    print(f"all {len(BREAKS)} deliberate breaks went RED")
+    print(f"all {len(BREAKS) + len(JSON_BREAKS)} deliberate breaks went RED")
     return 0
 
 

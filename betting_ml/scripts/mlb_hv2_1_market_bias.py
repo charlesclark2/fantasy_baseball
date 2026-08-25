@@ -356,8 +356,16 @@ def novig_shin(d_home, d_away, tol: float = 1e-13, max_iter: int = 200):
     for _ in range(max_iter):
         mid = 0.5 * (lo + hi)
         f_mid = _sum(mid)
-        hi = np.where(f_mid > 0, mid, hi)   # still over 1 -> need more z
-        lo = np.where(f_mid > 0, lo, mid)
+        # f(z) = sum_i p_i(z) - 1 is DECREASING in z: f(0) = sqrt(ov) - 1 > 0, and
+        # more insider share pushes the fair probabilities down. So a POSITIVE f
+        # means z is too SMALL and the search moves the LOWER bound up.
+        # ⚠️ The first cut had these two lines the other way round. It converged to
+        # z ~ 0.5, where the probabilities sum to 0.757 rather than 1 — and the
+        # guard of the day ("Shin must differ from proportional") passed happily,
+        # because a badly wrong answer differs too. The invariant that actually
+        # binds is `sum_i p_i == 1`, which is now asserted.
+        lo = np.where(f_mid > 0, mid, lo)
+        hi = np.where(f_mid > 0, hi, mid)
         if float(np.max(hi - lo)) < tol:
             break
     z = 0.5 * (lo + hi)
@@ -602,13 +610,42 @@ def run_gates(f: pd.DataFrame, seasons: Sequence[int] = SEASONS) -> dict:
 # FAIL and a harness that cannot FIRE are both worthless, so prove BOTH directions)
 # ═════════════════════════════════════════════════════════════════════════════
 
-def negative_control(f: pd.DataFrame, seed: int = 20260824,
-                     seasons: Sequence[int] = SEASONS) -> dict:
-    """Shuffle the OUTCOMES, keep every price and segment. No arm may survive.
-    A gate family that fires on noise is measuring nothing."""
+def negative_control_permutation(f: pd.DataFrame, seed: int = 20260824,
+                                 seasons: Sequence[int] = SEASONS) -> dict:
+    """THE PRE-REGISTERED negative control: shuffle the OUTCOMES, keep every price
+    and segment; no arm may survive.
+
+    ⚠️ **IT IS MIS-SPECIFIED, IT FAILED, AND IT IS LEFT HERE FAILING** (NF-D20: a
+    pre-registered anchor that fails is decomposed, never re-labelled). Permuting
+    outcomes does not implement "no segment bias" — it severs the price↔probability
+    link entirely, so a +250 dog now wins at the pooled ~47 % base rate instead of
+    ~29 %, which is a MASSIVE artificial dog bias. Measured: `dog_vs_heavy_fav`
+    returns +0.378 ROI under it and clears every gate. The failure is a statement
+    about THIS CONTROL, not about the gate family.
+
+    `negative_control_efficient_market` below is the correctly-specified null,
+    added AFTER this one was found to be mis-specified, and labelled as the
+    amendment it is."""
     rng = np.random.default_rng(seed)
     g = f.copy()
     g["home_won"] = rng.permutation(g["home_won"].to_numpy())
+    return run_gates(g, seasons)
+
+
+def negative_control_efficient_market(f: pd.DataFrame, seed: int = 20260824,
+                                      seasons: Sequence[int] = SEASONS) -> dict:
+    """AMENDED negative control — a PERFECTLY EFFICIENT market.
+
+    Re-draw each game's outcome from **its own no-vig implied probability**. Prices,
+    segments and the vig are untouched; what is removed is exactly the thing the
+    study is looking for — any systematic gap between a segment's implied and
+    realized win rate. Under this null the truth is "the price is right", so **no
+    arm may survive**, and every arm's ROI should sit at roughly minus the vig.
+
+    This is the null the permutation control was *meant* to implement."""
+    rng = np.random.default_rng(seed)
+    g = f.copy()
+    g["home_won"] = rng.random(len(g)) < g["novig_home"].to_numpy()
     return run_gates(g, seasons)
 
 
@@ -625,6 +662,144 @@ def positive_control(f: pd.DataFrame, edge: float = 0.06, seed: int = 20260824,
     p_home = np.where(fav_home, p_home - edge, p_home + edge)
     g["home_won"] = rng.random(len(g)) < np.clip(p_home, 0.01, 0.99)
     return run_gates(g, seasons)
+
+
+def efficient_market_null_band(f: pd.DataFrame, n_sims: int = 500,
+                               seed: int = 20260824) -> dict:
+    """The DECISIVE reference read: what would each arm's ROI be if Bovada's price
+    were exactly right?
+
+    Re-draw every game's outcome from its own no-vig implied probability `n_sims`
+    times and record each arm's ROI. Prices, segments, eligibility and the vig are
+    untouched — the ONLY thing removed is a systematic implied-vs-realized gap, i.e.
+    precisely the bias this study is looking for. An arm whose REAL ROI sits inside
+    this band is behaving exactly like a fair-but-vigged market; an arm outside it
+    is the thing a candidate would look like.
+
+    ⭐ This is a DIAGNOSTIC that explains the verdict, not a gate. It changes no
+    registered clause — it is added because the amended negative control is a single
+    draw, and a single draw carries its own sampling noise.
+
+    Eligibility and bet-side depend only on PRICES and TEAMS, never on outcomes, so
+    they are computed ONCE and reused across every simulation."""
+    rng = np.random.default_rng(seed)
+    p_home = f["novig_home"].to_numpy(dtype=float)
+    n = len(f)
+    plans = []
+    for arm in REGISTERED_ARMS:
+        elig = arm.eligible(f).to_numpy(dtype=bool)
+        sub = f.loc[elig]
+        if sub.empty:
+            plans.append((arm.arm_id, None, None, None))
+            continue
+        home = arm.bet_home(sub).to_numpy(dtype=bool)
+        dec = np.where(home, sub["home_decimal"], sub["away_decimal"]).astype(float)
+        plans.append((arm.arm_id, np.flatnonzero(elig), home, dec))
+
+    draws: dict[str, list[float]] = {a.arm_id: [] for a in REGISTERED_ARMS}
+    for _ in range(n_sims):
+        home_won = rng.random(n) < p_home
+        for arm_id, idx, home, dec in plans:
+            if idx is None:
+                draws[arm_id].append(float("nan"))
+                continue
+            won = np.where(home, home_won[idx], ~home_won[idx])
+            draws[arm_id].append(float(np.mean(np.where(won, dec - 1.0, -1.0))))
+    out = {}
+    for arm_id, vals in draws.items():
+        v = np.asarray(vals, dtype=float)
+        out[arm_id] = {
+            "mean": float(np.mean(v)),
+            "p2_5": float(np.quantile(v, 0.025)),
+            "p97_5": float(np.quantile(v, 0.975)),
+        }
+    return {"n_sims": int(n_sims), "per_arm": out}
+
+
+def _blocking_gates(gates: dict) -> dict:
+    """Which gate stopped each arm. A control that fails is only informative once
+    you know WHICH clause bound (NF-W7i: diagnose a failing control before
+    concluding the instrument is blind)."""
+    out = {}
+    for r in gates["arms"]:
+        out[r["arm_id"]] = [name for name, ok in r["gates"].items() if not ok]
+    return out
+
+
+def fold_winner_distribution(f: pd.DataFrame, seasons: Sequence[int] = SEASONS) -> dict:
+    """NF1.8's FLIP DISTRIBUTION — the cheapest and most informative companion to
+    PBO: which arm posts the best ROI in each season fold, and how often.
+
+    Mass on two arms a fraction of a percent apart is a TIE (and a high PBO is then
+    the NULL, not evidence of overfitting); mass spread thinly over unrelated arms
+    is a search that learnt nothing. A rank statistic alone cannot tell those apart."""
+    counts: dict[str, int] = {a.arm_id: 0 for a in REGISTERED_ARMS}
+    for s in seasons:
+        best, best_roi = None, -np.inf
+        for arm in REGISTERED_ARMS:
+            bets = bet_series(f, arm)
+            sp = bets.loc[bets["season"] == s, "pnl"].to_numpy(dtype=float)
+            roi = _roi(sp)
+            if len(sp) and np.isfinite(roi) and roi > best_roi:
+                best, best_roi = arm.arm_id, roi
+        if best is not None:
+            counts[best] += 1
+    return counts
+
+
+def contender_spread(gates: dict) -> float:
+    """NF1.8: the spread over the CONTENDER set (top quartile), not the whole field.
+    A spread computed over a field that contains its own known-bad arms measures
+    those arms, not the contest."""
+    rois = sorted((r["roi"] for r in gates["arms"] if np.isfinite(r["roi"])), reverse=True)
+    if not rois:
+        return float("nan")
+    top = rois[: max(2, len(rois) // 4)]
+    return float(max(top) - min(top))
+
+
+def _controls(pop: pd.DataFrame) -> dict:
+    """Both pre-registered controls plus the amended negative control, each reported
+    with the gates that bound — never a bare survivor list."""
+    perm = negative_control_permutation(pop)
+    eff = negative_control_efficient_market(pop)
+    pos = positive_control(pop)
+    return {
+        "negative_permuted_outcomes": {
+            "status": "PRE-REGISTERED; MIS-SPECIFIED; FAILED — left failing and decomposed",
+            "survivors": perm["survivors"],
+            "roi": {r["arm_id"]: r["roi"] for r in perm["arms"]},
+            "why": ("permuting outcomes severs the price-probability link, which is a "
+                    "massive ARTIFICIAL dog bias rather than the absence of one; it does "
+                    "not implement the null it names"),
+        },
+        "negative_efficient_market": {
+            "status": "AMENDED control (added after the permutation control was found "
+                      "mis-specified); this is the null the permutation was meant to be",
+            "survivors": eff["survivors"],
+            "roi": {r["arm_id"]: r["roi"] for r in eff["arms"]},
+            "pbo": eff["pbo"]["pbo"],
+        },
+        "positive_injected_dog_edge": {
+            "status": "PRE-REGISTERED; FAILED — no arm survives a 6pp injected dog bias",
+            "survivors": pos["survivors"],
+            "roi": {r["arm_id"]: r["roi"] for r in pos["arms"]},
+            "pbo": pos["pbo"]["pbo"],
+            "blocking_gates": _blocking_gates(pos),
+            "why": ("the METRIC gates all fire (roi_positive, fold_consistency, bh_fdr "
+                    "pass for 6 of 8 arms); the DEFLATION gates block every one. A 6pp "
+                    "edge injected into a family of near-clones makes 'which arm is best "
+                    "in-sample' a coin flip, so CSCV PBO rises to 0.426 (NF1.8: a high "
+                    "PBO over near-clones is a TIE, not overfitting), and the same edge "
+                    "inflates cross-trial dispersion V so SR0 outruns every arm's Sharpe "
+                    "(the MH2.5 / NF-W6b-C mechanism). ⇒ the deflation gates as "
+                    "registered are hostile to a correlated field and CANNOT certify a "
+                    "real effect of this size. This bounds what a SURVIVOR would have "
+                    "meant; it does NOT rescue this study's null, which rests on G1 "
+                    "(every arm's ROI is negative) — a de-vig-free, PBO-free, DSR-free "
+                    "clause no gate change can move."),
+        },
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -684,6 +859,25 @@ def _coverage_audit(full: pd.DataFrame) -> dict:
     return {"observed_total": int(len(full)), "per_season": per}
 
 
+def _efficient_market_read(pop: pd.DataFrame, gates: dict) -> dict:
+    band = efficient_market_null_band(pop)
+    per = band["per_arm"]
+    rows = {}
+    for r in gates["arms"]:
+        b = per[r["arm_id"]]
+        rows[r["arm_id"]] = {
+            "real_roi": r["roi"],
+            "efficient_mean": b["mean"],
+            "efficient_ci95": [b["p2_5"], b["p97_5"]],
+            "delta_vs_efficient": r["roi"] - b["mean"],
+            "above_band": bool(r["roi"] > b["p97_5"]),
+            "below_band": bool(r["roi"] < b["p2_5"]),
+        }
+    return {"n_sims": band["n_sims"], "per_arm": rows,
+            "arms_above_band": [k for k, v in rows.items() if v["above_band"]],
+            "arms_below_band": [k for k, v in rows.items() if v["below_band"]]}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--audit", action="store_true", help="coverage only; score nothing")
@@ -719,13 +913,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         },
         "audit": audit,
         "gates": gates,
-        "verdict": classify(gates),
-        "controls": {
-            "negative_permuted_outcomes": {
-                "survivors": negative_control(derive(restrict(full)))["survivors"]},
-            "positive_injected_dog_edge": {
-                "survivors": positive_control(derive(restrict(full)))["survivors"]},
+        "efficient_market_null_band": _efficient_market_read(pop, gates),
+        "nf1_8_diagnostics": {
+            "fold_winner_distribution": fold_winner_distribution(pop),
+            "contender_spread_roi": contender_spread(gates),
+            "note": ("reported beside PBO because a rank statistic cannot tell a TIE "
+                     "from an unstable pick (NF1.8). Not load-bearing here: every arm "
+                     "is negative, so the verdict is decided by G1 before PBO is read."),
         },
+        "verdict": classify(gates),
+        "controls": _controls(pop),
         "sensitivity_full_observed_sample": run_gates(
             derive(full), sorted(int(s) for s in full["season"].unique())),
     }

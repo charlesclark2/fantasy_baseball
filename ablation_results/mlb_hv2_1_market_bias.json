@@ -1,0 +1,1776 @@
+{
+  "story": "MLB-HV2-1",
+  "best_alpha": 0,
+  "population": {
+    "bookmaker": "bovada",
+    "market": "h2h",
+    "game_type": "R",
+    "first_pitch_utc_hours": [
+      3,
+      23
+    ],
+    "seasons": [
+      2020,
+      2021,
+      2022,
+      2024,
+      2025,
+      2026
+    ],
+    "excluded_seasons": [
+      2023
+    ],
+    "min_season_coverage": 0.5,
+    "novig_method": "proportional",
+    "novig_sensitivity": "shin",
+    "marquee_teams": [
+      "ATL",
+      "BOS",
+      "CHC",
+      "LAD",
+      "NYM",
+      "NYY"
+    ],
+    "n_games": 8827
+  },
+  "audit": {
+    "observed_total": 9304,
+    "per_season": {
+      "2020": {
+        "observed": 575,
+        "observed_early": 575,
+        "observed_late": 0
+      },
+      "2021": {
+        "observed": 1653,
+        "observed_early": 1652,
+        "observed_late": 1
+      },
+      "2022": {
+        "observed": 1636,
+        "observed_early": 1636,
+        "observed_late": 0
+      },
+      "2023": {
+        "observed": 126,
+        "observed_early": 126,
+        "observed_late": 0
+      },
+      "2024": {
+        "observed": 1777,
+        "observed_early": 1777,
+        "observed_late": 0
+      },
+      "2025": {
+        "observed": 1839,
+        "observed_early": 1839,
+        "observed_late": 0
+      },
+      "2026": {
+        "observed": 1698,
+        "observed_early": 1348,
+        "observed_late": 350
+      }
+    }
+  },
+  "gates": {
+    "n_games": 8827,
+    "seasons": [
+      2020,
+      2021,
+      2022,
+      2024,
+      2025,
+      2026
+    ],
+    "declared_field_size": 8,
+    "fold_clause": {
+      "n_folds": 6,
+      "alpha": 0.2,
+      "wins_required": 5,
+      "attained_false_fire": 0.109375,
+      "attainable": true
+    },
+    "bh_cutoff": 0.00625,
+    "pbo": {
+      "pbo": 0.273,
+      "n_combos": 1000,
+      "n_buckets": 37,
+      "n_arms": 8
+    },
+    "arms": [
+      {
+        "arm_id": "dog_vs_heavy_fav",
+        "family": "A_favorite_longshot",
+        "hypothesis": "The public overbets HEAVY favorites (price <= -200); bet the dog.",
+        "n_bets": 1382,
+        "roi": -0.09081041968162083,
+        "roi_boot_ci95": [
+          -0.1501994497936726,
+          -0.016457399103139016
+        ],
+        "sharpe_per_bet": -0.0662121488639083,
+        "p_one_sided": 0.9930812408000602,
+        "hit_rate": 0.30824891461649784,
+        "hit_rate_ci95": [
+          0.28446283146127105,
+          0.33309803985873354
+        ],
+        "implied_mean": 0.324224636041713,
+        "implied_mean_shin": 0.31673792141919915,
+        "calibration_gap": -0.01597572142521514,
+        "calibration_gap_shin": -0.008489006802701315,
+        "fold_wins": 2,
+        "per_season": {
+          "2020": {
+            "n": 106,
+            "roi": 0.07839622641509435
+          },
+          "2021": {
+            "n": 317,
+            "roi": -0.05085173501577284
+          },
+          "2022": {
+            "n": 364,
+            "roi": -0.09964285714285713
+          },
+          "2024": {
+            "n": 234,
+            "roi": -0.17085470085470084
+          },
+          "2025": {
+            "n": 250,
+            "roi": -0.2006
+          },
+          "2026": {
+            "n": 111,
+            "roi": 0.07846846846846844
+          }
+        },
+        "dsr": 0.0010070433913576553,
+        "dsr_sr0": 0.01930181980794167,
+        "bh_pass": false,
+        "pbo": 0.273,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "dog_vs_mod_fav",
+        "family": "A_favorite_longshot",
+        "hypothesis": "The public overbets MODERATE favorites (-200 < price <= -140); bet the dog.",
+        "n_bets": 3685,
+        "roi": -0.024868385345997297,
+        "roi_boot_ci95": [
+          -0.07602877697841727,
+          0.023104366347177843
+        ],
+        "sharpe_per_bet": -0.021369390718802443,
+        "p_one_sided": 0.9027208367378143,
+        "hit_rate": 0.41383989145183175,
+        "hit_rate_ci95": [
+          0.39803557551890634,
+          0.4298236569559406
+        ],
+        "implied_mean": 0.4072131985855614,
+        "implied_mean_shin": 0.4033452085841761,
+        "calibration_gap": 0.006626692866270378,
+        "calibration_gap_shin": 0.010494682867655647,
+        "fold_wins": 2,
+        "per_season": {
+          "2020": {
+            "n": 269,
+            "roi": -0.012304832713754646
+          },
+          "2021": {
+            "n": 671,
+            "roi": -0.006259314456035772
+          },
+          "2022": {
+            "n": 750,
+            "roi": -0.12586666666666668
+          },
+          "2024": {
+            "n": 724,
+            "roi": -0.04558011049723759
+          },
+          "2025": {
+            "n": 746,
+            "roi": 0.053498659517426266
+          },
+          "2026": {
+            "n": 525,
+            "roi": 0.006399999999999992
+          }
+        },
+        "dsr": 0.0069670523461178874,
+        "dsr_sr0": 0.01930181980794167,
+        "bh_pass": false,
+        "pbo": 0.273,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "dog_vs_slight_fav",
+        "family": "A_favorite_longshot",
+        "hypothesis": "The public overbets SLIGHT favorites (-140 < price <= -100); bet the dog.",
+        "n_bets": 3548,
+        "roi": -0.05733703766963411,
+        "roi_boot_ci95": [
+          -0.09272771759839611,
+          -0.02888856208661098
+        ],
+        "sharpe_per_bet": -0.05644202727971943,
+        "p_one_sided": 0.9996130635949799,
+        "hit_rate": 0.4633596392333709,
+        "hit_rate_ci95": [
+          0.44700004165254853,
+          0.47979849285007914
+        ],
+        "implied_mean": 0.470515661069693,
+        "implied_mean_shin": 0.4692106727562665,
+        "calibration_gap": -0.0071560218363220796,
+        "calibration_gap_shin": -0.005851033522895566,
+        "fold_wins": 0,
+        "per_season": {
+          "2020": {
+            "n": 178,
+            "roi": -0.10789586788838557
+          },
+          "2021": {
+            "n": 594,
+            "roi": -0.04050448610852349
+          },
+          "2022": {
+            "n": 466,
+            "roi": -0.11496375634546847
+          },
+          "2024": {
+            "n": 796,
+            "roi": -0.025402880409587957
+          },
+          "2025": {
+            "n": 817,
+            "roi": -0.017945521177261104
+          },
+          "2026": {
+            "n": 697,
+            "roi": -0.10288577669214298
+          }
+        },
+        "dsr": 3.5365989598835073e-06,
+        "dsr_sr0": 0.01930181980794167,
+        "bh_pass": false,
+        "pbo": 0.273,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "road_all",
+        "family": "B_home_bias",
+        "hypothesis": "The public overbets HOME teams across the board; bet every road team.",
+        "n_bets": 8827,
+        "roi": -0.04752240175052532,
+        "roi_boot_ci95": [
+          -0.06248919303561131,
+          -0.03197659187460145
+        ],
+        "sharpe_per_bet": -0.045086159608822576,
+        "p_one_sided": 0.9999886201261873,
+        "hit_rate": 0.4673161889656735,
+        "hit_rate_ci95": [
+          0.4569243156957143,
+          0.4777364974679439
+        ],
+        "implied_mean": 0.46908240067823287,
+        "implied_mean_shin": 0.4677559175613546,
+        "calibration_gap": -0.0017662117125593624,
+        "calibration_gap_shin": -0.00043972859568108813,
+        "fold_wins": 0,
+        "per_season": {
+          "2020": {
+            "n": 575,
+            "roi": -0.04287188470846802
+          },
+          "2021": {
+            "n": 1652,
+            "roi": -0.02976100827942794
+          },
+          "2022": {
+            "n": 1636,
+            "roi": -0.07210333564568118
+          },
+          "2024": {
+            "n": 1777,
+            "roi": -0.03632699374601719
+          },
+          "2025": {
+            "n": 1839,
+            "roi": -0.06741336909712516
+          },
+          "2026": {
+            "n": 1348,
+            "roi": -0.02906261876430477
+          }
+        },
+        "dsr": 9.864596818891971e-10,
+        "dsr_sr0": 0.01930181980794167,
+        "bh_pass": false,
+        "pbo": 0.273,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "road_dog",
+        "family": "B_home_bias",
+        "hypothesis": "Home bias is strongest where the home side is also the favorite; bet the road DOG.",
+        "n_bets": 5567,
+        "roi": -0.052560435951903274,
+        "roi_boot_ci95": [
+          -0.08125967003789367,
+          -0.03173819819700286
+        ],
+        "sharpe_per_bet": -0.04543321823156814,
+        "p_one_sided": 0.999650381756152,
+        "hit_rate": 0.4100952038800072,
+        "hit_rate_ci95": [
+          0.3972412595742734,
+          0.42307313863660234
+        ],
+        "implied_mean": 0.4135655649415729,
+        "implied_mean_shin": 0.4098886161565779,
+        "calibration_gap": -0.00347036106156573,
+        "calibration_gap_shin": 0.00020658772342929677,
+        "fold_wins": 0,
+        "per_season": {
+          "2020": {
+            "n": 325,
+            "roi": -0.031364826179066774
+          },
+          "2021": {
+            "n": 997,
+            "roi": -0.024186113286345883
+          },
+          "2022": {
+            "n": 985,
+            "roi": -0.12441687322894589
+          },
+          "2024": {
+            "n": 1159,
+            "roi": -0.04453168092511954
+          },
+          "2025": {
+            "n": 1159,
+            "roi": -0.04339074139650873
+          },
+          "2026": {
+            "n": 942,
+            "roi": -0.035927936187136994
+          }
+        },
+        "dsr": 8.913569736848352e-07,
+        "dsr_sr0": 0.01930181980794167,
+        "bh_pass": false,
+        "pbo": 0.273,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "road_fav",
+        "family": "B_home_bias",
+        "hypothesis": "A road FAVORITE is under-backed because the public still leans home; bet it.",
+        "n_bets": 3048,
+        "roi": -0.03846454385540614,
+        "roi_boot_ci95": [
+          -0.07693871173242271,
+          -0.00949126590455266
+        ],
+        "sharpe_per_bet": -0.04565538796924897,
+        "p_one_sided": 0.9941418264637687,
+        "hit_rate": 0.5695538057742782,
+        "hit_rate_ci95": [
+          0.551899186643876,
+          0.5870333253234539
+        ],
+        "implied_mean": 0.568330331613197,
+        "implied_mean_shin": 0.5712045794522339,
+        "calibration_gap": 0.0012234741610811506,
+        "calibration_gap_shin": -0.0016507736779557414,
+        "fold_wins": 1,
+        "per_season": {
+          "2020": {
+            "n": 228,
+            "roi": -0.04227887447802896
+          },
+          "2021": {
+            "n": 585,
+            "roi": -0.030857488429278816
+          },
+          "2022": {
+            "n": 595,
+            "roi": 0.005574513851176516
+          },
+          "2024": {
+            "n": 595,
+            "roi": -0.02159653882949566
+          },
+          "2025": {
+            "n": 654,
+            "roi": -0.11377765935524807
+          },
+          "2026": {
+            "n": 391,
+            "roi": -0.014335093295977158
+          }
+        },
+        "dsr": 0.00015607568054523934,
+        "dsr_sr0": 0.01930181980794167,
+        "bh_pass": false,
+        "pbo": 0.273,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "fade_marquee",
+        "family": "C_marquee_bias",
+        "hypothesis": "The public overbets marquee clubs; bet against them when exactly one side is marquee.",
+        "n_bets": 3071,
+        "roi": -0.04406724334992653,
+        "roi_boot_ci95": [
+          -0.09185889421698301,
+          -0.001405037362680594
+        ],
+        "sharpe_per_bet": -0.03981991450469936,
+        "p_one_sided": 0.9863319432537391,
+        "hit_rate": 0.4438293715402149,
+        "hit_rate_ci95": [
+          0.42633842543633993,
+          0.4614606677460711
+        ],
+        "implied_mean": 0.44344017712217443,
+        "implied_mean_shin": 0.44102139591858425,
+        "calibration_gap": 0.0003891944180404727,
+        "calibration_gap_shin": 0.002807975621630654,
+        "fold_wins": 2,
+        "per_season": {
+          "2020": {
+            "n": 197,
+            "roi": 0.044746785073809865
+          },
+          "2021": {
+            "n": 595,
+            "roi": -0.029174338769375634
+          },
+          "2022": {
+            "n": 576,
+            "roi": -0.14799363795448572
+          },
+          "2024": {
+            "n": 604,
+            "roi": -0.054728895247559896
+          },
+          "2025": {
+            "n": 638,
+            "roi": 0.0068552661764565695
+          },
+          "2026": {
+            "n": 461,
+            "roi": -0.02789579403179114
+          }
+        },
+        "dsr": 0.0005828660866204165,
+        "dsr_sr0": 0.01930181980794167,
+        "bh_pass": false,
+        "pbo": 0.273,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "fade_marquee_fav",
+        "family": "C_marquee_bias",
+        "hypothesis": "The marquee premium is largest when the marquee club is also the favorite; bet the non-marquee dog.",
+        "n_bets": 2266,
+        "roi": -0.04400172306037564,
+        "roi_boot_ci95": [
+          -0.11217012558619441,
+          0.0072905745324765335
+        ],
+        "sharpe_per_bet": -0.03730125370351022,
+        "p_one_sided": 0.962103345032354,
+        "hit_rate": 0.4060017652250662,
+        "hit_rate_ci95": [
+          0.38595763917192594,
+          0.4263640547752231
+        ],
+        "implied_mean": 0.4053026922956922,
+        "implied_mean_shin": 0.4012645009217335,
+        "calibration_gap": 0.0006990729293739895,
+        "calibration_gap_shin": 0.004737264303332711,
+        "fold_wins": 2,
+        "per_season": {
+          "2020": {
+            "n": 131,
+            "roi": 0.07154670571823694
+          },
+          "2021": {
+            "n": 416,
+            "roi": -0.04523879136500765
+          },
+          "2022": {
+            "n": 426,
+            "roi": -0.19739984157221277
+          },
+          "2024": {
+            "n": 437,
+            "roi": -0.011352359377464129
+          },
+          "2025": {
+            "n": 508,
+            "roi": 0.001583766544784365
+          },
+          "2026": {
+            "n": 348,
+            "roi": -0.005782832020382343
+          }
+        },
+        "dsr": 0.003814505052987237,
+        "dsr_sr0": 0.01930181980794167,
+        "bh_pass": false,
+        "pbo": 0.273,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      }
+    ],
+    "anchors": [
+      {
+        "arm_id": "anchor_oracle_winner",
+        "family": "anchor",
+        "hypothesis": "ORACLE FLOOR \u2014 bets the actual winner every game. Nothing may beat it; an arm that does is proof the metric is inverted, not a finding.",
+        "n_bets": 8827,
+        "roi": 0.9139127109108702,
+        "roi_boot_ci95": [
+          0.9033489637136333,
+          0.9253826975526563
+        ],
+        "sharpe_per_bet": 2.373142720257611,
+        "p_one_sided": 0.0,
+        "hit_rate": 1.0,
+        "hit_rate_ci95": [
+          0.999564995154923,
+          1.0
+        ],
+        "implied_mean": 0.5191070720218974,
+        "implied_mean_shin": 0.51991844734325,
+        "calibration_gap": 0.48089292797810257,
+        "calibration_gap_shin": 0.48008155265675,
+        "fold_wins": 6,
+        "per_season": {
+          "2020": {
+            "n": 575,
+            "roi": 0.9372436614099152
+          },
+          "2021": {
+            "n": 1652,
+            "roi": 0.927053179854974
+          },
+          "2022": {
+            "n": 1636,
+            "roi": 0.8905425776195528
+          },
+          "2024": {
+            "n": 1777,
+            "roi": 0.905715270246492
+          },
+          "2025": {
+            "n": 1839,
+            "roi": 0.9166180581990084
+          },
+          "2026": {
+            "n": 1348,
+            "roi": 0.923335489271181
+          }
+        }
+      },
+      {
+        "arm_id": "anchor_all_home",
+        "family": "anchor",
+        "hypothesis": "DEGENERATE CEILING \u2014 bets home every game. The exact mirror of `road_all`; scored so the home/road result cannot be read as an artifact of which side was registered.",
+        "n_bets": 8827,
+        "roi": -0.038564887338604414,
+        "roi_boot_ci95": [
+          -0.049783780784662474,
+          -0.025153387465629822
+        ],
+        "sharpe_per_bet": -0.041369323888585094,
+        "p_one_sided": 0.9999491993210093,
+        "hit_rate": 0.5326838110343265,
+        "hit_rate_ci95": [
+          0.5222635025320562,
+          0.5430756843042858
+        ],
+        "implied_mean": 0.5309175993217672,
+        "implied_mean_shin": 0.5322440824386443,
+        "calibration_gap": 0.0017662117125593069,
+        "calibration_gap_shin": 0.00043972859568219835,
+        "fold_wins": 0,
+        "per_season": {
+          "2020": {
+            "n": 575,
+            "roi": -0.019884453881616786
+          },
+          "2021": {
+            "n": 1652,
+            "roi": -0.043185811865597994
+          },
+          "2022": {
+            "n": 1636,
+            "roi": -0.037354086734766014
+          },
+          "2024": {
+            "n": 1777,
+            "roi": -0.05795773600749072
+          },
+          "2025": {
+            "n": 1839,
+            "roi": -0.015968572703866323
+          },
+          "2026": {
+            "n": 1348,
+            "roi": -0.047601891964514274
+          }
+        }
+      },
+      {
+        "arm_id": "anchor_all_fav",
+        "family": "anchor",
+        "hypothesis": "DEGENERATE CEILING \u2014 bets the favorite every game. The mirror of family A.",
+        "n_bets": 8615,
+        "roi": -0.03715051981622164,
+        "roi_boot_ci95": [
+          -0.05566356448824539,
+          -0.01628498454289707
+        ],
+        "sharpe_per_bet": -0.04513128051998259,
+        "p_one_sided": 0.999985987665021,
+        "hit_rate": 0.5827045850261172,
+        "hit_rate_ci95": [
+          0.5722572039454545,
+          0.5930782424493305
+        ],
+        "implied_mean": 0.5800291759404861,
+        "implied_mean_shin": 0.5834221279195282,
+        "calibration_gap": 0.0026754090856311308,
+        "calibration_gap_shin": -0.0007175428934109718,
+        "fold_wins": 1,
+        "per_season": {
+          "2020": {
+            "n": 553,
+            "roi": -0.03594833671820278
+          },
+          "2021": {
+            "n": 1582,
+            "roi": -0.04409914397438908
+          },
+          "2022": {
+            "n": 1580,
+            "roi": 0.006519748243788245
+          },
+          "2024": {
+            "n": 1754,
+            "roi": -0.04121759003325684
+          },
+          "2025": {
+            "n": 1813,
+            "roi": -0.06953903133290933
+          },
+          "2026": {
+            "n": 1333,
+            "roi": -0.031761993806742765
+          }
+        }
+      },
+      {
+        "arm_id": "anchor_coin_flip",
+        "family": "anchor",
+        "hypothesis": "NO-SKILL REFERENCE \u2014 a deterministic pseudo-random side (seeded on game_pk). Its ROI measures the vig a rule pays for showing up; a real arm must clear it, and it must be negative or the price data is wrong.",
+        "n_bets": 8827,
+        "roi": -0.058952252025797694,
+        "roi_boot_ci95": [
+          -0.07589029604958708,
+          -0.045577706060454526
+        ],
+        "sharpe_per_bet": -0.05945162713002772,
+        "p_one_sided": 0.9999999883556748,
+        "hit_rate": 0.4930327404554209,
+        "hit_rate_ci95": [
+          0.4826083984167431,
+          0.5034631440774164
+        ],
+        "implied_mean": 0.5010763000525764,
+        "implied_mean_shin": 0.5011185687894789,
+        "calibration_gap": -0.008043559597155525,
+        "calibration_gap_shin": -0.00808582833405802,
+        "fold_wins": 0,
+        "per_season": {
+          "2020": {
+            "n": 575,
+            "roi": -0.05397737153482919
+          },
+          "2021": {
+            "n": 1652,
+            "roi": -0.048685131370660426
+          },
+          "2022": {
+            "n": 1636,
+            "roi": -0.09799302761850302
+          },
+          "2024": {
+            "n": 1777,
+            "roi": -0.06162728317628084
+          },
+          "2025": {
+            "n": 1839,
+            "roi": -0.044465903016140125
+          },
+          "2026": {
+            "n": 1348,
+            "roi": -0.04251159639469945
+          }
+        }
+      }
+    ],
+    "anchor_gates": {
+      "oracle_is_the_floor": true,
+      "coin_flip_loses": true,
+      "all_home_loses": true,
+      "all_fav_loses": true
+    },
+    "survivors": []
+  },
+  "efficient_market_null_band": {
+    "n_sims": 500,
+    "per_arm": {
+      "dog_vs_heavy_fav": {
+        "real_roi": -0.09081041968162083,
+        "efficient_mean": -0.042024732272069466,
+        "efficient_ci95": [
+          -0.10770332850940667,
+          0.03172539797395079
+        ],
+        "delta_vs_efficient": -0.048785687409551366,
+        "above_band": false,
+        "below_band": false
+      },
+      "dog_vs_mod_fav": {
+        "real_roi": -0.024868385345997297,
+        "efficient_mean": -0.04173221709633651,
+        "efficient_ci95": [
+          -0.0824902985074627,
+          -0.0029398236092266486
+        ],
+        "delta_vs_efficient": 0.016863831750339214,
+        "above_band": false,
+        "below_band": false
+      },
+      "dog_vs_slight_fav": {
+        "real_roi": -0.05733703766963411,
+        "efficient_mean": -0.043213278453756956,
+        "efficient_ci95": [
+          -0.07608413820730786,
+          -0.012344621733905435
+        ],
+        "delta_vs_efficient": -0.014123759215877156,
+        "above_band": false,
+        "below_band": false
+      },
+      "road_all": {
+        "real_roi": -0.04752240175052532,
+        "efficient_mean": -0.04203567676408939,
+        "efficient_ci95": [
+          -0.06479072671586182,
+          -0.019987184013744917
+        ],
+        "delta_vs_efficient": -0.005486724986435931,
+        "above_band": false,
+        "below_band": false
+      },
+      "road_dog": {
+        "real_roi": -0.052560435951903274,
+        "efficient_mean": -0.04252035573402301,
+        "efficient_ci95": [
+          -0.07529805609184777,
+          -0.010831384884210184
+        ],
+        "delta_vs_efficient": -0.010040080217880262,
+        "above_band": false,
+        "below_band": false
+      },
+      "road_fav": {
+        "real_roi": -0.03846454385540614,
+        "efficient_mean": -0.04089347903483882,
+        "efficient_ci95": [
+          -0.06901056363466687,
+          -0.01034146461552398
+        ],
+        "delta_vs_efficient": 0.002428935179432684,
+        "above_band": false,
+        "below_band": false
+      },
+      "fade_marquee": {
+        "real_roi": -0.04406724334992653,
+        "efficient_mean": -0.04217276173284545,
+        "efficient_ci95": [
+          -0.08202603335901681,
+          -0.0044489288517110745
+        ],
+        "delta_vs_efficient": -0.001894481617081084,
+        "above_band": false,
+        "below_band": false
+      },
+      "fade_marquee_fav": {
+        "real_roi": -0.04400172306037564,
+        "efficient_mean": -0.04188439548740195,
+        "efficient_ci95": [
+          -0.09134763231986187,
+          0.006900001351536517
+        ],
+        "delta_vs_efficient": -0.0021173275729736915,
+        "above_band": false,
+        "below_band": false
+      }
+    },
+    "arms_above_band": [],
+    "arms_below_band": []
+  },
+  "nf1_8_diagnostics": {
+    "fold_winner_distribution": {
+      "dog_vs_heavy_fav": 2,
+      "dog_vs_mod_fav": 2,
+      "dog_vs_slight_fav": 0,
+      "road_all": 0,
+      "road_dog": 0,
+      "road_fav": 1,
+      "fade_marquee": 0,
+      "fade_marquee_fav": 1
+    },
+    "contender_spread_roi": 0.013596158509408842,
+    "note": "reported beside PBO because a rank statistic cannot tell a TIE from an unstable pick (NF1.8). Not load-bearing here: every arm is negative, so the verdict is decided by G1 before PBO is read."
+  },
+  "verdict": {
+    "state": "GENUINE_ABSENCE",
+    "reason": "`roi_per_unit_staked`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+    "retest_trigger": null,
+    "best_arm": "dog_vs_mod_fav",
+    "best_arm_roi": -0.024868385345997297,
+    "detail": {
+      "n_folds": 6,
+      "n_arms": 8
+    }
+  },
+  "controls": {
+    "negative_permuted_outcomes": {
+      "status": "PRE-REGISTERED; MIS-SPECIFIED; FAILED \u2014 left failing and decomposed",
+      "survivors": [
+        "dog_vs_heavy_fav"
+      ],
+      "roi": {
+        "dog_vs_heavy_fav": 0.3782633863965268,
+        "dog_vs_mod_fav": 0.14307191316146542,
+        "dog_vs_slight_fav": -0.000918111589226914,
+        "road_all": -0.009567314601158049,
+        "road_dog": 0.09295652014133288,
+        "road_fav": -0.1849171196347754,
+        "fade_marquee": 0.08015586013514296,
+        "fade_marquee_fav": 0.1540113236054408
+      },
+      "why": "permuting outcomes severs the price-probability link, which is a massive ARTIFICIAL dog bias rather than the absence of one; it does not implement the null it names"
+    },
+    "negative_efficient_market": {
+      "status": "AMENDED control (added after the permutation control was found mis-specified); this is the null the permutation was meant to be",
+      "survivors": [],
+      "roi": {
+        "dog_vs_heavy_fav": -0.03421852387843704,
+        "dog_vs_mod_fav": -0.0493324287652646,
+        "dog_vs_slight_fav": -0.05104859117690898,
+        "road_all": -0.0503144533927764,
+        "road_dog": -0.051168651562596985,
+        "road_fav": -0.04344228652860183,
+        "fade_marquee": -0.037495378147032896,
+        "fade_marquee_fav": -0.03453421977682312
+      },
+      "pbo": 0.857
+    },
+    "positive_injected_dog_edge": {
+      "status": "PRE-REGISTERED; FAILED \u2014 no arm survives a 6pp injected dog bias",
+      "survivors": [],
+      "roi": {
+        "dog_vs_heavy_fav": 0.15565123010130247,
+        "dog_vs_mod_fav": 0.08660515603799183,
+        "dog_vs_slight_fav": 0.07253599631501985,
+        "road_all": 0.0005655761655884002,
+        "road_dog": 0.08839355090517857,
+        "road_fav": -0.14661194658857035,
+        "fade_marquee": 0.05168767440720863,
+        "fade_marquee_fav": 0.11764034922924808
+      },
+      "pbo": 0.426,
+      "blocking_gates": {
+        "dog_vs_heavy_fav": [
+          "pbo",
+          "dsr"
+        ],
+        "dog_vs_mod_fav": [
+          "pbo",
+          "dsr"
+        ],
+        "dog_vs_slight_fav": [
+          "pbo",
+          "dsr"
+        ],
+        "road_all": [
+          "fold_consistency",
+          "bh_fdr",
+          "pbo",
+          "dsr"
+        ],
+        "road_dog": [
+          "pbo",
+          "dsr"
+        ],
+        "road_fav": [
+          "roi_positive",
+          "fold_consistency",
+          "bh_fdr",
+          "pbo",
+          "dsr"
+        ],
+        "fade_marquee": [
+          "pbo",
+          "dsr"
+        ],
+        "fade_marquee_fav": [
+          "pbo",
+          "dsr"
+        ]
+      },
+      "why": "the METRIC gates all fire (roi_positive, fold_consistency, bh_fdr pass for 6 of 8 arms); the DEFLATION gates block every one. A 6pp edge injected into a family of near-clones makes 'which arm is best in-sample' a coin flip, so CSCV PBO rises to 0.426 (NF1.8: a high PBO over near-clones is a TIE, not overfitting), and the same edge inflates cross-trial dispersion V so SR0 outruns every arm's Sharpe (the MH2.5 / NF-W6b-C mechanism). \u21d2 the deflation gates as registered are hostile to a correlated field and CANNOT certify a real effect of this size. This bounds what a SURVIVOR would have meant; it does NOT rescue this study's null, which rests on G1 (every arm's ROI is negative) \u2014 a de-vig-free, PBO-free, DSR-free clause no gate change can move."
+    }
+  },
+  "sensitivity_full_observed_sample": {
+    "n_games": 9304,
+    "seasons": [
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025,
+      2026
+    ],
+    "declared_field_size": 8,
+    "fold_clause": {
+      "n_folds": 7,
+      "alpha": 0.2,
+      "wins_required": 6,
+      "attained_false_fire": 0.0625,
+      "attainable": true
+    },
+    "bh_cutoff": 0.00625,
+    "pbo": {
+      "pbo": 0.727,
+      "n_combos": 1000,
+      "n_buckets": 44,
+      "n_arms": 8
+    },
+    "arms": [
+      {
+        "arm_id": "dog_vs_heavy_fav",
+        "family": "A_favorite_longshot",
+        "hypothesis": "The public overbets HEAVY favorites (price <= -200); bet the dog.",
+        "n_bets": 1449,
+        "roi": -0.08729468599033816,
+        "roi_boot_ci95": [
+          -0.14349934469200523,
+          -0.013222628005535664
+        ],
+        "sharpe_per_bet": -0.06353728835680984,
+        "p_one_sided": 0.9922096781058412,
+        "hit_rate": 0.30917874396135264,
+        "hit_rate_ci95": [
+          0.28591355074283686,
+          0.33345303833503587
+        ],
+        "implied_mean": 0.3242261112028459,
+        "implied_mean_shin": 0.31672019549855446,
+        "calibration_gap": -0.015047367241493248,
+        "calibration_gap_shin": -0.007541451537201815,
+        "fold_wins": 3,
+        "per_season": {
+          "2020": {
+            "n": 106,
+            "roi": 0.07839622641509435
+          },
+          "2021": {
+            "n": 317,
+            "roi": -0.05085173501577284
+          },
+          "2022": {
+            "n": 364,
+            "roi": -0.09964285714285713
+          },
+          "2023": {
+            "n": 20,
+            "roi": 0.30700000000000005
+          },
+          "2024": {
+            "n": 234,
+            "roi": -0.17085470085470084
+          },
+          "2025": {
+            "n": 250,
+            "roi": -0.2006
+          },
+          "2026": {
+            "n": 158,
+            "roi": 0.009999999999999992
+          }
+        },
+        "dsr": 0.0012059601967903805,
+        "dsr_sr0": 0.01841111314750243,
+        "bh_pass": false,
+        "pbo": 0.727,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "dog_vs_mod_fav",
+        "family": "A_favorite_longshot",
+        "hypothesis": "The public overbets MODERATE favorites (-200 < price <= -140); bet the dog.",
+        "n_bets": 3885,
+        "roi": -0.022167310167310175,
+        "roi_boot_ci95": [
+          -0.07586017613909524,
+          0.02506376948512044
+        ],
+        "sharpe_per_bet": -0.01905886625215773,
+        "p_one_sided": 0.8825704342784153,
+        "hit_rate": 0.41544401544401544,
+        "hit_rate_ci95": [
+          0.4000388901030689,
+          0.4310161922506257
+        ],
+        "implied_mean": 0.407448728713027,
+        "implied_mean_shin": 0.40358017977783595,
+        "calibration_gap": 0.007995286730988427,
+        "calibration_gap_shin": 0.01186383566617949,
+        "fold_wins": 2,
+        "per_season": {
+          "2020": {
+            "n": 269,
+            "roi": -0.012304832713754646
+          },
+          "2021": {
+            "n": 671,
+            "roi": -0.006259314456035772
+          },
+          "2022": {
+            "n": 750,
+            "roi": -0.12586666666666668
+          },
+          "2023": {
+            "n": 52,
+            "roi": -0.03711538461538466
+          },
+          "2024": {
+            "n": 724,
+            "roi": -0.04558011049723759
+          },
+          "2025": {
+            "n": 746,
+            "roi": 0.053498659517426266
+          },
+          "2026": {
+            "n": 673,
+            "roi": 0.01606240713224368
+          }
+        },
+        "dsr": 0.009976684432143307,
+        "dsr_sr0": 0.01841111314750243,
+        "bh_pass": false,
+        "pbo": 0.727,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "dog_vs_slight_fav",
+        "family": "A_favorite_longshot",
+        "hypothesis": "The public overbets SLIGHT favorites (-140 < price <= -100); bet the dog.",
+        "n_bets": 3750,
+        "roi": -0.05358831613436414,
+        "roi_boot_ci95": [
+          -0.08536731498159596,
+          -0.02807823256229475
+        ],
+        "sharpe_per_bet": -0.05275133475353841,
+        "p_one_sided": 0.9993817982652895,
+        "hit_rate": 0.4653333333333333,
+        "hit_rate_ci95": [
+          0.4494124119839119,
+          0.48132520630599807
+        ],
+        "implied_mean": 0.47060374774573627,
+        "implied_mean_shin": 0.4693017947559926,
+        "calibration_gap": -0.005270414412402946,
+        "calibration_gap_shin": -0.003968461422659275,
+        "fold_wins": 1,
+        "per_season": {
+          "2020": {
+            "n": 178,
+            "roi": -0.10789586788838557
+          },
+          "2021": {
+            "n": 595,
+            "roi": -0.042117083610862104
+          },
+          "2022": {
+            "n": 466,
+            "roi": -0.11496375634546847
+          },
+          "2023": {
+            "n": 50,
+            "roi": 0.013598681788470932
+          },
+          "2024": {
+            "n": 796,
+            "roi": -0.025402880409587957
+          },
+          "2025": {
+            "n": 817,
+            "roi": -0.017945521177261104
+          },
+          "2026": {
+            "n": 848,
+            "roi": -0.08126850978284295
+          }
+        },
+        "dsr": 7.110263696325816e-06,
+        "dsr_sr0": 0.01841111314750243,
+        "bh_pass": false,
+        "pbo": 0.727,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "road_all",
+        "family": "B_home_bias",
+        "hypothesis": "The public overbets HOME teams across the board; bet every road team.",
+        "n_bets": 9304,
+        "roi": -0.04274112652668619,
+        "roi_boot_ci95": [
+          -0.059988786731831674,
+          -0.023962882560544987
+        ],
+        "sharpe_per_bet": -0.04057374198992716,
+        "p_one_sided": 0.9999545407958623,
+        "hit_rate": 0.4702278589853826,
+        "hit_rate_ci95": [
+          0.4601005034763607,
+          0.4803797891402486
+        ],
+        "implied_mean": 0.469753219609846,
+        "implied_mean_shin": 0.4684539054107692,
+        "calibration_gap": 0.00047463937553660074,
+        "calibration_gap_shin": 0.0017739535746134072,
+        "fold_wins": 1,
+        "per_season": {
+          "2020": {
+            "n": 575,
+            "roi": -0.04287188470846802
+          },
+          "2021": {
+            "n": 1653,
+            "roi": -0.029216951276602336
+          },
+          "2022": {
+            "n": 1636,
+            "roi": -0.07210333564568118
+          },
+          "2023": {
+            "n": 126,
+            "roi": 0.08739140358812864
+          },
+          "2024": {
+            "n": 1777,
+            "roi": -0.03632699374601719
+          },
+          "2025": {
+            "n": 1839,
+            "roi": -0.06741336909712516
+          },
+          "2026": {
+            "n": 1698,
+            "roi": -0.017220549538386195
+          }
+        },
+        "dsr": 8.07740957159853e-09,
+        "dsr_sr0": 0.01841111314750243,
+        "bh_pass": false,
+        "pbo": 0.727,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "road_dog",
+        "family": "B_home_bias",
+        "hypothesis": "Home bias is strongest where the home side is also the favorite; bet the road DOG.",
+        "n_bets": 5830,
+        "roi": -0.04620816101913475,
+        "roi_boot_ci95": [
+          -0.07844760165338081,
+          -0.020074289069790124
+        ],
+        "sharpe_per_bet": -0.039909396298980854,
+        "p_one_sided": 0.9988453086672378,
+        "hit_rate": 0.4130360205831904,
+        "hit_rate_ci95": [
+          0.40045829371069935,
+          0.4257282752666175
+        ],
+        "implied_mean": 0.41372984180785183,
+        "implied_mean_shin": 0.4100526096047231,
+        "calibration_gap": -0.0006938212246614395,
+        "calibration_gap_shin": 0.0029834109784672713,
+        "fold_wins": 1,
+        "per_season": {
+          "2020": {
+            "n": 325,
+            "roi": -0.031364826179066774
+          },
+          "2021": {
+            "n": 997,
+            "roi": -0.024186113286345883
+          },
+          "2022": {
+            "n": 985,
+            "roi": -0.12441687322894589
+          },
+          "2023": {
+            "n": 59,
+            "roi": 0.18382925298179534
+          },
+          "2024": {
+            "n": 1159,
+            "roi": -0.04453168092511954
+          },
+          "2025": {
+            "n": 1159,
+            "roi": -0.04339074139650873
+          },
+          "2026": {
+            "n": 1146,
+            "roi": -0.01874317069067982
+          }
+        },
+        "dsr": 5.15334017601474e-06,
+        "dsr_sr0": 0.01841111314750243,
+        "bh_pass": false,
+        "pbo": 0.727,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "road_fav",
+        "family": "B_home_bias",
+        "hypothesis": "A road FAVORITE is under-backed because the public still leans home; bet it.",
+        "n_bets": 3254,
+        "roi": -0.03751937439487236,
+        "roi_boot_ci95": [
+          -0.07602602571585104,
+          -0.009053119703588733
+        ],
+        "sharpe_per_bet": -0.04453611505173167,
+        "p_one_sided": 0.9944654717173884,
+        "hit_rate": 0.5700676090964967,
+        "hit_rate_ci95": [
+          0.5529848879787235,
+          0.5869850908443307
+        ],
+        "implied_mean": 0.5680820459465985,
+        "implied_mean_shin": 0.5709552618150773,
+        "calibration_gap": 0.001985563149898173,
+        "calibration_gap_shin": -0.0008876527185806005,
+        "fold_wins": 2,
+        "per_season": {
+          "2020": {
+            "n": 228,
+            "roi": -0.04227887447802896
+          },
+          "2021": {
+            "n": 586,
+            "roi": -0.029320930910813666
+          },
+          "2022": {
+            "n": 595,
+            "roi": 0.005574513851176516
+          },
+          "2023": {
+            "n": 63,
+            "roi": 0.0055112556824836595
+          },
+          "2024": {
+            "n": 595,
+            "roi": -0.02159653882949566
+          },
+          "2025": {
+            "n": 654,
+            "roi": -0.11377765935524807
+          },
+          "2026": {
+            "n": 533,
+            "roi": -0.021894766254693422
+          }
+        },
+        "dsr": 0.00015351513295330574,
+        "dsr_sr0": 0.01841111314750243,
+        "bh_pass": false,
+        "pbo": 0.727,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "fade_marquee",
+        "family": "C_marquee_bias",
+        "hypothesis": "The public overbets marquee clubs; bet against them when exactly one side is marquee.",
+        "n_bets": 3218,
+        "roi": -0.046646557146200314,
+        "roi_boot_ci95": [
+          -0.0934130519631156,
+          -0.004103441395101977
+        ],
+        "sharpe_per_bet": -0.042022717100746926,
+        "p_one_sided": 0.9914334811449942,
+        "hit_rate": 0.44126786824114356,
+        "hit_rate_ci95": [
+          0.4241922988025389,
+          0.458483492408379
+        ],
+        "implied_mean": 0.44223500534371457,
+        "implied_mean_shin": 0.43975632432705236,
+        "calibration_gap": -0.000967137102571014,
+        "calibration_gap_shin": 0.0015115439140911957,
+        "fold_wins": 3,
+        "per_season": {
+          "2020": {
+            "n": 197,
+            "roi": 0.044746785073809865
+          },
+          "2021": {
+            "n": 595,
+            "roi": -0.029174338769375634
+          },
+          "2022": {
+            "n": 576,
+            "roi": -0.14799363795448572
+          },
+          "2023": {
+            "n": 45,
+            "roi": 0.016309111405098577
+          },
+          "2024": {
+            "n": 604,
+            "roi": -0.054728895247559896
+          },
+          "2025": {
+            "n": 638,
+            "roi": 0.0068552661764565695
+          },
+          "2026": {
+            "n": 563,
+            "roi": -0.05039429419313223
+          }
+        },
+        "dsr": 0.0003430964765648093,
+        "dsr_sr0": 0.01841111314750243,
+        "bh_pass": false,
+        "pbo": 0.727,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      },
+      {
+        "arm_id": "fade_marquee_fav",
+        "family": "C_marquee_bias",
+        "hypothesis": "The marquee premium is largest when the marquee club is also the favorite; bet the non-marquee dog.",
+        "n_bets": 2386,
+        "roi": -0.04794750645146125,
+        "roi_boot_ci95": [
+          -0.11434943245079174,
+          0.002889260119116057
+        ],
+        "sharpe_per_bet": -0.040552192720480815,
+        "p_one_sided": 0.9761954323505145,
+        "hit_rate": 0.40318524727577537,
+        "hit_rate_ci95": [
+          0.3836733650836934,
+          0.4230083717759638
+        ],
+        "implied_mean": 0.4045296152096544,
+        "implied_mean_shin": 0.4004461295371401,
+        "calibration_gap": -0.0013443679338790426,
+        "calibration_gap_shin": 0.002739117738635277,
+        "fold_wins": 3,
+        "per_season": {
+          "2020": {
+            "n": 131,
+            "roi": 0.07154670571823694
+          },
+          "2021": {
+            "n": 416,
+            "roi": -0.04523879136500765
+          },
+          "2022": {
+            "n": 426,
+            "roi": -0.19739984157221277
+          },
+          "2023": {
+            "n": 30,
+            "roi": 0.04774603174603171
+          },
+          "2024": {
+            "n": 437,
+            "roi": -0.011352359377464129
+          },
+          "2025": {
+            "n": 508,
+            "roi": 0.001583766544784365
+          },
+          "2026": {
+            "n": 438,
+            "roi": -0.041414731584130955
+          }
+        },
+        "dsr": 0.0021951310995528654,
+        "dsr_sr0": 0.01841111314750243,
+        "bh_pass": false,
+        "pbo": 0.727,
+        "gates": {
+          "roi_positive": false,
+          "fold_consistency": false,
+          "bh_fdr": false,
+          "pbo": false,
+          "dsr": false
+        },
+        "survives": false
+      }
+    ],
+    "anchors": [
+      {
+        "arm_id": "anchor_oracle_winner",
+        "family": "anchor",
+        "hypothesis": "ORACLE FLOOR \u2014 bets the actual winner every game. Nothing may beat it; an arm that does is proof the metric is inverted, not a finding.",
+        "n_bets": 9304,
+        "roi": 0.9144710685476423,
+        "roi_boot_ci95": [
+          0.9033275182391944,
+          0.9253770455844444
+        ],
+        "sharpe_per_bet": 2.377459385732269,
+        "p_one_sided": 0.0,
+        "hit_rate": 1.0,
+        "hit_rate_ci95": [
+          0.9995872878972327,
+          1.0
+        ],
+        "implied_mean": 0.5188600770886528,
+        "implied_mean_shin": 0.5196628360348169,
+        "calibration_gap": 0.4811399229113472,
+        "calibration_gap_shin": 0.4803371639651831,
+        "fold_wins": 7,
+        "per_season": {
+          "2020": {
+            "n": 575,
+            "roi": 0.9372436614099152
+          },
+          "2021": {
+            "n": 1653,
+            "roi": 0.9270184018982508
+          },
+          "2022": {
+            "n": 1636,
+            "roi": 0.8905425776195528
+          },
+          "2023": {
+            "n": 126,
+            "roi": 0.9386646296972628
+          },
+          "2024": {
+            "n": 1777,
+            "roi": 0.905715270246492
+          },
+          "2025": {
+            "n": 1839,
+            "roi": 0.9166180581990084
+          },
+          "2026": {
+            "n": 1698,
+            "roi": 0.9226420809984204
+          }
+        }
+      },
+      {
+        "arm_id": "anchor_all_home",
+        "family": "anchor",
+        "hypothesis": "DEGENERATE CEILING \u2014 bets home every game. The exact mirror of `road_all`; scored so the home/road result cannot be read as an artifact of which side was registered.",
+        "n_bets": 9304,
+        "roi": -0.04278780492567149,
+        "roi_boot_ci95": [
+          -0.05601055746773702,
+          -0.027670499166818078
+        ],
+        "sharpe_per_bet": -0.04584552777803428,
+        "p_one_sided": 0.9999951134431283,
+        "hit_rate": 0.5297721410146173,
+        "hit_rate_ci95": [
+          0.5196202108597514,
+          0.5398994965236392
+        ],
+        "implied_mean": 0.5302467803901539,
+        "implied_mean_shin": 0.5315460945892297,
+        "calibration_gap": -0.00047463937553660074,
+        "calibration_gap_shin": -0.001773953574612408,
+        "fold_wins": 0,
+        "per_season": {
+          "2020": {
+            "n": 575,
+            "roi": -0.019884453881616786
+          },
+          "2021": {
+            "n": 1653,
+            "roi": -0.043764646825146934
+          },
+          "2022": {
+            "n": 1636,
+            "roi": -0.037354086734766014
+          },
+          "2023": {
+            "n": 126,
+            "roi": -0.14872677389086597
+          },
+          "2024": {
+            "n": 1777,
+            "roi": -0.05795773600749072
+          },
+          "2025": {
+            "n": 1839,
+            "roi": -0.015968572703866323
+          },
+          "2026": {
+            "n": 1698,
+            "roi": -0.0601373694631935
+          }
+        }
+      },
+      {
+        "arm_id": "anchor_all_fav",
+        "family": "anchor",
+        "hypothesis": "DEGENERATE CEILING \u2014 bets the favorite every game. The mirror of family A.",
+        "n_bets": 9084,
+        "roi": -0.039872166125105794,
+        "roi_boot_ci95": [
+          -0.05821233962173283,
+          -0.01851136395581692
+        ],
+        "sharpe_per_bet": -0.04839906182092548,
+        "p_one_sided": 0.9999980147019272,
+        "hit_rate": 0.5809114927344782,
+        "hit_rate_ci95": [
+          0.5707328518860862,
+          0.5910217305041261
+        ],
+        "implied_mean": 0.5797549537395922,
+        "implied_mean_shin": 0.5831441774494408,
+        "calibration_gap": 0.0011565389948859917,
+        "calibration_gap_shin": -0.0022326847149626294,
+        "fold_wins": 1,
+        "per_season": {
+          "2020": {
+            "n": 553,
+            "roi": -0.03594833671820278
+          },
+          "2021": {
+            "n": 1583,
+            "roi": -0.04352197128875061
+          },
+          "2022": {
+            "n": 1580,
+            "roi": 0.006519748243788245
+          },
+          "2023": {
+            "n": 122,
+            "roi": -0.1004471670814105
+          },
+          "2024": {
+            "n": 1754,
+            "roi": -0.04121759003325684
+          },
+          "2025": {
+            "n": 1813,
+            "roi": -0.06953903133290933
+          },
+          "2026": {
+            "n": 1679,
+            "roi": -0.043538283169481114
+          }
+        }
+      },
+      {
+        "arm_id": "anchor_coin_flip",
+        "family": "anchor",
+        "hypothesis": "NO-SKILL REFERENCE \u2014 a deterministic pseudo-random side (seeded on game_pk). Its ROI measures the vig a rule pays for showing up; a real arm must clear it, and it must be negative or the price data is wrong.",
+        "n_bets": 9304,
+        "roi": -0.057697137251091636,
+        "roi_boot_ci95": [
+          -0.0751036198837619,
+          -0.043412658053523304
+        ],
+        "sharpe_per_bet": -0.05814612604888161,
+        "p_one_sided": 0.9999999898023976,
+        "hit_rate": 0.49333619948409285,
+        "hit_rate_ci95": [
+          0.4831821930348577,
+          0.5034957063955747
+        ],
+        "implied_mean": 0.50091519791782,
+        "implied_mean_shin": 0.5009506926268523,
+        "calibration_gap": -0.007578998433727169,
+        "calibration_gap_shin": -0.007614493142759471,
+        "fold_wins": 1,
+        "per_season": {
+          "2020": {
+            "n": 575,
+            "roi": -0.05397737153482919
+          },
+          "2021": {
+            "n": 1653,
+            "roi": -0.0481296260175074
+          },
+          "2022": {
+            "n": 1636,
+            "roi": -0.09799302761850302
+          },
+          "2023": {
+            "n": 126,
+            "roi": 0.07481979751144073
+          },
+          "2024": {
+            "n": 1777,
+            "roi": -0.06162728317628084
+          },
+          "2025": {
+            "n": 1839,
+            "roi": -0.044465903016140125
+          },
+          "2026": {
+            "n": 1698,
+            "roi": -0.04949654181173614
+          }
+        }
+      }
+    ],
+    "anchor_gates": {
+      "oracle_is_the_floor": true,
+      "coin_flip_loses": true,
+      "all_home_loses": true,
+      "all_fav_loses": true
+    },
+    "survivors": []
+  }
+}

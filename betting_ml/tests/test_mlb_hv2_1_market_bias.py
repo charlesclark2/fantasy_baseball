@@ -183,14 +183,41 @@ def test_proportional_novig_sums_to_one_and_removes_the_overround():
     assert ph[0] < 1.0 / d[0], "de-vigging must LOWER the raw implied probability"
 
 
-def test_shin_and_proportional_differ_on_a_lopsided_price():
-    """The sensitivity must actually be a different number, or reporting it is
-    decoration (a 'sensitivity' that equals the primary tests nothing)."""
+def test_shin_probabilities_sum_to_one():
+    """⭐ THE INVARIANT THAT ACTUALLY BINDS. Shin's `z` is DEFINED as the value at
+    which the fair probabilities sum to 1, so this is not a nicety — it is the
+    equation being solved.
+
+    The first implementation had its bisection updates inverted and converged to
+    z ~ 0.5, where the two probabilities sum to 0.757. Every guard of the day
+    passed, because they only asked whether Shin DIFFERED from the proportional
+    method — and a badly wrong answer differs too. It was caught by reading the
+    calibration column and finding a ~12pp offset where ~1pp was plausible."""
+    for pair in ([-150, +130], [-400, +320], [-105, -115], [-1000, +650], [+120, -140]):
+        d = mb.american_to_decimal(pair)
+        sh, sa = mb.novig_shin([d[0]], [d[1]])
+        assert sh[0] + sa[0] == pytest.approx(1.0, abs=1e-9), f"Shin does not sum to 1 at {pair}"
+        assert 0.0 < sh[0] < 1.0 and 0.0 < sa[0] < 1.0
+
+
+def test_shin_stays_close_to_proportional_but_is_not_equal_to_it():
+    """A sensitivity must be a DIFFERENT number (or reporting it tests nothing) and
+    a PLAUSIBLE one — Shin moves a two-way baseball price by ~1-2 points, never 12."""
     d = mb.american_to_decimal([-400, +320])
     ph, _ = mb.novig_proportional([d[0]], [d[1]])
     sh, _ = mb.novig_shin([d[0]], [d[1]])
-    assert abs(ph[0] - sh[0]) > 1e-4
-    assert 0.0 < sh[0] < 1.0
+    assert abs(ph[0] - sh[0]) > 1e-4, "Shin collapsed onto the proportional method"
+    assert abs(ph[0] - sh[0]) < 0.05, "Shin is implausibly far from proportional"
+
+
+def test_shin_shades_the_favorite_up_relative_to_proportional():
+    """Shin's whole point: proportional de-vig under-corrects the LONGSHOT, so Shin
+    assigns the favorite MORE probability and the dog LESS. A sensitivity pointing
+    the wrong way would silently invert the calibration diagnostic."""
+    d = mb.american_to_decimal([-400, +320])
+    ph, pa = mb.novig_proportional([d[0]], [d[1]])
+    sh, sa = mb.novig_shin([d[0]], [d[1]])
+    assert sh[0] > ph[0] and sa[0] < pa[0]
 
 
 def test_a_flat_stake_win_pays_decimal_minus_one_and_a_loss_pays_minus_one():
@@ -293,3 +320,89 @@ def test_an_empty_bucket_scores_zero_not_missing():
     heavy = [a.arm_id for a in mb.REGISTERED_ARMS].index("dog_vs_heavy_fav")
     may = buckets.index("2024-05")
     assert M[may, heavy] == 0.0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 4. Reproduction pin — 1e-9, on the REAL scored data
+# ══════════════════════════════════════════════════════════════════════════════
+
+ARTIFACT = REPO / "ablation_results" / "mlb_hv2_1_market_bias.json"
+FIXTURE = REPO / "betting_ml" / "tests" / "fixtures" / "mlb_hv2_1_input.csv.gz"
+
+
+def _artifact() -> dict:
+    import json
+    return json.loads(ARTIFACT.read_text())
+
+
+def test_the_committed_result_reproduces_from_the_committed_fixture_to_1e_9():
+    """Everything after `extract()` is pure, so the decisive record must re-derive
+    EXACTLY from the committed input — no S3, no network. The fixture is the real
+    extracted frame, so this pins the study on its own data rather than on a
+    synthetic stand-in that could agree with a broken pipeline."""
+    committed = _artifact()
+    full = pd.read_csv(FIXTURE)
+    assert len(full) == committed["audit"]["observed_total"], "fixture row count drifted"
+
+    gates = mb.run_gates(mb.derive(mb.restrict(full)))
+    assert gates["n_games"] == committed["gates"]["n_games"]
+
+    got = {r["arm_id"]: r for r in gates["arms"]}
+    want = {r["arm_id"]: r for r in committed["gates"]["arms"]}
+    assert set(got) == set(want)
+    # non-vacuity: a pin over an empty field would pass on nothing.
+    assert len(got) == 8
+    for arm_id, w in want.items():
+        g = got[arm_id]
+        assert g["n_bets"] == w["n_bets"], arm_id
+        for key in ("roi", "sharpe_per_bet", "p_one_sided", "hit_rate",
+                    "implied_mean", "implied_mean_shin", "dsr"):
+            assert g[key] == pytest.approx(w[key], abs=1e-9, rel=0), f"{arm_id}.{key}"
+    assert gates["pbo"]["pbo"] == pytest.approx(committed["gates"]["pbo"]["pbo"], abs=1e-9)
+    assert gates["survivors"] == committed["gates"]["survivors"]
+
+
+def test_the_recorded_verdict_is_the_one_the_gates_imply():
+    """The verdict is DERIVED at read time, never trusted from the artifact — a
+    stored verdict string can outlive the numbers under it."""
+    committed = _artifact()
+    gates = mb.run_gates(mb.derive(mb.restrict(pd.read_csv(FIXTURE))))
+    assert mb.classify(gates)["state"] == committed["verdict"]["state"]
+
+
+def test_the_null_rests_on_the_point_estimate_not_on_a_deflation_gate():
+    """⭐ The load-bearing property of this study's verdict: EVERY registered arm
+    fails G1 (ROI > 0), which is de-vig-free, PBO-free, DSR-free and field-free. No
+    change to a deflation gate can turn a negative point estimate positive, so the
+    positive control's failure (the deflation gates cannot certify a real effect
+    over a near-clone field) bounds what a SURVIVOR would have meant and does not
+    touch this null."""
+    committed = _artifact()
+    arms = committed["gates"]["arms"]
+    assert len(arms) == 8
+    assert all(r["roi"] < 0 for r in arms), "an arm has positive ROI — re-read the verdict"
+    assert all(not r["gates"]["roi_positive"] for r in arms)
+    assert committed["gates"]["survivors"] == []
+
+
+def test_every_arm_sits_inside_the_efficient_market_null_band():
+    """The substantive finding, asserted rather than narrated: with each game's
+    outcome redrawn from Bovada's own no-vig price, the arms' ROIs are
+    indistinguishable from what they actually earned."""
+    band = _artifact()["efficient_market_null_band"]
+    assert band["n_sims"] >= 100
+    assert len(band["per_arm"]) == 8
+    assert band["arms_above_band"] == []
+    assert band["arms_below_band"] == []
+
+
+def test_the_amended_negative_control_prices_the_vig_and_certifies_nothing():
+    """Two-sided: under a perfectly efficient market no arm may survive AND every
+    arm must land at roughly minus the vig (node 1 measured overround 1.023-1.070,
+    so a flat-stake rule should lose ~2-5%). An 'efficient market' in which rules
+    broke even would mean the control is not pricing the vig."""
+    c = _artifact()["controls"]["negative_efficient_market"]
+    assert c["survivors"] == []
+    rois = list(c["roi"].values())
+    assert len(rois) == 8
+    assert all(-0.09 < r < -0.01 for r in rois), rois
