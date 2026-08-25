@@ -1,0 +1,112 @@
+# Plan spec — MLB-HV2-1 (FULL tier: §0.5-adjacent market study; model-independent)
+# Authored by PM 2026-08-24. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: mlb-hv2-1
+  vertical: mlb
+  card: https://trello.com/c/eWN8cNck   # EPIC HV2; the HV2-1 card is pulled to the Sprint at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    HV2-1: the pure market-bias backtest — the HIGHEST-prior item on the
+    MLB board and deliberately MODEL-INDEPENDENT. Question: does Bovada's
+    recreational H2H pricing carry a persistent, pre-registrable segment
+    bias (public overweighting of favorites / home teams / marquee clubs)
+    that a RULE would have exploited historically — no model anywhere in
+    the loop? Context that governs it: E13.8 caps model headroom at
+    ~0.002-0.005 Brier, so the epic's reframe is that any remaining H2H
+    value lives in market bias, not architecture. best_alpha=0 — the
+    output is a MEASUREMENT with a verdict, never a bet, a tout, or a
+    served change; a null CLOSES the direction and is a valuable outcome.
+  acceptanceCriteria:
+    - description: >
+        PRE-REGISTER EVERYTHING BEFORE SCORING (E2.1-r; the 28.2
+        multiple-testing trap is the named hazard): the segment list (e.g.
+        favorite-odds buckets, home/away x favorite/dog, marquee-team flag,
+        day/night — whatever is registered, closed-form and short), the
+        rule family (flat-stake fade/follow per segment), the metric (ROI
+        + hit rate vs the no-vig implied probability, with CIs), the
+        seasons/window, and the deflation gates (PBO/DSR/BH-FDR across the
+        registered segment family via cv_power, declared_field_size =
+        the full registered list). Commit the prereg BEFORE any scoring.
+    - description: >
+        DATA: historical Bovada (or recorded book) H2H odds already in the
+        lake/warehouse — state the exact source tables and their vintage;
+        no new paid data. If the stored odds cannot support the registered
+        window, SAY SO and stop — a shrunken ad-hoc window chosen after
+        seeing coverage is the trap; re-register the smaller window
+        explicitly instead.
+    - description: >
+        The no-vig conversion method is pre-registered (state the overround
+        removal method) and applied uniformly; the rule never references
+        any Credence model output (model-independence is a checkable
+        property — grep-level guard that the study imports no model
+        modules).
+    - description: >
+        VALID OUTCOMES: a surviving segment (clears all gates) -> recorded
+        as a CANDIDATE for a forward paper-trade accrual — nothing ships,
+        no bet flag flips, the operator decides any next step; or a
+        classified null -> the market-bias direction CLOSES and the epic's
+        remaining EV re-ranks. Either way the verdict is loud in the
+        decisive record.
+    - description: >
+        Standing modeling disciplines: reproduction pin 1e-9; RED-proofs;
+        no post-hoc segment trims (MH2.2); no re-reads after gate failure;
+        runtime handoff rule — any command expected >2 min goes to the
+        operator paste-ready (a full-history odds scan may qualify; measure
+        a small slice first).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: mlb-hv2-1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "HV2" / "market bias" (board Credence Sports, 2026-08-24)'
+    duplicates: []
+    adjacent:
+      - "HV2-0 stratified eval (epic sibling) — CONDITIONAL MODEL skill; different question (model vs market by regime); no shared code beyond the odds tables."
+      - "HV2-4 microstructure re-hardening (Backlog) — market ERROR prediction; explicitly separate; do not touch E13.16's harness."
+      - "HV2-2 opener flag (To Do) — feature-store correctness; disjoint."
+      - "Totals TV2-x — different market; out of scope."
+  triedLedger:
+    files:
+      - "production_model_state/mlb_h2h.md (E13.8 headroom cap; E1.9 tied bake-off; the manual-only-always posture)"
+      - "E13.16 record (the untrustworthy-harness caution — its CLV machinery is NOT reused here)"
+    recordedNulls:
+      - "E13.8's headroom measurement is the LICENSE for this study, not a null it re-approaches: model-side headroom is capped, so the bias question is orthogonal and untested."
+      - "28.2's subset-mining trap — honored by full pre-registration of the segment family, not re-read."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "The MLB revenue question (whether ANY exploitable H2H angle exists); epic HV2's re-ranking; a possible forward paper-trade accrual (operator-gated)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: mlb-hv2-1-plan
+spec:
+  goalRef: { name: mlb-hv2-1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-data-audit
+        desc: "Name the odds tables + vintage + coverage; stop-and-say-so if the registered window is unsupported."
+      - id: 2-prereg
+        desc: "Commit the pre-registration (segments, rules, metric, window, gates) BEFORE any scoring."
+      - id: 3-score
+        desc: "Run the registered backtest (slice-timed first; operator handoff if >2 min)."
+      - id: 4-classify
+        desc: "Deflation gates + classify; decisive record in the MLB ablation_results convention."
+      - id: 5-closeout
+        desc: "Verdict + findings into closeout.followUps; operator summary with the verdict stated plainly."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

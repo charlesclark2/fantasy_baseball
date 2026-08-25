@@ -1,0 +1,912 @@
+{
+  "sport": "ncaaf",
+  "game_day": "2026-08-29",
+  "season": 2026,
+  "generated_at": "2026-08-25T01:35:43.000Z",
+  "n_games": 8,
+  "games": [
+    {
+      "game_id": 401856766,
+      "season": 2026,
+      "game_day": "2026-08-29",
+      "commence_time": "2026-08-29T16:00:00.000Z",
+      "start_time_tbd": false,
+      "season_type": "regular",
+      "cfbd_week": 1,
+      "is_neutral_site": true,
+      "is_conference_game": false,
+      "home": {
+        "team_id": 2628,
+        "team": "TCU",
+        "conference": "Big 12",
+        "strength_margin": 4.815380142765619,
+        "strength_margin_sd": 7.290424218294123
+      },
+      "away": {
+        "team_id": 153,
+        "team": "North Carolina",
+        "conference": "ACC",
+        "strength_margin": -4.31100776140045,
+        "strength_margin_sd": 7.313490296083379
+      },
+      "win_probability": {
+        "home": 0.78,
+        "away": 0.22
+      },
+      "margin": {
+        "mu": 12.771819999202657,
+        "sigma": 16.68983135824316,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          -14.911957948391132,
+          -8.639057353903238,
+          1.726149064093439,
+          12.828209721225079,
+          23.936800539907164,
+          34.07960953103408,
+          40.39147150981662
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": -8.639057353903238,
+        "interval_hi": 34.07960953103408,
+        "interval_width": 42.71866688493732
+      },
+      "total": {
+        "mu": 54.509398736626366,
+        "sigma": 17.227365317433602,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          26.107921612785454,
+          32.17601756965846,
+          42.70950582139669,
+          54.381898565878075,
+          65.9798702661475,
+          76.63648549163047,
+          82.51454309169047
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": 32.17601756965846,
+        "interval_hi": 76.63648549163047,
+        "interval_width": 44.460467921972004
+      },
+      "market": {
+        "status": "unavailable",
+        "reason": "no_line_captured_for_this_kickoff",
+        "source": null,
+        "snapshot_ts": null,
+        "home_spread": null,
+        "total": null,
+        "home_moneyline_american": null,
+        "home_moneyline_implied_probability": null
+      },
+      "provenance": {
+        "model_version": "ncaaf_game_distribution_v2",
+        "model_form": "strength_posterior",
+        "model_learner": "ridge",
+        "model_contract": "strength_pace",
+        "mean_artifact_version": "ncaaf_game_mean_v2",
+        "strength_as_of_week": 1,
+        "pace_term_active": false,
+        "n_draws": 20000,
+        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_kind": "pre_kickoff"
+      },
+      "framing": {
+        "framing": "market_blind_projection",
+        "best_alpha": 0,
+        "market_blind": true,
+        "projection_only": true,
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+      }
+    },
+    {
+      "game_id": 401864494,
+      "season": 2026,
+      "game_day": "2026-08-29",
+      "commence_time": "2026-08-29T19:00:00.000Z",
+      "start_time_tbd": false,
+      "season_type": "regular",
+      "cfbd_week": 1,
+      "is_neutral_site": false,
+      "is_conference_game": false,
+      "home": {
+        "team_id": 30,
+        "team": "USC",
+        "conference": "Big Ten",
+        "strength_margin": 11.950954293579104,
+        "strength_margin_sd": 7.344584063173222
+      },
+      "away": {
+        "team_id": 23,
+        "team": "San José State",
+        "conference": "Mountain West",
+        "strength_margin": -11.25438109148021,
+        "strength_margin_sd": 7.334726222464596
+      },
+      "win_probability": {
+        "home": 0.94515,
+        "away": 0.05485
+      },
+      "margin": {
+        "mu": 26.94234358553754,
+        "sigma": 16.700645719754856,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          -0.753451687086236,
+          5.31548490369947,
+          15.730469886559682,
+          26.974866320995226,
+          38.46322202588796,
+          48.50327066125062,
+          54.421641186533115
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": 5.31548490369947,
+        "interval_hi": 48.50327066125062,
+        "interval_width": 43.18778575755115
+      },
+      "total": {
+        "mu": 55.459495852946226,
+        "sigma": 17.237822787350463,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          27.155796509146693,
+          33.341928079285346,
+          43.8850706825591,
+          55.43100886114562,
+          67.30626130334402,
+          77.67826057513913,
+          83.54629811691983
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": 33.341928079285346,
+        "interval_hi": 77.67826057513913,
+        "interval_width": 44.33633249585379
+      },
+      "market": {
+        "status": "unavailable",
+        "reason": "no_line_captured_for_this_kickoff",
+        "source": null,
+        "snapshot_ts": null,
+        "home_spread": null,
+        "total": null,
+        "home_moneyline_american": null,
+        "home_moneyline_implied_probability": null
+      },
+      "provenance": {
+        "model_version": "ncaaf_game_distribution_v2",
+        "model_form": "strength_posterior",
+        "model_learner": "ridge",
+        "model_contract": "strength_pace",
+        "mean_artifact_version": "ncaaf_game_mean_v2",
+        "strength_as_of_week": 1,
+        "pace_term_active": false,
+        "n_draws": 20000,
+        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_kind": "pre_kickoff"
+      },
+      "framing": {
+        "framing": "market_blind_projection",
+        "best_alpha": 0,
+        "market_blind": true,
+        "projection_only": true,
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+      }
+    },
+    {
+      "game_id": 401858202,
+      "season": 2026,
+      "game_day": "2026-08-29",
+      "commence_time": "2026-08-29T19:30:00.000Z",
+      "start_time_tbd": false,
+      "season_type": "regular",
+      "cfbd_week": 1,
+      "is_neutral_site": false,
+      "is_conference_game": true,
+      "home": {
+        "team_id": 258,
+        "team": "Virginia",
+        "conference": "ACC",
+        "strength_margin": 4.925851996039935,
+        "strength_margin_sd": 7.323444691982895
+      },
+      "away": {
+        "team_id": 152,
+        "team": "NC State",
+        "conference": "ACC",
+        "strength_margin": 4.976230400875237,
+        "strength_margin_sd": 7.2850629361436186
+      },
+      "win_probability": {
+        "home": 0.5847,
+        "away": 0.4153
+      },
+      "margin": {
+        "mu": 3.4484331750203343,
+        "sigma": 16.690493518180975,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          -24.129422344813314,
+          -17.511036632300048,
+          -7.457378610972151,
+          3.5418579311682987,
+          14.957858205947153,
+          24.78929668126815,
+          30.82002639134276
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": -17.511036632300048,
+        "interval_hi": 24.78929668126815,
+        "interval_width": 42.3003333135682
+      },
+      "total": {
+        "mu": 54.23794447131614,
+        "sigma": 17.228005612713407,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          25.41289163274757,
+          31.951718804537858,
+          42.41916463016581,
+          53.877137347333935,
+          65.95216937526665,
+          76.33985811292541,
+          82.68951524997625
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": 31.951718804537858,
+        "interval_hi": 76.33985811292541,
+        "interval_width": 44.38813930838755
+      },
+      "market": {
+        "status": "unavailable",
+        "reason": "no_line_captured_for_this_kickoff",
+        "source": null,
+        "snapshot_ts": null,
+        "home_spread": null,
+        "total": null,
+        "home_moneyline_american": null,
+        "home_moneyline_implied_probability": null
+      },
+      "provenance": {
+        "model_version": "ncaaf_game_distribution_v2",
+        "model_form": "strength_posterior",
+        "model_learner": "ridge",
+        "model_contract": "strength_pace",
+        "mean_artifact_version": "ncaaf_game_mean_v2",
+        "strength_as_of_week": 1,
+        "pace_term_active": false,
+        "n_draws": 20000,
+        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_kind": "pre_kickoff"
+      },
+      "framing": {
+        "framing": "market_blind_projection",
+        "best_alpha": 0,
+        "market_blind": true,
+        "projection_only": true,
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+      }
+    },
+    {
+      "game_id": 401864577,
+      "season": 2026,
+      "game_day": "2026-08-29",
+      "commence_time": "2026-08-29T21:30:00.000Z",
+      "start_time_tbd": false,
+      "season_type": "regular",
+      "cfbd_week": 1,
+      "is_neutral_site": false,
+      "is_conference_game": false,
+      "home": {
+        "team_id": 2449,
+        "team": "North Dakota State",
+        "conference": "Mountain West",
+        "strength_margin": -3.3078886990428504,
+        "strength_margin_sd": 7.411812363940548
+      },
+      "away": {
+        "team_id": 55,
+        "team": "Jacksonville State",
+        "conference": "Conference USA",
+        "strength_margin": -4.807793454189605,
+        "strength_margin_sd": 7.289658140831523
+      },
+      "win_probability": {
+        "home": 0.61585,
+        "away": 0.38415
+      },
+      "margin": {
+        "mu": 5.0367611846707065,
+        "sigma": 16.703906731824645,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          -22.466651248580547,
+          -16.48597480080544,
+          -6.224965281240689,
+          5.045045487289229,
+          16.352672956374565,
+          26.467068419507104,
+          32.54080601463199
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": -16.48597480080544,
+        "interval_hi": 26.467068419507104,
+        "interval_width": 42.953043220312544
+      },
+      "total": {
+        "mu": 56.11964773870952,
+        "sigma": 17.24097626460494,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          28.044537335680527,
+          34.11531629944111,
+          44.418029857672174,
+          55.96511990337159,
+          67.56483924817955,
+          78.31704775861988,
+          84.59446382822938
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": 34.11531629944111,
+        "interval_hi": 78.31704775861988,
+        "interval_width": 44.20173145917877
+      },
+      "market": {
+        "status": "unavailable",
+        "reason": "no_line_captured_for_this_kickoff",
+        "source": null,
+        "snapshot_ts": null,
+        "home_spread": null,
+        "total": null,
+        "home_moneyline_american": null,
+        "home_moneyline_implied_probability": null
+      },
+      "provenance": {
+        "model_version": "ncaaf_game_distribution_v2",
+        "model_form": "strength_posterior",
+        "model_learner": "ridge",
+        "model_contract": "strength_pace",
+        "mean_artifact_version": "ncaaf_game_mean_v2",
+        "strength_as_of_week": 1,
+        "pace_term_active": false,
+        "n_draws": 20000,
+        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_kind": "pre_kickoff"
+      },
+      "framing": {
+        "framing": "market_blind_projection",
+        "best_alpha": 0,
+        "market_blind": true,
+        "projection_only": true,
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+      }
+    },
+    {
+      "game_id": 401866408,
+      "season": 2026,
+      "game_day": "2026-08-29",
+      "commence_time": "2026-08-29T22:30:00.000Z",
+      "start_time_tbd": false,
+      "season_type": "regular",
+      "cfbd_week": 1,
+      "is_neutral_site": false,
+      "is_conference_game": true,
+      "home": {
+        "team_id": 2199,
+        "team": "Eastern Michigan",
+        "conference": "Mid-American",
+        "strength_margin": -7.450217473445626,
+        "strength_margin_sd": 7.320774949375082
+      },
+      "away": {
+        "team_id": 16,
+        "team": "Sacramento State",
+        "conference": "Mid-American",
+        "strength_margin": -3.3078886990428504,
+        "strength_margin_sd": 7.411812363940548
+      },
+      "win_probability": {
+        "home": 0.47275,
+        "away": 0.52725
+      },
+      "margin": {
+        "mu": -1.3345810010599102,
+        "sigma": 16.708358426615494,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          -28.570361435392098,
+          -22.481359516542724,
+          -12.452526369751201,
+          -1.1963549025556217,
+          10.157886573739352,
+          20.311262437376534,
+          26.255765904759432
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": -22.481359516542724,
+        "interval_hi": 20.311262437376534,
+        "interval_width": 42.79262195391926
+      },
+      "total": {
+        "mu": 56.67791385008162,
+        "sigma": 17.24528122344536,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          28.63117615065504,
+          34.889759144001665,
+          45.04469876411377,
+          56.85199278487775,
+          68.61057040554398,
+          78.92238908777077,
+          85.3099119165256
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": 34.889759144001665,
+        "interval_hi": 78.92238908777077,
+        "interval_width": 44.0326299437691
+      },
+      "market": {
+        "status": "unavailable",
+        "reason": "no_line_captured_for_this_kickoff",
+        "source": null,
+        "snapshot_ts": null,
+        "home_spread": null,
+        "total": null,
+        "home_moneyline_american": null,
+        "home_moneyline_implied_probability": null
+      },
+      "provenance": {
+        "model_version": "ncaaf_game_distribution_v2",
+        "model_form": "strength_posterior",
+        "model_learner": "ridge",
+        "model_contract": "strength_pace",
+        "mean_artifact_version": "ncaaf_game_mean_v2",
+        "strength_as_of_week": 1,
+        "pace_term_active": false,
+        "n_draws": 20000,
+        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_kind": "pre_kickoff"
+      },
+      "framing": {
+        "framing": "market_blind_projection",
+        "best_alpha": 0,
+        "market_blind": true,
+        "projection_only": true,
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+      }
+    },
+    {
+      "game_id": 401858201,
+      "season": 2026,
+      "game_day": "2026-08-29",
+      "commence_time": "2026-08-29T23:00:00.000Z",
+      "start_time_tbd": false,
+      "season_type": "regular",
+      "cfbd_week": 1,
+      "is_neutral_site": false,
+      "is_conference_game": false,
+      "home": {
+        "team_id": 24,
+        "team": "Stanford",
+        "conference": "ACC",
+        "strength_margin": -7.683893666086616,
+        "strength_margin_sd": 7.391945198129823
+      },
+      "away": {
+        "team_id": 62,
+        "team": "Hawai'i",
+        "conference": "Mountain West",
+        "strength_margin": 0.05926247708009863,
+        "strength_margin_sd": 7.307247303911831
+      },
+      "win_probability": {
+        "home": 0.3927,
+        "away": 0.6073
+      },
+      "margin": {
+        "mu": -4.624105028576014,
+        "sigma": 16.703540840177457,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          -31.764512078875274,
+          -25.822869666005598,
+          -15.64748402644997,
+          -4.438551557827902,
+          6.717315341273001,
+          17.01047489928627,
+          23.086745473921184
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": -25.822869666005598,
+        "interval_hi": 17.01047489928627,
+        "interval_width": 42.83334456529187
+      },
+      "total": {
+        "mu": 54.9255651096482,
+        "sigma": 17.24062243662993,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          26.61600461580475,
+          32.902110543726074,
+          43.362414116866525,
+          55.109466794048124,
+          66.70110406698615,
+          76.87658823765345,
+          82.971323727526
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": 32.902110543726074,
+        "interval_hi": 76.87658823765345,
+        "interval_width": 43.974477693927376
+      },
+      "market": {
+        "status": "unavailable",
+        "reason": "no_line_captured_for_this_kickoff",
+        "source": null,
+        "snapshot_ts": null,
+        "home_spread": null,
+        "total": null,
+        "home_moneyline_american": null,
+        "home_moneyline_implied_probability": null
+      },
+      "provenance": {
+        "model_version": "ncaaf_game_distribution_v2",
+        "model_form": "strength_posterior",
+        "model_learner": "ridge",
+        "model_contract": "strength_pace",
+        "mean_artifact_version": "ncaaf_game_mean_v2",
+        "strength_as_of_week": 1,
+        "pace_term_active": false,
+        "n_draws": 20000,
+        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_kind": "pre_kickoff"
+      },
+      "framing": {
+        "framing": "market_blind_projection",
+        "best_alpha": 0,
+        "market_blind": true,
+        "projection_only": true,
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+      }
+    },
+    {
+      "game_id": 401864570,
+      "season": 2026,
+      "game_day": "2026-08-29",
+      "commence_time": "2026-08-29T23:00:00.000Z",
+      "start_time_tbd": false,
+      "season_type": "regular",
+      "cfbd_week": 1,
+      "is_neutral_site": false,
+      "is_conference_game": false,
+      "home": {
+        "team_id": 52,
+        "team": "Florida State",
+        "conference": "ACC",
+        "strength_margin": 4.963429052544981,
+        "strength_margin_sd": 7.369060183119172
+      },
+      "away": {
+        "team_id": 166,
+        "team": "New Mexico State",
+        "conference": "Conference USA",
+        "strength_margin": -11.515530916841541,
+        "strength_margin_sd": 7.33098317962693
+      },
+      "win_probability": {
+        "home": 0.8868,
+        "away": 0.1132
+      },
+      "margin": {
+        "mu": 20.258251944417545,
+        "sigma": 16.703635301316115,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          -7.547760154713449,
+          -1.298056820096192,
+          8.829383480118643,
+          20.160769696787817,
+          31.51586344607654,
+          41.682739630244534,
+          47.58208342751112
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": -1.298056820096192,
+        "interval_hi": 41.682739630244534,
+        "interval_width": 42.980796450340726
+      },
+      "total": {
+        "mu": 56.07050362648169,
+        "sigma": 17.240713783280043,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          28.165143372828986,
+          34.26079298134872,
+          44.63415007952909,
+          56.178785547038714,
+          67.69857526144585,
+          78.02206500946899,
+          84.55014575408345
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": 34.26079298134872,
+        "interval_hi": 78.02206500946899,
+        "interval_width": 43.76127202812027
+      },
+      "market": {
+        "status": "unavailable",
+        "reason": "no_line_captured_for_this_kickoff",
+        "source": null,
+        "snapshot_ts": null,
+        "home_spread": null,
+        "total": null,
+        "home_moneyline_american": null,
+        "home_moneyline_implied_probability": null
+      },
+      "provenance": {
+        "model_version": "ncaaf_game_distribution_v2",
+        "model_form": "strength_posterior",
+        "model_learner": "ridge",
+        "model_contract": "strength_pace",
+        "mean_artifact_version": "ncaaf_game_mean_v2",
+        "strength_as_of_week": 1,
+        "pace_term_active": false,
+        "n_draws": 20000,
+        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_kind": "pre_kickoff"
+      },
+      "framing": {
+        "framing": "market_blind_projection",
+        "best_alpha": 0,
+        "market_blind": true,
+        "projection_only": true,
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+      }
+    },
+    {
+      "game_id": 401862693,
+      "season": 2026,
+      "game_day": "2026-08-29",
+      "commence_time": "2026-08-30T02:00:00.000Z",
+      "start_time_tbd": false,
+      "season_type": "regular",
+      "cfbd_week": 1,
+      "is_neutral_site": false,
+      "is_conference_game": false,
+      "home": {
+        "team_id": 2439,
+        "team": "UNLV",
+        "conference": "Mountain West",
+        "strength_margin": 0.5776863595405098,
+        "strength_margin_sd": 7.291973250748571
+      },
+      "away": {
+        "team_id": 235,
+        "team": "Memphis",
+        "conference": "American Athletic",
+        "strength_margin": -4.748352989843551,
+        "strength_margin_sd": 7.417607337981066
+      },
+      "win_probability": {
+        "home": 0.7193,
+        "away": 0.2807
+      },
+      "margin": {
+        "mu": 9.674966061907012,
+        "sigma": 16.70507888107336,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          -18.08200835920059,
+          -11.872250229290538,
+          -1.6092109214625143,
+          9.734785635655909,
+          21.03851617869154,
+          31.21606663236213,
+          37.668944157826445
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": -11.872250229290538,
+        "interval_hi": 31.21606663236213,
+        "interval_width": 43.088316861652665
+      },
+      "total": {
+        "mu": 55.22469982874301,
+        "sigma": 17.242109770665866,
+        "quantile_levels": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95
+        ],
+        "quantiles": [
+          26.71545814038636,
+          33.07960876496734,
+          43.625927568660224,
+          55.24787208694433,
+          66.87005652737909,
+          77.22284816396294,
+          83.58660433224867
+        ],
+        "interval_lo_level": 0.1,
+        "interval_hi_level": 0.9,
+        "interval_lo": 33.07960876496734,
+        "interval_hi": 77.22284816396294,
+        "interval_width": 44.1432393989956
+      },
+      "market": {
+        "status": "unavailable",
+        "reason": "no_line_captured_for_this_kickoff",
+        "source": null,
+        "snapshot_ts": null,
+        "home_spread": null,
+        "total": null,
+        "home_moneyline_american": null,
+        "home_moneyline_implied_probability": null
+      },
+      "provenance": {
+        "model_version": "ncaaf_game_distribution_v2",
+        "model_form": "strength_posterior",
+        "model_learner": "ridge",
+        "model_contract": "strength_pace",
+        "mean_artifact_version": "ncaaf_game_mean_v2",
+        "strength_as_of_week": 1,
+        "pace_term_active": false,
+        "n_draws": 20000,
+        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_kind": "pre_kickoff"
+      },
+      "framing": {
+        "framing": "market_blind_projection",
+        "best_alpha": 0,
+        "market_blind": true,
+        "projection_only": true,
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+      }
+    }
+  ],
+  "framing": {
+    "framing": "market_blind_projection",
+    "best_alpha": 0,
+    "market_blind": true,
+    "projection_only": true,
+    "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+  }
+}

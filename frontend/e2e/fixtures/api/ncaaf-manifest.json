@@ -1,0 +1,33 @@
+{
+  "sport": "ncaaf",
+  "season": 2026,
+  "generated_at": "2026-08-25T01:35:44.000Z",
+  "current_game_day": "2026-08-24",
+  "game_days": [
+    {
+      "game_day": "2026-08-29",
+      "n_games": 8
+    }
+  ],
+  "n_games_total": 8,
+  "futures_available": true,
+  "provenance": {
+    "model_version": "ncaaf_game_distribution_v2",
+    "model_form": "strength_posterior",
+    "model_learner": "ridge",
+    "model_contract": "strength_pace",
+    "mean_artifact_version": "ncaaf_game_mean_v2",
+    "strength_as_of_week": 1,
+    "pace_term_active": false,
+    "n_draws": 20000,
+    "snapshot_ts": "2026-08-25T01:32:57.000Z",
+    "snapshot_kind": "pre_kickoff"
+  },
+  "framing": {
+    "framing": "market_blind_projection",
+    "best_alpha": 0,
+    "market_blind": true,
+    "projection_only": true,
+    "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
+  }
+}

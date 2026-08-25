@@ -13,10 +13,14 @@ no dbt manifest), so it collects cleanly in the fast gate.
 """
 from __future__ import annotations
 
+import pathlib
+import re
 from datetime import date
 
 from quant_sports_intel_models.football.ncaaf.ingest import roll_forward as rf
 from quant_sports_intel_models.football.ncaaf.ingest import sources as src
+
+_REPO = pathlib.Path(__file__).resolve().parents[2]
 
 
 # ── current_season(): clock-derived, the roll-forward target ─────────────────────────────
@@ -110,3 +114,111 @@ def test_run_roll_forward_uses_clock_derived_season_when_unset(monkeypatch):
     monkeypatch.setattr(rf, "build_ctx", lambda: object())
     rf.run_roll_forward()  # no season → current_season()
     assert seen["season"] == src.current_season()
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# NCAAF-RF1 — the roll-forward WINDOW guard (2026-08-24)
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# `NCAAF_ROLL_FORWARD_CRON` used to be `0 6 * 2-8 1` (Mondays, Feb–Aug). Its last fire was Mon
+# 2026-08-31, after which every roll-forward feed would have stopped advancing until Feb 2027 —
+# through the whole season. That is the E9.48(c) / INC-37 month-scoped-cron class; RF1 widened the
+# window to one full season cycle and these guards keep it there.
+#
+# SOURCE-READ, NOT IMPORT: the constant lives in `pipeline/schedules/`, and `pipeline/__init__.py`
+# reads the gitignored dbt manifest at IMPORT — a fast-gate test that imports it dies at COLLECTION
+# (E11.23). Reading the file keeps this module fast-gate-clean.
+
+_SCHEDULE_SRC = _REPO / "pipeline/schedules/sports_rollforward_schedules.py"
+_BOX_OPS = _REPO / "services/dagster/aws/BOX_OPERATIONS.md"
+
+
+def _declared_cron() -> str:
+    """The cron literal as the SCHEDULE declares it (code, not prose)."""
+    m = re.search(r'^NCAAF_ROLL_FORWARD_CRON = "([^"]+)"', _SCHEDULE_SRC.read_text(), re.M)
+    assert m, "NCAAF_ROLL_FORWARD_CRON assignment not found — did the constant move or rename?"
+    return m.group(1)
+
+
+def _expand_months(field: str) -> set[int]:
+    """`2-12,1` → {1,…,12}. A cron month field is comma-separated ranges/singletons."""
+    months: set[int] = set()
+    for part in field.split(","):
+        if "-" in part:
+            lo, hi = (int(x) for x in part.split("-"))
+            months.update(range(lo, hi + 1))
+        else:
+            months.add(int(part))
+    return months
+
+
+def test_the_roll_forward_cron_covers_a_full_season_cycle():
+    """The whole point of RF1: the window must not end in August.
+
+    Asserted on the cron VALUE, so no amount of explanatory comment can satisfy it (INC-38).
+    """
+    minute, hour, dom, month, dow = _declared_cron().split()
+    # Unchanged by RF1 — the cadence itself (weekly Monday 06:00 PT) is not what was broken.
+    assert (minute, hour, dom, dow) == ("0", "6", "*", "1"), (
+        f"expected a weekly Monday 06:00 fire, got {_declared_cron()!r}")
+
+    months = _expand_months(month)
+    # The IN-SEASON months are the regression this guard exists for. Sep–Dec plus January (bowls /
+    # the CFP run into mid-January) is the Aug–Jan convention every other NCAAF schedule uses.
+    missing = {9, 10, 11, 12, 1} - months
+    assert not missing, (
+        f"SEASONAL BOUNDARY HOLE (E9.48(c) / INC-37): the roll-forward cron {_declared_cron()!r} "
+        f"does not fire in month(s) {sorted(missing)}. Every roll-forward feed — `talent` above "
+        f"all — would stop advancing for the season, and the NCAAF-PS snapshots are IMMUTABLE, so "
+        f"the forward track record would be permanently missing it.")
+    # …and the pre-season churn window RF1 must not have traded away to buy the in-season half.
+    assert {2, 3, 4, 5, 6, 7, 8} <= months, (
+        f"the Feb–Aug pre-season window regressed: {_declared_cron()!r}")
+
+
+def test_the_retired_february_to_august_window_is_gone():
+    """A presence-only check cannot see a partial edit. Assert the RETIRED expression ABSENT from
+    the constant itself (NF-DTB-1) — while allowing the comment to keep NAMING `2-8`, which is
+    exactly what the incident note must do to stay legible."""
+    assert _declared_cron() != "0 6 * 2-8 1", (
+        "the pre-RF1 Feb–Aug cron is back — see the ⚠️ NCAAF-RF1 note at the constant")
+    assert "2-8" not in _declared_cron().split()[3], (
+        f"the month field still carries the retired `2-8` range: {_declared_cron()!r}")
+
+
+def test_the_documented_window_matches_the_cron_constant():
+    """ONE THING, ONE OWNER: `BOX_OPERATIONS.md §10` is the operator's intended-state table, and a
+    doc that disagrees with the schedule is the `W7B_LAKEHOUSE_S3` documented-but-never-set class.
+    The §10 row quotes the cron literally; this pins the two together so drift fails CI."""
+    rows = [ln for ln in _BOX_OPS.read_text().splitlines()
+            if ln.startswith("|") and "`sports_ncaaf_roll_forward_schedule`" in ln]
+    assert len(rows) == 1, (
+        f"expected exactly one §10 intended-state row for the NCAAF roll-forward, found {len(rows)}")
+    m = re.search(r"declared cron `([^`]+)`", rows[0])
+    assert m, ("the §10 row must state the schedule's cron as ``declared cron `<expr>` `` so it can "
+               "be pinned against the code")
+    assert m.group(1) == _declared_cron(), (
+        f"BOX_OPERATIONS.md §10 documents cron {m.group(1)!r} but the schedule declares "
+        f"{_declared_cron()!r} — update BOTH in the same change.")
+
+
+def test_the_cron_carries_the_incident_and_the_defect_class():
+    """AC1: a future reader must find out from the code WHY the window is a full cycle.
+
+    ⚠️ Deliberately a COMMENT scan — the requirement here IS about the comment. Every assertion on
+    the cron's BEHAVIOUR above reads the value instead, so prose can satisfy this one and only this
+    one (the INC-38 rule is that a *behavioural* guard must not be comment-satisfiable)."""
+    lines = _SCHEDULE_SRC.read_text().splitlines()
+    idx = next(i for i, ln in enumerate(lines)
+               if ln.startswith('NCAAF_ROLL_FORWARD_CRON = "'))
+    # Walk back over the CONTIGUOUS comment block immediately above the constant — not the whole
+    # module docstring, which already says "talent" for unrelated reasons and would make this pass
+    # on prose that has nothing to do with the incident.
+    j = idx
+    while j > 0 and lines[j - 1].lstrip().startswith("#"):
+        j -= 1
+    note = "\n".join(lines[j:idx])
+    assert note.strip(), "the cron constant carries no comment block at all"
+    for token in ("NCAAF-RF1", "E9.48", "INC-37", "talent"):
+        assert token in note, (
+            f"the comment block at NCAAF_ROLL_FORWARD_CRON must name {token!r} — a future reader "
+            f"has to be able to find out from the code why this window is a full season cycle")

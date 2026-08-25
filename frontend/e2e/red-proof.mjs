@@ -2808,6 +2808,214 @@ const CASES = [
     grep: "the disclosure stamps the FEED",
   },
 
+  // ══ NCAAF-P3.2 — the college-football game-predictions surface ═════════════════════════════
+  {
+    id: "ncaaf-curve-falls-back-to-a-normal-silently",
+    shipped: "NCAAF-P3.2 — the shape the model does NOT serve, drawn as if it did",
+    // The served form is whatever the registered artifact is (`strength_posterior` today;
+    // `student_t` and `count` are declared forms, and P2.5 measured a real right-skew on the
+    // college total). Drawing μ/σ's normal instead of the served quantile ladder is a picture of a
+    // model we do not serve — and it looks like a perfectly good bell, which is why nothing but a
+    // provenance assertion can see it.
+    detail: "Forces `buildDistributionCurve` down the parametric branch on every payload.",
+    file: "lib/ncaaf-curve.ts",
+    from: "  const ladder = ladderOf(dist)",
+    to: "  const ladder = null as ReturnType<typeof ladderOf>",
+    grep: "drawn from the served quantiles",
+  },
+  {
+    id: "ncaaf-parametric-fallback-not-labelled",
+    shipped: "NCAAF-P3.2 — a fallback shape presented as the served one",
+    // The other half of the case above. Drawing the fallback is FINE — hiding that it is a
+    // fallback is not: a bell built from two parameters and a curve built from the model's own
+    // simulated quantiles are different pictures, and the reader is entitled to know which.
+    detail: "Drops the note that says the shape came from the parameters, not the ladder.",
+    file: "components/ncaaf/distribution-curve.tsx",
+    from: '      {curve.source === "parametric" && (',
+    to: "      {false && (",
+    grep: "draws the fallback AND labels it",
+  },
+  {
+    id: "ncaaf-market-spread-sign-not-converted",
+    shipped: "NCAAF-P3.2 — the market shown backing the WRONG TEAM",
+    // ⭐ THE MOST CONSEQUENTIAL SILENT ERROR AVAILABLE ON THIS PANEL. The book quotes a home
+    // SPREAD (negative = home favoured); the model publishes a home MARGIN (positive = home
+    // favoured). Forget the conversion and a −2.5 home favourite renders as the market having the
+    // home team losing by 2.5, beside our +12.8 — a plausible-looking number that inverts the
+    // comparison the panel exists for.
+    detail: "Renders the raw home spread in the model's margin column.",
+    file: "components/ncaaf/market-comparison.tsx",
+    from: "  const marketHomeMargin = available && isNum(market.home_spread) ? -market.home_spread : null",
+    to: "  const marketHomeMargin = available && isNum(market.home_spread) ? market.home_spread : null",
+    grep: "renders in the model's units",
+  },
+  {
+    id: "ncaaf-absent-market-renders-as-a-blank",
+    shipped: "NCAAF-P3.2 — an absent market line reading as PARITY",
+    // The branch nearly every reader meets: the only NCAAF odds capture scheduled for 2026 is the
+    // paid /historical catch-up, which cannot reach a kickoff until it is PAST (P3.1 closeout
+    // item 2). In a two-column comparison a blank cell reads as agreement — a fabricated market
+    // view, rendered by a component doing nothing at all.
+    detail: "Falls back to an em-dash instead of naming the absence.",
+    file: "components/ncaaf/market-comparison.tsx",
+    from: '      {market ?? <span className="text-[11px] text-gray-500">{MARKET_ABSENT_LABEL}</span>}',
+    to: '      {market ?? "\u2014"}',
+    grep: "never blanks or zeroes",
+  },
+  {
+    id: "ncaaf-market-null-causes-collapsed",
+    shipped: "NCAAF-P3.2 — two causes of a null market line rendered as one",
+    // NF-C6b/NF-K1: an empty state that means several things costs an investigation every time it
+    // recurs. "Nobody has priced this yet" and "we could not read the market" are different facts,
+    // and the contract carries the machine-readable `reason` precisely so a surface can say which.
+    detail: "Collapses every market-null reason into the single fallback sentence.",
+    file: "components/ncaaf/market-comparison.tsx",
+    from: "          {(market.reason && MARKET_REASON_COPY[market.reason]) || MARKET_REASON_FALLBACK}",
+    to: "          {MARKET_REASON_FALLBACK}",
+    grep: "reads differently from one that was never captured",
+  },
+  {
+    id: "ncaaf-empty-day-rendered-as-a-failure",
+    shipped: "NCAAF-P3.2 — the ordinary state of a Tuesday, reported as an outage",
+    // A day with nothing published answers 404, which on this surface is normal. Rendering it as
+    // "something went wrong" trains a reader to ignore the message that means it really did.
+    detail: "Treats every slate error, including the routine 404, as a failed read.",
+    file: "components/ncaaf/games-page.tsx",
+    from:
+      "  const dayIsEmpty = slate.isError && slateStatus === 404\n" +
+      "  const slateFailed = slate.isError && slateStatus !== 404",
+    to: "  const dayIsEmpty = false\n  const slateFailed = slate.isError",
+    grep: "it is not the failure message",
+  },
+  {
+    id: "ncaaf-opens-on-a-day-with-no-slate",
+    shipped: "NCAAF-P3.2 — a working surface that 404s on open, most days of the week",
+    // ⭐ THE MEASURED CASE, not a hypothetical: the captured manifest's `current_game_day`
+    // (2026-08-24) is NOT in `game_days`, because before the opener "today" is a weekday. Opening
+    // on it renders the empty state over a perfectly good published slate.
+    detail: "Opens on `current_game_day` instead of the next PUBLISHED day.",
+    file: "lib/ncaaf.ts",
+    from:
+      "  if (days.includes(today)) return today\n" +
+      "  return days.find((d) => d > today) ?? days[days.length - 1]",
+    to: "  return today",
+    grep: "opens on a published day even when",
+  },
+  {
+    id: "ncaaf-band-recomputed-from-the-parameters",
+    shipped: "NCAAF-P3.2 — the honest interval, quietly recomputed",
+    // ⭐⭐ AND A FINDING ABOUT WHERE THIS ONE IS CATCHABLE, recorded because it is the more useful
+    // half. This break is caught by `ncaaf-curve.spec.ts`, whose fixture carries an interval that
+    // is deliberately NOT μ ± 1.2816σ. It is NOT catchable by the rendered-band clause in
+    // `ncaaf-games.spec.ts`, and the reason is worth knowing: the CAPTURED payload is Gaussian-
+    // drawn, so μ ± 1.2816σ agrees with the served bounds to the first decimal the card prints.
+    // A rendered assertion over a Gaussian payload structurally cannot separate "served" from
+    // "recomputed" — which is exactly why the arithmetic has its own spec, and why that spec's
+    // fixture is deliberately non-Gaussian.
+    detail: "Reconstructs the 80% band from μ/σ instead of reading the served interval.",
+    file: "lib/ncaaf-curve.ts",
+    from: "  const band = bandOf(dist)",
+    to:
+      "  const band = isNum(dist.mu) && isNum(dist.sigma)\n" +
+      "    ? { lo: dist.mu - 1.2816 * dist.sigma, hi: dist.mu + 1.2816 * dist.sigma, loLevel: 0.1, hiLevel: 0.9 }\n" +
+      "    : bandOf(dist)",
+    grep: "never reconstructed from the parameters",
+  },
+  {
+    id: "ncaaf-started-game-not-flagged",
+    shipped: "NCAAF-P3.2 — a finished game rendered exactly like an upcoming one",
+    // The served payload is a PRE-KICKOFF snapshot with no game state and no score, so without
+    // this a Saturday evening shows projections for games that are underway or over, identical to
+    // games that have not started — and it is invisible to every clause that runs on a day when
+    // the slate is still in the future. `page.clock` is what makes that day testable.
+    detail: "Never flags a game whose kickoff instant has passed.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const started = hasKickedOff(game.commence_time)",
+    to: "  const started = false",
+    grep: "kickoff has passed says so",
+  },
+  {
+    id: "ncaaf-every-game-flagged-as-started",
+    shipped: "NCAAF-P3.2 — the one-sided fix, i.e. the defect the FIX itself invites",
+    // ⭐ THE OTHER HALF. "Flag a started game" is satisfied by a component that flags EVERY game,
+    // which passes the case above and puts a "Kicked off" chip on a slate that has not begun —
+    // the same one-sided shape `quota-notice-shown-for-every-save-failure` records above. The
+    // before-kickoff twin clause is what refuses it, and this is what proves it can.
+    detail: "Flags every card as started, whatever the kickoff instant.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const started = hasKickedOff(game.commence_time)",
+    to: "  const started = true",
+    grep: "before kickoff no card is flagged",
+  },
+  {
+    id: "ncaaf-framing-flags-ignored",
+    shipped: "NCAAF-P3.2 — the honest-frame flags present but not RESPECTED",
+    // P3.1 made the posture MACHINE-READABLE so a surface could branch on it rather than trust a
+    // sentence someone wrote. Ignoring the branch means every claim-bearing string on the page
+    // keeps asserting itself over a payload that no longer warrants it — confidently, and with no
+    // error anywhere. The guarantee that stops it today lives in a WRITER this client cannot see,
+    // across a deploy boundary it cannot control (the API Lambda has no CD — NF-C0).
+    detail: "Treats every payload as market-blind, whatever its framing flags say.",
+    file: "lib/ncaaf.ts",
+    from:
+      "  return (\n" +
+      '    framing.framing === "market_blind_projection" &&',
+    to: "  return true || (\n" + '    framing.framing === "market_blind_projection" &&',
+    grep: "makes the surface WITHDRAW its own copy",
+  },
+  {
+    id: "ncaaf-framing-copy-withdrawn-always",
+    shipped: "NCAAF-P3.2 — the one-sided fix: copy withdrawn on every card",
+    // ⭐ THE OTHER HALF, and it is the more likely mistake: a component that withdraws its framing
+    // sentence unconditionally passes the case above and says NOTHING on any real card — the panel
+    // silently loses the one sentence that makes it honest, on every game, forever.
+    detail: "Withdraws the framing sentence on every payload, real ones included.",
+    file: "lib/ncaaf.ts",
+    from:
+      "  return (\n" +
+      '    framing.framing === "market_blind_projection" &&',
+    to: "  return false && (\n" + '    framing.framing === "market_blind_projection" &&',
+    grep: "states the no-advantage framing on every card",
+  },
+  {
+    id: "ncaaf-total-presented-as-discriminating",
+    shipped: "NCAAF-P3.2 — a pre-season total axis presented as if it separated games",
+    // ⭐ PM ADDENDUM (2), MEASURED: with `pace_term_active` false the eight opener totals span 2.4
+    // points against a sigma of 17.2 — about a seventh of one standard deviation — while the
+    // margins span 31.6. The total's BAND is honest and its ORDERING is noise, so a card that
+    // presented both axes identically would invite a reader to compare totals across games.
+    detail: "Drops the caveat that says the total does not separate games yet.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const totalUndifferentiated = prov.pace_term_active === false",
+    to: "  const totalUndifferentiated = false",
+    grep: "the TOTAL says it does not separate games",
+  },
+  {
+    id: "ncaaf-total-caveat-never-lifts",
+    shipped: "NCAAF-P3.2 — the one-sided fix: the caveat that is still there in November",
+    // ⭐ THE OTHER HALF, and it is the likelier mistake. A card that caveats the total
+    // UNCONDITIONALLY passes the case above and is wrong for most of the season — pace is exactly
+    // what makes the totals differ once it activates, so the note would be withdrawing a reading
+    // the board is for. The pace-ACTIVE twin clause is what refuses it.
+    detail: "Caveats the total on every payload, whatever the served pace flag says.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const totalUndifferentiated = prov.pace_term_active === false",
+    to: "  const totalUndifferentiated = true",
+    grep: "with pace ACTIVE the total carries no such caveat",
+  },
+  {
+    id: "ncaaf-unrecorded-pace-read-as-inactive",
+    shipped: "NCAAF-P3.2 — 'we did not record it' silently read as 'it did not act'",
+    // The absent-vs-null rule the served contract is built on, applied to a PROVENANCE field. A
+    // truthiness test (`!prov.pace_term_active`) treats a NULL — the writer not recording whether
+    // pace acted — as a definite "it did not", and caveats a whole board on an unanswered question.
+    detail: "Reads an unrecorded pace flag as an inactive one.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const totalUndifferentiated = prov.pace_term_active === false",
+    to: "  const totalUndifferentiated = !prov.pace_term_active",
+    grep: "an UNRECORDED pace flag is not read as an inactive one",
+  },
+
 ]
 
 /**
@@ -2870,7 +3078,17 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 171, red: 165, notObservable: 6 }
+// NCAAF-P3.2 adds EIGHT cases, each RED-proven individually (`-- ncaaf-`) rather than by a full
+// board run, for the same reason every entry above records: 179 cases × a production build each
+// does not belong in a session. So 171/165/6 → 179/173/6, and the next full run CONFIRMS it.
+// ⛔ A projection is not a measurement.
+// NCAAF-P3.2's kicked-off state adds TWO more (the same story, a defect found after its first
+// eight cases were proven), each RED-proven individually. So 179/173/6 → 181/175/6.
+// And TWO more for the framing-flag branch (the flags being RESPECTED, both directions).
+// 181/175/6 → 183/177/6.
+// PM addendum (2) — the pre-season totals treatment — adds THREE more, each RED-proven
+// individually. 183/177/6 → 186/180/6.
+const RECORDED_BOARD = { total: 186, red: 180, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
