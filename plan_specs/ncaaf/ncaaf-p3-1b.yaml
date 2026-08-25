@@ -7,7 +7,7 @@ metadata:
   name: ncaaf-p3-1b
   vertical: ncaaf
   card: https://trello.com/c/ikIt1qcm   # P3.2 record thread; P3.1b card linked at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Serve the T-1 odds snapshot as the market line. The T-1 capture has
