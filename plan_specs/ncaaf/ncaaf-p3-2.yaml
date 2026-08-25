@@ -1,0 +1,116 @@
+# Plan spec — NCAAF-P3.2 (FULL tier: flagship frontend surface, calendar-locked)
+# Authored by PM 2026-08-24. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-p3-2
+  vertical: ncaaf
+  card: https://trello.com/c/y0xpO30Y   # P3 epic thread; P3.2 card linked on creation
+  status: ACCEPTED
+spec:
+  description: >
+    The flagship NCAAF game-predictions surface, probability-first and
+    distributional, consuming the P3.1 API. Opener is 2026-08-29. Per the
+    P3 brand directive (ncaaf_story_prompts.md §Phase 3): lead with the WIN
+    PROBABILITY (both sides, "58% / 42%"); visualize margin + total as
+    DISTRIBUTIONAL CURVES drawn from the served interval params — the
+    signature viz, never a point number; show the honest interval (80%);
+    show the MODEL line vs the MARKET line side-by-side as TRANSPARENCY
+    with an explicit no-edge-claim framing. Week selector; link-outs
+    stubbed for P3.3. Reuse MLB card scaffolding where sensible but the
+    framing is uncertainty-forward. NCAAF is FREE (E9.45). best_alpha=0 —
+    no pick, no edge language, no "best bets" anywhere.
+  acceptanceCriteria:
+    - description: >
+        All UI in frontend/ (Next.js) ONLY — never app/ legacy Streamlit
+        (repo CLAUDE.md rule). Frontend-only story: no backend, router, or
+        serving-store changes — P3.1 owns those; if the API contract needs
+        a change, FLAG it, don't make it.
+    - description: >
+        Cards render for the live week from the P3.1 API; curves draw from
+        the served interval params (client-side density/band from the
+        params, no re-derivation of model quantities); model-vs-market
+        rendered honestly with the no-edge-claim copy; mobile-legible
+        (chromium + mobile E2E projects).
+    - description: >
+        DEPENDENCY HANDLING, stated because P3.1's runtime gate may still
+        be completing: build against P3.1's committed Pydantic payload
+        contract with a CAPTURED real payload as the fixture (never a
+        hand-invented one); the final verification leg runs against the
+        DEPLOYED API by name. If the deployed API is not yet live when you
+        reach that leg, STOP there, mark the leg pending in the closeout,
+        and hand the operator the exact verification curls — do not fake
+        the leg with the fixture.
+    - description: >
+        Honest-framing copy discipline: probabilities and intervals are
+        what they are ("the model's line" vs "the market's line",
+        "we don't claim an edge here"); no win-rate claims; every copy
+        string in the frontend claim-copy convention with denylist
+        coverage; the best_alpha=0 flags the payload carries are respected
+        (if the payload says no-edge, the surface may never imply one).
+    - description: >
+        Empty/degraded states are first-class: no games this week, a game
+        with missing market line (absent-vs-null — an absent line renders
+        "no market line", never 0 or a blank that implies parity), a
+        payload field the contract marks optional. E2E asserts RENDERED
+        output (NF-C4) for the happy path AND the degraded states.
+    - description: >
+        Guards RED-proven (mutation landed + predicate moved); a changelog
+        line (Monday block); frontend auto-deploys on merge to main —
+        verify the published surface by name post-deploy.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-p3-2
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "P3.2" / "NCAAF" / "frontend" (board Credence Sports, 2026-08-24)'
+    duplicates: []
+    adjacent:
+      - "NCAAF-P3.1 (IN FLIGHT, serving) — this story consumes its API and touches none of its files; contract changes are flagged, not made."
+      - "P3.3 team stats / P3.9 nav+entitlement (To Do) — link-outs stubbed here; their surfaces are not built here."
+      - "P2.3 naming policy — 'best bets' language is banned; this surface is the highest-risk place for it to creep in via copy reuse from MLB components."
+      - "MLB app components — reused where sensible; do not regress MLB surfaces (shared components need their existing pins green)."
+  triedLedger:
+    files:
+      - "quant_sports_intel_models/football/ncaaf/ncaaf_story_prompts.md §Phase 3 (P3.2 tasks + the cross-cutting brand directive)"
+      - "production_model_state ncaaf sections (CLV null; best_alpha=0 measured — the framing this surface must carry)"
+    recordedNulls:
+      - "VAL1 ALL_BUCKETS_NULL + pooled CLV null — the no-edge framing is a recorded verdict, not a style choice; the surface enforces it."
+  supersedes: []
+  dependsOn:
+    - "P3.1 payload contract on dev (committed); deployed API for the final leg only"
+  feedsInto:
+    - "The 8/29 opener MVP; P3.9 nav/entitlement completes the path to users"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-p3-2-plan
+spec:
+  goalRef: { name: ncaaf-p3-2 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-fixture
+        desc: "Capture a real P3.1 payload as the fixture (operator curl if the API is deployed; else from the serving-write artifact)."
+      - id: 2-cards-and-curves
+        desc: "Game cards: win prob both sides, margin/total curves from interval params, 80% band, model-vs-market, week selector."
+      - id: 3-degraded-states
+        desc: "Empty week, absent market line, optional-field handling; absent-vs-null throughout."
+      - id: 4-guards
+        desc: "Copy denylist + rendered-output E2E (chromium + mobile) + RED-proofs + changelog."
+      - id: 5-live-verify
+        desc: "Against the DEPLOYED API by name; if not yet live, stop, mark pending, hand the operator the curls."
+      - id: 6-closeout
+        desc: "Verdict + findings into closeout.followUps; session summary."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
