@@ -2881,10 +2881,10 @@ const CASES = [
     // "something went wrong" trains a reader to ignore the message that means it really did.
     detail: "Treats every slate error, including the routine 404, as a failed read.",
     file: "components/ncaaf/games-page.tsx",
-    from: "  const dayIsEmpty = slate.isError && slateStatus === 404
-  const slateFailed = slate.isError && slateStatus !== 404",
-    to: "  const dayIsEmpty = false
-  const slateFailed = slate.isError",
+    from:
+      "  const dayIsEmpty = slate.isError && slateStatus === 404\n" +
+      "  const slateFailed = slate.isError && slateStatus !== 404",
+    to: "  const dayIsEmpty = false\n  const slateFailed = slate.isError",
     grep: "it is not the failure message",
   },
   {
@@ -2895,8 +2895,9 @@ const CASES = [
     // on it renders the empty state over a perfectly good published slate.
     detail: "Opens on `current_game_day` instead of the next PUBLISHED day.",
     file: "lib/ncaaf.ts",
-    from: "  if (days.includes(today)) return today
-  return days.find((d) => d > today) ?? days[days.length - 1]",
+    from:
+      "  if (days.includes(today)) return today\n" +
+      "  return days.find((d) => d > today) ?? days[days.length - 1]",
     to: "  return today",
     grep: "opens on a published day even when",
   },
@@ -2914,9 +2915,10 @@ const CASES = [
     detail: "Reconstructs the 80% band from μ/σ instead of reading the served interval.",
     file: "lib/ncaaf-curve.ts",
     from: "  const band = bandOf(dist)",
-    to: "  const band = isNum(dist.mu) && isNum(dist.sigma)
-    ? { lo: dist.mu - 1.2816 * dist.sigma, hi: dist.mu + 1.2816 * dist.sigma, loLevel: 0.1, hiLevel: 0.9 }
-    : bandOf(dist)",
+    to:
+      "  const band = isNum(dist.mu) && isNum(dist.sigma)\n" +
+      "    ? { lo: dist.mu - 1.2816 * dist.sigma, hi: dist.mu + 1.2816 * dist.sigma, loLevel: 0.1, hiLevel: 0.9 }\n" +
+      "    : bandOf(dist)",
     grep: "never reconstructed from the parameters",
   },
 
