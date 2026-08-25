@@ -1,0 +1,137 @@
+# Plan spec — NF-INJ2b (FULL tier: §0.5 — re-select the ordering learner on a per-game RATE target)
+# Authored by PM 2026-08-25. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj2b
+  vertical: nfl_fantasy
+  card: https://trello.com/c/FUOXwXzS
+  status: ACCEPTED
+spec:
+  description: >
+    The successor NF-INJ2's refusal named: NF1.5's ordering learner is
+    fitted on real_fp_ppr (a season TOTAL — it orders POINTS), so handing
+    it a rate multiset asks a question it was never validated on; NF-INJ2's
+    rate_permute fixed coherence and the give-back but breached the
+    pre-registered ordering constraint at the QB draftable tier (tier rho
+    0.481 -> 0.350, BH-significant). Coherence and ordering are NOT jointly
+    satisfiable with the incumbent learner. This story RE-SELECTS/RE-FITS
+    the ordering learner on a per-game RATE target so both hold together.
+    The evidence base is now live: the caps flip published with NF1.5
+    absorbing ~90% of a certified availability correction, ~11 disclosed
+    incoherent rows on the served board, and the -M measurement's 515
+    unflagged rank moves — the give-back is the fantasy product's most
+    user-visible defect. best_alpha=0; DEPLOY-HELD; §0.5 forward-registered;
+    nothing serves without the gated ship path + operator approval.
+  acceptanceCriteria:
+    - description: >
+        FORWARD PRE-REGISTRATION (committed before any scoring): >=3
+        learner/target arms — the rate-target re-fit, the incumbent
+        points-learner (reference), and the stratified middle path — plus
+        degenerates and a matched foil. Two NF-INJ2 field members carry
+        BY NAME with their recorded properties: stratified (beat
+        rate_permute on CRPS 7/7, give-back +6.88%, but 7 impossible rows
+        left — the named fallback) and feasibility_clamp (removes
+        impossible rows at ~0 ordering cost, does NOTHING to the
+        give-back). Gates: CRPS/PIT + the ORDERING constraint (draftable-
+        tier rho per position — the exact gate NF-INJ2 breached, same bar,
+        not relaxed) + PBO/DSR/BH via cv_power with declared_field_size.
+        Per the standing recipe, state in the prereg whether an injected-
+        effect positive control applies to this field's shape and, if the
+        arms are near-clones on any axis, include one.
+    - description: >
+        ⛔ A QB-ONLY application is NOT admissible unless pre-registered
+        forward — adopting it after seeing NF-INJ2's per-position damage is
+        discovering a family after scoring. If a per-position family is
+        wanted, name it on MECHANISM in the prereg before any scoring.
+    - description: >
+        BASELINE = the CURRENT served vintage: the flip board (fitted
+        RES/PUP caps + NF-INJ3c rookie routing + any adopted overrides).
+        SHIP lesson binds: VERIFY input freshness before any board-vintage
+        measurement (read the injury vintage from inside the artifact
+        against its bar — a stale feed capped Kittle at 3.3 games and
+        nearly poisoned a measurement); the chain authority is
+        pipeline/jobs/sports_nfl_board_publish_job.py — open it, don't
+        reconstruct the chain from runners.
+    - description: >
+        SUCCESS is joint: the winning arm must (a) hold the ordering
+        constraint at every position's draftable tier, (b) remove (or not
+        reintroduce) the give-back — measure the availability-discount
+        retention on the flagged cohort, and (c) drive the NF-INJ1
+        violation count on its counterfactual board toward zero. A null
+        (no arm clears all three) is a valid outcome; classify it and the
+        stratified fallback question goes to the operator.
+    - description: >
+        IF IT CLEARS — gated ship path, all deploy-held: counterfactual
+        board rebuild, population-scoped material diff (1e-9; NEVER
+        bitwise; rookie-band motion read against a >=5-draw same-commit
+        envelope — card QkpAHBYa), whole-board placement read + interval
+        reval via --out stems, and the served impact measured on the
+        REAL board. This change re-orders the flagship paid surface: the
+        operator packet carries top-25 rank moves per config including
+        superflex, and the publish decision is the operator's with a
+        combined read on the exact publish-candidate board.
+    - description: >
+        Standing disciplines: reproduction pins 1e-9; RED-proofs (mutation
+        landed + predicate moved); no re-read of NF-INJ2's refusal
+        (E2.1-r — this story SUPERSEDES the learner, it does not relax the
+        gate); no post-hoc trims (MH2.2); runtime handoff — anything
+        expected >2 min goes to the operator paste-ready; run the CI shard
+        that OWNS any shared-instrument guard touched.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj2b
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ2b" / "ordering" / "NF1.5" (board Credence Sports, 2026-08-25)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ3b-SHIP (Done, published) — the caps this learner now composes with; its stamp guard + boundaries untouched."
+      - "NF-INJ-NEWS-1 / NF-INJ3c (Done) — the availability chain feeding the rate multiset; read-only here."
+      - "Full-season-rate render card (To Do) — display; a successful INJ2b shrinks its population but does not close it."
+      - "🚨 rookie-band non-determinism (To Do) — consumed as the standing envelope rule; not fixed here."
+      - "NF-INJ1-C suppression (Done, live) — the symptom patch this story aims to make unnecessary; its guards must stay green on the counterfactual."
+  triedLedger:
+    files:
+      - "ablation_results/nf_inj2_rate_permutation.md (the refusal + §3d mechanism + §4 successor naming)"
+      - "nf_inj3b_m_counterfactual.md incl. the CORRECTION block (the give-back measurement; Michael Mayer as the clean re-order exhibit)"
+      - "production_model_state/nfl_season_fantasy.md (NF1.5 stack + the ordering ceiling record)"
+    recordedNulls:
+      - "NF-INJ2 CONSTRAINT_REFUSED — not re-read; this story replaces the learner the refusal diagnosed, under the SAME ordering bar."
+      - "NF1.5 stage-2 six-class null (season-level features) — the re-fit changes TARGET, not the feature space; no feature expansion."
+  supersedes: []
+  dependsOn:
+    - "The Tue 8/25 9:30 verification reading CLEAN (the flip board is the baseline; a reversal would change it)"
+  feedsInto:
+    - "Coherence + ordering holding together on the flagship board; retiring the give-back and, eventually, the Option-C suppression's population"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj2b-plan
+spec:
+  goalRef: { name: nf-inj2b }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-prereg
+        desc: "Arms, gates, family, controls — committed BEFORE scoring; baseline vintage + freshness check recorded."
+      - id: 2-bake-off
+        desc: "Run the registered field (slice-timed; operator handoff if >2 min)."
+      - id: 3-classify
+        desc: "Gates + classify; decisive record; the three-part joint success read."
+      - id: 4-gated-ship-path
+        desc: "ONLY IF CLEARED: counterfactual rebuild + diff + placement/interval via --out stems; operator packet."
+      - id: 5-closeout
+        desc: "Verdict + findings into closeout.followUps; operator summary."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
