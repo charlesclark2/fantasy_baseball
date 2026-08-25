@@ -861,6 +861,50 @@ def apply_availability_chain(
     return df
 
 
+#: NF-INJ3b-SHIP — the PER-ROW injury-games evidence columns carried on the built board.
+INJURY_GAMES_EVIDENCE_COLS: tuple[str, ...] = ("injury_games_served", "injury_games_incumbent")
+
+
+def stamp_injury_games_evidence(df: pd.DataFrame, row_log: dict) -> pd.DataFrame:
+    """Carry the formal step's PER-ROW injury-games evidence onto the frame (NF-INJ3b-SHIP, D6).
+
+    ⭐ WHY IT IS ON THE BOARD AT ALL, and it is the whole reason the D6 publish guard can exist.
+    `injury_games_policy.stamp()` says which cap model this build was CONFIGURED to serve; these two
+    columns say what it ACTUALLY DID to each row. A build that lost its covariate feed serves the
+    incumbent while still stamping the fitted arm's `model_version` — the two look identical from
+    the stamp alone, and identical from the games column alone, and differ only here. Guarding the
+    stamp against the rows is what turns "the declaration outran its production" (NF-C0e) from an
+    invisible failure into a refused publish.
+
+    ⛔ NaN, not 0.0, on every row the fitted arm did not produce. A zero would read as "the fitted
+    arm projected this player at zero games", which is a real and meaningful value for a shelved
+    player; absence has to be absence.
+
+    Keyed on `player_id` because `apply_availability_chain` may hand back a different frame object
+    from the one the formal callable saw."""
+    for col in INJURY_GAMES_EVIDENCE_COLS:
+        if col not in df.columns:
+            df[col] = np.nan
+    pid = row_log.get("player_id")
+    fitted = row_log.get("fitted")
+    if pid is None or fitted is None:
+        return df                       # no formal step ran on this frame at all
+    key = pd.Series(df["player_id"].astype(str).to_numpy(), index=df.index)
+    cert = np.asarray(row_log["certified"], dtype=bool)
+    df["injury_games_served"] = key.map(
+        dict(zip(pid, np.asarray(fitted, dtype=float)))).astype(float).to_numpy()
+    # ⭐ THE INCUMBENT COLUMN IS FILLED ON EVERY **CERTIFIED** ROW, not only on the rows the fitted
+    #    arm produced — and that asymmetry is deliberate and load-bearing. It is what lets the D6
+    #    guard tell "the fitted arm had certified rows available and did not produce any" (a build
+    #    that lost its covariate feed — the failure) apart from "this board has no certified rows at
+    #    all" (an off-season board, where the mechanism simply cannot act and a pass would be
+    #    vacuous — NF-D20's "count the folds the mechanism could act on before crediting a pass").
+    df["injury_games_incumbent"] = key.map(
+        dict(zip(pid[cert], np.asarray(row_log["incumbent"], dtype=float)[cert]))
+    ).astype(float).to_numpy()
+    return df
+
+
 def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND,
                            positions: tuple = _ENV_TILT_POSITIONS) -> np.ndarray:
     """NF-D2 slice 4 / NF-D4 — the per-position multiplicative environment tilt from the projection-
@@ -1293,6 +1337,13 @@ def project_veterans(
     #    NF-D2 slice 5 — the FORMAL cap. Expected games for a player flagged unavailable
     #    (RES/PUP/NFI/SUS) in the projection-season roster, with the whole season line rescaled by
     #    the games ratio. No-op when `proj_status` is absent or `injury_override_blend == 0`.
+    # ⭐ NF-INJ3b-SHIP (PM ruling D6): the PER-ROW evidence the publish guard reads back off the
+    #    ARTIFACT. `injury_games_served` is what the formal step ACTUALLY produced for a certified
+    #    row and `injury_games_incumbent` is what the shipped constants would have produced for the
+    #    SAME row — so "did the fitted arm move this board" is a MEASUREMENT on the published board
+    #    rather than a claim the policy module makes about itself (NF-C0e). NaN on every row the
+    #    fitted arm did not produce, which is every row of a flag-off build.
+    _inj_row_log: dict = {}
     _formal_games = None
     if injury_override_blend > 0 and "proj_status" in df.columns:
         # ⭐ NF-INJ3b-M: THE COVARIATE FEED the certified hurdle needs. `onset_carryover`,
@@ -1319,7 +1370,10 @@ def project_veterans(
             )
             _games, _prov = _IGS.served_injury_games(
                 _frame, eg=_frame["proj_games"].to_numpy(), blend=injury_override_blend,
-                feed_supplied=(injury_covariates is not None))
+                feed_supplied=(injury_covariates is not None), row_log=_inj_row_log)
+            # keyed by player_id, not by position: `apply_availability_chain` hands this callable
+            # the frame it is about to rescale, and a later step may return a NEW frame.
+            _inj_row_log["player_id"] = _frame["player_id"].astype(str).to_numpy()
             if _prov.get("path") == "incumbent_no_feed":
                 import logging
                 logging.getLogger("nfl.fantasy.season_projection").warning(
@@ -1335,6 +1389,7 @@ def project_veterans(
         absence_prior=absence_prior, absence_prior_blend=absence_prior_blend,
         reported_absence_rows=reported_absence_rows, reported_absence_log=reported_absence_log,
     )
+    df = stamp_injury_games_evidence(df, _inj_row_log)
 
     # ── NF-TR2b: the served veteran LEVEL recalibration — a per-position constant on the per-game
     #    RATE, carried onto the whole line (every scoring format moves together). Applied LAST among
