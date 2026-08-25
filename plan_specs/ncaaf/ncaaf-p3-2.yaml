@@ -123,7 +123,13 @@ spec:
       against api.credencesports.com. ⏸️ THE CLIENT HALF CANNOT BE DONE FROM THIS
       SESSION: frontend/ auto-deploys on merge to main, so "verify the published
       surface by name" is a POST-MERGE operator step and is handed over as one rather
-      than faked against the fixture.
+      than faked against the fixture. ⚠️ It was ATTEMPTED PRE-MERGE and blocked, which
+      is worth recording because it is the cheaper path: the PR's Vercel PREVIEW
+      deployment renders this surface against the LIVE API, but it sits behind Vercel
+      SSO (an anonymous GET returns 302 to `vercel.com/sso-api`), so a session cannot
+      reach it. AN OPERATOR LOGGED INTO VERCEL CAN — and that makes the surface
+      verifiable BEFORE the merge rather than only after it. Both commands are in the
+      handoff.
     followUps: >
       -1) 🚨 THE TRANSPARENCY PANEL SHIPS WITH ITS PRIMARY BRANCH AS AN ABSENCE, and the
       PM decision that fixes it is P3.1 closeout item 2, still open. Measured on the live
