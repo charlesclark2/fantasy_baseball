@@ -101,7 +101,9 @@ spec:
       `/ncaaf/games` at 307 (⛔ not 308: `/ncaaf` may become a real hub at P3.3/P3.6, and a
       permanent redirect is cached past any future page). Footer NCAAF row promoted from
       `COMING` to `PRODUCTS` as a live link, with the "Coming this season" group surviving on
-      NFL, which is genuinely unbuilt.
+      NFL, which is genuinely unbuilt. The fourth door filled the signed-out bar and it had to
+      be paid for in layout — see follow-up 5, which is the most useful thing in this closeout
+      for whoever touches the nav next.
 
       AC2 LOGOS. ESPN mark beside each team name, sized well under the probability. The
       payload's `team_id` IS the ESPN id — re-verified in-session against the live CDN for all
@@ -226,13 +228,28 @@ spec:
       uniqueness assert; the E9.64 lesson ("a red-proof harness nobody runs is decorative") is
       one level up from where it currently bites.
 
-      ⚠️ 5. THE SIGNED-OUT DESKTOP BAR IS NOW FULL. A fourth door put it 7px past its own
-      container at 640px — caught by `positioning-alignment.spec.ts`, which exists for exactly
-      this. Absorbed by tightening the bar's gap from `sm:gap-3` to `md:gap-3` (24px recovered
-      at its narrowest rendering width; unchanged from `md` up), ⛔ not by demoting a door,
-      which would re-hide a product from the bar. A FIFTH desktop entry will not fit without a
-      real positioning decision — a dropdown, or demoting a company page to mobile-only. → PM:
-      checklist item wherever nav positioning lives, so the next story does not discover it.
+      ⚠️⚠️ 5. THE SIGNED-OUT DESKTOP BAR IS FULL, AND A BINARY OVERFLOW CHECK CANNOT SAY SO.
+      A fourth door put it past its own container at 640px — caught by
+      `positioning-alignment.spec.ts`, which exists for exactly this. ⭐ THE INSTRUCTIVE PART IS
+      THAT THE FIRST FIX PASSED LOCALLY AND STILL FAILED CI: a flex row SHRINKS its items
+      rather than overflowing, so the bar can sit at 100% capacity and report `overflow = 0` on
+      macOS while CI's Linux font metrics render the same strings ~5px wider and tip it over.
+      "Fits" and "fits by nothing" are the same green.
+      MEASURED at 640px: the `h-12` wordmark was 144px of a 640px bar — the single largest item
+      on it — so moving its step-up from `sm` to `md` took headroom from −14px to +26px.
+      ⛔ THE CHEAPEST-LOOKING RECLAIM WAS WRONG AND IS RECORDED AT THE CALL SITE: folding
+      `Sign In` away to `md` would have freed ~65px, but the hamburger is `sm:hidden`, so
+      between 640 and 767px there is no mobile menu either — a logged-out visitor would have had
+      NO Sign In affordance anywhere in that band, which is the E9.58 defect exactly. Demoting a
+      door was rejected for the same shape of reason: it re-hides a product from the bar, which
+      is the defect this story exists to fix.
+      `positioning-alignment.spec.ts` now ANNOTATES the measured headroom on every run — a
+      REPORT, not a new requirement; the pass/fail clause is untouched — so the next session
+      reads the number instead of spending a CI cycle discovering it.
+      ⚠️ A FIFTH desktop entry does not fit inside 26px. It needs a real positioning decision —
+      a dropdown, or demoting a company page to mobile-only (About and FAQ are both in the
+      footer's Credence column on every page, which is the E9.46 precedent). → PM: checklist
+      item wherever nav positioning lives.
 
       ℹ️ 6. `next.config.mjs` now has TWO redirects with DELIBERATELY DIFFERENT permanence, and
       the difference is load-bearing: `/pricing` → `/subscribe` is 308 because that URL is a
