@@ -137,9 +137,20 @@ spec:
       THIS PR for the pre-existing reason and would destroy the evidence the spec asked for),
       rolled into the named `Unit Tests (fast gate)` check so a red guard actually fails the
       gate rather than running red beside it (finding ⑧ moved one job over).
-      PROOF ON THIS PR: the `Detect backend changes` job prints `changelog=true` and
-      "→ changelog guard WILL run"; `Changelog guard (Monday-week keys)` executes rather than
-      skipping. Read those two on PR #1046's run — the operator's post-merge checks list it.
+      PROOF, CAPTURED VERBATIM (PR #1046, run on 906ed69f — recorded here because an Actions
+      log expires and this is the evidence the spec asked for). `Detect backend changes` step
+      "Report the verdict":
+        backend=true
+        changelog=true
+        -> Python suites WILL run (the diff touches something outside frontend/docs)
+        -> changelog guard WILL run (frontend/data/changelog.json changed)
+      and the job `Changelog guard (Monday-week keys)` concluded SUCCESS, i.e. it RAN rather
+      than skipping. ⭐ THE SECOND LINE IS THE ONE THAT MATTERS: `backend` is true on this PR
+      (it edits `.github/workflows/ci.yml`), so the guard would have run for the OLD reason —
+      which is exactly why the job is gated on `changelog` ALONE. Its running is attributable
+      to the new trigger and to nothing else. The counterfactual is measured rather than
+      asserted: on a `frontend/`-only diff (PR #1036's shape) the same filter answers
+      backend=false / changelog=true, so the shards skip and the guard still runs.
 
       AC4 CHANGELOG + PROMOTION. One user-facing entry added to the existing `2026-08-24`
       Monday block as a 4-line insertion (the file round-trips byte-identically through
