@@ -7,7 +7,7 @@ metadata:
   name: nf-inj2b
   vertical: nfl_fantasy
   card: https://trello.com/c/FUOXwXzS
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The successor NF-INJ2's refusal named: NF1.5's ordering learner is
