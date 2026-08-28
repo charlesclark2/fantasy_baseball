@@ -224,6 +224,36 @@ The injected effect is **+0.75 CRPS** per fold on every non-degenerate, non-refe
 now. It is ~2.4× the lift NF-INJ2 measured (0.3126), i.e. an effect nobody would call marginal, and it
 is applied uniformly so the near-clone geometry is preserved.
 
+> #### ⚠️ AMENDMENT 1 — 2026-08-27, filed BEFORE ANY SCORING (nothing had been run when this was written)
+>
+> **The injection also plants +0.05 draftable-tier ρ per fold, per position, on the same arms.**
+>
+> The clause above plants a SELECTING-METRIC effect only. Writing the control revealed that this
+> would not answer the question the control is registered to ask. `injected_effect_positive_control`
+> partitions the registered gates into DEFLATION-class and METRIC, and returns `BLIND` when not even
+> the metric gates fire. This study's registered gate table contains the ORDERING CONSTRAINT, which
+> is held at its REAL value by a CRPS-only injection — so on any run where the constraint legitimately
+> fails, the control would return `BLIND`, whose documented meaning is *"a null from this family is
+> free"*. That would be flatly wrong, and it would be a label attached to the study's headline.
+>
+> A planted TRUE POSITIVE for THIS study is an arm that is better on the selecting metric **and**
+> does not regress the ordering constraint. The injection must therefore reach both, and +0.05 tier-ρ
+> per fold per position is enough to make the one-sided paired regression test unambiguously
+> non-significant in the "arm is worse" direction for a planted arm.
+>
+> ⛔ This changes NO bar, NO arm, NO gate and NO reading of the study. It changes only what the
+> DIAGNOSTIC control plants, it is filed before a single arm was scored, and the original clause is
+> left above VERBATIM (E2.1-r / NF-W7f: a pre-registration is not edited, it is amended on the
+> record). The MLB-TV2-0 node-2 amendment is the precedent for the shape.
+>
+> One consequence, stated now so it is a prediction and not a post-hoc reading: because the
+> registered per-arm gate table deliberately **excludes** `pbo` (a FIELD-level statistic must not be
+> carried as a per-arm pass/fail — PLAT-CVP1 defect 4(a)), the control's
+> `field_level_gates_applied_per_arm` is expected to come back **EMPTY**. That emptiness is the
+> affirmative finding, not an absence of one. The field-level PBO's behaviour under injection is
+> reported BESIDE the control as a labelled diagnostic, because it is the MLB-HV2-1 mechanism and
+> would otherwise be invisible.
+
 ### Anchors
 
 * Every degenerate scored every run and its number READ (NF-D14).
