@@ -7,7 +7,7 @@ metadata:
   name: nf-inj2b
   vertical: nfl_fantasy
   card: https://trello.com/c/FUOXwXzS
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The successor NF-INJ2's refusal named: NF1.5's ordering learner is
@@ -130,8 +130,103 @@ spec:
       - id: 5-closeout
         desc: "Verdict + findings into closeout.followUps; operator summary."
   closeout:
-    verdict: null
+    verdict: >
+      HARNESS COMPLETE AND SMOKE-PROVEN; THE DECISIVE RUN IS THE OPERATOR'S (>2 min, handed off
+      paste-ready). Nodes 0, 1 and the buildable half of 2 are done and committed; nodes 3-5 are
+      computed BY that run, which writes the decisive record and the null classification itself.
+      `best_alpha = 0`; DEPLOY-HELD throughout — `nf_inj2b_rate_ordering.SERVED_ARM` is `None`, so
+      the board keeps serving NF-INJ2's `incumbent`, and `assert_coherent()` runs at import and
+      refuses a flag flip the record does not support.
+
+      PRECONDITION VERIFIED FROM INSIDE THE SERVED ARTIFACT, not assumed: the flip board reads
+      `injuryGamesStamp.verdict = FLIPPED_AND_MOVED` (passed, 25/25/25 fitted rows moved, max move
+      4.00 games), Alec Pierce at g = 3.7, 'AJ Dillon' present (the 32 all-caps names are D/ST),
+      the injury input 0.8h fresh against its 72h bar, `reportedAbsenceCount = 0` and 11 coherence
+      violations. Nothing was reversed on 2026-08-25 and the board has republished twice since with
+      the flip intact, so the flip board IS the baseline.
+
+      WHAT WAS BUILT — a 10-arm field declared on MECHANISM before any scoring: a 2x2 over the two
+      factors NF-INJ2's own diagnosis names (the score's FIT TARGET x the multiset ASSIGNMENT rule),
+      plus the two NF-INJ2 members the spec carries by name and two pre-registered degenerates. The
+      four specification items NF-INJ3's null turned on are fixed FORWARD: `V`'s membership
+      (degenerates AND the `incumbent` reference arm excluded per DSR-CONV + MH2.1 (a), `n_trials`
+      at the full declared field), the BH family named per leg, `pbo_application="field"`, and the
+      injected-effect positive control declared APPLICABLE with its reason (arms 2-6 are near-clones
+      on the assignment axis). The ordering constraint is NF-INJ2's bar VERBATIM, not relaxed.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) ⭐ MEASURED BEFORE ANY SCORING, AND IT BOUNDS WHAT THE STORY'S OWN HEADLINE CAN ACHIEVE —
+      recorded in the pre-registration §1b so a weak primary cannot later read as an excuse. The fit
+      target reaches `PosRefinedBlend`'s score ONLY through its inner model, which exists only when
+      `anchor == "learned"`. RB's selected class (`pos_blend_flat`) anchors on `mvp1_fp`, so at RB
+      the rate re-fit is BYTE-IDENTICALLY INACTIVE (measured max |Δscore| = 0.000e+00, confirmed
+      0/2 folds active on the smoke). An RB result under the primary is UNINFORMATIVE, never a pass
+      (NF-D20) — and the joint criterion now reports the active-cell count beside the pass count.
+      It does not threaten the criterion (RB was not the breached position), but it had to be
+      measured rather than discovered. ⚠️ AND WHERE THE RE-FIT IS ACTIVE IT MOVES THE ORDERING ONLY
+      SLIGHTLY — rho(points-fit, rate-fit) >= 0.9918 at every active position — because the score
+      is a z-blend whose market axis (`market_score`, an ADP/ECR season-TOTAL consensus) is
+      TARGET-INVARIANT. A target swap alone cannot make the score availability-neutral, which is
+      exactly why the field also carries an arm acting on the MULTIPLY (`rate_refit_stratified`)
+      rather than on the score. `rate_refit_reselect` DOES rescue RB (2/2 folds active) because it
+      can move the class off the mvp1 anchor.
+
+      (2) 🔴 A SILENT-VACUITY DEFECT INHERITED FROM NF-INJ2's RUNNER, FIXED HERE — worth the PM's
+      attention because it is live in a DECIDED story's code. `apply_2026` substituted the ARM'S OWN
+      BOARD for a missing served baseline (`served if served is not None else board`), which makes
+      every served-relative figure compare an arm to itself and reports a structural zero as a
+      measurement. NF-INJ2's own record therefore carries a `served_giveback_pct` that may be its
+      arm's own number rather than the served board's. NF-INJ2b REFUSES instead, and reads the
+      baseline from the PUBLISHED artifact rather than any rebuild. Two-sided proven: with the real
+      baseline staged, `served_giveback_pct` is now IDENTICAL (121.4) across three arms, as a
+      property of the served board must be.
+
+      (3) 🔴 A 1e-9 REPRODUCTION PIN AGAINST THE PUBLISHED BOARD IS UNACHIEVABLE, NOT STRICT.
+      `projections.json` serves `fpPpr`/`g` rounded to ONE decimal, so a 1e-9 bar against it is a
+      tolerance nothing could ever meet (the E9.61 class: an API-rounded side compared against a
+      recomputed side manufactures phantom deltas). The pin now runs at half the artifact's own
+      rounding unit and SAYS SO; the story's 1e-9 discipline still governs every LOCAL diff. Any
+      future story pinning a rebuild against the wire inherits this.
+
+      (4) ⚠️ A PREREQUISITE THE DECISIVE RUN CANNOT PROCEED WITHOUT, and the guard that found it.
+      The local MVP-1 2026 board is 58.2h from the served board, against a 48h bar — so the 2026
+      application REFUSES (verified live: it raises, naming the lag). Every 2026 number computed off
+      it would be about a board nobody is served. The operator must rebuild the marts + MVP-1 board
+      and RE-STAGE the published `projections.json` immediately before the run. ⭐ AND A CONSTRAINT
+      WORTH KNOWING: `--market-refresh` pulls a live ADP/ECR snapshot that FEEDS THE ORDERING and
+      moves daily, so an exact pin against a published board is only reachable close to that board's
+      own publish. This is a property of the chain, not of this story.
+
+      (5) ⭐ A METHOD FINDING ABOUT THE NEW POSITIVE CONTROL, MEASURED RATHER THAN ASSUMED, and it
+      generalises to every study that runs one. A UNIFORM ADDITIVE injection is a STRUCTURAL NO-OP
+      on a rank-based FIELD statistic: CSCV/PBO ranks arms within each in-sample half, so a common
+      shift cannot re-order the treated arms among themselves (measured 0/35 splits moved). Reading
+      "PBO did not move under injection" as evidence about the field would be reading a property of
+      the injection. MLB-HV2-1's PBO rose because its injection was a bias on the DATA that each arm
+      responded to DIFFERENTLY — a different object. The control now COUNTS the splits its injection
+      moved and reports the statistic INERT when that count is zero. ⛔ The fix is NOT a non-uniform
+      injection: uniformity is what preserves the near-clone geometry the control exists to probe.
+      Carried into CLAUDE.md beside the PM's gate-class convention.
+
+      (6) ⭐ THE PLAT-CVP1 DEFECT-4(a) DETECTOR CAME BACK EMPTY, AND THE EMPTINESS IS THE FINDING.
+      `field_level_gates_applied_per_arm == []` because this study's registered per-arm gate table
+      deliberately OMITS `pbo` — a field-level statistic must not be carried as a per-arm pass/fail.
+      Predicted in the pre-registration amendment before the control was run, so it is a confirmed
+      prediction rather than an absence of one.
+
+      (7) ⚖️ NEEDS YOUR CALL AFTER THE DECISIVE RUN — the pre-registration's §6 first branch says a
+      TIE on the selecting metric still SHIPS, because coherence is a correctness constraint the
+      incumbent FAILS on 11 live rows. That is the pricing-vs-discrimination family rule and it is
+      written down in advance precisely so it cannot look like a post-hoc rescue. It did not decide
+      NF-INJ2 (that arm WON the metric and was refused on the ordering constraint), and it may not
+      decide this one either — but if the run lands on it, the disposition is yours, not the gate's.
+
+      (8) 📎 The two SHIPPED-CODE additions are strictly additive and guarded as such: `score_target`
+      defaults to `"points"` and `capture` to `None` on both `learned_scores_by_player` and
+      `build_season_projection`, so any caller that never heard of NF-INJ2b is byte-identical
+      (NF-C0 / E8.6). `apply_learned_ordering` now resolves the served arm through ONE owner
+      (`nf_inj2b_rate_ordering.resolve_served_arm`), which refuses a state where both registrations
+      name a non-incumbent arm (INC-30 / INC-36 / INC-38).

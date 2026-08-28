@@ -529,20 +529,25 @@ def apply_learned_ordering(mvp1: pd.DataFrame, learned_score: np.ndarray,
     player by his MVP-1 points on a scale the learner does not share — silently interleaves two
     different scales. A player the model cannot speak to should be left alone, not guessed at."""
     from quant_sports_intel_models.football.nfl.fantasy import season_projection as _SP
-    from quant_sports_intel_models.football.nfl.fantasy import nf_inj2_rate_permutation as _RP
+    from quant_sports_intel_models.football.nfl.fantasy import nf_inj2b_rate_ordering as _RO
     out = mvp1.copy()
     base = _SP.score_line(out, prefix="proj_")["proj_fp_ppr"].to_numpy(dtype=float)
     pos = np.array([(p or "").upper() for p in out["position"]], dtype=object)
     score = np.asarray(learned_score, dtype=float)
     elig = (np.ones(len(out), dtype=bool) if eligible is None
             else np.asarray(eligible, dtype=bool))
-    use_arm = _RP.SERVED_ARM if arm is None else str(arm)
-    remapped = _RP.assign_targets(
+    # ⭐ NF-INJ2b: ONE owner decides which arm the board serves. `nf_inj2b_rate_ordering` holds the
+    # NF-INJ2b field, DELEGATES every rule NF-INJ2 already owns to it, and `resolve_served_arm()` is
+    # the single authority — two policy modules each naming a served arm is the "one logical thing,
+    # two execution owners" class (INC-30 / INC-36 / INC-38). Its `assert_coherent()` runs at import
+    # and refuses a state where both name a non-incumbent arm.
+    use_arm = _RO.resolve_served_arm() if arm is None else str(arm)
+    remapped = _RO.assign_targets(
         base=base, games=out.get("proj_games"), score=score, positions=pos, eligible=elig,
         arm=use_arm, learn_positions=positions, line=out,
-        seed=_RP.RANDOM_ORDER_SEED if arm_seed is None else int(arm_seed),
+        seed=_RO.RANDOM_ORDER_SEED if arm_seed is None else int(arm_seed),
         rescale_lo=lo, rescale_hi=hi)
-    hi_eff = _RP.feasible_hi(arm=use_arm, line=out, positions=pos,
+    hi_eff = _RO.feasible_hi(arm=use_arm, line=out, positions=pos,
                              games=out.get("proj_games"), rescale_hi=hi)
     return apply_learned_level(out, remapped, lo=lo, hi=hi_eff)
 

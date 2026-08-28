@@ -505,16 +505,113 @@ def _make_selected_learner(pos: str, sel: dict, nf11: dict):
     return M13.make_pos_learner(name, feats=M13.POSITION_FEATURES[pos], **sel["hp"])
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-INJ2b — the ordering learner's FIT TARGET
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#: the fit targets `learned_scores_by_player` understands. `points` is the shipped behaviour
+#: (`real_fp_ppr`, a season TOTAL); `rate` is the per-game rate the coherent assignment rules
+#: actually hand out; `rate_reselect` additionally re-selects the learner CLASS in-fold on that
+#: target. Declared in `ablation_results/nf_inj2b_preregistration.md` §2 before any scoring.
+SCORE_TARGETS = ("points", "rate", "rate_reselect")
+
+#: a hard floor on the games divisor, so a degenerate row can never produce an infinite rate. It is
+#: MEASURED to be inert on this pool rather than asserted: `real_games` has minimum 6.0 across all
+#: 6,958 pooled player-seasons (the pool is built from players who actually played ≥6 games), i.e.
+#: ~24× the floor. `_fit_target_binding()` reports the count so "inert" stays a measurement.
+_RATE_GAMES_FLOOR = 0.25
+
+
+def _fit_target_values(tr: pd.DataFrame, score_target: str) -> np.ndarray:
+    """The ordering learner's fit target `y` for one position's training rows.
+
+    ⭐ THE WHOLE POINT OF NF-INJ2b. `points` returns the season TOTAL the learner has always been
+    fitted on. `rate` returns `real_fp_ppr / real_games` — the per-game rate — because NF-INJ2's §6b
+    decomposition showed that handing a POINTS-fitted score a RATE multiset asks it a question it was
+    never validated on, and the mismatch is largest exactly where the games spread is widest."""
+    y = pd.to_numeric(tr["real_fp_ppr"], errors="coerce").to_numpy(dtype=float)
+    if score_target == "points":
+        return y
+    if "real_games" not in tr.columns:
+        raise KeyError(
+            "the training pool carries no `real_games`, so a per-game RATE target cannot be formed. "
+            "Refusing rather than silently falling back to the POINTS target, which would score an "
+            "arm under another arm's name and make the whole bake-off vacuous.")
+    g = pd.to_numeric(tr["real_games"], errors="coerce").to_numpy(dtype=float)
+    return y / np.where(np.isfinite(g) & (g > _RATE_GAMES_FLOOR), g, _RATE_GAMES_FLOOR)
+
+
+def _fit_target_binding(tr: pd.DataFrame) -> int:
+    """How many training rows the rate floor actually moved — reported, never assumed."""
+    if "real_games" not in tr.columns:
+        return -1
+    g = pd.to_numeric(tr["real_games"], errors="coerce").to_numpy(dtype=float)
+    return int(np.sum(~(np.isfinite(g) & (g > _RATE_GAMES_FLOOR))))
+
+
+def _reselect_in_fold(pos: str, sel: dict, nf11: dict, tr: pd.DataFrame,
+                      projection_season: int) -> tuple[str, dict]:
+    """Choose the ordering learner's CLASS in-fold on the per-game RATE target (NF-INJ2b §2).
+
+    STRICTLY IN-FOLD: candidates are fitted on pool target seasons ≤ `projection_season − 2` and
+    ranked on `projection_season − 1`. The EVALUATION fold is never touched, so this is a selection,
+    not a peek (the NCAAF-P2.1 target-encoding lesson: select in-fold or the collapse is an
+    estimator artefact rather than a verdict).
+
+    Candidates are `nf1_5_model.STAGE1_CANDIDATES` — the SAME four-variant family NF1.5's own stage-1
+    searched, ⛔ no expansion. Hyperparameters are NOT re-tuned: each candidate takes this position's
+    NF1.5-selected `hp` restricted to the parameters that variant accepts, because a new Optuna
+    search would be a different and much larger intervention with its own deflation cost. Ties break
+    by `STAGE1_CANDIDATES` order, so the choice is deterministic.
+
+    Returns `(learner_name, hp)`. Falls back to the position's shipped selection when the inner split
+    cannot be formed — and that fallback is RECORDED by the caller, never silent."""
+    ts = pd.to_numeric(tr.get("target_season"), errors="coerce")
+    inner_tr = tr[ts <= projection_season - 2]
+    inner_va = tr[ts == projection_season - 1]
+    if len(inner_tr) < 30 or len(inner_va) < 10:
+        return sel["learner"], dict(sel.get("hp") or {})
+    y_tr = _fit_target_values(inner_tr, "rate")
+    y_va = _fit_target_values(inner_va, "rate")
+    if not np.isfinite(y_va).any() or float(np.nanstd(y_va)) < 1e-12:
+        return sel["learner"], dict(sel.get("hp") or {})
+    best, best_rho, best_hp = None, -np.inf, {}
+    for name in M15.STAGE1_CANDIDATES:
+        allowed = {"blend_w"} | ({"disp_slope"} if M15._STAGE1_VARIANTS[name]["tune_slope"] else set())
+        hp = {k: v for k, v in (sel.get("hp") or {}).items() if k in allowed}
+        try:
+            cand = M15.make_stage1_learner(name, inner=_anchor_spec(pos, nf11), **hp)
+            cand.fit(inner_tr, y_tr)
+            pred = np.asarray(cand.predict(inner_va), dtype=float)
+        except Exception:                      # a candidate that cannot fit is not a candidate
+            continue
+        ok = np.isfinite(pred) & np.isfinite(y_va)
+        if ok.sum() < 10 or float(np.nanstd(pred[ok])) < 1e-12:
+            continue
+        rho = pd.Series(pred[ok]).corr(pd.Series(y_va[ok]), method="spearman")
+        if pd.notna(rho) and float(rho) > best_rho + 1e-12:
+            best, best_rho, best_hp = name, float(rho), hp
+    return (best, best_hp) if best is not None else (sel["learner"], dict(sel.get("hp") or {}))
+
+
 def learned_scores_by_player(con, base_season: int, projection_season: int, schema: str,
                              selections: dict[str, dict], inputs,
                              pool: pd.DataFrame,
-                             market_refresh: bool = False) -> dict[str, float]:
+                             market_refresh: bool = False,
+                             capture: dict | None = None,
+                             score_target: str = "points") -> dict[str, float]:
     """`{player_id -> learned ordering score}` for the selected positions, fit on ALL completed
     history in `pool` and applied to the NF1.5 research feature frame for `projection_season`.
 
     Keyed by player rather than returned as a per-position array because the frame it is APPLIED to
     (the shipped board) is a different, wider universe than the frame it is COMPUTED on — see
-    `build_season_projection`."""
+    `build_season_projection`.
+
+    NF-INJ2b: `capture` is an OUT-param (the INC-41 `run_ref` pattern, and the same shape
+    `build_season_projection` already uses) carrying the MARKET-ATTACHED feature frame and the
+    training pool this call fitted on. A §0.5 harness re-fitting the ordering learner on a different
+    TARGET must fit it on the SAME frame the shipped build scored, or the arm it measures is not the
+    arm the board would serve (NF-C0e). Purely additive: `None` leaves every existing caller
+    byte-identical."""
     nf11, _ = _load_incumbents()
     feats = build_extended_frame(con, base_season, projection_season, inputs, schema)
     if feats.empty:
@@ -523,20 +620,59 @@ def learned_scores_by_player(con, base_season: int, projection_season: int, sche
     # the market snapshot the SERVED ordering is computed from (NF-FRESH1 §2.3 — the market feeds
     # the ranking, not just a reference column).
     feats = attach_market(con, feats, schema, market_refresh=market_refresh)
+    if capture is not None:
+        capture.update(feats=feats.copy(), pool=pool.copy() if pool is not None else pd.DataFrame(),
+                       selections={p: dict(s) for p, s in selections.items()})
+    out, chosen = score_from_frames(feats, pool, selections, nf11, projection_season, score_target)
+    if capture is not None:
+        # WHICH learner actually produced this score, per position — so an INACTIVE re-fit or a
+        # silent fallback is visible on the record rather than inferred (NF1.7 (a)).
+        capture.setdefault("score_provenance", {})[score_target] = chosen
+    return out
+
+
+def score_from_frames(feats: pd.DataFrame, pool: pd.DataFrame, selections: dict[str, dict],
+                      nf11: dict, projection_season: int,
+                      score_target: str = "points") -> tuple[dict[str, float], dict[str, dict]]:
+    """Fit the ordering learner and score `feats` — the pure half of `learned_scores_by_player`.
+
+    ⭐ EXTRACTED SO THERE IS ONE IMPLEMENTATION. NF-INJ2b needs the SAME learner fitted on a second
+    and third TARGET over the SAME market-attached frame the shipped build scored. Re-deriving that
+    in the harness would measure something other than what the board would serve — the NF-C0e "a
+    study that re-derives the shipped logic measures something else" class — so the harness calls
+    THIS function with the captured frames, and the serving path reaches it through
+    `learned_scores_by_player`. Returns `({player_id -> score}, {position -> provenance})`."""
+    if score_target not in SCORE_TARGETS:
+        raise ValueError(f"score_target must be one of {SCORE_TARGETS}, got {score_target!r}")
     out: dict[str, float] = {}
+    chosen: dict[str, dict] = {}
     for pos, sel in selections.items():
-        tr = pool[pool["position"] == pos] if not pool.empty else pd.DataFrame()
-        learner = _make_selected_learner(pos, sel, nf11)
+        tr = (pool[pool["position"] == pos] if pool is not None and not pool.empty
+              else pd.DataFrame())
+        use_sel, reselected = sel, False
+        if score_target == "rate_reselect" and len(tr) >= 30:
+            name, hp = _reselect_in_fold(pos, sel, nf11, tr, projection_season)
+            use_sel = {"learner": name, "hp": hp, "source": "nf_inj2b_in_fold_reselect"}
+            reselected = (name != sel["learner"]) or (hp != (sel.get("hp") or {}))
+        learner = _make_selected_learner(pos, use_sel, nf11)
         if len(tr) >= 30:
-            learner.fit(tr, tr["real_fp_ppr"].to_numpy())
+            # ⭐ NF-INJ2b: the ONE line the whole story turns on — WHICH quantity the ordering
+            # learner is fitted to rank. `points` is the shipped season TOTAL; `rate` is the
+            # per-game rate the coherent assignment rules actually hand out.
+            learner.fit(tr, _fit_target_values(tr, score_target))
+        chosen[pos] = {"learner": use_sel["learner"], "hp": dict(use_sel.get("hp") or {}),
+                       "shipped_learner": sel["learner"], "reselected": bool(reselected),
+                       "score_target": score_target, "n_train": int(len(tr)),
+                       "rate_floor_binding_rows": (_fit_target_binding(tr)
+                                                   if score_target != "points" else 0)}
         te = feats[feats["position"] == pos]
         if te.empty:
             continue
-        s = np.asarray(learner.predict(te), dtype=float)
-        for pid, v in zip(te["player_id"].astype(str), s):
+        sc = np.asarray(learner.predict(te), dtype=float)
+        for pid, v in zip(te["player_id"].astype(str), sc):
             if np.isfinite(v):
                 out[pid] = float(v)
-    return out
+    return out, chosen
 
 
 def build_season_projection(con, base_season: int, projection_season: int, schema: str,
@@ -545,7 +681,8 @@ def build_season_projection(con, base_season: int, projection_season: int, schem
                             band_panel: pd.DataFrame | None = None,
                             market_refresh: bool = False,
                             arm: str | None = None,
-                            capture: dict | None = None) -> pd.DataFrame:
+                            capture: dict | None = None,
+                            score_target: str = "points") -> pd.DataFrame:
     """The NF1.5 refined board = **the SHIPPED MVP-1 board with the veteran ORDER re-assigned**.
 
     ⭐ NF1.5b REBUILT THIS AS A TRANSFORM OF THE SHIPPED BOARD rather than a parallel assembly, and
@@ -584,7 +721,8 @@ def build_season_projection(con, base_season: int, projection_season: int, schem
                 if selections else pd.DataFrame())
 
     scores = (learned_scores_by_player(con, base_season, projection_season, schema, selections,
-                                       inputs, pool, market_refresh=market_refresh)
+                                       inputs, pool, market_refresh=market_refresh,
+                                       capture=capture, score_target=score_target)
               if selections else {})
     positions = tuple(p for p in M1.LEARN_POSITIONS if p in selections)
     scale_by_pid: dict[str, float] = {}

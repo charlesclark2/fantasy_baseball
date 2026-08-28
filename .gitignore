@@ -167,6 +167,13 @@ quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf1_6_kdst_base_
 # s3://credence-prod-s3-api-cache/snapshots/<tag>/ (immutable); --download copies are a local
 # convenience, never committed (a convenience commit must not sweep prod JSON into git).
 quant_sports_intel_models/football/nfl/fantasy/artifacts/served_board_snapshots/
+# NF-INJ2b — the PUBLISHED 2026 board, staged from the prod api-cache as the study's baseline.
+# 1.3 MB and re-fetchable in one command; the runner REFUSES with that command named rather than
+# dying opaquely or (worse) substituting a rebuild for it (NF-INFRA1's cure: a gitignored artifact a
+# build READS must fail with a named remedy). The small `manifest.json` beside it IS committed —
+# it is the vintage/provenance record the report cites.
+quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_*.json
+quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/board_2026_*.parquet
 .nf_c8_red_proof_backup/
 
 # NF-INJ3b-M (PM ruling D4): the neutral "latest run" stems that
