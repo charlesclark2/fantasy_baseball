@@ -7,7 +7,7 @@ metadata:
   name: ncaaf-p3-1b
   vertical: ncaaf
   card: https://trello.com/c/ikIt1qcm   # P3.2 record thread; P3.1b card linked at kickoff
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Serve the T-1 odds snapshot as the market line. The T-1 capture has
@@ -89,8 +89,60 @@ spec:
   graph:
     nodes: []   # MINI tier
   closeout:
-    verdict: null
+    verdict: SHIPPED_CODE_NO_USER_VISIBLE_LINE_YET
+    verdictNote: >
+      Every acceptance criterion is met in code and RED-proven, and the change is
+      verified end-to-end against real captured data (2025). It produces NOTHING on
+      the 2026 board today: the lake holds ZERO 2026 odds rows of either kind, so
+      the opener cards still read "No market line" unless an operator runs the paid
+      capture on Fri 8/28. NO changelog entry was added — the user-visible line has
+      not appeared, and a declaration must not outrun its production. Full readout:
+      quant_sports_intel_models/football/ncaaf/ablation_results/ncaaf_p3_1b_market_source_readout.md
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      ① ⭐ THE PM PREMISE IS ONE CAPTURE-RUN SHORT, and this is the item that decides
+      whether the opener carries a line. Measured: season 2026 has ZERO rows in
+      odds_ncaaf_historical (2020-2025 carry 9,000+ close and 9,845 T-1 rows, so the
+      backfill is real). The capture is the paid /historical CATCH-UP (P0.6b decision
+      (A)), it only fetches a kickoff past its snapshot instant, and
+      sports_ncaaf_odds_capture_schedule fires MONDAYS (0 8 * 8-12,1 1). The 8/29
+      opener's T-1 instant is Fri 8/28; the next scheduled fire is Mon 8/31, after the
+      games. ⇒ an OPERATOR-RUN capture on Fri 8/28 (T-1 only, ~1 week of kickoffs,
+      command in the handoff) is what turns this story into a visible line. PM call:
+      run it, or accept the opener ships with the stated absence and the line appears
+      from week 2 onward. Neither is a defect; both should be a decision.
+      ② ⭐ A GENUINE MIS-JOIN IN P1.4's CLV STAGING MART, found by this story's leakage
+      guard firing on real data and DELIBERATELY LEFT UNFIXED (it is a mart P1.4 owns
+      and it touches the vs-market/CLV evals, not just serving). build_clv_staging
+      matches Odds-API team names to CFBD names by PREFIX with NO kickoff-proximity
+      bound, so a rematch attaches the WRONG game's line: 8 of 876 2025 games (0.9%)
+      carry a snapshot MORE THAN A DAY after their own kickoff (Texas Tech-BYU's 11/08
+      game carries a 12/06 snapshot = the Big 12 championship rematch; Colorado-Arizona's
+      11/01 carries 11/23). Those rows are inside the population VAL1/VAL3 read. Suggest
+      a new spec: bound the join by kickoff proximity, then re-read whether any recorded
+      vs-market figure moves.
+      ③ A CFBD-vs-ODDS-API KICKOFF-CLOCK DISAGREEMENT, measured and worth knowing before
+      anyone reads a coverage number: 64 of 876 2025 close snapshots (7.3%) sit 5-55 min
+      after the CFBD startDate while being pre-kickoff by the BOOK's commence_time. The
+      guard refuses them (fail-closed — at that distance a "close" may be an IN-PLAY
+      price by CFBD's clock). The T-1 leg is structurally immune. Net cost to the served
+      board over the whole 2025 season: 5 games of 876 (0.57%) refused, and those five
+      are the ② mis-joins. Not an action item on its own; it IS the reason a close-line
+      coverage figure will read ~7% lower than a naive count.
+      ④ THE CAPTURED E2E FIXTURE NOW PREDATES THE CONTRACT. ncaaf-slate-2026-08-29.json
+      is verbatim production bytes and does not carry the newly-declared market.as_of.
+      Its round-trip test was RE-ANCHORED to tolerate a post-capture field only when it
+      validates to null, and to NAME what it tolerated. Closing it properly is a
+      re-capture through capture-fixtures.mjs AFTER the Lambda deploy — the fixture
+      cannot lead the wire. Checklist item on the parent card.
+      ⑤ NO E2E COVERS A T-1-SOURCED LINE WITH REAL BYTES. The market fixture's three
+      rows are real 2025 CLOSES (that is what P3.2 recorded), so the T-1 render is
+      covered by the mechanical no-client-change proof (the panel reads no source/as_of;
+      two payloads differing only in source are identical where the panel reads) rather
+      than by a browser assertion. Recording three real T-1 rows beside the closes is a
+      ~10-minute follow-up once someone is at a laptop with lake creds
+      (build_clv_staging(min_year=2025, with_t1=True)). Low priority — the render is
+      provably source-independent — but it would close the last inference.
+      ⑥ THE SERVING CHANGE IS NOT DEPLOYED BY MERGING. deploy.sh is the only path to the
+      API Lambda; the box also needs the merged code for the serving WRITE. Both are
+      operator steps in the handoff, and the runtime gate is only answerable after ① has
+      put a 2026 line in the lake.

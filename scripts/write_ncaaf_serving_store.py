@@ -209,18 +209,27 @@ def read_market_lines(season: int) -> tuple[dict[int, dict], bool]:
     That join is subtle (Odds-API team names ⋈ CFBD names by prefix, season + kickoff proximity) and
     a second copy of it would be a second rule set free to drift from the one the model was
     validated against (E9.61). It is already leakage-safe by construction — only snapshots with
-    `_snapshot_ts < commence_time` are eligible, and the LATEST such snapshot per event wins, which
-    is the P0.6c-correct read now that close and T-1 rows coexist per kickoff.
+    `_snapshot_ts < commence_time` are eligible.
+
+    ⭐ NCAAF-P3.1b — `with_t1=True`. P0.6c captures TWO snapshots per kickoff (a ~24h-prior T-1 and
+    a K−5min close) and this asks the SAME join for both, so `payloads._market` can prefer the
+    market's own PRE-kickoff line beside a pre-kickoff projection and stamp WHICH line it served.
+    It also removes a mislabel: the kind-blind `close_` leg takes the latest pre-commence snapshot,
+    so on a kickoff that has a T-1 and no close yet it was already serving T-1 VALUES under a
+    `close` LABEL. The flag is opt-in because a `t1_*` column in the DEFAULT frame would be picked
+    up as a model FEATURE by `feature_columns` (see that function's docstring) — this serving read
+    is the only caller that wants it.
 
     ⚠️ EXPECT THIS TO BE EMPTY FOR AN UPCOMING SLATE, and that is not a defect: the paid
-    `/historical` capture can only reach a kickoff once that kickoff is past its snapshot instant,
-    so a board written days ahead has no line to show yet. The served `market.reason` says so.
+    `/historical` capture can only reach a kickoff once that kickoff is past its snapshot instant
+    (K−24h for T-1, K−5min for the close), so a board written days ahead has no line to show yet.
+    The served `market.reason` says so.
     """
     try:
         from quant_sports_intel_models.football.ncaaf.models.bakeoff_ncaaf_game import (
             build_clv_staging,
         )
-        clv = build_clv_staging(min_year=int(season))
+        clv = build_clv_staging(min_year=int(season), with_t1=True)
         if clv is None or clv.empty:
             return {}, False
         return {int(r["game_id"]): r for r in clv.to_dict("records")}, False
@@ -234,6 +243,20 @@ def read_market_lines(season: int) -> tuple[dict[int, dict], bool]:
 # ══════════════════════════════════════════════════════════════════════════════════════════
 # The write
 # ══════════════════════════════════════════════════════════════════════════════════════════
+
+def _count_by(slates: dict, field: str) -> dict[str, int]:
+    """`{value: n}` over every served game's `market[field]`, skipping nulls. Sorted for a stable
+    run log — an operator diffing two runs should see a value change, not a dict reordering."""
+    counts: dict[str, int] = {}
+    for slate in slates.values():
+        for game in slate["games"]:
+            value = game["market"].get(field)
+            if value is None:
+                continue
+            counts[str(value)] = counts.get(str(value), 0) + 1
+    return dict(sorted(counts.items()))
+
+
 
 def write_serving_store(season: int, *, dry_run: bool = False, local_root: str | None = None,
                         with_market: bool = True, with_futures: bool = True,
@@ -332,6 +355,13 @@ def write_serving_store(season: int, *, dry_run: bool = False, local_root: str |
         futures_teams=(futures_payload or {}).get("n_teams", 0),
         market_lines_attached=sum(
             1 for s in slates.values() for g in s["games"] if g["market"]["status"] == "available"),
+        # NCAAF-P3.1b: WHICH line attached, and which nulls we produced, counted per value rather
+        # than as one total. A run log saying "12 lines attached" cannot answer "did the T-1 leg
+        # actually fire?" — and the runtime gate for this story is exactly that question, per key
+        # shape (the P3.1 positive-control lesson). A REFUSED count is separated from an
+        # unattached one because a leakage refusal is a defect and an absent capture is not.
+        market_lines_by_source=_count_by(slates, "source"),
+        market_reasons=_count_by(slates, "reason"),
         market_read_failed=bool(market_failed),
         model_version=(any_game or {}).get("provenance", {}).get("model_version"),
         snapshot_ts=(any_game or {}).get("provenance", {}).get("snapshot_ts"),
