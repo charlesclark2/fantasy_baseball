@@ -268,6 +268,14 @@ BREAKS: tuple[Break, ...] = (
           gone="elif unevaluated:",
           tests=("test_an_uncomputable_gate_is_never_reported_as_a_deflation_refusal",)),
 
+    Break("the 2026 table reads a give-back key the reducer never writes — the column silently "
+          "renders an em-dash and the number vanishes (the NF-C0e wrong-key class, render side)",
+          RUN,
+          '"median ratio": _fmt(gb.get("median_point_ratio")),',
+          '"median ratio": _fmt(gb.get("median_ratio")),',
+          gone='gb.get("median_point_ratio")',
+          tests=("test_the_2026_section_reads_the_giveback_keys_the_reducer_actually_writes",)),
+
     Break("an UNCOMPUTABLE gate renders as a plain False — UNDEFINED conflated with FAILED, the "
           "conflation the seven-state null taxonomy exists to prevent (MH2)",
           RUN,

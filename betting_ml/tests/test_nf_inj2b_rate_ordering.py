@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -343,6 +344,23 @@ def test_the_joint_criterion_does_not_pass_on_inactive_positions_alone():
     assert j["a_inactive_positions"] == ["QB", "RB"]
     assert j["a_active_positions"] == ["TE", "WR"]
     assert "INACTIVE" in j["a_note"] and "NF-D20" in j["a_note"]
+
+
+def test_the_2026_section_reads_the_giveback_keys_the_reducer_actually_writes():
+    """⭐ A wrong key does not error — it renders an em-dash, and a silently blank column in the
+    story's headline table is a number the reader never learns is missing (the NF-C0e wrong-key
+    class, on the render side; the first cut read `median_ratio` and the reducer writes
+    `median_point_ratio`). Asserted against the REDUCER's own output keys, ⛔ never against a list
+    a test author typed."""
+    import inspect
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_inj2_rate_permutation as R2
+    produced = set(re.findall(r'"([a-z0-9_]+)":', inspect.getsource(R2.injury_giveback)))
+    src = _RUNNER.read_text()
+    block = src[src.index('for a, r in app["arms"].items():'):src.index('⭐ **ATTRIBUTION BY CONTROL')]
+    for key in re.findall(r'gb\.get\("([a-z0-9_]+)"\)', block):
+        assert key in produced, (
+            f"the 2026 table reads gb[{key!r}], which `injury_giveback` never writes — it renders "
+            f"an em-dash and the number silently vanishes. It writes: {sorted(produced)}")
 
 
 def test_an_uncomputable_gate_renders_as_UNDEFINED_not_as_a_failure():

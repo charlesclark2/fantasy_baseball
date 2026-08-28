@@ -1441,7 +1441,7 @@ def write_report_md(rep: dict, path: Path) -> None:
                 "impossible rows": _fmt(r["coherence_violating_players"], 0),
                 "…attributable": _fmt(r["coherence_violating_players_attributable"], 0),
                 "give-back %": _fmt(gb.get("giveback_pct"), 2),
-                "median ratio": _fmt(gb.get("median_ratio")),
+                "median ratio": _fmt(gb.get("median_point_ratio")),
                 "ρ(games, ratio)": _fmt(r["availability_gradient"]["rho"]),
                 "clamp hi/lo": f"{r['clamp_saturation_high']}/{r['clamp_saturation_low']}"})
         A(_md_table(rows, ["arm", "target", "impossible rows", "…attributable", "give-back %",
