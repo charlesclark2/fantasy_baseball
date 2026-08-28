@@ -3093,6 +3093,113 @@ const CASES = [
     grep: "an UNRECORDED pace flag is not read as an inactive one",
   },
 
+  // ══ NCAAF-P3.9 — the nav door and the team marks ══════════════════════════════════════════
+  {
+    id: "ncaaf-nav-door-signed-in-only",
+    shipped: "NCAAF-P3.9 — THE DEFECT THIS STORY EXISTS TO FIX, reproduced exactly",
+    // `/ncaaf/games` has been LIVE and unreachable since P3.2: the route worked perfectly, and no
+    // nav entry pointed at it. This break puts the door back in the signed-in sport menu ONLY —
+    // which is the shape a session naturally reaches for, since `nav-model.ts` is where sports
+    // live. The surface is free and unguarded, so the DEFAULT reader is anonymous and would still
+    // have no way to find it.
+    detail: "Removes the NCAAF door from SIGNED_OUT_NAV, leaving it in the signed-in menu alone.",
+    file: "lib/positioning-copy.ts",
+    from:
+      "  {\n" +
+      '    label: "College football games",\n' +
+      '    short: "NCAAF",\n' +
+      '    href: "/ncaaf/games",\n' +
+      '    product: "ncaaf",\n' +
+      "    desktop: true,\n" +
+      '    key: "ncaaf-games",\n' +
+      "  },\n",
+    to: "",
+    grep: "signed-out visitor can reach the NCAAF board",
+  },
+  {
+    id: "ncaaf-nav-highlight-always-on",
+    shipped: "NCAAF-P3.9 — the one-sided fix: a highlight that is really just a colour",
+    // ⭐ THE OTHER HALF of "the entry highlights". A door that is permanently highlighted satisfies
+    // the current-page clause and tells a reader they are on the NCAAF board from every page in the
+    // product. Same shape as the kicked-off badge's twin above; the off-page clause refuses it.
+    detail: "Marks the NCAAF door current on every page, whatever `activeLink` says.",
+    file: "components/nav.tsx",
+    // ⚠️ THE ANCHOR CARRIES ITS SIBLING LINE. The bare `data-nav-active=…` line appears TWICE (the
+    // signed-out bar and the signed-out phone panel), and its 16-space indent is a SUBSTRING of the
+    // phone panel's 20-space one — so a bare anchor would land on whichever comes first and could
+    // report a false vacuity about a clause it never touched (E11.24, prediction_log).
+    from:
+      "                data-nav-item={item.key}\n" +
+      '                data-nav-active={item.key && item.key === activeLink ? "true" : "false"}',
+    to:
+      "                data-nav-item={item.key}\n" +
+      '                data-nav-active="true"',
+    grep: "CURRENT-PAGE signal",
+  },
+  {
+    id: "ncaaf-bare-route-404s",
+    shipped: "NCAAF-P3.9 — a bare /ncaaf 404'd",
+    // The URL a reader types, and the one a nav label reading "NCAAF" implies. A redirect is a
+    // ROUTING fact, which is why this suite runs a production build — dev-server routing is not the
+    // routing that ships (E9.56c's `/pricing`).
+    detail: "Removes the /ncaaf → /ncaaf/games redirect.",
+    file: "next.config.mjs",
+    from: '      { source: "/ncaaf", destination: "/ncaaf/games", permanent: false },\n',
+    to: "",
+    grep: "bare /ncaaf lands on the board",
+  },
+  {
+    id: "ncaaf-footer-still-coming-soon",
+    shipped: "NCAAF-P3.9 — the footer called a live product 'Coming this season'",
+    // The footer renders on EVERY page, so this was the site telling every visitor the opposite of
+    // the truth about a product that had already shipped.
+    detail: "Removes the live NCAAF footer link.",
+    file: "components/site-footer.tsx",
+    from: '  { label: "NCAAF Betting Intelligence", href: "/ncaaf/games" },\n',
+    to: "",
+    grep: "footer offers NCAAF as a live link",
+  },
+  {
+    id: "ncaaf-logo-fallback-is-initials",
+    shipped: "E9.46 — a failed image wearing the costume of data",
+    // ⭐⭐ THE E9.46 LESSON, BOUND BY THIS STORY'S SPEC. `player-page.tsx` and the home page's
+    // fantasy card both fall back to INITIALS, and that is precisely how `static.www.nfl.com`
+    // stayed missing from the CSP allowlist unnoticed: every blocked headshot presented as "this
+    // player has no photo". Beside a college team, two letters read as a real abbreviation, so the
+    // same fallback here would look like something we PUBLISHED about the team.
+    detail: "Falls back to the team's initials instead of a stated placeholder mark.",
+    file: "components/ncaaf/team-logo.tsx",
+    from: "        ?\n      </span>",
+    to:
+      '        {teamName.split(/\\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}\n' +
+      "      </span>",
+    grep: "never initials",
+  },
+  {
+    id: "ncaaf-logo-dominates-the-card",
+    shipped: "NCAAF-P3.9 — decoration that outgrew the thing the card is about",
+    // The P3 brand directive's lead clause is PROBABILITY FIRST. The pre-existing mobile clause
+    // compares FONT SIZES, which an image cannot have — so a logo could grow without moving it by a
+    // pixel. This is the case that proves the new box-measuring clause is what covers that gap.
+    detail: "Sizes the team mark at 40px against a 24px probability.",
+    file: "components/ncaaf/team-logo.tsx",
+    from: '  const box = "h-5 w-5 shrink-0"',
+    to: '  const box = "h-10 w-10 shrink-0"',
+    grep: "smaller than the win probability",
+  },
+  {
+    id: "ncaaf-logo-fallback-shifts-the-layout",
+    shipped: "NCAAF-P3.9 — 'decorative only' broken by the fallback, not by the image",
+    // ⭐ The failure mode a single-state assertion cannot see: the logo loads fine, and the card
+    // reflows only for the readers whose image DIDN'T. Giving the fallback its own size is the
+    // ordinary way that happens, which is why the component shares one size string between both
+    // branches rather than repeating it.
+    detail: "Gives the fallback a different box from the image it replaces.",
+    file: "components/ncaaf/team-logo.tsx",
+    from: "          `${box} inline-flex items-center justify-center rounded-[3px] border border-dashed ` +",
+    to: "          `h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-[3px] border border-dashed ` +",
+    grep: "failed logo moves nothing",
+  },
 ]
 
 /**
@@ -3165,7 +3272,37 @@ const CASES = [
 // 181/175/6 → 183/177/6.
 // PM addendum (2) — the pre-season totals treatment — adds THREE more, each RED-proven
 // individually. 183/177/6 → 186/180/6.
-const RECORDED_BOARD = { total: 192, red: 186, notObservable: 6 }
+// NCAAF-P3.9 adds SEVEN cases — three for the nav door (missing from the signed-out menu, a
+// highlight that is always on, the bare /ncaaf 404), one for the footer's stale "coming this
+// season", and three for the team marks (a fallback that renders initials, a mark that outgrows the
+// probability, a fallback that shifts the layout). Each RED-proven individually (`-- ncaaf-nav-`,
+// `-- ncaaf-bare-`, `-- ncaaf-footer-`, `-- ncaaf-logo-`) rather than by a full board run, for the
+// reason every entry above records: 199 cases × a production build each does not belong in a
+// session. So 192/186/6 → 199/193/6, and the next full run CONFIRMS it.
+// ⛔ A projection is not a measurement.
+//
+// 🔎 MEASURED IN PASSING, 2026-08-27 (NCAAF-P3.9), and recorded rather than repaired because it
+// predates this story and the ⛔ note above is explicit that a drift is a FINDING, not a number to
+// edit. A mechanical sweep of every case's anchor against the current tree reports:
+//
+//   · 216 cases in `CASES` — against a recorded total of 192 before this story added 7. Every
+//     entry above says its own figure is a PROJECTION confirmed by the next full run, and no full
+//     run has happened since; the projections have compounded. The 199 below is 192 + this story's
+//     7, per the convention, ⛔ NOT 216 — writing 216 would assert a `red` split for 17 cases
+//     nobody has measured.
+//   · 5 cases whose `from` anchor NO LONGER EXISTS in the file they name — `disclosure-dropped`,
+//     `yahoo-attribution-dropped`, `save-reports-success-before-the-server-answers`,
+//     `note-never-reaches-the-server`, `designation-nested-in-the-availability-branch`. A stale
+//     anchor is an UNPROVEN clause reading as a quiet one (E9.64 found six of exactly these).
+//   · 1 case whose anchor appears TWICE in its file — `free-account-bounced-to-login-not-upsell`
+//     in `components/auth-guard.tsx`. `String.replace` takes the FIRST occurrence, so that break
+//     may be landing on a different call site than the one it names, which reports a FALSE VACUITY
+//     — the dangerous direction, since it reads as a finding and invites weakening a correct guard.
+//
+// ⛔ NOT FIXED HERE ON PURPOSE: hardening this shared harness (e.g. asserting anchor uniqueness)
+// would turn a pre-existing case red for a reason unrelated to any story in flight, on a deadline
+// day. Carried to NCAAF-P3.9's closeout as a follow-up instead.
+const RECORDED_BOARD = { total: 199, red: 193, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

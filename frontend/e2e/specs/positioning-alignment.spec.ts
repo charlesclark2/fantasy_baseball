@@ -620,16 +620,31 @@ test("the footer leads with fantasy and never links an unshipped product", async
   ).toBeLessThan(text.indexOf("mlb betting intelligence"))
 
   // ⛔ E9.56c's dead-`/pricing` class. The coming rows must be listed AND unclickable.
-  expect(text, "the un-shipped verticals vanished rather than being labelled").toContain(
-    "ncaaf betting intelligence",
-  )
+  //
+  // ⭐ RE-ANCHORED BY NCAAF-P3.9, and the reason is itself the finding. This clause used to NAME the
+  // two unshipped products — `/ncaaf|nfl betting/` — and require that no footer link matched. That
+  // is a proxy for "unshipped" made of product names, and such a proxy rots the moment one of them
+  // ships: `/ncaaf/games` went live at P3.2, so a CORRECT footer (a live link) turned this red
+  // while the property it defends was perfectly intact. The rule it exists to enforce is
+  // structural — NOTHING UNDER THE "Coming this season" SUB-HEADING IS EVER A LINK — so that is
+  // what is asserted now, derived from the DOM. Strictly stronger (it covers every future row,
+  // named or not) and it cannot go stale on the next launch.
+  //
+  // ⚠️ IT MUST STILL SAY THE GROUP IS NON-EMPTY, or a footer that shipped every product would
+  // satisfy "no coming row is a link" vacuously.
   expect(text).toContain("coming this season")
-  const comingLinks = await footer
-    .locator("a")
-    .evaluateAll((els) =>
-      els.filter((e) => /ncaaf|nfl betting/i.test(e.textContent ?? "")).length,
-    )
-  expect(comingLinks, "an un-shipped product is rendered as a link in the footer").toBe(0)
+  const coming = await footer.locator('nav[aria-label="Products"] li').evaluateAll((els) => {
+    const heading = els.findIndex((e) => /coming this season/i.test(e.textContent ?? ""))
+    return els
+      .slice(heading + 1)
+      .map((e) => ({ text: (e.textContent ?? "").trim(), links: e.querySelectorAll("a").length }))
+  })
+  expect(coming.length, "the 'Coming this season' group is empty — this clause would be vacuous")
+    .toBeGreaterThan(0)
+  expect(
+    coming.filter((r) => r.links > 0).map((r) => r.text),
+    "a product listed as 'Coming this season' is rendered as a link",
+  ).toEqual([])
 
   // ⭐ THE ALIGNMENT BUG (operator report + screenshot, 2026-08-09), as a structural assertion.
   // Each coming row used to carry its OWN "Coming this season" chip beside the label in a

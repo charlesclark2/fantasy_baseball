@@ -40,6 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
+      changelog: ${{ steps.filter.outputs.changelog }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -74,12 +75,46 @@ jobs:
           # `backend` is true when any changed file is NOT purely frontend/docs.
           # `**` includes everything, then the `!` lines subtract the paths that
           # can never affect the Python test suites (the Next.js app + markdown/docs).
+          #
+          # 🚨 NCAAF-P3.9 (2026-08-27) — `changelog` ADDED, closing NCAAF-P3.2 finding ⑧.
+          #
+          # THE GAP: `betting_ml/tests/test_changelog_guard.py` (E9.18's Monday-week + one-block-per-
+          # week invariant) lives in the `guards` Python shard, and every Python job is gated on
+          # `backend`. A frontend-only PR resolves `backend == false` — so the guard did NOT run on
+          # the exact PR class that edits `frontend/data/changelog.json`. Measured on PR #1036
+          # (2026-08-25, frontend-only): every Python shard reported `skipping`. CLAUDE.md's claim
+          # that "a wrong date can't ship" was therefore FALSE for the commonest case.
+          #
+          # ⚠️ IT IS A REGRESSION OPENED BY A CORRECT FIX, and dateable to E9.63b (2026-08-07)
+          # directly above: before `predicate-quantifier: every` the filter answered `true` for
+          # EVERY diff, so the Python suites always ran and the guard was covered by accident. The
+          # E11.30 / NF-K1 class — the detection still exists, it just stopped running where it
+          # matters.
+          #
+          # ⭐ WHY A SEPARATE OUTPUT RATHER THAN ADDING THE FILE TO `backend`. Two reasons, and the
+          # first is mechanical: under `predicate-quantifier: every` a file must match EVERY pattern
+          # in its list, so adding `- 'frontend/data/changelog.json'` to `backend` would demand that
+          # `betting_ml/x.py` also match that path — i.e. it would resolve `backend` to FALSE for
+          # every backend file in the repo and silently disarm the entire Python gate. The obvious
+          # edit is the catastrophic one. The second is scope: it would also run six pytest shards,
+          # the slow Monte-Carlo gate and the model smoke test on a changelog typo, which is the
+          # cost E9.7 built this job to avoid.
+          #
+          # ⭐ AND WHY NOT THE OTHER OPTION THE STORY OFFERED — porting the Monday-week rule into an
+          # E2E clause. That would create a SECOND implementation of one invariant, in a second
+          # language, free to drift from the first: this repo's most-repeated defect class
+          # (INC-30's two crontabs, INC-36's two deploys, INC-38's four callers, NF-C-LDA-1's five
+          # copies of one roster rule). The gap here is a TRIGGER defect, not a coverage defect —
+          # the guard is correct and already exists, it simply stopped being reached. So the trigger
+          # is what gets fixed, and the invariant keeps exactly one owner.
           filters: |
             backend:
               - '**'
               - '!frontend/**'
               - '!**/*.md'
               - '!docs/**'
+            changelog:
+              - 'frontend/data/changelog.json'
 
       # Say what was decided. A gate whose verdict appears nowhere in the log is one nobody can
       # sanity-check from a run page — which is a large part of why the `some`/`every` defect above
@@ -87,10 +122,16 @@ jobs:
       - name: Report the verdict
         run: |
           echo "backend=${{ steps.filter.outputs.backend }}"
+          echo "changelog=${{ steps.filter.outputs.changelog }}"
           if [ "${{ steps.filter.outputs.backend }}" = "true" ]; then
             echo "→ Python suites WILL run (the diff touches something outside frontend/docs)"
           else
             echo "→ Python suites will SKIP (frontend/docs-only diff)"
+          fi
+          if [ "${{ steps.filter.outputs.changelog }}" = "true" ]; then
+            echo "→ changelog guard WILL run (frontend/data/changelog.json changed)"
+          else
+            echo "→ changelog guard will SKIP (the changelog is untouched)"
           fi
 
   # E11.13 — fast gate: every test EXCEPT the `slow` Monte-Carlo calibration guards.
@@ -149,6 +190,46 @@ jobs:
           # shellcheck disable=SC2086
           uv run pytest $TARGETS -m "not slow" -n auto --tb=short
 
+  # ⭐ NCAAF-P3.9 — THE CHANGELOG GUARD, ON THE PR CLASS THAT ACTUALLY EDITS THE CHANGELOG.
+  #
+  # See the long note on the `changelog` filter above for the gap, its date, and why the fix is a
+  # trigger change rather than a second implementation of the invariant.
+  #
+  # ⚠️ GATED ON `changelog` ALONE, NEVER on `backend || changelog`, and that is deliberate on two
+  # counts. (1) COVERAGE: it is additive — a backend PR still runs the same test inside the `guards`
+  # shard, so nothing is moved out of the fast gate and nothing is lost if this job is ever removed.
+  # (2) PROVABILITY: this story's own PR edits `.github/workflows/ci.yml`, so `backend` is `true` on
+  # it — an `||` would make "the guard ran" true for the OLD reason and prove nothing about the new
+  # path. Keyed on `changelog` alone, this job running IS the proof the new trigger fires.
+  changelog-guard:
+    name: Changelog guard (Monday-week keys)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.changelog == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The same provisioning as every sibling job. The guard itself imports only the stdlib, so a
+      # leaner `--no-project` install would be faster — but it would break the moment the guard grew
+      # a dependency, and the cached sync is already the cheap part.
+      - name: Install dependencies
+        run: uv sync --no-dev-packages || uv sync
+
+      - name: Run the changelog guard
+        run: uv run pytest betting_ml/tests/test_changelog_guard.py -v --tb=short
+
   # Static checks that used to ride along in the single fast-gate job.
   static-checks:
     name: Static checks (syntax + ingest MERGE ban)
@@ -196,7 +277,7 @@ jobs:
   unit-tests:
     name: Unit Tests (fast gate)
     runs-on: ubuntu-latest
-    needs: [changes, unit-tests-shard, static-checks]
+    needs: [changes, unit-tests-shard, static-checks, changelog-guard]
     if: always()
 
     steps:
@@ -205,15 +286,20 @@ jobs:
           SHARDS="${{ needs.unit-tests-shard.result }}"
           STATIC="${{ needs.static-checks.result }}"
           CHANGES="${{ needs.changes.result }}"
-          echo "changes=$CHANGES  shards=$SHARDS  static-checks=$STATIC"
+          # ⭐ NCAAF-P3.9 — the changelog guard joins the ROLL-UP, not just the workflow. This job's
+          # name is the one a required status check references, so a guard that ran red beside it
+          # but outside it would leave the named gate GREEN on a frontend-only PR — which is the
+          # state finding ⑧ describes, moved one job over rather than fixed.
+          CHANGELOG="${{ needs.changelog-guard.result }}"
+          echo "changes=$CHANGES  shards=$SHARDS  static-checks=$STATIC  changelog-guard=$CHANGELOG"
           # A matrix job's `result` is `success` only when EVERY leg succeeded. `skipped` is a
           # pass: it means the `changes` filter found a frontend/docs-only diff. `changes` itself
           # is checked too — if IT failed, the shards would be `skipped` and this roll-up would
           # otherwise report a green gate for a suite that never ran.
-          for r in "$CHANGES" "$SHARDS" "$STATIC"; do
+          for r in "$CHANGES" "$SHARDS" "$STATIC" "$CHANGELOG"; do
             case "$r" in
               success|skipped) ;;
-              *) echo "::error::fast gate did not pass (changes=$CHANGES, shards=$SHARDS, static=$STATIC)"; exit 1 ;;
+              *) echo "::error::fast gate did not pass (changes=$CHANGES, shards=$SHARDS, static=$STATIC, changelog=$CHANGELOG)"; exit 1 ;;
             esac
           done
           echo "fast gate GREEN"
