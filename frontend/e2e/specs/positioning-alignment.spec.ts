@@ -260,6 +260,32 @@ test("the signed-out desktop bar fits at the breakpoint where it first renders",
   expect(overflow, "the signed-out nav bar overflows horizontally at the sm breakpoint")
     .toBeLessThanOrEqual(1)
 
+  // ⭐ NCAAF-P3.9 — RECORD THE HEADROOM, don't just pass/fail on it. This is a REPORT, not a new
+  // requirement: the clause above is unchanged and still the gate.
+  //
+  // WHY IT EARNS ITS LINE. A flex row SHRINKS its items rather than overflowing, so this bar can
+  // sit at 100% capacity and report `overflow = 0` — which is exactly what happened when P3.9 added
+  // a fourth door: green on macOS, and 5px over on CI, whose Linux font metrics render the same
+  // strings slightly wider. A binary check cannot tell "fits comfortably" from "fits by nothing",
+  // and the difference between those two is whether the NEXT label edit is safe. The number is
+  // annotated on every run so a session reads it before spending a CI cycle finding out.
+  const headroom = await nav.evaluate((el) => {
+    const bar = el.firstElementChild as HTMLElement
+    const style = getComputedStyle(bar)
+    const gap = parseFloat(style.columnGap || "0") || 0
+    const kids = [...bar.children] as HTMLElement[]
+    const content =
+      kids.reduce((sum, k) => sum + k.getBoundingClientRect().width, 0) +
+      gap * Math.max(0, kids.length - 1) +
+      parseFloat(style.paddingLeft || "0") +
+      parseFloat(style.paddingRight || "0")
+    return Math.round(bar.clientWidth - content)
+  })
+  test.info().annotations.push({
+    type: "signed-out-bar-headroom",
+    description: `${headroom}px spare at 640px (negative means the flex row is shrinking to fit)`,
+  })
+
   // ⚠️ AND THE LINKS MUST NOT HAVE WRAPPED. A bar can fit its container by letting a link break
   // onto a second line, which is the E9.58 symptom and is invisible to a scrollWidth check. Every
   // link carries `whitespace-nowrap`, so a wrapped link shows up as a taller-than-one-line box.

@@ -172,14 +172,24 @@ export function Nav({
       {/* Top bar */}
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
         {/* `shrink-0` so the wordmark can never be squeezed into the links beside it, and a
-            smaller mark below `sm` — at h-12 the logo alone took a third of a 390px bar. */}
+            smaller mark below `sm` — at h-12 the logo alone took a third of a 390px bar.
+            ⭐ NCAAF-P3.9 MOVES THE STEP-UP FROM `sm` TO `md`, and it is MEASURED rather than eyeballed.
+            At 640px — the narrowest width at which the signed-out links render, i.e. the bar's worst
+            case — the h-12 wordmark was 144px of a 640px bar, the single largest item on it, and a
+            fourth door left the bar at ~100% capacity. It fit LOCALLY only because flex SHRANK the
+            items, and CI's Linux font metrics (the same strings, ~5px wider in total) tipped it
+            into a real overflow. Measured headroom at 640px: −14px before, +26px after.
+            ⛔ THE TEMPTING RECLAIM WAS FOLDING `Sign In` AWAY TO `md`, and it is WRONG: the
+            hamburger is `sm:hidden`, so between 640 and 767px there would be no Sign In affordance
+            ANYWHERE — E9.58's property, deleted at one viewport band. A wordmark step costs
+            nothing a reader can be denied. */}
         <Link href="/" className="shrink-0">
           <Image
             src="/brand/logo-full.svg"
             alt="Credence Sports"
             width={240}
             height={48}
-            className="h-9 w-auto sm:h-12"
+            className="h-9 w-auto md:h-12"
             priority
           />
         </Link>
@@ -310,13 +320,18 @@ export function Nav({
             // opened on a phone. Sign Up is always visible; Sign In folds away under `sm` so the
             // bar cannot overflow on a small screen (the signup page carries its own "already
             // have an account?" link, so nothing is lost).
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               <Button
                 variant="ghost"
                 size="sm"
                 asChild
                 className="hidden sm:inline-flex text-gray-400 hover:text-white hover:bg-[#141414]"
               >
+                {/* ⛔ NCAAF-P3.9 CONSIDERED AND REJECTED folding this away to `md` for the ~65px it
+                    would have reclaimed. The hamburger is `sm:hidden`, so between 640 and 767px
+                    there is no mobile menu either — a logged-out visitor would have had NO Sign In
+                    affordance at all in that band, which is precisely the E9.58 defect. Only the
+                    GAP moves. */}
                 <Link href="/login">Sign In</Link>
               </Button>
               <Button
