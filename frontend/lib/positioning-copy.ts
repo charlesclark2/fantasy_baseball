@@ -527,6 +527,17 @@ export const FAQ_HEADER = {
 // using it — the mobile grouping logic is product-keyed, and narrowing the type would make adding
 // a genuinely public betting surface later a type change rather than a data edit.
 //
+// ⚠️⚠️ NCAAF-P3.9 IS THAT "genuinely public betting surface", AND IT DID NOT REUSE THIS MEMBER —
+// a correction to the sentence above, recorded here rather than left for a reader to trip over.
+// `product: "betting"` is the PROXY two existing guards use for "an MLB door was re-added"
+// (`test_the_signed_out_nav_has_no_mlb_door`, and `positioning-alignment.spec.ts`'s "offers no MLB
+// door"), so filing college football under it turns both red for a reason unrelated to what they
+// defend — and the tempting repair is relaxing the one clause the operator marked ⛔ DO NOT DELETE.
+// A distinct `"ncaaf"` member costs a one-word type change and keeps every guard meaning what it
+// was written to mean. `"betting"` therefore still has no entry, and the paragraph above still
+// holds for a future public MLB surface: it is only the MLB PROXY that makes the member unusable
+// for a DIFFERENT vertical.
+//
 // ══ ⭐ WHY THE FANTASY DOOR SAYS "FANTASY FOOTBALL" (operator, 2026-08-09) ══════════════════════
 //
 // It said "Fantasy". `nav-model.ts` already declares an MLB→Fantasy surface (E8.1's prospect

@@ -114,6 +114,20 @@ CASES = [
      '] as const',
      "test_the_footer_links_ncaaf_instead_of_calling_it_unbuilt"),
 
+    # ── E9.60's footer clause, re-anchored by this story ──────────────────────────────────────
+    # ⚠️ THESE TWO PROVE A GUARD THIS STORY *CHANGED*, which is the case that most needs proving:
+    # re-anchoring a clause off a stale proxy is one edit away from quietly weakening it. Both
+    # halves of the property it defends must still bite.
+    ("an unshipped footer product is given a destination", FOOTER,
+     '  { label: "NFL Betting Intelligence" },',
+     '  { label: "NFL Betting Intelligence", href: "/nfl" },',
+     "test_an_unshipped_product_is_listed_in_the_footer_but_carries_no_link"),
+
+    ("the coming-soon group is emptied rather than listed", FOOTER,
+     '  { label: "NFL Betting Intelligence" },\n',
+     '',
+     "test_an_unshipped_product_is_listed_in_the_footer_but_carries_no_link"),
+
     # ── the CSP host ──────────────────────────────────────────────────────────────────────────
     ("the ESPN logo host is dropped from the CSP", CONFIG,
      "blob: https://a.espncdn.com https://img.mlbstatic.com",
@@ -162,6 +176,23 @@ CASES = [
      'for r in "$CHANGES" "$SHARDS" "$STATIC" "$CHANGELOG"; do',
      'for r in "$CHANGES" "$SHARDS" "$STATIC"; do',
      "test_the_changelog_guard_is_inside_the_named_required_check"),
+
+    # ── E9.7's path-filter clause, re-anchored by this story ──────────────────────────────────
+    # ⚠️ THE RE-ANCHORING MUST NOT HAVE WEAKENED IT. The original clause said every pytest job gates
+    # on `backend`; finding ⑧ is the counterexample, so it now says "gates on SOME `changes`
+    # output" — with a SECOND clause holding the SUITE jobs to `backend` specifically. Both halves
+    # are broken here, because the whole risk of a re-anchor is that it quietly drops one.
+    ("a pytest job is left ungated entirely", CI,
+     "    if: needs.changes.outputs.changelog == 'true'",
+     "",
+     "test_no_job_that_runs_pytest_is_ungated"),
+
+    # ⭐ THE NARROWER DOOR: the six shards put back on every frontend PR by gating them on the
+    # changelog filter instead — "gates on SOME output" alone would wave this straight through.
+    ("the pytest SUITES are moved onto the narrower filter", CI,
+     "    name: Unit Tests (fast gate) — ${{ matrix.shard }}\n    runs-on: ubuntu-latest\n    needs: changes\n    if: needs.changes.outputs.backend == 'true'",
+     "    name: Unit Tests (fast gate) — ${{ matrix.shard }}\n    runs-on: ubuntu-latest\n    needs: changes\n    if: needs.changes.outputs.changelog == 'true'",
+     "test_the_suite_jobs_still_gate_on_backend_specifically"),
 
     # ── the comment-stripping itself (INC-38) ─────────────────────────────────────────────────
     # ⭐ PROSE MUST NOT SATISFY A SOURCE GUARD. Delete the real declaration and leave a comment
