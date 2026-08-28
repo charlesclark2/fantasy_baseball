@@ -220,16 +220,22 @@ def read_market_lines(season: int) -> tuple[dict[int, dict], bool]:
     up as a model FEATURE by `feature_columns` (see that function's docstring) — this serving read
     is the only caller that wants it.
 
-    ⚠️ EXPECT THIS TO BE EMPTY FOR AN UPCOMING SLATE, and that is not a defect: the paid
-    `/historical` capture can only reach a kickoff once that kickoff is past its snapshot instant
-    (K−24h for T-1, K−5min for the close), so a board written days ahead has no line to show yet.
-    The served `market.reason` says so.
+    ⭐ NCAAF-ODDS-LIVE — `with_live=True`. The third leg reads `odds_ncaaf_live`, the
+    ahead-of-kickoff board captured on a tiered in-season cadence, which is what puts a line beside
+    the model DAYS before kickoff. `_market` then serves the FRESHEST strictly-pre-kickoff
+    observation of the three.
+
+    ⚠️ THE TWO `/historical` LEGS CAN STILL BE EMPTY FOR AN UPCOMING SLATE, and that is not a
+    defect: that capture only reaches a kickoff once it is past its snapshot instant (K−24h for
+    T-1, K−5min for the close). Before NCAAF-ODDS-LIVE that meant an upcoming board had no line at
+    all; now the live leg covers exactly that window. A game with nothing from any leg still says
+    so through `market.reason`.
     """
     try:
         from quant_sports_intel_models.football.ncaaf.models.bakeoff_ncaaf_game import (
             build_clv_staging,
         )
-        clv = build_clv_staging(min_year=int(season), with_t1=True)
+        clv = build_clv_staging(min_year=int(season), with_t1=True, with_live=True)
         if clv is None or clv.empty:
             return {}, False
         return {int(r["game_id"]): r for r in clv.to_dict("records")}, False

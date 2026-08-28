@@ -8,7 +8,14 @@ comparator for a pre-kickoff projection, was stored (and paid for) and never ser
 
 WHAT THESE GUARDS DEFEND, and why each is a property rather than a preference:
 
-  1. **PREFERENCE + LABEL.** T-1 is preferred and the served block SAYS which line it is
+⚠️ **RE-ANCHORED BY NCAAF-ODDS-LIVE (2026-08-27).** P3.1b's fixed "T-1 before close" ORDER is
+superseded by FRESHEST-STRICTLY-PRE-KICKOFF-WINS, because a live ahead-of-kickoff feed now exists
+(see `payloads._MARKET_CANDIDATES` for the argument). The five clauses below that encoded the
+order were re-anchored onto the new rule rather than deleted — every other property P3.1b
+defends (the label, `as_of`, the leakage guard, additivity, the no-client-change claim) is
+unchanged and still asserted here.
+
+  1. **LABEL.** The served block SAYS which observation it is
      (`source`) and when it was taken (`as_of`). Two lines a day apart under one unlabelled number
      is the mislabelling class this repo keeps paying for (INC-41's two unequal numbers under one
      word), and it is not hypothetical here: the kind-blind staging leg takes the LATEST
@@ -91,17 +98,26 @@ def _market(row: dict | None, *, commence: str | None = KICKOFF, read_failed: bo
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 1. Preference, and saying which line it is
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def test_the_t1_line_is_preferred_over_the_close_and_says_so():
-    """The surface serves a PRE-KICKOFF projection, so the comparator is the market's PRE-kickoff
-    line. The close is the fallback, not the preference — it is the better-informed number, which
-    is precisely why quoting it beside a day-old projection flatters neither honestly."""
+def test_the_freshest_pre_kickoff_observation_wins_and_says_which_it_is():
+    """RE-ANCHORED (NCAAF-ODDS-LIVE): freshest wins, not a fixed kind order.
+
+    With both a T-1 and a close in hand — i.e. a game already played — the close IS the freshest
+    pre-kickoff observation and is the right line to show. P3.1b preferred T-1 here only because
+    the alternative was a close captured after the game; a live feed removes that argument."""
     block = _market({**T1_LINE, **CLOSE_LINE})
     assert block["status"] == "available"
+    assert block["source"] == payloads.MARKET_SOURCE_CLOSE
+    assert block["home_spread"] == CLOSE_LINE["close_home_spread"], "the stale T-1 was served"
+    assert block["snapshot_ts"] == CLOSE_TS and block["as_of"] == CLOSE_TS
+
+
+def test_a_t1_line_still_wins_when_it_is_the_freshest_thing_we_have():
+    """The pre-kickoff regime, which is the one that matters for an UPCOMING board: no close has
+    been captured yet, so the T-1 observation is the freshest and it is labelled as itself."""
+    block = _market(dict(T1_LINE))
     assert block["source"] == payloads.MARKET_SOURCE_T1
-    assert block["home_spread"] == T1_LINE["t1_home_spread"], "the CLOSE values were served"
-    assert block["total"] == T1_LINE["t1_total"]
-    assert block["home_moneyline_american"] == T1_LINE["t1_home_ml_american"]
-    assert block["snapshot_ts"] == T1_TS and block["as_of"] == T1_TS
+    assert block["home_spread"] == T1_LINE["t1_home_spread"]
+    assert block["as_of"] == T1_TS
 
 
 def test_the_close_is_served_when_no_t1_snapshot_was_captured():
@@ -136,7 +152,7 @@ def test_as_of_always_equals_the_served_lines_own_snapshot_instant():
     """`as_of` is the reader-facing name for the instant, and it must never drift from the line it
     labels — an `as_of` copied from the other candidate would be a correct-looking lie."""
     for row, expected in ((dict(T1_LINE), T1_TS), (dict(CLOSE_LINE), CLOSE_TS),
-                          ({**T1_LINE, **CLOSE_LINE}, T1_TS)):
+                          ({**T1_LINE, **CLOSE_LINE}, CLOSE_TS)):  # freshest wins
         block = _market(row)
         assert block["as_of"] == block["snapshot_ts"] == expected
 
@@ -286,7 +302,7 @@ def test_the_game_payload_passes_the_kickoff_into_the_guard():
     could not run it — so the wiring is the guard, and it is asserted rather than assumed."""
     good = payloads.build_game_payload(_snapshot_row(), market_row={**T1_LINE, **CLOSE_LINE})
     assert good["market"]["status"] == "available"
-    assert good["market"]["source"] == payloads.MARKET_SOURCE_T1
+    assert good["market"]["source"] == payloads.MARKET_SOURCE_CLOSE  # freshest of the two
     no_kickoff = payloads.build_game_payload(_snapshot_row(commence=None),
                                              market_row={**T1_LINE, **CLOSE_LINE})
     assert no_kickoff["market"]["status"] == "unavailable", (
@@ -344,7 +360,13 @@ def test_the_t1_columns_are_opt_in_so_they_can_never_become_a_model_feature():
 def test_the_serving_writer_is_the_caller_that_opts_in():
     """The serving read is the one caller that wants both kinds; the modelling callers must not."""
     src = Path(_REPO / "scripts/write_ncaaf_serving_store.py").read_text()
-    assert "build_clv_staging(min_year=int(season), with_t1=True)" in src
+    # RE-ANCHORED (NCAAF-ODDS-LIVE): the serving read now opts into the live leg too. The
+    # property P3.1b defends is unchanged — it is the ONE caller that asks for the extra kinds.
+    # ⚠️ Matched as a CALL fragment, not a bare `with_t1=True`: the writer's own docstring
+    # explains the flag, so an identifier scan is satisfied by the prose with the call deleted
+    # (INC-38 — and this exact re-anchor shipped that way for one RED-proof cycle).
+    assert re.search(r"build_clv_staging\(min_year=int\(season\),[^)]*with_t1=True", src), (
+        "the serving read no longer asks build_clv_staging for the T-1 leg")
     for modelling in ("quant_sports_intel_models/football/ncaaf/models/bakeoff_ncaaf_game.py",
                       "quant_sports_intel_models/football/ncaaf/models/bakeoff_ncaaf_p2_1.py"):
         body = Path(_REPO / modelling).read_text()
@@ -416,8 +438,7 @@ def test_the_writer_counts_market_lines_per_source_not_just_in_total():
         {"market": _market(None)},
         {"market": _market({**T1_LINE, "t1_snapshot_ts": "2026-08-30T02:00:00.000Z"})},
     ]}}
-    assert writer._count_by(slates, "source") == {
-        payloads.MARKET_SOURCE_CLOSE: 1, payloads.MARKET_SOURCE_T1: 1}
+    assert writer._count_by(slates, "source") == {payloads.MARKET_SOURCE_CLOSE: 2}
     assert writer._count_by(slates, "reason") == {
         payloads.MARKET_REASON_NOT_PRE_KICKOFF: 1, payloads.MARKET_REASON_NO_CAPTURE: 1}
 
@@ -437,7 +458,7 @@ def test_a_real_write_run_reports_which_line_it_attached(monkeypatch, tmp_path):
                         lambda season: ({row["game_id"]: {**T1_LINE, **CLOSE_LINE}}, False))
     result = writer.write_serving_store(2026, dry_run=True, out_dir=str(tmp_path))
     assert result["market_lines_attached"] == 1
-    assert result["market_lines_by_source"] == {payloads.MARKET_SOURCE_T1: 1}, (
+    assert result["market_lines_by_source"] == {payloads.MARKET_SOURCE_CLOSE: 1}, (
         "the run log cannot answer WHICH line attached, which is the only question this story's "
         "runtime gate asks")
     assert result["market_reasons"] == {}

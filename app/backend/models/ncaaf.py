@@ -252,11 +252,13 @@ class NcaafMarketLine(BaseModel):
     status: Literal["available", "unavailable"] = "unavailable"
     #: machine-readable cause when `status == "unavailable"`; None when available.
     reason: str | None = None
-    #: WHICH captured snapshot this line is — `odds_api_historical_t_minus_1` (the ~24h-prior
-    #: line, P0.6c) or `odds_api_historical_close` (K−5min). NCAAF-P3.1b: the two coexist per
-    #: kickoff in the lake, so a served line that did not SAY which one it is would be a number
-    #: whose meaning a reader cannot recover — and the T-1 line is a materially different thing
-    #: from a close (a day of movement apart).
+    #: WHICH observation this line is — `odds_api_live` (the ahead-of-kickoff board,
+    #: NCAAF-ODDS-LIVE), `odds_api_historical_t_minus_1` (the ~24h-prior snapshot, P0.6c) or
+    #: `odds_api_historical_close` (K−5min). All three can coexist per kickoff, and they are
+    #: materially different numbers — a live line days out and a close are a week of movement
+    #: apart — so a served number that did not SAY which one it is would be a number whose
+    #: meaning a reader cannot recover. The served line is the FRESHEST of them that is provably
+    #: pre-kickoff; `as_of` says when.
     source: str | None = None
     snapshot_ts: str | None = None
     #: NCAAF-P3.1b, ADDITIVE (NF-C0): the instant the served line was captured — the same value as

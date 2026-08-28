@@ -29,6 +29,7 @@ from pipeline.jobs.sports_nfl_rollforward_job import sports_nfl_roll_forward_job
 from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
 # NCAAF-P0.6b: the recurring IN-SEASON closing-line catch-up (bridges the P0.6 one-time backfill).
 from pipeline.jobs.sports_ncaaf_odds_capture_job import sports_ncaaf_odds_capture_job
+from pipeline.jobs.sports_ncaaf_odds_live_job import sports_ncaaf_odds_live_job
 # NCAAF-PS: the weekly PRE-KICKOFF prediction snapshot (per-game predictives + the P1.5 futures
 # board → the lake). TIME-CRITICAL in the same sense as the NF-W0a capture jobs — a prediction not
 # written before kickoff can never be written, and a backtest is not a substitute.
@@ -74,6 +75,7 @@ all_jobs = [
     sports_nfl_roll_forward_job,
     sports_nfl_sleeper_injuries_job,
     sports_ncaaf_odds_capture_job,
+    sports_ncaaf_odds_live_job,
     sports_ncaaf_prediction_snapshot_job,
     sports_ncaaf_serving_write_job,
     sports_nfl_pit_weather_job,

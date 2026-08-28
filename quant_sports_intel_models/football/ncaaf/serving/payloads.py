@@ -70,18 +70,24 @@ MARKET_REASON_INSTANT_UNPROVABLE = "market_snapshot_instant_unprovable"
 #: inventing a third naming for the same two things.
 MARKET_SOURCE_CLOSE = "odds_api_historical_close"
 MARKET_SOURCE_T1 = "odds_api_historical_t_minus_1"
+#: NCAAF-ODDS-LIVE: the ahead-of-kickoff board (`odds_ncaaf_live`), captured on a tiered in-season
+#: cadence so a line stands beside the model DAYS before kickoff instead of only after the game.
+MARKET_SOURCE_LIVE = "odds_api_live"
 
-#: Preference order, and the reason it is T-1 FIRST: this surface serves a PRE-KICKOFF projection,
-#: so the honest comparator beside it is the market's pre-kickoff line — the ~24h-prior snapshot,
-#: taken at roughly the vintage the model's own snapshot was taken at. The close (K−5min) is the
-#: fallback, not the preference: it is the more *informed* line, which is exactly why quoting it
-#: beside a day-old projection would flatter neither number honestly.
+#: The candidates, and the TIE-BREAK order among equally-fresh ones. ⚠️ This tuple is no longer the
+#: preference — see `_market`: the rule is FRESHEST STRICTLY-PRE-KICKOFF WINS.
 #:
-#: ⭐ It also FIXES A MISLABEL that predates this story. `build_clv_staging` takes the LATEST
-#: pre-commence snapshot per event with no kind filter, so for a kickoff that has a T-1 row and no
-#: close row yet the `close_*` columns already carried T-1 VALUES under a `close` LABEL. Preferring
-#: the explicitly-kinded T-1 columns makes the label match the line.
+#: ⭐ THIS SUPERSEDES NCAAF-P3.1b's FIXED "T-1 BEFORE CLOSE" ORDER, deliberately and on the record.
+#: P3.1b preferred T-1 because the only alternative was a close captured AFTER the game, and
+#: comparing a pre-kickoff projection to a post-hoc closing price is a vintage mismatch. Once a
+#: live feed exists that argument no longer selects T-1: for an UPCOMING game the honest
+#: comparator is what the market says NOW, and for a game already played the freshest pre-kickoff
+#: observation IS the close, which is also the right answer there. So one rule — freshest — gives
+#: the correct line in both regimes, where a fixed order gives the wrong one in one of them.
+#: `source` + `as_of` (both shipped by P3.1b) are what keep this honest: the reader is always told
+#: which observation they are looking at and when it was taken.
 _MARKET_CANDIDATES: tuple[tuple[str, str], ...] = (
+    (MARKET_SOURCE_LIVE, "live_"),
     (MARKET_SOURCE_T1, "t1_"),
     (MARKET_SOURCE_CLOSE, "close_"),
 )
@@ -257,12 +263,15 @@ def _market(market_row: Mapping[str, Any] | None, *, read_failed: bool,
     days ahead legitimately has none. That is a stated absence, not a defect, and the `reason`
     is what lets a surface say so instead of rendering a blank cell.
 
-    NCAAF-P3.1b — WHICH LINE, AND FROM WHEN
-    ---------------------------------------
-    Two snapshot kinds coexist per kickoff since P0.6c: a T-1 (~24h-prior) line and a close
-    (K−5min) line. This serves a PRE-KICKOFF projection, so it PREFERS the T-1 line and falls back
-    to the close, stamping `source` + `as_of` so a reader can always recover which line they are
-    looking at and when it was taken (see `_MARKET_CANDIDATES`).
+    WHICH LINE, AND FROM WHEN — FRESHEST STRICTLY-PRE-KICKOFF WINS
+    ---------------------------------------------------------------
+    Three observations can coexist per kickoff: the LIVE board (NCAAF-ODDS-LIVE, captured hourly
+    inside a day of kickoff and 6-hourly otherwise), the P0.6c T-1 (~24h-prior) snapshot, and the
+    K−5min close. The served line is the FRESHEST of them that is provably pre-kickoff, with
+    `source` + `as_of` stamped so the reader always knows which observation and from when.
+    ⚠️ This supersedes NCAAF-P3.1b's fixed T-1-before-close order — see `_MARKET_CANDIDATES` for
+    why one rule is right in both the upcoming and the already-played regime where a fixed order
+    is wrong in one of them.
 
     🔒 THE LEAKAGE GUARD, AND WHY IT COVERS THE CLOSE TOO
     -----------------------------------------------------
@@ -276,8 +285,8 @@ def _market(market_row: Mapping[str, Any] | None, *, read_failed: bool,
 
     It FAILS CLOSED. A kickoff instant we cannot read, a snapshot instant we cannot read, and a
     snapshot at/after kickoff are all refusals — a check that did not run is not a pass (NF1.7 (a)).
-    A refused candidate attaches NOTHING and logs loudly; the next candidate in preference order is
-    still considered, because a close that is out of bounds says nothing about a T-1 that is not.
+    A refused candidate attaches NOTHING and logs loudly; every OTHER candidate is still
+    considered, because one observation being out of bounds says nothing about another that is not.
     """
     if market_row is None:
         return _unavailable_market(
@@ -285,7 +294,8 @@ def _market(market_row: Mapping[str, Any] | None, *, read_failed: bool,
 
     kickoff = _instant(commence_time)
     refusal: str | None = None
-    for source, prefix in _MARKET_CANDIDATES:
+    eligible: list[tuple[Any, int, str, dict]] = []
+    for rank, (source, prefix) in enumerate(_MARKET_CANDIDATES):
         line = _market_candidate(market_row, prefix)
         if line is None:
             continue
@@ -301,15 +311,22 @@ def _market(market_row: Mapping[str, Any] | None, *, read_failed: bool,
         if not snapshot < kickoff:
             log.warning(
                 "[ALERT] NCAAF market line REFUSED for game_id=%s source=%s: snapshot %s is NOT "
-                "before kickoff %s — this is the odds→game join attaching the WRONG game, not a "
-                "late capture. Attaching nothing.",
+                "before kickoff %s — either the odds→game join attached the WRONG game or an "
+                "in-play price reached the store. Attaching nothing.",
                 game_id, source, snapshot.isoformat(), kickoff.isoformat())
             refusal = refusal or MARKET_REASON_NOT_PRE_KICKOFF
             continue
-        return {"status": "available", "reason": None, "source": source,
-                "as_of": line["snapshot_ts"], **line}
+        eligible.append((snapshot, rank, source, line))
 
-    return _unavailable_market(refusal or MARKET_REASON_NO_CAPTURE)
+    if not eligible:
+        return _unavailable_market(refusal or MARKET_REASON_NO_CAPTURE)
+    # FRESHEST WINS. `-snapshot` is not expressible on a Timestamp, so sort ascending on the
+    # instant and take the last; `rank` breaks an exact tie deterministically (two feeds observing
+    # the same instant is vanishingly unlikely but must not depend on dict order).
+    eligible.sort(key=lambda e: (e[0], -e[1]))
+    _, _, source, line = eligible[-1]
+    return {"status": "available", "reason": None, "source": source,
+            "as_of": line["snapshot_ts"], **line}
 
 
 def build_game_payload(row: Mapping[str, Any], *,
