@@ -7,7 +7,7 @@ metadata:
   name: ncaaf-p3-9
   vertical: ncaaf
   card: https://trello.com/c/ikIt1qcm   # P3.2 record; P3.9 card linked/pulled at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Make the live NCAAF surface FINDABLE before Saturday, plus two cheap
