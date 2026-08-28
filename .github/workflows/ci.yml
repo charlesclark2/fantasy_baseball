@@ -94,11 +94,28 @@ jobs:
           # ⭐ WHY A SEPARATE OUTPUT RATHER THAN ADDING THE FILE TO `backend`. Two reasons, and the
           # first is mechanical: under `predicate-quantifier: every` a file must match EVERY pattern
           # in its list, so adding `- 'frontend/data/changelog.json'` to `backend` would demand that
-          # `betting_ml/x.py` also match that path — i.e. it would resolve `backend` to FALSE for
-          # every backend file in the repo and silently disarm the entire Python gate. The obvious
-          # edit is the catastrophic one. The second is scope: it would also run six pytest shards,
-          # the slow Monte-Carlo gate and the model smoke test on a changelog typo, which is the
-          # cost E9.7 built this job to avoid.
+          # `betting_ml/x.py` match that path too. MEASURED against picomatch with the action's own
+          # MatchOptions (`{dot: true}`), exactly as E9.63b's note above did:
+          #
+          #                                  backend, with the changelog added to its list
+          #     betting_ml/tests/test_x.py       false
+          #     pipeline/ops/y.py                false
+          #     .github/workflows/ci.yml         false
+          #     frontend/data/changelog.json     false   <- it does not even select itself
+          #
+          # i.e. the obvious edit does not WIDEN the gate, it DISARMS it: `backend` becomes false
+          # for every file in the repo, no Python job ever runs again, and the changelog still is
+          # not checked. The catastrophic edit wearing the costume of the one-line fix — which is
+          # why it is pinned by `test_ncaaf_p3_9_nav.py` rather than left to this comment.
+          #
+          # The second reason is scope: even if it worked it would run six pytest shards, the slow
+          # Monte-Carlo gate and the model smoke test on a changelog typo — the cost E9.7 built this
+          # job to avoid.
+          #
+          # ⭐ AND THE NEW FILTER, MEASURED THE SAME WAY:
+          #     frontend/data/changelog.json  -> backend false, changelog TRUE   (the gap, closed)
+          #     frontend/components/nav.tsx   -> backend false, changelog false  (unchanged)
+          #     betting_ml/tests/test_x.py    -> backend TRUE,  changelog false  (unchanged)
           #
           # ⭐ AND WHY NOT THE OTHER OPTION THE STORY OFFERED — porting the Monday-week rule into an
           # E2E clause. That would create a SECOND implementation of one invariant, in a second
