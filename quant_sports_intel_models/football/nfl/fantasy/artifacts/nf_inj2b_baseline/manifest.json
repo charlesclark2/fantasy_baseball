@@ -1,0 +1,933 @@
+{
+  "season": 2026,
+  "reportedAbsenceCount": 0,
+  "generated_at": "2026-08-27T14:18:54.071999+00:00",
+  "source": "local-artifacts",
+  "adp_as_of": "2026-08-27",
+  "ecr_as_of": "2026-08-27",
+  "freshness": {
+    "adp": {
+      "source": "ffc",
+      "format": "ppr",
+      "teams": 12,
+      "as_of": "2026-08-27",
+      "window_start": "2026-08-20",
+      "window_end": "2026-08-27",
+      "drafts": 7986
+    },
+    "ecr": {
+      "source": "fantasypros",
+      "scoring": "PPR",
+      "as_of": "2026-08-27",
+      "label": "8/27",
+      "experts": 108
+    },
+    "adp_by_sample": {
+      "2qb/10": {
+        "source": "ffc",
+        "format": "2qb",
+        "teams": 10,
+        "as_of": "2026-08-27",
+        "window_start": "2026-07-28",
+        "window_end": "2026-08-27",
+        "drafts": 5911
+      },
+      "2qb/12": {
+        "source": "ffc",
+        "format": "2qb",
+        "teams": 12,
+        "as_of": "2026-08-27",
+        "window_start": "2026-07-28",
+        "window_end": "2026-08-27",
+        "drafts": 5911
+      },
+      "half-ppr/10": {
+        "source": "ffc",
+        "format": "half-ppr",
+        "teams": 10,
+        "as_of": "2026-08-27",
+        "window_start": "2026-08-22",
+        "window_end": "2026-08-27",
+        "drafts": 3144
+      },
+      "half-ppr/12": {
+        "source": "ffc",
+        "format": "half-ppr",
+        "teams": 12,
+        "as_of": "2026-08-27",
+        "window_start": "2026-08-22",
+        "window_end": "2026-08-27",
+        "drafts": 3144
+      },
+      "ppr/10": {
+        "source": "ffc",
+        "format": "ppr",
+        "teams": 10,
+        "as_of": "2026-08-27",
+        "window_start": "2026-08-20",
+        "window_end": "2026-08-27",
+        "drafts": 7986
+      },
+      "ppr/12": {
+        "source": "ffc",
+        "format": "ppr",
+        "teams": 12,
+        "as_of": "2026-08-27",
+        "window_start": "2026-08-20",
+        "window_end": "2026-08-27",
+        "drafts": 7986
+      },
+      "standard/10": {
+        "source": "ffc",
+        "format": "standard",
+        "teams": 10,
+        "as_of": "2026-08-27",
+        "window_start": "2026-08-20",
+        "window_end": "2026-08-27",
+        "drafts": 1905
+      },
+      "standard/12": {
+        "source": "ffc",
+        "format": "standard",
+        "teams": 12,
+        "as_of": "2026-08-27",
+        "window_start": "2026-08-20",
+        "window_end": "2026-08-27",
+        "drafts": 1905
+      }
+    },
+    "input_vintage": {
+      "depth_chart_as_of": "2026-08-26 07:41:22",
+      "sleeper_status_as_of": "2026-08-27T13:30:14.908041+00:00"
+    },
+    "projection_built_at": "2026-08-27T14:18:33.631330+00:00",
+    "market_refresh": true
+  },
+  "positions": [
+    "QB",
+    "RB",
+    "WR",
+    "TE",
+    "K",
+    "DST"
+  ],
+  "projectionSource": "nf1_5",
+  "projectionLabel": "market-aware refined (NF1.5)",
+  "sizes": [
+    10,
+    12
+  ],
+  "auctionBudget": 200,
+  "configs": [
+    {
+      "name": "full_ppr",
+      "label": "Full-PPR",
+      "ppr": "ppr",
+      "superflex": false,
+      "adpFormat": "ppr",
+      "description": "Full-PPR (1.0/reception), 12-team, 1QB/2RB/2WR/1TE/1FLEX.",
+      "draftType": "snake",
+      "auctionBudget": 200,
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 2,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "full_ppr_3wr",
+      "label": "Full-PPR \u00b7 3-WR",
+      "ppr": "ppr",
+      "superflex": false,
+      "adpFormat": "ppr",
+      "description": "Full-PPR (1.0/reception), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+      "draftType": "snake",
+      "auctionBudget": 200,
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 3,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "half_ppr",
+      "label": "Half-PPR",
+      "ppr": "half",
+      "superflex": false,
+      "adpFormat": "half-ppr",
+      "description": "Half-PPR (0.5/reception), 12-team, 1QB/2RB/2WR/1TE/1FLEX.",
+      "draftType": "snake",
+      "auctionBudget": 200,
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 2,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "half_ppr_3wr",
+      "label": "Half-PPR \u00b7 3-WR",
+      "ppr": "half",
+      "superflex": false,
+      "adpFormat": "half-ppr",
+      "description": "Half-PPR (0.5/reception), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+      "draftType": "snake",
+      "auctionBudget": 200,
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 3,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "standard",
+      "label": "Standard (non-PPR)",
+      "ppr": "standard",
+      "superflex": false,
+      "adpFormat": "standard",
+      "description": "Standard (non-PPR), 12-team, 1QB/2RB/2WR/1TE/1FLEX.",
+      "draftType": "snake",
+      "auctionBudget": 200,
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 2,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "standard_3wr",
+      "label": "Standard \u00b7 3-WR",
+      "ppr": "standard",
+      "superflex": false,
+      "adpFormat": "standard",
+      "description": "Standard (non-PPR), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+      "draftType": "snake",
+      "auctionBudget": 200,
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 3,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "superflex",
+      "label": "Superflex (Full-PPR)",
+      "ppr": "ppr",
+      "superflex": true,
+      "adpFormat": "2qb",
+      "description": "Superflex full-PPR, 12-team, adds a QB-eligible SUPERFLEX slot.",
+      "draftType": "snake",
+      "auctionBudget": 200,
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 2,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "SUPERFLEX",
+          "count": 1,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    }
+  ],
+  "projections": {
+    "players": 871,
+    "adp_format": "ppr",
+    "adp_teams": 12,
+    "adp_as_of": "2026-08-27",
+    "ecr_as_of": "2026-08-27",
+    "freshness": {
+      "adp": {
+        "source": "ffc",
+        "format": "ppr",
+        "teams": 12,
+        "as_of": "2026-08-27",
+        "window_start": "2026-08-20",
+        "window_end": "2026-08-27",
+        "drafts": 7986
+      },
+      "ecr": {
+        "source": "fantasypros",
+        "scoring": "PPR",
+        "as_of": "2026-08-27",
+        "label": "8/27",
+        "experts": 108
+      },
+      "adp_by_sample": {
+        "2qb/10": {
+          "source": "ffc",
+          "format": "2qb",
+          "teams": 10,
+          "as_of": "2026-08-27",
+          "window_start": "2026-07-28",
+          "window_end": "2026-08-27",
+          "drafts": 5911
+        },
+        "2qb/12": {
+          "source": "ffc",
+          "format": "2qb",
+          "teams": 12,
+          "as_of": "2026-08-27",
+          "window_start": "2026-07-28",
+          "window_end": "2026-08-27",
+          "drafts": 5911
+        },
+        "half-ppr/10": {
+          "source": "ffc",
+          "format": "half-ppr",
+          "teams": 10,
+          "as_of": "2026-08-27",
+          "window_start": "2026-08-22",
+          "window_end": "2026-08-27",
+          "drafts": 3144
+        },
+        "half-ppr/12": {
+          "source": "ffc",
+          "format": "half-ppr",
+          "teams": 12,
+          "as_of": "2026-08-27",
+          "window_start": "2026-08-22",
+          "window_end": "2026-08-27",
+          "drafts": 3144
+        },
+        "ppr/10": {
+          "source": "ffc",
+          "format": "ppr",
+          "teams": 10,
+          "as_of": "2026-08-27",
+          "window_start": "2026-08-20",
+          "window_end": "2026-08-27",
+          "drafts": 7986
+        },
+        "ppr/12": {
+          "source": "ffc",
+          "format": "ppr",
+          "teams": 12,
+          "as_of": "2026-08-27",
+          "window_start": "2026-08-20",
+          "window_end": "2026-08-27",
+          "drafts": 7986
+        },
+        "standard/10": {
+          "source": "ffc",
+          "format": "standard",
+          "teams": 10,
+          "as_of": "2026-08-27",
+          "window_start": "2026-08-20",
+          "window_end": "2026-08-27",
+          "drafts": 1905
+        },
+        "standard/12": {
+          "source": "ffc",
+          "format": "standard",
+          "teams": 12,
+          "as_of": "2026-08-27",
+          "window_start": "2026-08-20",
+          "window_end": "2026-08-27",
+          "drafts": 1905
+        }
+      },
+      "input_vintage": {
+        "depth_chart_as_of": "2026-08-26 07:41:22",
+        "sleeper_status_as_of": "2026-08-27T13:30:14.908041+00:00"
+      },
+      "projection_built_at": "2026-08-27T14:18:33.631330+00:00",
+      "market_refresh": true
+    },
+    "projection_source": "nf1_5",
+    "projection_label": "market-aware refined (NF1.5)",
+    "market_lean": {
+      "QB": "market-led-adaptive",
+      "RB": "market-led",
+      "TE": "market-blend",
+      "WR": "market-led"
+    },
+    "market_lean_note": "At positions labelled market-led or market-blend, the ranking INCORPORATES market consensus (ADP/ECR) alongside our own model \u2014 so it is not an independent read on the market at those positions, and a gap between our order and the market's is a smaller, less independent signal there than it would be from a model that ignored the market. The point projections and their ranges are unchanged from the market-blind model, so this is a re-ORDERING of the same numbers, not a re-pricing.",
+    "model_version": "nfl_fantasy_nf1_5_v1",
+    "base_season": 2025,
+    "rookie_policy": {
+      "selection_status": "PM_JUDGMENT",
+      "shrink_lambda": 0.5,
+      "statistically_selected": false,
+      "source_model": "NF-D16",
+      "decision_story": "NF-D21"
+    },
+    "veteran_level_policy": {
+      "status": "recalibrated",
+      "form": "pos_const",
+      "params": {
+        "QB": 0.9287565281164292,
+        "RB": 1.2479904415110172,
+        "TE": 1.1115566369997747,
+        "WR": 1.1003068768907542
+      },
+      "window_seasons": 5.0,
+      "source_model": "NF-TR2b",
+      "decision_story": "NF-TR2",
+      "statistically_selected": true,
+      "level_model_version": "nfl_fantasy_nf_tr2b_veteran_level_v1"
+    },
+    "injury_games_policy": {
+      "status": "fitted_hurdle",
+      "form": "hurdle",
+      "arm": "hurdle_transfer",
+      "source_model": "NF-INJ3b",
+      "decision_story": "NF-INJ3b",
+      "certified_statuses": "RES,PUP",
+      "statistically_selected": true,
+      "injury_games_model_version": "nfl_fantasy_nf_inj3b_injury_games_v1"
+    }
+  },
+  "featureLegend": {
+    "pergame_fp": {
+      "label": "Recent per-game scoring pace",
+      "description": "Points per game over his most recent games, weighted toward the latest ones \u2014 how well he's scoring right now, before accounting for how many games he's expected to play."
+    },
+    "base_games": {
+      "label": "Games played last season",
+      "description": "How many games he actually played last season \u2014 more games played is a stronger signal than a small sample."
+    },
+    "expected_games": {
+      "label": "Expected games this season (health/role)",
+      "description": "Our own estimate of how many games he's projected to play this season, based on his role and recent availability."
+    },
+    "snap_share": {
+      "label": "Snap share (playing time)",
+      "description": "The share of his team's offensive snaps he played \u2014 how big a role he holds on the field."
+    },
+    "target_share": {
+      "label": "Target share (receiving role)",
+      "description": "The share of his team's pass targets thrown his way \u2014 his role in the passing game."
+    },
+    "carry_share": {
+      "label": "Carry share (rushing role)",
+      "description": "The share of his team's rushing attempts he gets \u2014 his role in the running game."
+    },
+    "depth_rank": {
+      "label": "Depth-chart standing",
+      "description": "Where he sits on his team's depth chart at his position \u2014 starter vs. backup."
+    },
+    "mover_scale": {
+      "label": "Team-change opportunity",
+      "description": "An adjustment for players who changed teams \u2014 a new opportunity, or a lost one, with a different roster around him."
+    },
+    "team_env": {
+      "label": "Team offensive environment (Vegas win total)",
+      "description": "How good his team's offense is expected to be this season, from Vegas win totals \u2014 a rising tide that lifts every skill player on that offense."
+    },
+    "injury_cap_ratio": {
+      "label": "Injury / availability risk",
+      "description": "How much his availability is capped by injury risk \u2014 1.0 means no cap; lower means games are expected to be missed."
+    },
+    "age": {
+      "label": "Player age",
+      "description": "The player's age \u2014 older players carry more decline risk, younger players carry more unproven-role uncertainty."
+    },
+    "fp_sd": {
+      "label": "Week-to-week scoring volatility",
+      "description": "How much his fantasy scoring bounces around week to week \u2014 a volatile player vs. a consistent one."
+    }
+  },
+  "featureContributionsMeta": {
+    "model_version": "nfl_fantasy_nf1_v1",
+    "generated_at": "2026-08-02T03:28:32.450731+00:00",
+    "base_season": 2025,
+    "projection_season": 2026,
+    "n_players": 703
+  },
+  "coherence": {
+    "violating_players": 11,
+    "by_file": {
+      "projections.json": 11
+    },
+    "injury_input": {
+      "verdict": "OK",
+      "lag_hours": 0.8,
+      "as_of": "2026-08-27T13:30:14.908041+00:00",
+      "max_lag_hours": 72.0,
+      "detail": "injury status 0.8h old, within the 72h bar"
+    }
+  },
+  "injuryGamesStamp": {
+    "verdict": "FLIPPED_AND_MOVED",
+    "passed": true,
+    "stamp": "nfl_fantasy_nf_inj3b_injury_games_v1",
+    "claims_fitted": true,
+    "fitted_model_version": "nfl_fantasy_nf_inj3b_injury_games_v1",
+    "incumbent_model_version": "nfl_fantasy_injury_cap_incumbent_v1",
+    "n_certified": 25,
+    "n_fitted": 25,
+    "n_moved": 25,
+    "max_abs_move": 3.9997523670390134,
+    "material_atol": 1e-09,
+    "detail": "25 of 25 fitted row(s) differ materially from the incumbent cap (largest move 4 games) under the fitted stamp nfl_fantasy_nf_inj3b_injury_games_v1."
+  }
+}
