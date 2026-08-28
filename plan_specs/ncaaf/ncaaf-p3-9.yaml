@@ -71,7 +71,7 @@ spec:
   supersedes: []
   dependsOn:
     - "P3.2b on main (operator promoted 2026-08-25)"
-    - "NCAAF-P3.1b PR landed on dev (operator sequencing rule 2026-08-25: backend first — this session also absorbs any client change P3.1b flagged for the T-1 market source/as_of display)"
+    - "AMENDED 2026-08-28 (PM): the P3.1b dependency is RELAXED — its scope grew (odds cadence) and the opener is tomorrow. P3.9 runs NOW with a hard boundary instead: ⛔ touch NOTHING market-related (no market fields, no market rendering, no payloads); any P3.1b-flagged client change becomes a follow-up, not this story. P3.1b is backend-only, so no file collision; the one shared surface is the changelog same-week block — rebase before committing it."
   feedsInto:
     - "The 8/29 opener being findable by an actual user — the last item on the MVP critical path"
 ---
