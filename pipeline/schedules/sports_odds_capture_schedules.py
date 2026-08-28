@@ -36,6 +36,7 @@ instant regardless of when the fetch runs (see that module's docstring).
 from dagster import DefaultScheduleStatus, RunRequest, ScheduleEvaluationContext, schedule
 
 from pipeline.jobs.sports_ncaaf_odds_capture_job import sports_ncaaf_odds_capture_job
+from pipeline.jobs.sports_ncaaf_odds_live_job import sports_ncaaf_odds_live_job
 
 # Monday 08:00 PT, months August-December + January (the in-season closing-line window).
 NCAAF_ODDS_CAPTURE_CRON = "0 8 * 8-12,1 1"
@@ -54,3 +55,41 @@ def sports_ncaaf_odds_capture_schedule(context: ScheduleEvaluationContext):
         "clock-derived current_season()"
     )
     return RunRequest(run_key=None, tags={"sport": "ncaaf", "cadence": "odds_recurring_capture"})
+
+
+# ── NCAAF-ODDS-LIVE — the ahead-of-kickoff board ─────────────────────────────────────────────
+#
+# Football is bet days ahead, and the weekly `/historical` catch-up above structurally cannot
+# serve that (it only asks for a kickoff once K−buffer has passed). This fires the live bulk
+# `/odds` feed so a market line stands beside the model DAYS before kickoff.
+#
+# ⏱️ ONE HOURLY CRON, AND THE OP DECIDES. The operator-chosen cadence is tiered — hourly inside
+# 24h of the next kickoff, 6-hourly otherwise — and that decision lives in
+# `odds_live_capture.should_capture`, a pure function of the clock and the schedule, NOT in a
+# second cron. Two crons for one logical job is this repo's most-repeated operational defect
+# (INC-30's double-installed crontab, INC-36's raced deploy, INC-38's per-caller flag).
+# A non-capturing tick spends ZERO credits and logs why.
+#
+# ⛔ The schedule eval itself does NO IO: the tier decision needs the season's kickoff times, and
+# a CFBD call inside a schedule evaluation would put network in the Dagster DAEMON — the INC-32
+# wedge class. The op does the read, in its own process, with the client's own timeout.
+#
+# ⛔ SHIPS `default_status=STOPPED`, the same operator-gated carve-out (E11.23) the paid
+# `/historical` capture takes: this spends real Odds-API credits on every capturing tick. Turning
+# it on is a deliberate act; the intended state belongs in `BOX_OPERATIONS.md §10`.
+NCAAF_ODDS_LIVE_CRON = "0 * * 8-12,1 *"   # hourly, in-season (Aug-Dec + Jan bowls/CFP)
+
+
+@schedule(
+    job=sports_ncaaf_odds_live_job,
+    cron_schedule=NCAAF_ODDS_LIVE_CRON,
+    execution_timezone="America/Los_Angeles",
+    default_status=DefaultScheduleStatus.STOPPED,  # ⛔ operator-gated — paid feed
+)
+def sports_ncaaf_odds_live_schedule(context: ScheduleEvaluationContext):
+    """Hourly in-season tick; the op applies the 6h-baseline / hourly-near-kickoff tier."""
+    context.log.info(
+        "[ncaaf odds live] hourly tick — the op decides whether this one captures "
+        "(hourly within 24h of the next kickoff, otherwise a 6-hourly baseline tick)"
+    )
+    return RunRequest(run_key=None, tags={"sport": "ncaaf", "cadence": "odds_live_capture"})

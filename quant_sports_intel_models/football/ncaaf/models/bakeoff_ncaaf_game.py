@@ -290,8 +290,23 @@ def load_matrix(source: str) -> pd.DataFrame:
 _SNAPSHOT_KIND_T1 = "t_minus_1"
 _SNAPSHOT_KIND_CLOSE = "close"
 
+#: The ahead-of-kickoff live board's OWN table (NCAAF-ODDS-LIVE). Named here rather than imported
+#: for the same reason as the kind strings above; pinned equal by a guard test.
+_ODDS_LIVE_SOURCE = "odds_ncaaf_live"
 
-def _clv_sql(O: str, G: str, min_year: int, *, kind: str | None, prefix: str) -> str:
+
+#: Fold accents + punctuation before comparing two sources' school names. DuckDB's own
+#: `strip_accents`, then drop everything that is not alphanumeric or a space.
+#: ⚠️ OPT-IN (`accent_fold=`) and used ONLY by the live leg. Measured 2026-08-27: the raw prefix
+#: join MISSES `San José State` vs "San Jose State Spartans" and `Hawai'i` vs "Hawaii Rainbow
+#: Warriors" — 2 of the 8 opener games. Applying it to the DEFAULT leg would ADD rows to the CLV
+#: mart, i.e. change the population P1.4's model selection and VAL1's null were decided on, so the
+#: default stays byte-identical and the false-negative sweep for the historical legs is carded.
+_NAME_FOLD = "lower(regexp_replace(strip_accents({}), '[^a-zA-Z0-9 ]', '', 'g'))"
+
+
+def _clv_sql(O: str, G: str, min_year: int, *, kind: str | None, prefix: str,
+             accent_fold: bool = False) -> str:
     """The odds→game staging join, ONE rule set, parameterised by snapshot kind and column prefix.
 
     ⭐ NCAAF-P3.1b lifted this out of `build_clv_staging` so the T-1 read is the SAME join rather
@@ -306,6 +321,9 @@ def _clv_sql(O: str, G: str, min_year: int, *, kind: str | None, prefix: str) ->
         f"\n          and coalesce(json_extract_string(raw_json,'$._snapshot_kind'), "
         f"'{_SNAPSHOT_KIND_CLOSE}') = '{kind}'"
     )
+    fold = (lambda col: _NAME_FOLD.format(col)) if accent_fold else (lambda col: col)
+    home_match = f"{fold('c.odds_home')} like {fold('g.g_home')} || '%'"
+    away_match = f"{fold('c.odds_away')} like {fold('g.g_away')} || '%'"
     return f"""
     with snaps as (
         select json_extract_string(raw_json,'$.id')            as event_id,
@@ -357,14 +375,32 @@ def _clv_sql(O: str, G: str, min_year: int, *, kind: str | None, prefix: str) ->
     from consensus c
     join games g
       on g.season = c.season
-     and c.odds_home like g.g_home || '%'
-     and c.odds_away like g.g_away || '%'
+     and {home_match}
+     and {away_match}
     """
 
 
-def _run_clv_leg(q, O: str, G: str, min_year: int, *, kind: str | None, prefix: str) -> pd.DataFrame:
-    """One snapshot kind → `game_id` + its `{prefix}*` consensus columns, deduped, ML→prob added."""
-    clv = q(_clv_sql(O, G, min_year, kind=kind, prefix=prefix))
+def _run_clv_leg(q, O: str, G: str, min_year: int, *, kind: str | None, prefix: str,
+                 missing_ok: bool = False, accent_fold: bool = False) -> pd.DataFrame:
+    """One snapshot kind → `game_id` + its `{prefix}*` consensus columns, deduped, ML→prob added.
+
+    `missing_ok` is for the LIVE leg only: `odds_ncaaf_live` does not exist until the live capture
+    has fired once, and a serving read must treat a never-written table as "no line yet", not as a
+    failure. ⛔ It is NOT a blanket swallow — `query_or_missing` establishes absence by LISTING
+    `_delta_log/` and RAISES on anything it cannot prove absent (NCAAF-LAKE1), so a transient read
+    failure still surfaces instead of being served as an empty board.
+    """
+    if missing_ok:
+        from quant_sports_intel_models.football.ncaaf.ingest.query_lake import query_or_missing
+        clv = query_or_missing(_clv_sql(O, G, min_year, kind=kind, prefix=prefix,
+                                        accent_fold=accent_fold))
+        if clv is None or clv.empty:
+            return pd.DataFrame(columns=["game_id", f"{prefix}home_spread", f"{prefix}total",
+                                         f"{prefix}home_ml_american", f"{prefix}snapshot_ts",
+                                         f"{prefix}home_ml_prob"]).astype({"game_id": "int64"})
+    else:
+        clv = q(_clv_sql(O, G, min_year, kind=kind, prefix=prefix,
+                         accent_fold=accent_fold))
     # dedupe (a rare double-prefix match) — keep one row per game_id.
     clv = clv.dropna(subset=["game_id"]).drop_duplicates(subset=["game_id"], keep="first")
     clv["game_id"] = clv["game_id"].astype("int64")
@@ -376,7 +412,8 @@ def _run_clv_leg(q, O: str, G: str, min_year: int, *, kind: str | None, prefix: 
     return clv
 
 
-def build_clv_staging(min_year: int = 2020, *, with_t1: bool = False) -> pd.DataFrame:
+def build_clv_staging(min_year: int = 2020, *, with_t1: bool = False,
+                      with_live: bool = False) -> pd.DataFrame:
     """The vs-market/CLV staging mart P1.4 OWNS: the leakage-safe CLOSING consensus line per game,
     keyed to the matrix `game_id`.
 
@@ -407,10 +444,19 @@ def build_clv_staging(min_year: int = 2020, *, with_t1: bool = False) -> pd.Data
     from quant_sports_intel_models.football.ncaaf.ingest.query_lake import q, delta
     O, G = delta("odds_ncaaf_historical"), delta("games")
     clv = _run_clv_leg(q, O, G, min_year, kind=None, prefix="close_")
-    if not with_t1:
-        return clv
-    t1 = _run_clv_leg(q, O, G, min_year, kind=_SNAPSHOT_KIND_T1, prefix="t1_")
-    return clv.merge(t1, on="game_id", how="outer")
+    if with_t1:
+        t1 = _run_clv_leg(q, O, G, min_year, kind=_SNAPSHOT_KIND_T1, prefix="t1_")
+        clv = clv.merge(t1, on="game_id", how="outer")
+    if with_live:
+        # ⛔ A DIFFERENT TABLE, and that is the point: `odds_ncaaf_live` is the ahead-of-kickoff
+        # board, and it must never reach the CLV mart. This leg's own kind filter is None because
+        # every row in that table is a live observation — the separation is the TABLE, not a flag.
+        live = _run_clv_leg(q, delta(_ODDS_LIVE_SOURCE), G, min_year, kind=None, prefix="live_",
+                            missing_ok=True, accent_fold=True)
+        clv = clv.merge(live, on="game_id", how="outer")
+    if with_t1 or with_live:
+        clv["game_id"] = clv["game_id"].astype("int64")
+    return clv
 
 
 def assemble_cache(args) -> Path:

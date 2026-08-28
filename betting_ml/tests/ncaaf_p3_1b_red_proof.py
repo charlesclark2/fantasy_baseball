@@ -42,11 +42,14 @@ PANEL = _REPO / "frontend/components/ncaaf/market-comparison.tsx"
 #: (label, file, old, new, pytest -k selector, token that must DISAPPEAR or None)
 BREAKS: list[tuple[str, Path, str, str, str, str | None]] = [
     # ── direction 1: a valid T-1 must ATTACH, and under its own label ────────────────────────
-    ("the close is preferred over the T-1 line again",
+    # ⚠️ RE-ANCHORED (NCAAF-ODDS-LIVE): the fixed T-1-before-close ORDER is superseded by
+    # freshest-wins, so the break that inverted the order no longer describes a defect. What must
+    # still go red is a candidate DISAPPEARING from consideration entirely.
+    ("the T-1 observation stops being a candidate at all",
      PAYLOADS,
-     "    (MARKET_SOURCE_T1, \"t1_\"),\n    (MARKET_SOURCE_CLOSE, \"close_\"),",
-     "    (MARKET_SOURCE_CLOSE, \"close_\"),\n    (MARKET_SOURCE_T1, \"t1_\"),",
-     "t1_line_is_preferred or t1_only_kickoff or as_of_always_equals", None),
+     "    (MARKET_SOURCE_T1, \"t1_\"),\n",
+     "",
+     "t1_only_kickoff or a_t1_line_still_wins or as_of_always_equals", None),
 
     ("a T-1 line is served under the `close` label (the mislabel this story fixes)",
      PAYLOADS,
@@ -64,10 +67,10 @@ BREAKS: list[tuple[str, Path, str, str, str, str | None]] = [
 
     ("`as_of` is stamped from the OTHER candidate's instant",
      PAYLOADS,
-     '        return {"status": "available", "reason": None, "source": source,\n'
-     '                "as_of": line["snapshot_ts"], **line}',
-     '        return {"status": "available", "reason": None, "source": source,\n'
-     '                "as_of": _s(market_row.get("close_snapshot_ts")), **line}',
+     '    return {"status": "available", "reason": None, "source": source,\n'
+     '            "as_of": line["snapshot_ts"], **line}',
+     '    return {"status": "available", "reason": None, "source": source,\n'
+     '            "as_of": _s(market_row.get("t1_snapshot_ts")), **line}',
      "as_of_always_equals", None),
 
     # ── direction 2: a post-kickoff snapshot must be REFUSED ──────────────────────────────────
@@ -148,16 +151,16 @@ BREAKS: list[tuple[str, Path, str, str, str, str | None]] = [
     # ── the staging read: one join, opt-in, and the kind string that must not drift ───────────
     ("the T-1 columns land in the DEFAULT frame and become model features",
      BAKEOFF,
-     "def build_clv_staging(min_year: int = 2020, *, with_t1: bool = False) -> pd.DataFrame:",
-     "def build_clv_staging(min_year: int = 2020, *, with_t1: bool = True) -> pd.DataFrame:",
+     "def build_clv_staging(min_year: int = 2020, *, with_t1: bool = False,",
+     "def build_clv_staging(min_year: int = 2020, *, with_t1: bool = True,",
      "opt_in_so_they_can_never_become_a_model_feature", None),
 
     ("the serving writer stops asking for the T-1 leg",
      WRITER,
-     "clv = build_clv_staging(min_year=int(season), with_t1=True)",
-     "clv = build_clv_staging(min_year=int(season))",
+     "clv = build_clv_staging(min_year=int(season), with_t1=True, with_live=True)",
+     "clv = build_clv_staging(min_year=int(season), with_live=True)",
      "serving_writer_is_the_caller_that_opts_in",
-     "build_clv_staging(min_year=int(season), with_t1=True)"),
+     "build_clv_staging(min_year=int(season), with_t1=True"),
 
     ("the T-1 leg forks into a second copy of the join",
      BAKEOFF,

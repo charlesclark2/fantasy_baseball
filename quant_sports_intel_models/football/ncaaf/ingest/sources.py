@@ -380,14 +380,26 @@ def _odds_get(ctx: Ctx, path: str, params: dict) -> list:
     return data
 
 
-def _odds_ncaaf(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
+def _odds_ncaaf(ctx: Ctx, year: int, *, weeks=None, commence_from: str | None = None) -> list[dict]:
     """CURRENT NCAAF game lines (h2h/spreads/totals) across US books (Bovada = target). This is
-    the LIVE bulk `/odds` feed — NOT closing lines (that's `odds_ncaaf_historical`, P0.6)."""
-    return _odds_get(
-        ctx,
-        f"sports/{ODDS_SPORT_KEY}/odds",
-        {"regions": ctx.odds_regions, "markets": NCAAF_GAME_LINE_MARKETS, "oddsFormat": "american"},
-    )
+    the LIVE bulk `/odds` feed — NOT closing lines (that's `odds_ncaaf_historical`, P0.6).
+
+    ONE call returns the WHOLE upcoming board (measured 2026-08-27: 109 events, 1.6-92.6 days
+    out, Bovada on 51) for 1 x markets x regions credits — a tenth of what the per-kickoff
+    `/historical` loop costs. `odds_live_capture` is the consumer.
+
+    `commence_from` (ADDITIVE, default None = today's behaviour for every existing caller): an
+    ISO instant below which events are excluded. ⛔ The live endpoint otherwise returns IN-PLAY
+    games with IN-PLAY prices, and an in-play price reaching a store that a PRE-GAME line is
+    served from is the one thing the NCAAF surface must never do. `odds_live_capture` passes the
+    snapshot instant here AND re-checks every record after the fetch — the request parameter is
+    one edit away from being dropped, so it is not the only defence.
+    """
+    params = {"regions": ctx.odds_regions, "markets": NCAAF_GAME_LINE_MARKETS,
+              "oddsFormat": "american"}
+    if commence_from:
+        params["commenceTimeFrom"] = commence_from
+    return _odds_get(ctx, f"sports/{ODDS_SPORT_KEY}/odds", params)
 
 
 def _odds_scores(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
