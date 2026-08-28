@@ -335,29 +335,49 @@ def test_the_fold_still_refuses_a_genuinely_different_school():
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 6. Orchestration — one owner, gated, and it logs on both branches
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⛔ THE THREE CLAUSES BELOW INSPECT SOURCE AND DO NOT IMPORT `pipeline` (E11.23).
+# `pipeline/__init__.py` reads `dbt/target/manifest.json` at import, and that file is a gitignored
+# BUILD ARTIFACT the fast gate does not have — so a fast-gate test that imports `pipeline` dies at
+# COLLECTION on CI while passing on any laptop that has ever run dbt. This shipped that way once
+# and CI caught it. ⛔ A `skipif(manifest missing)` is the WRONG cure here: it would make these
+# clauses vacuous in exactly the environment that runs them (NF1.7 (a)).
+# The live-object properties (the schedule really registers, the defs really load) are covered by
+# the separate `Dagster definitions validate` job, which DOES have a manifest; these are the cheap
+# early signal, and each is written to be falsifiable by the edit it names.
+_SCHED_SRC = _executable_only(
+    (_REPO / "pipeline/schedules/sports_odds_capture_schedules.py").read_text())
+
+
 def test_there_is_exactly_one_cron_for_this_job():
     """Two crons for one logical job is this repo's most-repeated operational defect (INC-30 /
     INC-36 / INC-38). The tier lives in the op, not in a second schedule."""
-    from pipeline.schedules import sports_odds_capture_schedules as sch
-    crons = [v for k, v in vars(sch).items()
-             if k.startswith("NCAAF_ODDS_LIVE") and isinstance(v, str)]
-    assert crons == ["0 * * 8-12,1 *"], crons
-    assert sch.sports_ncaaf_odds_live_schedule.cron_schedule == crons[0]
+    crons = re.findall(r"^NCAAF_ODDS_LIVE\w*_CRON\s*=\s*(['\"])(.*?)\1",
+                       _SCHED_SRC, re.M)
+    assert [c[1] for c in crons] == ["0 * * 8-12,1 *"], crons
+    # …and the schedule must USE that constant, so the constant IS the cron rather than a second
+    # literal free to drift from it.
+    assert re.search(r"cron_schedule=NCAAF_ODDS_LIVE_CRON", _SCHED_SRC), (
+        "the live schedule does not take its cron from the declared constant")
 
 
 def test_the_paid_schedule_ships_stopped():
     """It spends real credits on every capturing tick; turning it on is a deliberate operator act
     (the E11.23 carve-out the sibling paid capture already takes)."""
-    from dagster import DefaultScheduleStatus
-    from pipeline.schedules import sports_ncaaf_odds_live_schedule as s
-    assert s.default_status == DefaultScheduleStatus.STOPPED
+    decorator = _SCHED_SRC.split("def sports_ncaaf_odds_live_schedule")[0].rsplit("@schedule", 1)
+    assert len(decorator) == 2, "could not locate the live schedule's own decorator"
+    assert "default_status=DefaultScheduleStatus.STOPPED" in decorator[1], (
+        "the PAID live-odds schedule does not ship STOPPED")
+    assert "job=sports_ncaaf_odds_live_job" in decorator[1]
 
 
 def test_the_job_and_schedule_are_registered():
-    from pipeline.jobs import sports_ncaaf_odds_live_job
-    from pipeline.schedules import sports_ncaaf_odds_live_schedule
-    assert sports_ncaaf_odds_live_job.name == "sports_ncaaf_odds_live_job"
-    assert sports_ncaaf_odds_live_schedule.job.name == sports_ncaaf_odds_live_job.name
+    """An unregistered job is invisible to Dagit and can never be turned on."""
+    jobs = _executable_only((_REPO / "pipeline/jobs/__init__.py").read_text())
+    scheds = _executable_only((_REPO / "pipeline/schedules/__init__.py").read_text())
+    assert "sports_ncaaf_odds_live_job" in jobs and jobs.count("sports_ncaaf_odds_live_job") >= 2, (
+        "the job is not both imported and exported from pipeline.jobs")
+    assert scheds.count("sports_ncaaf_odds_live_schedule") >= 2, (
+        "the schedule is not both imported and exported from pipeline.schedules")
 
 
 def test_the_op_logs_on_both_branches_so_a_quiet_tick_is_legible():
