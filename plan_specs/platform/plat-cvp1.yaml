@@ -7,7 +7,7 @@ metadata:
   name: plat-cvp1
   vertical: platform
   card: https://trello.com/c/Og5NBwwH
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Harden the shared null-classification / deflation instrument
@@ -122,8 +122,97 @@ spec:
       - id: 5-closeout
         desc: "Verdict + findings into closeout.followUps; docstring retirement note with the four citations; operator summary."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED. All four measured defects fixed at the source in
+      `betting_ml/utils/cv_power.py`, each proven against its own incident
+      record LOADED from the committed artifact (never retyped, never edited).
+      D1 — all SIX of VAL1's bucket x market cells now classify as their
+      hand-corrected states unaided (VAL1's call-site label MEASURED_IMMATERIAL
+      maps to the instrument's GENUINE_ABSENCE; the mapping is stated in the
+      guard, not in VAL1's record). D2 — VAL3's recorded inputs plus its
+      recorded PBO (0.53 vs the 0.20 bar) return the new DEFLATION_REFUSED
+      state, naming the gate and publishing NO fold/season trigger; VAL3's own
+      PBO-less call still returns its recorded POWER_LIMITED with its recorded
+      trigger, byte-identically. D3 — `lockstep_variance_lever` reproduces
+      NF-W8-0d's recorded ladder (SR / SR0 / gap to 5.7e-13, inside the 1e-9
+      pin; DSR to the 4dp the record carries, once its empirical moments are
+      supplied), and DSR_UNREACHABLE no longer names the lever the arithmetic
+      has closed. D4 — `injected_effect_positive_control` reproduces HV2-1's
+      recorded control (verdict DEFLATION_BLOCKED, zero survivors, the same six
+      arms blocked only by {pbo, dsr}) and DETECTS the field-level PBO carried
+      as a per-arm gate; a per-arm-applied PBO refusal is refused, not
+      converted into a verdict.
+      Back-compat is by construction — every new input defaults to None and
+      every pre-existing branch is byte-identical without them — which is why
+      the whole cross-vertical sweep moved exactly TWO pins.
+      Gates: all six CI shards green (core 5920, football 1923, serving-ops
+      1680, prospect-milb 811, guards 720, baseball-models 677) plus the slow
+      gate (59). 41 new guards; `betting_ml/tests/plat_cvp1_red_proof.py`
+      25/25 RED, sweeping the OWNING suites and not only this story's file.
+      best_alpha=0; no model, board, publish or serving change; no recorded
+      verdict recomputed or restated; roadmap files untouched.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      Findings for PM triage (worker sessions never create Trello cards):
+
+      (1) A RE-ANCHOR CAN REVEAL THAT A GUARD NEVER OWNED THE PROPERTY IT
+      APPEARS TO. The cross-suite RED sweep expected MH2.7's `k_pct` clause to
+      catch a lockstep regression; it did NOT, and the diagnosis is the
+      finding: that clause asserts "NOT a lever", which is about the FIELD half
+      of the sentence and is satisfied by BOTH the old and the new text, so it
+      is structurally insensitive to the open/closed distinction. It was never
+      asked to own it. The correct move was to leave MH2.7 alone (adding the
+      assertion there would make an older story's guard fail for a newer
+      story's reason — the E9.60 coupling anti-pattern) and let this story's
+      own clause own it. GENERAL: when a re-anchor sweep finds an old guard
+      green on a new break, establish whether the guard ever owned that
+      property before strengthening it — "the old suite didn't catch it" is as
+      often a scope fact as a gap.
+
+      (2) NO RECORDED ABSENCE CAN BE AUDITED AGAINST ITS OWN BAR WITHOUT A
+      RE-RUN, because the pre-fix code never wrote the bar into `detail` on the
+      branch that used it. E7.10's three recorded GENUINE_ABSENCE cells
+      (`gb_pct`, `k_pct`, `bb_pct`) carry `meaningful_sd_units: null` even
+      though its caller supplies one, so whether they would reclassify is not
+      readable off the artifact. This story deliberately did NOT re-run them —
+      history stands as recorded. The new branch records
+      `meaningful_sd_units`, `effect_ci_upper_sd_units` and an explicit
+      `absence_evidence` ("interval" | "mde" | "none — ..."), so every FUTURE
+      absence is auditable from its own artifact. PM decision available:
+      whether a re-classification pass over the recorded absence inventory is
+      worth a story, or whether they stand until each is next re-run anyway.
+
+      (3) TWO CALLERS SUPPLY A MEANINGFUL BAR AND WILL THEREFORE READ
+      DIFFERENTLY ON THEIR NEXT RUN — `e7_9_train_serve_consistency` and
+      `run_e7_10_fv_starter_prior`. A below-foil arm on a design that does not
+      resolve the bar now reads POWER_LIMITED rather than GENUINE_ABSENCE.
+      That is the fix working (VAL1's over-claim), not a regression, and it is
+      pinned two-sided through E7.9's own consumer path: at 8 folds its design
+      resolves 0.02079 CRPS against a 0.0200 pre-registered lift and correctly
+      declines to certify an absence; at 16 folds the same generator resolves
+      well inside the bar and the absence stands with no trigger. NEITHER
+      caller's recorded artifact is touched.
+
+      (4) THE HELPER IS READY FOR ITS TWO WAITING CONSUMERS. HV2-4's
+      registration required this helper and can now call
+      `cv_power.injected_effect_positive_control(inject=..., run_gates=...,
+      effect=...)` with its OWN registered gate function rather than
+      hand-rolling one — the argument contract is deliberately "your study's
+      own `run_gates`", because re-implementing it in the helper would restate
+      the harness's assumptions instead of testing them. NF-INJ2b's prereg
+      cites the same recipe and can drop its hand-rolled version. Both should
+      read `verdict` (VACUOUS | DETECTED | DEFLATION_BLOCKED | BLIND) and
+      `field_level_gates_applied_per_arm`, and pass
+      `pbo_application=` to `classify_null` so a PBO refusal is admissible
+      rather than hedged.
+
+      (5) A GATE-CLASS SPLIT IS NOW ENCODED AND IS WORTH A PM SANITY-READ.
+      `DEFLATION_CLASS_GATES = {pbo, cscv, dsr, deflated_sharpe}` and
+      `_FIELD_LEVEL_STATISTICS = {pbo, cscv}` — i.e. `bh_fdr` and fold
+      consistency are treated as statistics of the ARM'S OWN evidence, and
+      `dsr` as deflation-class but NOT field-level (each arm has its own
+      Sharpe; only its BENCHMARK is field-derived). That follows HV2-1's
+      record. NOTE the repo is not internally consistent here: VAL3's
+      `deflation_failed` list also counts `bh_fdr` and `fold_consistency` as
+      deflation. Both defaults are overridable per call, so nothing is locked
+      in — but if the program wants ONE convention, this is where it would be
+      declared.

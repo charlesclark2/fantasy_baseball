@@ -22,8 +22,45 @@ So this module answers, mechanically and without re-fitting anything:
   * **How does detectability move with the FIELD SIZE?** `dsr_max_field_size`, `field_size_curve`,
     `decompose_field_size`. This is a binding constraint DISTINCT from fold count and it is the one
     the program had no instrument for at all.
-  * **Which kind of null is this?** `classify_null` — SEVEN states, because "trustworthy dead" and
+  * **Which kind of null is this?** `classify_null` — EIGHT states, because "trustworthy dead" and
     "underpowered" do not exhaust the possibilities.
+  * **Is "get a lower-variance design" a lever at all?** `lockstep_variance_lever` — computed, not
+    prescribed (PLAT-CVP1 defect 3 / NF-W8-0d R2).
+  * **Would these gates pass a REAL effect?** `injected_effect_positive_control` — the standing
+    recipe, executable (PLAT-CVP1 defect 4 / MLB-HV2-1).
+
+⭐⭐ **PLAT-CVP1 (2026-08-25) — FOUR MEASURED DEFECTS FIXED AT THE SOURCE, AND THE INTERIM
+HAND-RECORD RULE RETIRES FOR FUTURE CALLERS.** Four studies each found a defect in this instrument,
+each did the right local thing (fix at the CALL SITE, preserve the instrument's raw output beside it,
+and file the gap), and each said the same thing about where the fix belonged — MH2.7's own lesson (i):
+**a defect corrected N times downstream is a defect in the INSTRUMENT.** The four, with what they
+measured:
+
+  1. **NCAAF-VAL1** (`ncaaf_val1_clv_week_strat.md` §8a + `.json`) — `GENUINE_ABSENCE` short-circuited
+     ahead of every power reading, so **5 of 6 buckets** were mislabelled "do NOT re-test", including
+     the one bucket whose interval still ADMITTED the pre-registered meaningful effect. ⇒ when a
+     meaningful bar is on record, `classify_null` now consults the INTERVAL first.
+  2. **NCAAF-VAL3** (`ncaaf_val3_cold_start_mu.md` §3) — the classifier took **no PBO argument at
+     all**, so it could express PBO-UNDEFINED but not PBO-EVALUATED-AND-FAILED, and returned
+     `POWER_LIMITED` while the real refusal was the PBO gate. ⇒ a `pbo` input and a
+     `DEFLATION_REFUSED` state, with the "more seasons" trigger SUPPRESSED.
+  3. **NF-W8-0d R2** (`nf_w8_0d_dsr_frontier.md` §1) — the `DSR_UNREACHABLE` remedy named "a
+     lower-variance design" verbatim, a lever the **lockstep invariant** makes deterministically void
+     when `SR ≤ SR0`; that one sentence sent NF-W7f, NF-W7j and NF-W8-0c at the same wall. ⇒ the
+     lockstep is now COMPUTED (`lockstep_variance_lever`) rather than prescribed around.
+  4. **MLB-HV2-1** (`ablation_results/mlb_hv2_1_market_bias.md` §5c) — with a **6pp bias INJECTED**,
+     every metric gate fired and a **field-level PBO applied as a per-arm gate** (0.426) vetoed the
+     planted effect, because a uniform edge makes the arms near-clones and a high PBO over near-clones
+     is a TIE (NF1.8), while the same edge inflates `V` and collapses DSR (MH2.5 / NF-W6b-C). ⇒ the
+     application is now distinguished and the misapplication REFUSED, and the standing recipe is a
+     CALLABLE (`injected_effect_positive_control`) instead of a paragraph.
+
+⛔ **HISTORY IS UNTOUCHED.** Those four records are the FIXTURES that prove the new behaviour; not one
+of them is edited, restated or "upgraded", and no recorded verdict is recomputed. The interim rule
+those studies followed — hand-record the corrected state beside the instrument's raw one — retires for
+**FUTURE callers only**: a caller that supplies the new inputs gets the corrected state from the
+instrument, and a caller that does not is unchanged, by construction (every new input defaults to
+`None` and every existing branch is byte-identical without them).
 
 ⭐ **THE ORGANISING FINDING (MH2): A GATE'S STRINGENCY MUST BE A DESIGN CONSTANT, NOT A SIDE-EFFECT
 OF n.** The `fold_win_rate ≥ 0.60` clause fires on a TRUE lift of zero **49.7% of the time at 3
@@ -69,6 +106,33 @@ BH_ALPHA = 0.10                # the family-wise alpha the E7.x harnesses use
 # The α=0.10 sensitivity is computed and REPORTED by the MH2 characterization rather than hidden: it
 # would re-decide 4 of the 8 recorded ADDs, which is exactly why the choice must be visible.
 FOLD_CONSISTENCY_ALPHA = 0.20
+
+#: The program's CSCV/PBO gate (`h_harness.MAX_PBO`, and the same 0.20 every §0.5 harness registers).
+#: Mirrored here so `classify_null` can be handed a PBO and read it against the bar the callers use;
+#: a caller with a different pre-registered bar passes `pbo_gate=` explicitly.
+MAX_PBO = 0.20
+
+#: ⭐ PLAT-CVP1 defect 4 — HOW a PBO was APPLIED, which is a different fact from what it measured.
+#: CSCV/PBO is a **FIELD-LEVEL** statistic: it answers "did the SELECTION overfit?" over the whole
+#: declared field, and it has exactly one value per field. Applying that single number as a PER-ARM
+#: pass/fail gate is a category error, and MLB-HV2-1 MEASURED what it costs — see
+#: `_PBO_PER_ARM_MISAPPLICATION`.
+PBO_APPLICATIONS = ("field", "per_arm")
+
+#: Gate names that deflate the SEARCH rather than scoring one arm's own evidence. The split is the
+#: whole point of defect 4: `bh_fdr` and a fold-consistency clause are statistics of the ARM's OWN
+#: evidence (they answer "is this arm's margin real?"), while PBO and DSR answer "did picking a
+#: winner out of THIS FIELD overfit?" — a question about the search, whose answer moves with the
+#: field's composition and correlation structure rather than with the effect. A caller whose harness
+#: names these differently passes `deflation_gates=`.
+DEFLATION_CLASS_GATES = frozenset({"pbo", "cscv", "dsr", "deflated_sharpe"})
+
+#: Of those, the ones that are ONE NUMBER PER FIELD. A field-level statistic can legitimately refuse
+#: a SEARCH; it cannot legitimately refuse an individual ARM, because it does not vary across arms —
+#: reading it per-arm converts "the selection was unstable" into "this arm failed", which is not a
+#: statement the statistic makes. (`dsr` is deliberately NOT here: DSR is per-arm — each arm has its
+#: own Sharpe — even though its BENCHMARK is field-derived.)
+_FIELD_LEVEL_STATISTICS = frozenset({"pbo", "cscv"})
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════════
@@ -529,6 +593,260 @@ def mde_in_sd_units(*, n_folds: int, n_metrics: int = 1, target_power: float = 0
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════════
+# 4b. ⭐ PLAT-CVP1 defect 3 — THE LOCKSTEP CHECK, COMPUTED RATHER THAN PRESCRIBED AROUND
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+#: The dispersion multipliers NF-W8-0d ran its ladder over. A DESIGN quantity — the ladder exists to
+#: make the invariance VISIBLE across four orders of magnitude, not to be tuned to a result.
+LOCKSTEP_DISPERSION_FACTORS = (1.0, 0.5, 0.25, 0.1, 0.01)
+
+
+@dataclass(frozen=True)
+class LockstepReport:
+    """What a SHARED (proportional) variance lever can and cannot do to a DSR gate.
+
+    `closed is True` ⇒ `SR ≤ SR0`, so no shared variance lever of any magnitude clears the gate and
+    a sharper design makes DSR strictly WORSE. `closed is False` ⇒ `SR > SR0`, the gap is positive
+    and a proportional sharpening scales it up, so the lever IS live. `closed is None` ⇒ not
+    evaluable (NF1.7 (a): a check that did not run is never scored as a pass).
+    """
+    closed: bool | None
+    sr: float | None = None
+    sr0: float | None = None
+    gap: float | None = None
+    sign_invariant: bool | None = None
+    dsr_falls_as_design_sharpens: bool | None = None
+    ladder: tuple[dict, ...] = ()
+
+
+def lockstep_variance_lever(*, observed_sr: float | None, n_trials: int,
+                            var_trials_sr: float | None, n_obs: int,
+                            skew: float = 0.0, kurt: float = 3.0,
+                            confidence: float = DSR_CONFIDENCE,
+                            dispersion_factors: Sequence[float] = LOCKSTEP_DISPERSION_FACTORS,
+                            ) -> LockstepReport:
+    """⭐⭐ **IS "GET A LOWER-VARIANCE DESIGN" A LEVER HERE? COMPUTE IT — DO NOT PRESCRIBE IT.**
+
+    `deflated_sharpe` reads the winner's Sharpe `SR` **and** the deflation benchmark
+    `SR0 = √V · z(N)` — and **the winner is one of the trials whose dispersion `V` measures**
+    (NF-W7k). A design change that multiplies EVERY arm's per-fold dispersion by a common `c` scales
+    every trial Sharpe by `1/c`, hence `SR0` by `1/c`, hence
+
+        `SR − SR0  ↦  (SR − SR0)/c`  — **its SIGN is invariant.**
+
+    Clearing needs `SR > SR0`. So a purely proportional dispersion lever — more rows per fold, more
+    Monte-Carlo draws, a proportionally sharper estimator — **can never flip an `SR ≤ SR0` refusal,
+    at any row count, fold count or draw count**, and when the gap is negative a *sharper* design
+    makes DSR strictly WORSE. Under common random numbers (the generic case: the arms score the same
+    rows with the same draws) a variance reduction IS shared, so this is the ordinary situation.
+
+    ⚠️ **WHY THIS IS COMPUTED AND NOT ASSERTED.** `classify_null`'s `DSR_UNREACHABLE` remedy named
+    "a lower-variance design (more rows per fold / a sharper metric)" verbatim, and that one sentence
+    sent **three consecutive records** (NF-W7f, NF-W7j, NF-W8-0c) at a wall before NF-W8-0d measured
+    the ladder and filed R2. The remedy was not wrong about its own axis — it is a prescription the
+    instrument was not checking, which is MH2.7's lesson (i) exactly: a defect corrected N times
+    downstream is a defect in the INSTRUMENT.
+
+    What is NOT closed by a closed lockstep, stated so the finding is not over-read: a
+    **DIFFERENTIAL**-variance design (one that shrinks the WINNER's dispersion more than the field's)
+    is untested, not refuted; so are a bigger effect and a genuine absence.
+
+    Returns a `LockstepReport`. The ladder re-derives `SR`, `SR0`, the gap and DSR at each dispersion
+    multiplier, so the invariance is exhibited numerically rather than argued from the algebra.
+    """
+    if observed_sr is None or var_trials_sr is None or int(n_trials) < 1:
+        return LockstepReport(closed=None)
+    sr = float(observed_sr)
+    sr0 = dsr_benchmark_sr0(int(n_trials), float(var_trials_sr))
+    gap = sr - sr0
+    ladder: list[dict] = []
+    for c in dispersion_factors:
+        c = float(c)
+        if c <= 0:
+            continue
+        # every trial Sharpe scales by 1/c ⇒ their VARIANCE scales by 1/c²
+        row_sr, row_v = sr / c, float(var_trials_sr) / (c * c)
+        row_sr0 = dsr_benchmark_sr0(int(n_trials), row_v)
+        ladder.append({
+            "dispersion_factor": c,
+            "winner_sharpe": row_sr,
+            "sr0": row_sr0,
+            "sr_minus_sr0": row_sr - row_sr0,
+            "dsr": dsr_from_sr(row_sr, n_obs=int(n_obs), n_trials=int(n_trials),
+                               var_trials_sr=row_v, skew=skew, kurt=kurt),
+        })
+    signs = {int(np.sign(r["sr_minus_sr0"])) for r in ladder}
+    dsrs = [r["dsr"] for r in ladder]
+    return LockstepReport(
+        closed=bool(gap <= 0.0),
+        sr=sr, sr0=sr0, gap=gap,
+        sign_invariant=(len(signs) <= 1),
+        # ⭐ the two-sided half: when the gap is NEGATIVE a sharper design must make DSR FALL, and
+        # when it is POSITIVE it must RISE. Reporting only the "falls" case would make the check
+        # satisfiable by a constant.
+        dsr_falls_as_design_sharpens=(all(b <= a for a, b in zip(dsrs, dsrs[1:]))
+                                      if len(dsrs) > 1 else None),
+        ladder=tuple(ladder),
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# 4c. ⭐ PLAT-CVP1 defect 4b — THE INJECTED-EFFECT POSITIVE CONTROL, AS A CALLABLE
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+#: The four verdicts an injected-effect control can return. `VACUOUS` is first in importance: a gate
+#: family that certifies arms on a NO-EFFECT payload cannot certify anything on a real one.
+POSITIVE_CONTROL_VERDICTS = ("VACUOUS", "DETECTED", "DEFLATION_BLOCKED", "BLIND")
+
+
+@dataclass(frozen=True)
+class PositiveControlReport:
+    verdict: str
+    effect: float
+    survivors: tuple[str, ...] = ()
+    metric_survivors: tuple[str, ...] = ()
+    deflation_blocked: tuple[str, ...] = ()
+    blocking_gates: dict = field(default_factory=dict)
+    deflation_gates: tuple[str, ...] = ()
+    metric_gates: tuple[str, ...] = ()
+    #: gate names present on EVERY arm that are field-level statistics — i.e. one number per FIELD
+    #: being read as a per-ARM pass/fail. Defect 4(a), detected rather than asserted.
+    field_level_gates_applied_per_arm: tuple[str, ...] = ()
+    null_control_checked: bool = False
+    null_control_survivors: tuple[str, ...] | None = None
+    reason: str = ""
+
+
+def injected_effect_positive_control(
+        *, inject, run_gates, effect: float,
+        deflation_gates: Iterable[str] = DEFLATION_CLASS_GATES,
+        check_null_control: bool = True,
+        null_effect: float = 0.0) -> PositiveControlReport:
+    """⭐⭐ **"WHICH GATES SHOULD PASS A PLANTED EFFECT?" — EXECUTED, NOT NARRATED.**
+
+    Plant an effect of KNOWN size into the study's own population, re-run the study's own registered
+    gate family, and report which gates fired and which blocked. MLB-HV2-1 ran exactly this by hand
+    and it produced the program's sharpest instrument finding: with a **6-percentage-point** dog bias
+    injected, **no arm survived** — the METRIC gates all fired correctly (ROI up to +0.156, p as low
+    as 1.4e-8) while **PBO rose to 0.426** (a uniform edge makes the arms simultaneously strong
+    NEAR-CLONES, so "which arm is best in-sample" becomes a coin flip — NF1.8's lesson that a high
+    PBO over a near-clone field is the signature of a TIE, not of overfitting) and **DSR collapsed**
+    (the same uniform edge inflates the cross-trial dispersion `V`, so `SR0` outruns every arm's
+    Sharpe — the MH2.5 / NF-W6b-C mechanism). That is a bound on what a SURVIVOR would have meant,
+    and it is the difference between a gate family that is BLIND and one whose deflation half is
+    hostile to a correlated field. Neither is visible from a leaderboard.
+
+    Arguments
+    ---------
+    `inject(effect) -> payload` — build the study's population with an effect of that size planted.
+      `inject(0.0)` MUST return the no-effect payload (that is the two-sided leg; a caller that
+      cannot express it passes `check_null_control=False`, and the report then records that the leg
+      did NOT run rather than scoring it as passed — NF1.7 (a)).
+    `run_gates(payload) -> {arm_id: {gate_name: bool}}` — the study's OWN registered gates. It must
+      be the gate function the study actually scores with; re-implementing it here would restate the
+      harness's assumptions instead of testing them (the NF-C0e "a test that reads a value back
+      under the key the code wrote" class).
+
+    Verdicts
+    --------
+    `VACUOUS`           an arm survives on the NO-EFFECT payload ⇒ the family certifies noise; no
+                        reading of the injected run means anything.
+    `DETECTED`          at least one arm clears EVERY gate ⇒ the family can certify an effect of
+                        this size over this field.
+    `DEFLATION_BLOCKED` no arm clears everything, but at least one clears every METRIC gate and is
+                        stopped ONLY by deflation-class gates ⇒ the family is NOT blind; its
+                        deflation half cannot certify an effect of this size over THIS field.
+    `BLIND`             not even the metric gates fire ⇒ a null from this family is free (it would
+                        have returned one for a real, large effect), so it is evidence about
+                        nothing.
+
+    ⛔ This is a DIAGNOSTIC about a gate family. It certifies nothing, re-scores nothing, and it does
+    not rescue or damage a study whose null rests on a gate the control leaves untouched — HV2-1's
+    null rests on `roi_positive`, which is de-vig-free, PBO-free, DSR-free and field-free, so no
+    deflation-gate finding can turn its negative point estimates positive.
+    """
+    if float(effect) == 0.0:
+        raise ValueError(
+            "an injected-effect control with a ZERO effect plants nothing — it is the null control, "
+            "not the positive one. Pass a real effect size (and use `check_null_control` for the "
+            "no-effect leg).")
+    defl = frozenset(str(g) for g in deflation_gates)
+
+    def _score(payload) -> dict[str, dict[str, bool]]:
+        got = run_gates(payload)
+        if not isinstance(got, dict) or not got:
+            raise ValueError(
+                "`run_gates` returned no arms — an empty gate table makes every clause below "
+                "vacuously true (there are no survivors because there is nothing to survive).")
+        out: dict[str, dict[str, bool]] = {}
+        for arm, gates in got.items():
+            if not isinstance(gates, dict) or not gates:
+                raise ValueError(
+                    f"`run_gates` returned no gates for arm {arm!r} — an arm with an empty gate "
+                    f"dict passes 'every gate' trivially, which is the vacuity this control exists "
+                    f"to refuse.")
+            out[str(arm)] = {str(g): bool(ok) for g, ok in gates.items()}
+        return out
+
+    scored = _score(inject(float(effect)))
+    gate_names = sorted({g for gates in scored.values() for g in gates})
+    metric_names = tuple(g for g in gate_names if g not in defl)
+    defl_names = tuple(g for g in gate_names if g in defl)
+    # defect 4(a), MEASURED: a field-level statistic carried as a per-arm pass/fail on every arm.
+    per_arm_field_level = tuple(
+        g for g in defl_names
+        if g in _FIELD_LEVEL_STATISTICS and all(g in gates for gates in scored.values()))
+
+    blocking = {arm: tuple(g for g, ok in gates.items() if not ok) for arm, gates in scored.items()}
+    survivors = tuple(a for a, b in blocking.items() if not b)
+    metric_survivors = tuple(a for a, b in blocking.items() if not any(g not in defl for g in b))
+    deflation_blocked = tuple(a for a in metric_survivors if blocking[a])
+
+    null_survivors: tuple[str, ...] | None = None
+    if check_null_control:
+        null_scored = _score(inject(float(null_effect)))
+        null_blocking = {a: [g for g, ok in gs.items() if not ok] for a, gs in null_scored.items()}
+        null_survivors = tuple(a for a, b in null_blocking.items() if not b)
+
+    if null_survivors:
+        verdict, why = "VACUOUS", (
+            f"{len(null_survivors)} arm(s) clear every gate on the NO-EFFECT payload "
+            f"({', '.join(null_survivors)}) — the family certifies noise, so nothing the injected "
+            f"run shows is evidence about anything.")
+    elif survivors:
+        verdict, why = "DETECTED", (
+            f"{len(survivors)} arm(s) clear every registered gate at an injected effect of "
+            f"{effect:g} — the family can certify an effect of this size over this field.")
+    elif deflation_blocked:
+        verdict, why = "DEFLATION_BLOCKED", (
+            f"no arm clears every gate, but {len(deflation_blocked)} clear every METRIC gate and "
+            f"are stopped ONLY by deflation-class gates "
+            f"({', '.join(sorted({g for a in deflation_blocked for g in blocking[a]}))}). The "
+            f"family is NOT blind: its DEFLATION half cannot certify an effect of size {effect:g} "
+            f"over THIS field. A uniform effect makes the arms simultaneously strong near-clones, "
+            f"which is a TIE (high PBO) and an inflated cross-trial dispersion (collapsed DSR) — "
+            f"MLB-HV2-1's measurement, NF1.8 / MH2.5's mechanisms. ⛔ This bounds what a SURVIVOR "
+            f"would have meant; it does not by itself refuse any recorded null.")
+    else:
+        verdict, why = "BLIND", (
+            f"not one arm clears even the METRIC gates at an injected effect of {effect:g} — this "
+            f"family would return a null for a real, large effect, so a null from it is free "
+            f"(NF1.7 (a): a check that cannot fire is not a check that passed).")
+    if per_arm_field_level:
+        why += (f" ⚠️ AND: {', '.join(per_arm_field_level)} is a FIELD-LEVEL statistic carried as a "
+                f"per-ARM pass/fail on every arm — see `classify_null(pbo_application=...)`.")
+
+    return PositiveControlReport(
+        verdict=verdict, effect=float(effect), survivors=survivors,
+        metric_survivors=metric_survivors, deflation_blocked=deflation_blocked,
+        blocking_gates={a: tuple(b) for a, b in blocking.items()},
+        deflation_gates=defl_names, metric_gates=metric_names,
+        field_level_gates_applied_per_arm=per_arm_field_level,
+        null_control_checked=bool(check_null_control), null_control_survivors=null_survivors,
+        reason=why)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
 # 5. Reading a null — SEVEN states, because two do not cover the cases
 # ══════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -540,6 +858,7 @@ NULL_STATES = (
     "UNDEFINED",          # a required stat was not computable at this fold count — not failed
     "GENUINE_ABSENCE",    # the best arm loses on average — no n and no field size rescues it
     "DSR_UNREACHABLE",    # beats the foil, but SR ≤ SR0 in THIS field — only a smaller field helps
+    "DEFLATION_REFUSED",  # a pre-registered deflation gate was EVALUATED and FAILED — no n moves it
     "POWER_LIMITED",      # every gate reachable; states the folds/seasons it needs
     "TRUSTWORTHY_DEAD",   # powered to detect the pre-registered meaningful effect, and did not
 )
@@ -561,6 +880,16 @@ class NullVerdict:
     #: MACHINE flag deliberately, so a report table can gate on it instead of parsing the prose (the
     #: MH2.2 report had to carry a hand-written callout under the table — that is not enforcement).
     field_remedy_admissible: bool | None = None
+    #: ⭐ PLAT-CVP1 defect 4(a) — was the PBO handed over applied the way the statistic is DEFINED?
+    #: `True` = field-level (a verdict about the SEARCH, which is what CSCV measures); `False` = it
+    #: was used as a per-ARM pass/fail, a misapplication this classifier REFUSES to convert into a
+    #: refusal verdict; `None` = no PBO was supplied, or its application was not stated. A MACHINE
+    #: flag for the same reason `field_remedy_admissible` is one: a report table gates on it instead
+    #: of parsing prose.
+    pbo_application_admissible: bool | None = None
+    #: ⭐ PLAT-CVP1 defect 3 — the computed shared-variance (lockstep) reading, when the DSR legs
+    #: were evaluable. `None` when they were not (never scored as "the lever is open").
+    lockstep: "LockstepReport | None" = None
 
 
 # ⭐⭐ DSR-CONV (2026-08-08) — THE INSTRUMENT'S REMEDY IS ONLY AS TRUSTWORTHY AS THE `V` IT WAS
@@ -652,9 +981,71 @@ _FIELD_NO_RESCUE = (
     "dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper "
     "metric)")
 
+# ⭐⭐ PLAT-CVP1 defect 3 (NF-W8-0d R2) — THE SENTENCE ABOVE IS ONLY HALF-TRUE, AND THE WRONG HALF IS
+# THE ONE A READER ACTS ON. "the only lever left is a lower-variance design" is correct whenever the
+# gap `SR − SR0` is POSITIVE (a proportional sharpening scales a positive gap UP). It is
+# DETERMINISTICALLY VOID when the gap is negative — the winner is one of the trials whose dispersion
+# sets `SR0`, so a shared variance reduction scales BOTH by the same factor and the SIGN of the gap
+# never moves (NF-W7k; `lockstep_variance_lever`). NF-W8-0d measured it: dispersion ×0.01 takes DSR
+# from 0.1654 to 0.0154, i.e. the prescribed lever makes the gate STRICTLY WORSE. That one sentence
+# sent NF-W7f, NF-W7j and NF-W8-0c at the same wall. So the instrument now COMPUTES which half it is
+# in rather than naming a lever it was not checking.
+_FIELD_NO_RESCUE_LOCKSTEP_CLOSED = (
+    "field size is NOT a lever here — even a 2-arm field does not clear at this fold count and "
+    "dispersion. ⛔ **AND NEITHER IS A LOWER-VARIANCE DESIGN**, computed rather than assumed: the "
+    "gap `SR − SR0` is {gap:.4f} ≤ 0, and a design change that shrinks EVERY arm's dispersion by a "
+    "common factor scales `SR` and `SR0` together, so the gap's SIGN is invariant — measured across "
+    "a ×{lo:g}…×{hi:g} ladder, over which DSR FALLS as the design sharpens. ⛔ Do NOT publish a "
+    "rows/folds/draws/sharper-metric trigger: no `n` overturns a deterministic invariant (NF-W7k / "
+    "NF-W8-0d). What remains UNTESTED (not refuted): a DIFFERENTIAL-variance design that shrinks the "
+    "WINNER's dispersion more than the field's, a bigger effect, or a genuine absence.")
+
+# ⭐ PLAT-CVP1 defect 2 (NCAAF-VAL3) — A DEFLATION GATE THAT WAS EVALUATED AND FAILED.
+# `classify_null` took no PBO argument at all, so it could express PBO-UNDEFINED (too few folds, or a
+# single contrast) but NOT PBO-EVALUATED-AND-FAILED. VAL3 hit that squarely: its PBO was the binding
+# refusal and the instrument returned `POWER_LIMITED` on its honest insufficient-statistics default,
+# a state that structurally could not name the gate that bound. The record hand-carried
+# `DEFLATION_REFUSED_PBO` beside it and filed the gap.
+_DEFLATION_REFUSED = (
+    "`{metric}`: the pre-registered **{gate}** deflation gate was EVALUATED and FAILED "
+    "({value:.4f} vs the {bar:.4f} bar). This is not a power shortfall and not an absence — the "
+    "search's own deflation requirement refused, over the field as registered.")
+_DEFLATION_NO_FOLD_TRIGGER = (
+    "⛔ **NO fold/season/row re-test trigger is published, deliberately.** No fold count moves a "
+    "pre-registered gate POPULATION, so a 'come back with more seasons' trigger would be the "
+    "actively-misleading direction (NF-D18 / MH2 (g″)). The admissible remedy is a FORWARD-registered "
+    "narrower COHERENT family on mechanistic grounds (or a forward-registered PBO population) — "
+    "⛔ never a post-hoc re-cut of a field you have already scored (MH2.2).")
+
+# ⭐⭐ PLAT-CVP1 defect 4(a) (MLB-HV2-1, MEASURED) — A FIELD-LEVEL STATISTIC READ AS A PER-ARM GATE.
+# CSCV/PBO has ONE value per field: it answers "did picking a winner out of THIS field overfit?" With
+# a 6-percentage-point bias INJECTED into HV2-1's population, every metric gate fired (ROI up to
+# +0.156, p as low as 1.4e-8) and PBO ROSE to 0.426 — because a uniform edge makes the arms
+# simultaneously strong NEAR-CLONES, so "which arm is best in-sample" becomes a coin flip. That is
+# NF1.8's lesson (a high PBO over a near-clone field is the signature of a TIE, not of overfitting),
+# and it means a field-level PBO used as a per-arm gate VETOES A REAL, LARGE, UNIFORM EFFECT. So the
+# classifier will not convert a per-arm-applied PBO into a refusal verdict; it reports the
+# misapplication instead, and the other gates decide.
+_PBO_PER_ARM_MISAPPLICATION = (
+    "⛔ **PBO REFUSAL NOT ADMITTED — a FIELD-LEVEL statistic was applied PER ARM.** CSCV/PBO has one "
+    "value for the whole field and answers whether the SELECTION overfit; it does not vary across "
+    "arms, so reading it as a per-arm pass/fail converts 'the search was unstable' into 'this arm "
+    "failed', which is not a statement the statistic makes. MLB-HV2-1 MEASURED the cost: with a 6pp "
+    "bias INJECTED, every metric gate fired and PBO rose to 0.426 precisely BECAUSE the planted "
+    "effect made the arms near-clones (NF1.8: a high PBO over near-clones is a TIE, not overfitting) "
+    "— so the per-arm reading vetoed a real, large effect. ⇒ this classifier does NOT return "
+    "`DEFLATION_REFUSED` on it; re-read the PBO at FIELD level (a verdict about the search) and "
+    "re-classify, and let the per-arm gates decide the arm.")
+_PBO_APPLICATION_UNSTATED = (
+    " ⚠️ `pbo_application` was NOT stated, so this classifier cannot tell a FIELD-level reading (the "
+    "statistic's own meaning) from the per-ARM misapplication MLB-HV2-1 measured. The refusal stands "
+    "as recorded but is flagged UNVERIFIED — state `pbo_application='field'` and re-classify rather "
+    "than quoting it bare (NF1.7 (a): a check that did not run is not a check that passed).")
+
 
 def _field_size_remedy(*, max_field: int, n_arms: int,
-                       declared_field_size: int | None) -> tuple[bool | None, str]:
+                       declared_field_size: int | None,
+                       lockstep: "LockstepReport | None" = None) -> tuple[bool | None, str]:
     """The `max_field_size` leg of a re-test trigger, made self-safe. Returns `(admissible, text)`.
 
     `admissible is None` ⇒ field size is no lever at all here (nothing to be admissible ABOUT);
@@ -663,6 +1054,14 @@ def _field_size_remedy(*, max_field: int, n_arms: int,
     prescription can be acted on without re-cutting a scored field.
     """
     if int(max_field) < 2:
+        # ⭐ PLAT-CVP1 defect 3 — which half of the variance statement are we in? COMPUTED, because
+        # naming "a lower-variance design" when the lockstep is closed is the sentence that sent
+        # three consecutive records at a wall (NF-W8-0d R2).
+        if lockstep is not None and lockstep.closed:
+            lo = min(r["dispersion_factor"] for r in lockstep.ladder) if lockstep.ladder else 1.0
+            hi = max(r["dispersion_factor"] for r in lockstep.ladder) if lockstep.ladder else 1.0
+            return None, _FIELD_NO_RESCUE_LOCKSTEP_CLOSED.format(
+                gap=float(lockstep.gap), lo=lo, hi=hi)
         return None, _FIELD_NO_RESCUE
     declared = int(declared_field_size) if declared_field_size is not None else int(n_arms)
     if int(max_field) >= declared:
@@ -681,6 +1080,10 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
                   active: bool = True, inactive_reason: str | None = None,
                   mde_sd_units: float | None = None,
                   meaningful_sd_units: float | None = None,
+                  effect_ci_upper_sd_units: float | None = None,
+                  effect_ci_lower_sd_units: float | None = None,
+                  pbo: float | None = None, pbo_gate: float = MAX_PBO,
+                  pbo_application: str | None = None,
                   skew: float = 0.0, kurt: float = 3.0,
                   confidence: float = DSR_CONFIDENCE,
                   degenerates_excluded_from_v: bool | None = None,
@@ -724,6 +1127,13 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
     this changes NO state — only whether the field sentence is an imperative or a design quantity.
     """
     d: dict = {"n_folds": int(n_folds), "n_arms": int(n_arms)}
+    #: computed by the DSR block when its inputs are present; `None` means NOT EVALUATED, and is
+    #: never read as "the shared-variance lever is open" (NF1.7 (a)).
+    lock: LockstepReport | None = None
+    #: the DSR fold-shortfall verdict, HELD so the deflation branch can preempt it (defect 2).
+    pending: NullVerdict | None = None
+    #: defect 4(a) — set once a PBO is supplied; threaded onto every verdict below.
+    pbo_admissible: bool | None = None
 
     if not active:
         return NullVerdict("INACTIVE", inactive_reason or (
@@ -779,10 +1189,94 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
             extra_seasons=MIN_FOLDS_FOR_PBO - int(n_folds), detail=d)
 
     if not beats_foil:
-        return NullVerdict("GENUINE_ABSENCE", (
-            f"`{metric}`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a "
-            f"negative point estimate and no field size changes its sign — do NOT re-test."),
-            retest_trigger=None, folds_have=int(n_folds), detail=d)
+        # ⭐⭐ PLAT-CVP1 defect 1 (NCAAF-VAL1) — **CONSULT THE INTERVAL BEFORE CLAIMING ABSENCE.**
+        # This branch used to short-circuit unconditionally, ahead of every power reading, on the
+        # (correct, as far as it goes) principle that no `n` flips a negative point estimate. What it
+        # missed is that at low `n` a TRUE, decision-changing effect ROUTINELY presents as a negative
+        # point estimate — VAL1 measured a design where a true +2 pp edge reads as −1 pp — so
+        # "do NOT re-test" over-claims. It was worse than over-claiming in one direction: VAL1's
+        # `ats/wk1-3` bucket, whose interval STILL ADMITS the pre-registered meaningful effect, got
+        # the same do-not-re-test badge as buckets whose interval excludes it. 5 of its 6 buckets
+        # were mislabelled and hand-corrected at the call site.
+        #
+        # The fix is the sharper POST-DATA question, and it was registered forward in VAL1 §8a: when
+        # a practically-meaningful bar is on record, read the EFFECT'S INTERVAL against it.
+        #   * interval WHOLLY BELOW the bar ⇒ the entire plausible range is below a decision-changing
+        #     effect ⇒ this is DECISIVE, and `GENUINE_ABSENCE`'s "do not re-test" is earned.
+        #   * interval SPANNING the bar ⇒ the design cannot separate the null from an effect that
+        #     would matter ⇒ `POWER_LIMITED`. ⛔ Not absence.
+        # ⚠️ The MDE and the interval answer DIFFERENT questions ("what would I have caught?" vs
+        # "what is still plausible given what I saw"), and the interval is the sharper one after the
+        # data. The MDE is used only as the fallback when no interval is supplied, and the evidence
+        # that backed the verdict is recorded either way — an absence certified by neither is not
+        # certified (NF1.7 (a)).
+        # ⭐ Back-compat is exact and deliberate: a caller with NO pre-registered meaningful effect
+        # passes no `meaningful_sd_units` and gets the unchanged verdict, because there is no bar to
+        # read an interval against and the point-estimate rule is then the only rule there is.
+        if meaningful_sd_units is None:
+            return NullVerdict("GENUINE_ABSENCE", (
+                f"`{metric}`: the best arm does not beat the foil ON AVERAGE. No sample size rescues "
+                f"a negative point estimate and no field size changes its sign — do NOT re-test."),
+                retest_trigger=None, folds_have=int(n_folds), detail=d)
+
+        bar = float(meaningful_sd_units)
+        d["meaningful_sd_units"] = bar
+        if effect_ci_lower_sd_units is not None:
+            d["effect_ci_lower_sd_units"] = float(effect_ci_lower_sd_units)
+        if mde_sd_units is not None:
+            d["mde_sd_units"] = float(mde_sd_units)
+
+        if effect_ci_upper_sd_units is not None:
+            ub = float(effect_ci_upper_sd_units)
+            d["effect_ci_upper_sd_units"] = ub
+            if ub < bar:
+                d["absence_evidence"] = "interval"
+                return NullVerdict("GENUINE_ABSENCE", (
+                    f"`{metric}`: the best arm does not beat the foil ON AVERAGE, **and** the whole "
+                    f"plausible range is below what would matter — the effect's upper bound {ub:.4f} "
+                    f"lies below the pre-registered meaningful effect {bar:.4f}. That is DECISIVE, "
+                    f"not underpowered: no re-test, because the interval already excludes the effect "
+                    f"a trigger would be sized on (NF-D18)."),
+                    retest_trigger=None, folds_have=int(n_folds), detail=d)
+            d["absence_evidence"] = "none — the interval still admits the meaningful effect"
+            return NullVerdict("POWER_LIMITED", (
+                f"`{metric}`: the point estimate is below the foil, but the effect's upper bound "
+                f"{ub:.4f} STILL ADMITS the pre-registered meaningful effect {bar:.4f}. ⛔ Do NOT "
+                f"read this as absence — at this `n` a decision-changing effect routinely presents "
+                f"as a negative point estimate, so this design cannot separate the two (NCAAF-VAL1)."),
+                retest_trigger=(
+                    "a design whose interval EXCLUDES the meaningful effect. ⚠️ Stated as a design "
+                    "requirement, not in seasons: only the caller knows the fold/row rule that "
+                    "converts it (the same reason the DSR trigger is stated in folds)."),
+                folds_have=int(n_folds), detail=d)
+
+        # No interval supplied. The MDE is the only power evidence on record, and it is weaker —
+        # so it may certify an absence only when the design demonstrably RESOLVES the bar.
+        if mde_sd_units is not None and float(mde_sd_units) <= bar:
+            d["absence_evidence"] = "mde"
+            return NullVerdict("GENUINE_ABSENCE", (
+                f"`{metric}`: the best arm does not beat the foil ON AVERAGE, and the design "
+                f"resolves {float(mde_sd_units):.2f} SD at 80% power — at or below the "
+                f"pre-registered meaningful effect of {bar:.2f} SD. An effect that would matter "
+                f"would have shown; it did not. ⚠️ This absence is MDE-backed, which is the weaker "
+                f"reading — the sharper post-data question is the effect's own interval, and none "
+                f"was supplied (pass `effect_ci_upper_sd_units=`)."),
+                retest_trigger=None, folds_have=int(n_folds), detail=d)
+        d["absence_evidence"] = "none — no interval supplied and the MDE does not reach the bar"
+        return NullVerdict("POWER_LIMITED", (
+            f"`{metric}`: the point estimate is below the foil, but nothing on record certifies that "
+            f"as ABSENCE — no effect interval was supplied, and "
+            + (f"the design resolves only {float(mde_sd_units):.2f} SD at 80% power against a "
+               f"pre-registered meaningful effect of {bar:.2f} SD"
+               if mde_sd_units is not None else
+               f"no detectability figure was recorded against the pre-registered meaningful effect "
+               f"of {bar:.2f} SD")
+            + f". ⛔ A below-foil point estimate at an `n` this design cannot resolve is not a "
+              f"do-not-re-test finding (NCAAF-VAL1)."),
+            retest_trigger=("supply the effect's interval (`effect_ci_upper_sd_units=`) and "
+                            "re-classify — an absence is certified by an interval that excludes the "
+                            "bar, or by a design that resolves it, and neither is on record here"),
+            folds_have=int(n_folds), detail=d)
 
     if observed_sr is not None and var_trials_sr is not None:
         # ⚠️ The EMPIRICAL moments must be threaded through here exactly as they are into
@@ -807,8 +1301,17 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
                                        confidence=confidence)
         # ⭐ MH2.7 — the field leg is built ONCE here and shared by both DSR-derived states below, so
         # the two can never drift apart on whether shrinking the field is admissible.
+        # ⭐ PLAT-CVP1 defect 3 — the shared-variance lever, COMPUTED here (NF-W8-0d R2) so the
+        # remedy sentences below can never name a lever the arithmetic has already closed.
+        lock = lockstep_variance_lever(
+            observed_sr=float(observed_sr), n_trials=int(n_arms),
+            var_trials_sr=float(var_trials_sr), n_obs=int(n_folds), skew=skew, kurt=kurt,
+            confidence=confidence)
+        d.update({"lockstep_closed": lock.closed, "lockstep_gap": lock.gap,
+                  "lockstep_sign_invariant": lock.sign_invariant})
         field_ok, field_text = _field_size_remedy(
-            max_field=max_field, n_arms=int(n_arms), declared_field_size=declared_field_size)
+            max_field=max_field, n_arms=int(n_arms), declared_field_size=declared_field_size,
+            lockstep=lock)
         d.update({"declared_field_size": declared_field_size,
                   "declared_field_size_source": ("stated" if declared_field_size is not None
                                                  else "unstated — defaulted to n_arms (refused)"),
@@ -826,7 +1329,7 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
                     + ("" if degenerates_excluded_from_v is True
                        else f" — ⚠️ BUT FIRST: {v_note}")),
                 folds_have=int(n_folds), max_field_size=max_field,
-                field_remedy_admissible=field_ok, detail=d)
+                field_remedy_admissible=field_ok, lockstep=lock, detail=d)
         if need > int(n_folds):
             # ⚠️ Stated in FOLDS, never translated to seasons here. The fold RULE differs per tier
             # — walk-forward burns `min_train_seasons` before its first fold, leave-one-cohort-out
@@ -834,7 +1337,13 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
             # arithmetic. An earlier cut applied the walk-forward inverse to a cohort-based tier and
             # produced a "36-season window" for a study whose folds ARE cohorts. The caller owns
             # the translation because only the caller knows the rule.
-            return NullVerdict("POWER_LIMITED", (
+            # ⭐ PLAT-CVP1 defect 2 — this verdict is HELD, not returned, so the PBO branch below
+            # can preempt it. A study whose pre-registered PBO was evaluated and FAILED must not be
+            # handed a "+N folds" trigger: no fold count moves a gate POPULATION, and publishing one
+            # is exactly the actively-misleading direction (NF-D18). Nothing else about the verdict
+            # changes — with no `pbo` supplied the branch below is a no-op and this is returned
+            # byte-identically to before.
+            pending = NullVerdict("POWER_LIMITED", (
                 f"`{metric}`: the effect is positive and every gate is REACHABLE, but this design "
                 f"cannot resolve it — DSR alone needs {need} folds against {n_folds} (the BH-FDR "
                 f"requirement is separate and may be larger). {v_note}"),
@@ -846,7 +1355,55 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
                                    else f" — ⚠️ BUT FIRST: {v_note}")),
                 folds_have=int(n_folds), folds_needed=need,
                 extra_seasons=need - int(n_folds), max_field_size=max_field,
-                field_remedy_admissible=field_ok, detail=d)
+                field_remedy_admissible=field_ok, lockstep=lock, detail=d)
+
+    # ⭐⭐ PLAT-CVP1 defect 2 (NCAAF-VAL3) — A DEFLATION GATE THAT WAS EVALUATED AND FAILED.
+    # Placed HERE deliberately, and the order is the argument:
+    #   * AFTER `beats_foil` — MLB-HV2-1's lesson. When every arm's point estimate is negative the
+    #     null rests on the point estimate, not on a deflation gate, and no gate change moves it.
+    #   * AFTER `DSR_UNREACHABLE` — that state says no fold count AND no admissible field clears,
+    #     which is strictly more specific and less rescuable than "the PBO gate refused".
+    #   * BEFORE every `POWER_LIMITED` — including the DSR one held above. This is the whole defect:
+    #     VAL3's PBO was the binding refusal and the classifier returned `POWER_LIMITED` on its
+    #     insufficient-statistics default, a state that structurally could not name the gate that
+    #     bound. Whether a fold trigger would have been published there is not a detail: a
+    #     "come back with more seasons" trigger for a PBO refusal is a lie about the remedy.
+    if pbo is not None:
+        d.update({"pbo": float(pbo), "pbo_gate": float(pbo_gate),
+                  "pbo_pass": bool(float(pbo) < float(pbo_gate)),
+                  "pbo_application": pbo_application})
+        if pbo_application is not None and pbo_application not in PBO_APPLICATIONS:
+            raise ValueError(f"pbo_application must be one of {PBO_APPLICATIONS} or None, "
+                             f"got {pbo_application!r}")
+        if float(pbo) >= float(pbo_gate):
+            # defect 4(a): a FIELD-level statistic read as a per-ARM gate is refused, not converted
+            # into a refusal verdict. The measurement behind this is HV2-1's injected 6pp bias.
+            if pbo_application == "per_arm":
+                d["pbo_application_admissible"] = pbo_admissible = False
+                d["pbo_refusal_admitted"] = False
+                d["pbo_refusal_refused_because"] = _PBO_PER_ARM_MISAPPLICATION
+            else:
+                d["pbo_application_admissible"] = pbo_admissible = (
+                    True if pbo_application == "field" else None)
+                d["pbo_refusal_admitted"] = True
+                return NullVerdict("DEFLATION_REFUSED", (
+                    _DEFLATION_REFUSED.format(metric=metric, gate="CSCV/PBO", value=float(pbo),
+                                              bar=float(pbo_gate))
+                    + " " + _DEFLATION_NO_FOLD_TRIGGER
+                    + ("" if pbo_application == "field" else _PBO_APPLICATION_UNSTATED)),
+                    retest_trigger=None, folds_have=int(n_folds),
+                    pbo_application_admissible=d["pbo_application_admissible"],
+                    lockstep=lock, detail=d)
+        else:
+            d["pbo_application_admissible"] = pbo_admissible = (
+                True if pbo_application == "field" else
+                False if pbo_application == "per_arm" else None)
+
+    if pending is not None:
+        # the DSR fold shortfall, released now that no deflation gate preempted it
+        if pbo_admissible is not None:
+            pending.pbo_application_admissible = pbo_admissible
+        return pending
 
     if p_one_sided is not None and bh_cutoff is not None:
         floor = sign_test_floor(n_folds, two_sided=False)
@@ -859,7 +1416,8 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
                 f"statement about the design, not the mechanism (E7.14)."),
                 retest_trigger=f"+{need - int(n_folds)} folds (⇒ {need} total) for certifiability",
                 folds_have=int(n_folds), folds_needed=need,
-                extra_seasons=need - int(n_folds), detail=d)
+                extra_seasons=need - int(n_folds),
+                pbo_application_admissible=pbo_admissible, lockstep=lock, detail=d)
 
     if mde_sd_units is not None and meaningful_sd_units is not None:
         d.update({"mde_sd_units": float(mde_sd_units),
@@ -868,22 +1426,28 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
             return NullVerdict("POWER_LIMITED", (
                 f"`{metric}`: the design detects {mde_sd_units:.2f} SD at 80% power, but the "
                 f"pre-registered practically-meaningful effect is {meaningful_sd_units:.2f} SD — a "
-                f"decision-changing effect would NOT reliably have shown up here."), detail=d)
+                f"decision-changing effect would NOT reliably have shown up here."),
+                pbo_application_admissible=pbo_admissible, lockstep=lock, detail=d)
         return NullVerdict("TRUSTWORTHY_DEAD", (
             f"`{metric}`: the design detects {mde_sd_units:.2f} SD at 80% power, at or below the "
             f"pre-registered meaningful effect of {meaningful_sd_units:.2f} SD. A decision-changing "
             f"effect would have shown and did not — this null RULES THE MECHANISM OUT at the size "
-            f"that would matter."), retest_trigger=None, folds_have=int(n_folds), detail=d)
+            f"that would matter."), retest_trigger=None, folds_have=int(n_folds),
+            pbo_application_admissible=pbo_admissible, lockstep=lock, detail=d)
 
     return NullVerdict("POWER_LIMITED", (
         f"`{metric}`: insufficient recorded statistics to certify the null as powered. Absent a "
         f"detectability figure the honest default is POWER-LIMITED — a null is trustworthy only "
-        f"when something was computed to make it so."), folds_have=int(n_folds), detail=d)
+        f"when something was computed to make it so."), folds_have=int(n_folds),
+        pbo_application_admissible=pbo_admissible, lockstep=lock, detail=d)
 
 
 __all__ = [
     "MIN_TRAIN_SEASONS", "MIN_FOLDS_FOR_PBO", "MIN_FOLDS_FOR_DSR", "LEGACY_FOLD_WIN_RATE",
     "BH_ALPHA", "FOLD_CONSISTENCY_ALPHA", "PBO_SHADOW_TO_LIVE", "NULL_STATES",
+    "MAX_PBO", "PBO_APPLICATIONS", "DEFLATION_CLASS_GATES", "LOCKSTEP_DISPERSION_FACTORS",
+    "POSITIVE_CONTROL_VERDICTS", "LockstepReport", "lockstep_variance_lever",
+    "PositiveControlReport", "injected_effect_positive_control",
     "achievable_folds", "seasons_for_folds", "pbo_evaluable",
     "fold_gate_false_fire", "FoldConsistencyClause", "fold_consistency_clause",
     "sign_test_floor", "folds_for_sign_certifiability",

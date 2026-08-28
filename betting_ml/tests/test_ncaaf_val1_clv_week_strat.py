@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from betting_ml.utils import cv_power
+
 from quant_sports_intel_models.football.ncaaf.models import ncaaf_val1_clv_week_strat as V
 
 _SRC = Path(V.__file__).read_text()
@@ -128,12 +130,18 @@ def _row(hit: float, n: int, *, placebo=0.40, anchors=(0.40, 0.40), side=0.5, sr
 
 
 def test_a_below_bar_bucket_whose_interval_excludes_the_meaningful_effect_is_decisive():
-    """`classify_null` returns GENUINE_ABSENCE on any below-foil point estimate, short-circuiting
-    before its MDE branch. Against a BAND bar that over-claims at n≈700 — the mirror of the NF-W7i
-    finding already carded against this instrument."""
+    """VAL1's §8a call-site correction: a below-foil point estimate whose interval EXCLUDES the
+    pre-registered meaningful effect is DECISIVE, and publishes no re-test trigger.
+
+    ⭐ PLAT-CVP1 RE-ANCHOR. This clause used to also pin `raw == "GENUINE_ABSENCE"` — the
+    instrument's PRE-FIX over-claim, which is the defect VAL1 filed and PLAT-CVP1 fixed at the
+    source. The property being defended is unchanged (the correction's OWN verdict, and its
+    trigger discipline); what moved is that the raw instrument is no longer asserted to be wrong.
+    The stronger half is pinned in `test_the_shared_instrument_no_longer_over_claims_absence`
+    below: given the interval, the instrument now reaches the same reading unaided.
+    ⛔ VAL1's RECORD is untouched — it is the fixture for the fix, not a thing to restate."""
     r = _row(0.4936, 701)
     out = V._classify(r, metric="t", var_trials_sr=0.19, n_arms=3)
-    assert out["raw"]["state"] == "GENUINE_ABSENCE"
     assert out["corrected"]["state"] == "MEASURED_IMMATERIAL"
     assert out["correction_applied"] is True
     assert out["corrected"]["retest_trigger"] is None, \
@@ -144,12 +152,45 @@ def test_a_below_bar_bucket_whose_interval_excludes_the_meaningful_effect_is_dec
 def test_a_below_bar_bucket_whose_interval_still_admits_the_effect_is_power_limited():
     r = _row(0.5228, 832)
     out = V._classify(r, metric="t", var_trials_sr=0.19, n_arms=3)
-    assert out["raw"]["state"] == "GENUINE_ABSENCE"
     assert out["corrected"]["state"] == "POWER_LIMITED"
     assert r["upper_bound_bonf"] >= V.MEANINGFUL
     trig = out["corrected"]["retest_trigger"]
     assert trig and "games" in trig and "seasons" in trig, \
         "a power-limited trigger must be stated in the unit that GROWS, not in p-decimals (MH2 g″)"
+
+
+def test_the_shared_instrument_no_longer_over_claims_absence():
+    """⭐ PLAT-CVP1 defect 1, pinned FROM THE CONSUMER SIDE — the half the re-anchor above gives up.
+
+    VAL1 measured that `classify_null` returned `GENUINE_ABSENCE` for 5 of its 6 buckets because a
+    below-foil point estimate short-circuited ahead of every power reading, and corrected it at the
+    call site (the S1b pattern). PLAT-CVP1 moved that reading into the instrument. Two directions,
+    so the clause cannot be satisfied by a constant:
+
+      * a below-foil row whose interval EXCLUDES the bar keeps `GENUINE_ABSENCE` — the do-not-re-test
+        badge is EARNED there, and deleting it would trade one over-claim for the opposite one;
+      * a below-foil row whose interval ADMITS the bar must NOT be absence.
+
+    Both rows are below the foil, so `beats_foil` is False in each and only the interval separates
+    them (NF-D17: an isolating fixture per clause)."""
+    decisive, undecidable = _row(0.4936, 701), _row(0.5228, 832)
+    assert decisive["upper_bound_bonf"] < V.MEANINGFUL <= undecidable["upper_bound_bonf"], \
+        "the fixture no longer straddles the bar — the clause would pin nothing"
+
+    def _instrument(r):
+        return cv_power.classify_null(
+            metric="t", n_folds=6, n_arms=3, beats_foil=bool(r["hit_rate"] > V.BREAKEVEN),
+            mde_sd_units=r["mde_pp"],
+            meaningful_sd_units=100.0 * (V.MEANINGFUL - V.BREAKEVEN),
+            effect_ci_upper_sd_units=100.0 * (r["upper_bound_bonf"] - V.BREAKEVEN))
+
+    assert not (decisive["hit_rate"] > V.BREAKEVEN or undecidable["hit_rate"] > V.BREAKEVEN), \
+        "both fixtures must be BELOW the foil or the interval is not what separates them"
+    dec, und = _instrument(decisive), _instrument(undecidable)
+    assert dec.state == "GENUINE_ABSENCE" and dec.retest_trigger is None
+    assert dec.detail["absence_evidence"] == "interval"
+    assert und.state == "POWER_LIMITED", \
+        "an interval that still admits the meaningful effect is not an absence (VAL1 §8a)"
 
 
 def test_the_band_correction_is_two_sided_at_its_own_boundary():
