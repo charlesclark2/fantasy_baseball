@@ -1,0 +1,104 @@
+# Plan spec — NF-RATE1 (MINI tier: full-season-rate render fix, four sites incl. CSV)
+# Authored by PM 2026-08-30. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-rate1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/BHBiqGVz
+  status: ACCEPTED
+spec:
+  description: >
+    Fix the full-season-rate line rendering absurd numbers on low-games
+    rows: pts x 17/g on a heavily-capped row prints a rate above every
+    real player on the board (measured: Kittle 580, Pierce 545, and the
+    PRE-EXISTING Levis 633, vs the board's #1 overall at 414). A RENDER
+    fix, not a suppression of served values — pts and g both stay served
+    (the NF-INJ3b-SHIP D3 ruling); what changes is whether the DERIVED
+    rate line is printed when it has stopped being a number a reader can
+    use. ⚠️ FOUR render sites including the CSV export's
+    full_season_rate column — a table-only fix silently misses the
+    export. best_alpha=0; frontend + exporter; no projection value,
+    ordering, or band moves.
+  acceptanceCriteria:
+    - description: >
+        THE SUPPRESSION RULE derives from a REAL ANCHOR, never tuned to
+        the current offenders: suppress the rate line when the implied
+        per-season rate exceeds the position's all-time realized maximum
+        season pace (the same anchor family as NF-INJ1's
+        REALIZED_MAX_PER_GAME — cite the source; if a season-rate analog
+        must be derived, derive it from the same recorded realized data
+        and pin the DERIVATION, not the value), OR when g is below the
+        existing MIN_GAMES_FOR_FULL_SEASON_RATE floor (which stays).
+        State the rule in one sentence in the code where the next editor
+        meets it. The rule must catch Levis (pre-existing) as well as the
+        flip-widened rows — a fix that only catches the new cases is
+        tuned to the incident, not the defect.
+    - description: >
+        SUPPRESSED RENDERING follows the Option-C pattern: a visible
+        withheld state (an em-dash / stated absence with a neutral
+        tooltip through fantasy-claim-copy.ts — no forecast language,
+        no injury claims), never a blank that reads as missing data and
+        never the absurd number. The CSV export renders the column EMPTY
+        on suppressed rows (absent-vs-null: an empty cell in a column
+        that exists elsewhere is a stated withholding; document the
+        semantics in the export's header note or data dictionary if one
+        exists).
+    - description: >
+        ALL FOUR SITES fixed through ONE owner (a shared
+        shouldRenderFullSeasonRate / formatted-rate helper) — four
+        inline copies of the rule would be the "one logical thing, many
+        owners" defect on day one. E2E asserts RENDERED output per
+        surface site (a suppressed row AND an untouched normal row), and
+        a Python guard covers the CSV column both ways.
+    - description: >
+        Guards RED-proven with UNIQUE mutation anchors (the NF-INJ2b
+        harness lesson); the existing MIN_GAMES floor behavior unchanged
+        and its guards green; NF-INJ1-C's withheld-stat-line machinery
+        untouched (adjacent, not shared — this suppresses a DERIVED
+        display line, that suppresses served counting stats).
+        Changelog entry (user-facing). Frontend auto-deploys on main;
+        the exporter half rides the box image — verify the PUBLISHED
+        board's CSV post-deploy, not just local output (merged never
+        means served).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-rate1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "full-season rate" / "render" (board Credence Sports, 2026-08-30)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ2c (IN FLIGHT) — research/ordering code; no shared files; a successful INJ2c shrinks this rule's firing population but never closes it (Levis predates the flip)."
+      - "NF-INJ1-C (Done, live) — the counting-stat suppression; shares the Option-C pattern and claim-copy conventions, NOT the predicate or components."
+      - "NF-DTB-1 (Done) — established the MIN_GAMES floor + the pin-the-rendered-string lesson; both inherited here."
+      - "P3.1b (IN FLIGHT, NCAAF backend) — disjoint sport and files; changelog week-block is the only shared surface (rebase)."
+  triedLedger:
+    files:
+      - "plan_specs/nfl_fantasy/nf-inj3b-ship.yaml closeout follow-up 9 (the measurement + the four-sites warning + the not-new evidence)"
+      - "ablation_results nf_inj1_diagnosis.md (the REALIZED_MAX anchor family)"
+      - "frontend fullSeasonRate + MIN_GAMES_FOR_FULL_SEASON_RATE (NF-DTB-1/NF-C lineage)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "Paid-surface credibility through the last drafts + Week 1; the CSV export's honesty"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-rate1-plan
+spec:
+  goalRef: { name: nf-rate1 }
+  graph:
+    nodes: []   # MINI tier — one owner, four sites, guards; sequence in acceptanceCriteria
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
