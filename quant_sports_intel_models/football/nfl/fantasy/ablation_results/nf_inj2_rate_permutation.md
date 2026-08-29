@@ -195,3 +195,62 @@ The pre-registration's §1 states that a successful arm drives ρ(expected games
 ## 9. The DISCLOSED wide-window sensitivity (2013–2025)
 
 Reported, ⛔ never selected on. Mean lift **-0.2975**, 5/13 folds — i.e. the arm LOSES over the wider window. The ordering mechanism could act on only **10/13** of those folds (NF-D20), and the pre-2019 seasons are exactly the ones NF1.5's own selection excluded via `score_from = 2019`. That does not rescue the arm — it bounds what the wide window can certify, and it is disclosed rather than dropped.
+
+
+---
+
+## ⚠️ ANNOTATION — added 2026-08-29 by NF-INJ2c (PM ruling D4 on NF-INJ2b). ⛔ NOTHING ABOVE IS EDITED.
+
+> This block is a POST-HOC ANNOTATION, not output of `write_report_md`. Everything above it — the
+> verdict, every figure, every table — is left exactly as the decisive run produced it (E2.1-r: a
+> record is annotated, never rewritten). ⚠️ The generator would not reproduce this block, so if
+> `run_nf_inj2_rate_permutation` is ever re-run the annotation must be re-appended; the ruling that
+> created it is **annotate, never re-run**, so that should not arise.
+
+**What the ruling asked to be flagged.** NF-INJ2b found a real defect in the `apply_2026` code this
+story shipped: `injury_giveback(mvp1, served if served is not None else board, board, capped_ids)`
+substitutes the ARM'S OWN BOARD for a missing served baseline. Under that fallback every
+served-relative figure compares an arm **to itself**, so a structural zero is reported as a
+measurement and "we compared against the served board" reads as a check that ran (the NF1.7 (a)
+vacuity, in a baseline rather than in a guard). NF-INJ2b replaced it with a REFUSAL that names the
+staging command. The concern was that this story's own `served_giveback_pct` might therefore be its
+arm's number rather than the served board's.
+
+**What the record actually establishes — measured, not assumed.** ⭐ **The fallback did NOT fire on
+this run.** Two independent signatures in the committed `nf_inj2_rate_permutation.json`, both
+decisive:
+
+1. `application_2026.reproduction_pin` is PRESENT (`n=794`, worst abs diff `2.56e-13`). That block is
+   written only inside `if served is not None and "incumbent" in arms:` — so `served` was a real,
+   staged artifact at run time.
+2. `served_giveback_pct` is **33.96 on all seven arms**, including `random_order` (own give-back
+   `20.37`), `mvp1_null` (own `-0.00`) and `rate_permute_games_frozen` (own `40.90`). That is exactly
+   the two-sided proof NF-INJ2b names: with a real baseline the served-relative figure is IDENTICAL
+   across arms because it is a property of the SERVED BOARD, not of the arm; under the fallback each
+   arm returns its own number and the seven would differ.
+
+⇒ the `injury give-back %` column above (incumbent `+33.96`, `rate_permute` `−11.99`) is the arm's
+own figure against MVP-1 and never touched the fallback, and `served_giveback_pct` is the served
+board's. **The figures stand as recorded.**
+
+**And it did not decide this verdict either way.** `CONSTRAINT_REFUSED` came from the pre-registered
+ORDERING constraint at QB (draftable-tier ρ 0.481 → 0.350, BH-significant). The give-back is reported
+under "what the arm DID do"; no branch of §6 reads it.
+
+**The forward fix** is NF-INJ2b's `served_baseline()` — read the baseline from the PUBLISHED artifact
+and REFUSE with the staging command named when it is absent, never fall through to a rebuild
+(`run_nf_inj2b_rate_ordering.served_baseline` / `_assert_baseline_is_current`). ⚠️ Note the two
+guards answer different questions: on NF-INJ2b's decisive run the freshness bar PASSED at 7.30h/48h
+while the reproduction pin FAILED at 40.58 over 797 rows, because the ADP/ECR snapshot that feeds the
+ordering moves intraday. A pin over a live-snapshot-fed surface must bind a CAPTURED artifact, never
+a re-pull (PM ruling D3, 2026-08-29).
+
+**One figure above that a later measurement DOES bear on, recorded here rather than edited.** §8
+attributes NF-INJ2's refusal to a MECHANISM: *"NF1.5's ordering learner is fitted on `real_fp_ppr`, a
+season TOTAL, so it was selected to order POINTS"*, and NF-INJ2b was funded to act on exactly that.
+NF-INJ2b's matched pair isolating the FIT TARGET measured **−0.0873 CRPS, 1/7 folds, p=0.977** — the
+target re-fit is mildly HARMFUL — while the pair isolating the ASSIGNMENT rule in point space read
+**+0.4452, 7/7, p=0.0009**. ⇒ **the stated mechanism is refuted by measurement; the lever is the
+assignment rule, not the fit target.** The VERDICT is untouched (`CONSTRAINT_REFUSED` stands, and the
+mechanism claim was never what refused the arm), and §8 is left verbatim — this paragraph is the
+correction, in the shape §8's own "a pre-registered prediction this run OVERTURNED" block uses.
