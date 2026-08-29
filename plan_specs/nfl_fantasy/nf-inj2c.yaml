@@ -7,7 +7,7 @@ metadata:
   name: nf-inj2c
   vertical: nfl_fantasy
   card: https://trello.com/c/Dsz8CROW
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Fresh forward registration of the ASSIGNMENT-RULE fix — the mechanism
