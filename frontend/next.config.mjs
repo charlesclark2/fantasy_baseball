@@ -63,7 +63,19 @@ const nextConfig = {
   // fix — it covers the API deploy-skew window and any link already handed out. Permanent, because
   // `/pricing` is also just the URL people will type.
   async redirects() {
-    return [{ source: "/pricing", destination: "/subscribe", permanent: true }]
+    return [
+      { source: "/pricing", destination: "/subscribe", permanent: true },
+      // ⭐ NCAAF-P3.9 — a bare `/ncaaf` 404'd. It is the URL a reader types, the one a nav label
+      // reading "NCAAF" implies, and the stem of every link we will ever publish on this vertical.
+      //
+      // ⚠️ `permanent: false` (307), DELIBERATELY, and unlike `/pricing` above. A 308 is cached by
+      // the browser essentially forever, so if `/ncaaf` later becomes a real hub page (P3.3 team
+      // pages, P3.6 futures — both carded), every reader who ever hit the permanent redirect would
+      // keep being bounced past it with no server round-trip and no way for us to correct it.
+      // `/pricing` is permanent because that URL is a mistake we are retiring; this one is a
+      // placeholder we intend to fill.
+      { source: "/ncaaf", destination: "/ncaaf/games", permanent: false },
+    ]
   },
   async rewrites() {
     return [

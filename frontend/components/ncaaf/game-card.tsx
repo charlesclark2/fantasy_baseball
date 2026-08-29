@@ -30,6 +30,7 @@ import {
 import type { NcaafGamePrediction } from "@/lib/ncaaf"
 import { DistributionCurve, bandSummary } from "./distribution-curve"
 import { MarketComparison } from "./market-comparison"
+import { NcaafTeamLogo } from "./team-logo"
 import { WinProbability } from "./win-probability"
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
@@ -194,9 +195,18 @@ export function NcaafGameCard({
             trigger, so a heading here nests a heading inside a heading — invalid, and it made every
             `h3` locator on a card ambiguous. The Radix header carries the semantics; this carries
             the words. */}
-        <div className="text-sm font-medium text-white">
+        {/* ⭐ NCAAF-P3.9 — the team marks. DECORATIVE: `aria-hidden` on each, the names carry the
+            meaning, and the row is `flex` with a FIXED 20px box per side so a slow or failed image
+            cannot reflow the header and move the probability below it (asserted, not assumed — the
+            mobile spec measures the probability's box with the logos loaded and with them refused,
+            and requires them identical).
+            ⚠️ `items-center`, not `items-baseline`: a replaced element has no useful baseline, so
+            baseline alignment drops the mark below the text it sits beside. */}
+        <div className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-white">
+          <NcaafTeamLogo teamId={game.away.team_id} teamName={away} />
           <span className="text-gray-300">{away}</span>
-          <span className="px-1.5 text-gray-600">at</span>
+          <span className="px-0.5 text-gray-600">at</span>
+          <NcaafTeamLogo teamId={game.home.team_id} teamName={home} />
           <span className="text-gray-300">{home}</span>
         </div>
         {started && (

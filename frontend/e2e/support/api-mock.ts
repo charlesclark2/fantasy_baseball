@@ -2029,6 +2029,42 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
   return mock
 }
 
+/** ⭐ NCAAF-P3.9 — the ESPN team-logo CDN, answered locally.
+ *
+ * ══ WHY IT IS ROUTED AT ALL ════════════════════════════════════════════════════════════════════
+ *
+ * `blockThirdParty` below cuts only the three analytics/error beacons, so `a.espncdn.com` would
+ * otherwise reach the REAL internet from a CI container — the one thing this harness's header says
+ * it does not do. That is not merely a purity point: an assertion about whether a logo rendered
+ * would then be an assertion about ESPN's uptime and the runner's egress, i.e. a flaky red that
+ * points at our code and is not about it.
+ *
+ * ══ WHY BOTH DIRECTIONS ARE NEEDED ═════════════════════════════════════════════════════════════
+ *
+ * `broken: true` is the whole point of the second half. E9.46's lesson is that a CSP refusal, a
+ * 404 and a dead CDN are INDISTINGUISHABLE from "there is no image for this team" once a fallback
+ * exists — so the fallback is exactly the branch that rots unobserved. Aborting the request is the
+ * only way to drive an `onError` deterministically; the live CDN answers 200 for every id we serve
+ * (verified for all sixteen opener teams), so there is no payload that reaches it by accident.
+ *
+ * ⚠️ A ONE-PIXEL PNG, NOT AN EMPTY BODY. `naturalWidth > 0` is what tells a LOADED image from an
+ * element that merely has a box because its width/height attributes reserved one — and a zero-byte
+ * "image/png" decodes to nothing, so it would fail an image the browser never actually rendered
+ * while the spec read it as a pass in the other direction.
+ */
+const ONE_PIXEL_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+)
+
+export async function mockTeamLogos(page: Page, { broken = false } = {}) {
+  await page.route("https://a.espncdn.com/**", (route) =>
+    broken
+      ? route.abort()
+      : route.fulfill({ status: 200, contentType: "image/png", body: ONE_PIXEL_PNG }),
+  )
+}
+
 /**
  * Cut every third-party beacon. Sentry's DSN is hardcoded in `instrumentation-client.ts` and
  * PostHog is proxied through the same-origin `/ingest` rewrite, so without this the suite makes

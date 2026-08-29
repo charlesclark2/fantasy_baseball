@@ -12,12 +12,18 @@ import { PlatformAttributionFooterSlot } from "@/components/fantasy/platform-att
  * record, so the two pages E9.60 rewrites were reachable from each other in one direction only and
  * the central trust asset was absent entirely.
  *
- * ⛔ A NOT-YET-LIVE PRODUCT IS TEXT, NEVER A LINK. NFL and NCAAF betting intelligence are listed
- * because a visitor deciding whether to subscribe should see where this is going — but they render
- * as a muted row with a "Coming this season" tag and NO anchor. This is the same rule the home
+ * ⛔ A NOT-YET-LIVE PRODUCT IS TEXT, NEVER A LINK. NFL betting intelligence is listed because a
+ * visitor deciding whether to subscribe should see where this is going — but it renders as a muted
+ * row under a "Coming this season" sub-heading and with NO anchor. This is the same rule the home
  * page's roadmap follows (`live: false` rows carry no `<Link>`), and it exists because E9.56c
  * shipped a primary CTA pointing at `/pricing`, a route that has never existed, and killed the buy
  * path for as long as the free pages were open.
+ *
+ * ⭐ AND ITS COROLLARY, WHICH NCAAF-P3.9 IS THE FIRST TO NEED: a product that GOES LIVE must stop
+ * being text in the same change. `/ncaaf/games` shipped at P3.2 and this column went on saying
+ * "Coming this season" about it — the rule above is what keeps an unbuilt product from being
+ * oversold, and leaving a live one under it is the identical defect facing the other way, on the
+ * one surface that renders on every page in the product.
  *
  * ⚠️ THE LINK ARRAYS STAY LITERAL, and that is deliberate rather than lazy. Two existing guards read
  * this file as SOURCE and a data-driven list would silently fall out of both:
@@ -32,6 +38,16 @@ import { PlatformAttributionFooterSlot } from "@/components/fantasy/platform-att
  *  bar's `SIGNED_OUT_NAV` and the signed-in `SPORTS` order. One product order, everywhere. */
 const PRODUCTS = [
   { label: "Fantasy Football", href: "/fantasy/rankings" },
+  // ⭐ NCAAF-P3.9 — PROMOTED OUT OF `COMING` (below), which is the whole point of the move: the
+  // module header's rule is "a not-yet-live product is TEXT, never a link", and the corollary
+  // nobody had had to apply yet is that a product that GOES live must stop being text in the same
+  // change. `/ncaaf/games` has been live since P3.2 while this column still said "Coming this
+  // season" — a footer that renders on every page telling every visitor the opposite of the truth.
+  //
+  // ⭐ It leads MLB because it is the FREE one: no account, no subscription (E9.45), so it is the
+  // only betting row here a signed-out reader can actually open. MLB's `/#today` is an anchor into
+  // the home page for exactly that reason.
+  { label: "NCAAF Betting Intelligence", href: "/ncaaf/games" },
   { label: "MLB Betting Intelligence", href: "/#today" },
 ] as const
 
@@ -52,8 +68,11 @@ const PRODUCTS = [
  *  "coming this season" string is still present exactly once, which is what
  *  `positioning-alignment.spec.ts` asserts. */
 const COMING = [
+  // ⚠️ NCAAF-P3.9 REMOVED THE NCAAF ROW — it is LIVE and now sits in `PRODUCTS` above. NFL betting
+  // remains genuinely unbuilt, so the shared "Coming this season" sub-heading still has exactly one
+  // member to head and still renders exactly once, which is what
+  // `positioning-alignment.spec.ts` asserts.
   { label: "NFL Betting Intelligence" },
-  { label: "NCAAF Betting Intelligence" },
 ] as const
 
 const CREDENCE = [

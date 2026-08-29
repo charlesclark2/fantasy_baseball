@@ -527,6 +527,17 @@ export const FAQ_HEADER = {
 // using it — the mobile grouping logic is product-keyed, and narrowing the type would make adding
 // a genuinely public betting surface later a type change rather than a data edit.
 //
+// ⚠️⚠️ NCAAF-P3.9 IS THAT "genuinely public betting surface", AND IT DID NOT REUSE THIS MEMBER —
+// a correction to the sentence above, recorded here rather than left for a reader to trip over.
+// `product: "betting"` is the PROXY two existing guards use for "an MLB door was re-added"
+// (`test_the_signed_out_nav_has_no_mlb_door`, and `positioning-alignment.spec.ts`'s "offers no MLB
+// door"), so filing college football under it turns both red for a reason unrelated to what they
+// defend — and the tempting repair is relaxing the one clause the operator marked ⛔ DO NOT DELETE.
+// A distinct `"ncaaf"` member costs a one-word type change and keeps every guard meaning what it
+// was written to mean. `"betting"` therefore still has no entry, and the paragraph above still
+// holds for a future public MLB surface: it is only the MLB PROXY that makes the member unusable
+// for a DIFFERENT vertical.
+//
 // ══ ⭐ WHY THE FANTASY DOOR SAYS "FANTASY FOOTBALL" (operator, 2026-08-09) ══════════════════════
 //
 // It said "Fantasy". `nav-model.ts` already declares an MLB→Fantasy surface (E8.1's prospect
@@ -561,11 +572,34 @@ export type SignedOutNavLink = {
    *  measurement, since every label change here is a width change. */
   short?: string
   /** Which product this door belongs to; `null` for the company-level pages. Rendered as a group
-   *  separator on mobile, where there is room to group. */
-  product: "fantasy" | "betting" | null
+   *  separator on mobile, where there is room to group.
+   *
+   *  ⭐ NCAAF-P3.9 ADDS `"ncaaf"` RATHER THAN REUSING `"betting"`, and the reason is not taxonomy.
+   *  Two guards — `test_the_signed_out_nav_has_no_mlb_door` and the E2E "offers no MLB door" clause
+   *  — assert `product: "betting"` is ABSENT, using it as their proxy for "an MLB entry was
+   *  re-added". That proxy is sound while MLB is the only betting product; filing college football
+   *  under it would make both guards go red for a reason that has nothing to do with what they
+   *  defend, and "fix" them by weakening the one clause the operator marked ⛔ DO NOT DELETE.
+   *  The footer already treats the three betting verticals as SEPARATE product rows, and the two
+   *  differ in the way that matters here: every MLB route refuses an anonymous caller, `/ncaaf/games`
+   *  serves one (E9.45 — NCAAF is FREE). A distinct member keeps both guards meaning exactly what
+   *  they were written to mean, and gives the phone menu its own group separator.
+   *
+   *  ⚠️ `"betting"` STAYS in the union, still unused — see the section header. */
+  product: "fantasy" | "betting" | "ncaaf" | null
   /** Desktop shows a trimmed set — the bar overflows on a laptop at more than about five links.
    *  Mobile shows everything (spec §22), which is where FAQ becomes reachable from the nav at all. */
   desktop: boolean
+  /** ⭐ NCAAF-P3.9 — the `activeLink` key this door highlights on, matching `nav-model.ts`'s
+   *  `NavItem.key` convention and the `activeLink` prop each page already passes.
+   *
+   *  ⚠️ WHY THE SIGNED-OUT BAR NEEDED ONE AT ALL. Every other signed-out entry points at a surface a
+   *  stranger meets BEFORE they are anywhere in particular, so none of them ever needed to say "you
+   *  are here". `/ncaaf/games` is different: it is a free surface with no auth guard, so the nav a
+   *  reader sees while standing ON it is the signed-OUT one — and without this the one nav state
+   *  that actually renders on the page can never highlight it. Optional, because the other doors
+   *  genuinely have no page of their own to be current on. */
+  key?: string
 }
 
 /** ⛔ EVERY ENTRY MUST BE REACHABLE BY THE VISITOR IT IS DRAWN FOR. This list renders ONLY when
@@ -593,6 +627,29 @@ export const SIGNED_OUT_NAV: readonly SignedOutNavLink[] = [
     href: TRACK_RECORD_TRUST_LINK.href,
     product: "fantasy",
     desktop: true,
+  },
+  // ⭐⭐ NCAAF-P3.9 — TOP-LEVEL, and it is a positioning ruling rather than a convenience (PM,
+  // 2026-08-25). `/ncaaf/games` shipped live at P3.2 and was UNREACHABLE: no nav entry at any
+  // viewport, a bare `/ncaaf` 404, and a footer still saying "Coming this season". A free
+  // acquisition surface in the one week of the year college football is the largest thing in
+  // American sport is not buried in a submenu.
+  //
+  // ⭐ IT BELONGS IN THIS LIST — the SIGNED-OUT one — and that is the load-bearing half. NCAAF is
+  // FREE (E9.45): `app/ncaaf/games/page.tsx` carries no `AuthGuard` and no `SubscriptionGate`, so
+  // an anonymous visitor is the DEFAULT reader of the page, and the signed-in `SPORTS` menu they
+  // never see would have left the surface as unfindable as it was. It is added to the signed-in
+  // nav too (`nav.tsx`), for the other half of the audience.
+  //
+  // ⚠️ It satisfies this list's own admission rule — "every entry must be reachable by the visitor
+  // it is drawn for" — which is precisely what the MLB entry above could not, and why the two
+  // decisions do not contradict each other.
+  {
+    label: "College football games",
+    short: "NCAAF",
+    href: "/ncaaf/games",
+    product: "ncaaf",
+    desktop: true,
+    key: "ncaaf-games",
   },
   // ⛔ NO MLB ENTRY — deliberate, and correct under both the current paid gate and the intended
   // signup gate. See the section header above before adding one.
