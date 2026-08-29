@@ -161,7 +161,8 @@ spec:
       API Lambda; the box also needs the merged code for the serving WRITE. Both are
       operator steps in the handoff, and the runtime gate is only answerable after ① has
       put a 2026 line in the lake.
-      ⑦ ⭐ ADDED 2026-08-29, AND IT IS THE ONE OPEN ITEM: THE CAPTURE IS HOURLY, THE
+      ⑦ ⭐ ADDED 2026-08-29 — RESOLVED THE SAME DAY, option (b) built (see the tail of
+      this list). ORIGINAL TEXT PRESERVED: THE CAPTURE IS HOURLY, THE
       RE-SERVE IS DAILY — so the SERVED as_of can trail the LAKE by up to 24h, and on a
       kickoff day that is the whole point of the line. sports_ncaaf_odds_live_schedule
       ticks hourly inside 24h of kickoff (that is what "the line is moving" means), but
@@ -180,3 +181,47 @@ spec:
       re-serve off the live-capture op when it actually captured, which couples the two
       and is the least reversible. Suggest (b) if the market line is meant to be a live
       comparator, (a) if it is meant to be a daily reference point.
+      ⑦-RESOLUTION (operator chose (b), 2026-08-29): the re-serve is now HOURLY with the tier in
+      the OP (`sports_ncaaf_serving_write_schedule` "20 * * 8-12,1 *" PT +
+      `write_ncaaf_serving_store.should_reserve`). Four properties make it safe, each pinned by a
+      guard and RED-proven 17/17: (a) ONE window — `should_reserve` shares the capture's
+      `in_dense_window` BY IMPORT and passes no override, so tuning one cadence moves both (E9.61);
+      (b) MONOTONE — the 06:00 PT baseline is preserved exactly, so every write the old daily
+      schedule made still happens and the dense tier only ADDS refreshes; the guard pins the
+      baseline against a LITERAL 6 (the retired cron's hour, a fact about history) rather than
+      against the constant under test, which would have made the whole claim vacuous; (c) FAILS
+      OPEN — an unevaluable tier falls through to the write, because a gate that failed closed
+      would turn a transient lake read into a silently frozen board (NF1.7 (a) read the right way
+      round: here "healthy" would be "skip", so the safe verdict is to serve); (d) the CHAINED
+      `ncaaf_serving_write_after_snapshot_op` is deliberately NOT gated (INC-25). The tier reads
+      kickoffs from the SNAPSHOT table, never CFBD — a paid key behind a HALT-tier serving write
+      would let a missing credential stop the board refreshing, which is strictly worse than the
+      staleness being fixed. ⏱️ Minute :20 vs the capture's :00 is the ordering mechanism between
+      two separate jobs; it is a WEAKER guarantee than a graph edge (a capture running >20 min is
+      still missed) and deliberately so — the write is idempotent and the next hour heals it.
+      ⑧ PM ADDENDUM (1), `market.status` MUST STAY BINARY — SATISFIED BY CONSTRUCTION AND NOW
+      PINNED. The cadence work changed WHEN the store is refreshed, not what `_market` can return,
+      so no third status was introduced. Three guards now hold it that way (server emits exactly
+      {available, unavailable}, read off the AST at MODULE scope because the unavailable branch is
+      emitted by a helper `_market` delegates to; the TS union declares exactly those two; and the
+      named call sites still test the field, so the list cannot rot silently). ⚠️ ONE CORRECTION TO
+      THE ADDENDUM: there are THREE client call sites, not two — `game-card.tsx:133` (spread),
+      `game-card.tsx:134` (total) and `market-comparison.tsx:119` (the panel's own gate). All three
+      are named in the guard so a future story does not have to re-derive the set.
+      ⑨ ⛔ PM ADDENDUM (2) CANNOT BE EXECUTED AS RULED — ITS PREMISE HAS EXPIRED, AND THE RULING
+      DEPENDS ON IT. The addendum says "prod measured 8/8 unavailable on opener day", so a
+      re-capture now would keep the fixture all-absent and owe zero re-anchoring. That was the
+      PRE-DEPLOY reading. Measured against prod 2026-08-29 while writing this: 8 of 8 games are
+      `available` / `odds_api_live` / `as_of 2026-08-28T01:38:24Z`. The live feed the operator
+      enabled has already closed the window. ⇒ a re-capture NOW yields an all-AVAILABLE slate,
+      which trips BOTH tripwires (`test_ncaaf_p3_2_surface.py:352`,
+      `ncaaf-games.spec.ts:422`) — precisely the outcome the ruling was written to avoid. By the
+      addendum's OWN second clause we are therefore in the ADD branch: a realistic-Saturday fixture
+      is ADDED beside the all-absent one, never replacing it. That was NOT done here, deliberately:
+      it is a fixture + mock-mode + spec change in the frontend lane the addendum itself reserved
+      for the next story (item (1)), and it is NOT time-critical — every remaining Saturday
+      reproduces these conditions, so the opener's bytes are not irreplaceable. Needs a PM ruling
+      on which story owns the ADD. NOTE the existing `ncaafSlateWithMarket` fixture is SYNTHETIC
+      (the ledger says so: "GENERATED, because at capture time there was nothing to capture") —
+      real market bytes now exist for the first time, so the ADD would also retire that inference,
+      which is followUp ⑤.

@@ -475,3 +475,77 @@ def test_the_generated_e2e_fixtures_still_clear_the_real_leakage_guard():
     for block in available:
         assert block["as_of"] == block["snapshot_ts"] is not None
         assert block["source"] in (payloads.MARKET_SOURCE_CLOSE, payloads.MARKET_SOURCE_T1)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# `market.status` IS BINARY — a PM constraint (P3.9 closeout → P3.1b addendum, 2026-08-29)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# THE HAZARD, in the PM's words: the client decides "does a line exist?" by testing
+# `market.status === "available"`. A THIRD status — say a captured-but-stale one — would be
+# rendered by every one of those sites as ABSENT, so a card would say no line was captured for a
+# game that has one. That is a silent wrong answer, not a missing feature, and it is invisible to
+# `tsc` (a new union member type-checks fine at a `===` comparison).
+#
+# The three call sites, named here so a future story can find them without re-deriving the set —
+# ⚠️ the addendum said TWO; there are THREE, both of `game-card.tsx`'s counting separately:
+#     frontend/components/ncaaf/game-card.tsx:133        the market spread
+#     frontend/components/ncaaf/game-card.tsx:134        the market total
+#     frontend/components/ncaaf/market-comparison.tsx    the comparison panel's own gate
+#
+# ⇒ STALENESS IS EXPRESSED VIA `as_of` (and, where a line is refused, via `reason`), NEVER via a
+# new status value. NCAAF-ODDS-LIVE's cadence work honours this by construction — it changed WHEN
+# the store is refreshed, not what `_market` can return — and this guard is what keeps it true.
+
+_CLIENT_STATUS_CALL_SITES = (
+    "frontend/components/ncaaf/game-card.tsx",
+    "frontend/components/ncaaf/market-comparison.tsx",
+)
+
+
+def _emitted_statuses() -> set[str]:
+    """Every literal `status` value `_market` can return, read off the AST rather than a grep so a
+    value mentioned in prose cannot satisfy it (INC-38)."""
+    import ast
+    tree = ast.parse(Path(payloads.__file__).read_text(encoding="utf-8"))
+    # ⭐ MODULE scope, not just `_market`: the "unavailable" branch is emitted by a helper
+    # `_market` delegates to, so scanning the function alone reported a ONE-member set and made
+    # the guard fail for the wrong reason. "What can the serving layer emit?" is the question the
+    # client actually cares about, and it is answered at the module.
+    out: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            for key, val in zip(node.keys, node.values):
+                if (isinstance(key, ast.Constant) and key.value == "status"
+                        and isinstance(val, ast.Constant)):
+                    out.add(val.value)
+    return out
+
+
+def test_the_served_market_status_is_binary():
+    """A third status silently renders as ABSENT at all three client call sites."""
+    assert _emitted_statuses() == {"available", "unavailable"}, (
+        f"_market can now emit {_emitted_statuses()}. Every value other than 'available' renders "
+        f"as NO LINE at {', '.join(_CLIENT_STATUS_CALL_SITES)} — a card would claim no line was "
+        "captured for a game that has one. Express staleness via as_of/reason, or hand the client "
+        "change to a frontend story FIRST.")
+
+
+def test_the_client_contract_declares_exactly_those_two():
+    """The TS union is the other half of the contract: it must not gain a member the client's
+    `=== "available"` tests would quietly treat as absent."""
+    ts = (_REPO / "frontend/lib/ncaaf.ts").read_text(encoding="utf-8")
+    match = re.search(r'status:\s*([^\n;]+)', ts)
+    assert match, "the NcaafMarketLine status field is gone from the client contract"
+    members = {m for m in re.findall(r'"([a-z_]+)"', match.group(1))}
+    assert members == {"available", "unavailable"}, (
+        f"the client status union is now {members} — see {_CLIENT_STATUS_CALL_SITES}")
+
+
+def test_the_named_client_call_sites_still_exist():
+    """⭐ Anti-rot: the comment above names three call sites, and a comment naming files that have
+    moved is worse than no comment. If this fails, UPDATE the names — do not delete the guard."""
+    for rel in _CLIENT_STATUS_CALL_SITES:
+        src = (_REPO / rel).read_text(encoding="utf-8")
+        assert 'status === "available"' in src, (
+            f"{rel} no longer tests market.status — the call-site list above is stale")

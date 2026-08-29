@@ -212,6 +212,23 @@ BREAKS: list[tuple[str, Path, str, str, str, str | None]] = [
      '"source": "odds_api_historical_close",\n        "snapshot_ts": "2025-10-03T22:50:39Z",',
      '"source": "somewhere_else",\n        "snapshot_ts": "2025-10-03T22:50:39Z",',
      "generated_e2e_fixtures_still_clear", None),
+
+    # ── the binary-status contract (PM addendum, 2026-08-29) ─────────────────────────────────
+    ("the serving layer gains a THIRD market status, which every client site renders as ABSENT",
+     PAYLOADS, '"status": "unavailable", "reason": reason,',
+     '"status": "stale", "reason": reason,',
+     "status_is_binary", None),
+
+    ("the client contract's status union gains a member the `=== available` tests treat as absent",
+     _REPO / "frontend/lib/ncaaf.ts", 'status: "available" | "unavailable"',
+     'status: "available" | "unavailable" | "stale"',
+     "client_contract_declares", None),
+
+    ("a named client call site stops testing market.status, so the call-site list has rotted",
+     PANEL, 'const available = market.status === "available"',
+     'const available = Boolean(market.home_spread)',
+     "named_client_call_sites", 'const available = market.status === "available"'),
+
 ]
 
 
