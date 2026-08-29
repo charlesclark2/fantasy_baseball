@@ -1223,6 +1223,20 @@ def matched_pair_reads(per_fold: dict, folds: tuple[int, ...], scored: dict) -> 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Report
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+def _coherence_fold_count(rep: dict, arm: str) -> str:
+    """How many folds carry ≥1 coherence violation for `arm`.
+
+    The leaderboard's coherence figure is a per-fold MEAN, and a mean is exactly the shape that
+    hides a rare violation behind a rounded zero. The count is what a reader needs to tell "this
+    arm is coherent by construction" from "this arm is coherent in six of seven folds"."""
+    d = (rep.get("per_fold") or {}).get(arm) or {}
+    seen = [v.get("coherence_violating_players") for v in d.values()]
+    got = [x for x in seen if x is not None]
+    if not got:
+        return "—"
+    return f"{sum(1 for x in got if x)}/{len(got)}"
+
+
 def write_report_md(rep: dict, path: Path) -> None:
     L: list[str] = []
     v = rep["verdict"]
@@ -1247,9 +1261,16 @@ def write_report_md(rep: dict, path: Path) -> None:
                      "assignment": rep["assignment_of"].get(a, "oracle"),
                      "CRPS": _fmt(s["crps"]), "MAE": _fmt(s["mae"]),
                      "cov80": _fmt(s["coverage80"]), "tier ρ": _fmt(s["tier_rho_pooled"]),
-                     "coherence viol.": _fmt(s["coherence_violating_players"], 0)})
+                     # ⭐ 4dp, and the fold count beside it. This value is a per-fold MEAN, and at 0
+                     # decimals a genuine 0.1429 (one violating player in one of seven folds) RENDERS
+                     # AS "0" — so the table asserted a coherence the `coherence_restored` gate,
+                     # which demands EXACTLY 0, was simultaneously refusing. A rounded render that
+                     # contradicts a gate reading the same number is the E9.61 class, and here it
+                     # hid the refutation of this story's own by-construction premise.
+                     "coherence viol./fold": _fmt(s["coherence_violating_players"], 4),
+                     "folds w/ ≥1": _coherence_fold_count(rep, a)})
     A(_md_table(rows, ["arm", "target", "assignment", "CRPS", "MAE", "cov80", "tier ρ",
-                       "coherence viol."]))
+                       "coherence viol./fold", "folds w/ ≥1"]))
     A("\n⛔ **CRPS selects. MAE never does** — the target is skewed and the low-availability cohort "
       "is exactly where the conditional median sits near the floor (NF-D11 / NF-D14). Disclosed, "
       "not used.\n")
@@ -1258,6 +1279,13 @@ def write_report_md(rep: dict, path: Path) -> None:
       "as evidence that they beat anything. It is reported for EVERY arm — a constraint a degenerate "
       "satisfies is fine (the metric then eliminates it); a *criterion* a degenerate WINS is fatal "
       "(NF1.8).\n")
+    A("\n⭐ **AND THE PRE-REGISTRATION'S \"by construction\" IS REFUTED BY THIS COLUMN, at the edge.** "
+      "The value is a per-fold MEAN, and no arm reaches exactly 0: `rate_refit` carries one "
+      "violating player in ONE of seven folds. The `coherence_restored` gate demands `= 0`, so it "
+      "reads **False for every arm in the field** — which is why the injected-effect control below "
+      "can only return `BLIND`, and it is a fact about a deterministic constraint, ⛔ not about the "
+      "family's statistical sensitivity. Recorded as it fell (E2.1-r); the remedy is a successor "
+      "whose coherence clause declares its attribution and its tolerance FORWARD.\n")
 
     A("\n## 2. Could the re-fit ACT? (NF-D20 — counted, never assumed)\n")
     A("The pre-registration §1b predicted this table before any scoring. A cell the re-fit cannot "
@@ -1363,6 +1391,24 @@ def write_report_md(rep: dict, path: Path) -> None:
       f"**+{c['effect_injected_tier_rho']} tier-ρ** per fold on every non-degenerate, "
       f"non-reference arm.\n")
     A(f"\n{c['reason']}\n")
+    # ⭐ PM ruling D2 (2026-08-29): annotate the badge at the point of reading, so a future reader
+    # cannot take it at face value. Render-time only — the control's own verdict string above is
+    # left exactly as the instrument returned it (E2.1-r: a result is annotated, never re-labelled).
+    _blockers = {g for b in c.get("blocking_gates", {}).values() for g in b}
+    _invariant = sorted(_blockers & {"coherence_restored"})
+    if c["verdict"] == "BLIND" and _invariant:
+        A(f"\n⚠️ **⛔ DO NOT READ THAT BADGE AT FACE VALUE — the blockage is a DETERMINISTIC "
+          f"CONSTRAINT, not statistical insensitivity, and the instrument cannot yet say so.** "
+          f"`{'`, `'.join(_invariant)}` is INJECTION-INVARIANT: the injection moves CRPS and tier-ρ "
+          f"and cannot move a board's coherence, so no arm could clear it however sensitive this "
+          f"family is — and `stratified` and `feasibility_clamp` are blocked under injection by it "
+          f"ALONE, with every metric gate AND `dsr` firing correctly for them. `BLIND` reads \"a "
+          f"null from this family is free\"; the honest reading is that the family's statistical "
+          f"half demonstrably fires and its verdict was decided by a constraint no injection can "
+          f"reach — NF-D18's `CONSTRAINT_REFUSED`, one level up, inside a positive control. "
+          f"Recorded as the instrument returned it; **PLAT-CVP2** is carded to accept a "
+          f"FORWARD-DECLARED set of injection-invariant gates and report `CONSTRAINT_BLOCKED`, "
+          f"leaving `BLIND` its meaning for gates the injection could have moved.\n")
     A(f"\n* metric gates: `{'`, `'.join(c['metric_gates'])}`\n"
       f"* deflation-class gates present: `{'`, `'.join(c['deflation_gates']) or '—'}`\n"
       f"* survivors: `{'`, `'.join(c['survivors']) or 'none'}`  ·  metric survivors: "
@@ -1514,8 +1560,25 @@ def main(argv: list[str] | None = None) -> int:
                          "only, ⛔ never a gate (the attribution control needs the full field)")
     ap.add_argument("--smoke", action="store_true",
                     help="two folds, no 2026 — a CODE-PATH PROOF, ⛔ never a gate")
+    ap.add_argument("--rewrite-report", action="store_true",
+                    help="re-render the markdown from the COMMITTED json and exit. ⛔ Re-scores "
+                         "NOTHING: `write_report_md` is a pure function of the stored report, so a "
+                         "rendering defect is fixable without a refit and without any number being "
+                         "able to move (the NF-W2e rule — derive the report at report time, so "
+                         "correcting a wrong sentence never costs a re-run, which is the pressure "
+                         "that leaves a known-wrong record published).")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
+    if args.rewrite_report:
+        stem = _STEM + ("_smoke" if args.smoke else "")
+        src = _REPORT_DIR / f"{stem}.json"
+        if not src.exists():
+            raise SystemExit(f"no committed report at {src} — there is nothing to re-render")
+        rep = json.loads(src.read_text())
+        write_report_md(rep, _REPORT_DIR / f"{stem}.md")
+        print(f"re-rendered {stem}.md from {stem}.json — verdict {rep['verdict']['state']} "
+              f"(generated {rep['generated_at'][:19]}Z; NOT re-scored)")
+        return 0
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(message)s")
     logging.getLogger("nfl").setLevel(logging.INFO)

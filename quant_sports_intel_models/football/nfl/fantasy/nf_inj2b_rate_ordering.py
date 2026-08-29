@@ -270,7 +270,7 @@ SERVED_ARM: str | None = None
 #: study had never run. `test_nf_inj2b_*::test_the_recorded_gate_status_matches_the_committed_report`
 #: fails if this and `ablation_results/nf_inj2b_rate_ordering.json`'s verdict disagree, so a re-run
 #: that changes the verdict must change this in the SAME commit.
-GATE_STATUS = "UNRUN"
+GATE_STATUS = "NULL"
 
 #: whether a PM has recorded a disposition to serve a non-incumbent arm. Kept SEPARATE from
 #: `GATE_STATUS` because clearing the gates and deciding to ship are different facts — NF-D21 and

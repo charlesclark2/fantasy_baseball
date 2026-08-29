@@ -7,7 +7,7 @@ metadata:
   name: nf-inj2b
   vertical: nfl_fantasy
   card: https://trello.com/c/FUOXwXzS
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     The successor NF-INJ2's refusal named: NF1.5's ordering learner is
@@ -131,10 +131,33 @@ spec:
         desc: "Verdict + findings into closeout.followUps; operator summary."
   closeout:
     verdict: >
-      HARNESS COMPLETE AND SMOKE-PROVEN; THE DECISIVE RUN IS THE OPERATOR'S (>2 min, handed off
-      paste-ready). Nodes 0, 1 and the buildable half of 2 are done and committed; nodes 3-5 are
-      computed BY that run, which writes the decisive record and the null classification itself.
-      `best_alpha = 0`; DEPLOY-HELD throughout — `nf_inj2b_rate_ordering.SERVED_ARM` is `None`, so
+      DECISIVE RUN COMPLETE (operator, 2026-08-29, 48.5s, 7 folds 2019-2025). VERDICT **NULL** on
+      the pre-registration's §6 branch 3 — the winning arm does not restore coherence. `best_alpha
+      = 0`; DEPLOY-HELD, `SERVED_ARM` still `None`, `GATE_STATUS` now `NULL` and pinned to the
+      committed report by a guard.
+
+      ⭐ THE HEADLINE, AND IT REFUTES THIS STORY'S OWN PREMISE ON THE STORY'S OWN TERMS. NF-INJ2's
+      refusal was attributed to a MECHANISM — "the ordering learner is fitted on season POINTS, so
+      handing it a RATE multiset asks a question it was never validated on." Re-fitting the learner
+      on a per-game rate target does NOT restore the ordering constraint: `ordering_not_regressed`
+      reads **False** for `rate_refit`, `rate_refit_stratified`, `rate_refit_reselect` AND for both
+      points-fitted rate-assignment arms. The matched pair that isolates the fit target puts it at
+      **-0.0873 CRPS, positive in 1 of 7 folds, one-sided p = 0.977** — the rate target is, if
+      anything, mildly HARMFUL. Meanwhile the pair that isolates the ASSIGNMENT rule in POINT space
+      (`stratified` - `incumbent`) puts it at **+0.4452, 7/7 folds, p = 0.0009**, and `stratified`
+      holds the ordering constraint at every position. ⇒ the lever is the ASSIGNMENT rule, not the
+      fit target; NF-INJ2's stated mechanism is refuted by a matched foil exactly as NF-D15 (g')
+      refutes a winner's stated mechanism — here applied to a REFUSAL's stated mechanism.
+
+      WHY IT IS STILL A NULL. `stratified` wins the selecting metric, clears fold consistency (7 of
+      a calibrated 6 required), BH-FDR (p = 0.0009), the degenerates, the own-form ceiling and the
+      ordering constraint — and FAILS `coherence_restored` (8.57 violating players/fold in-fold; 7
+      attributable on the 2026 board). Coherence is the correctness constraint the whole story
+      exists to satisfy, so the pre-registered branch refuses it. It also fails DSR (0.9325 against
+      0.95); `classify_null` reads that leg **POWER_LIMITED** at +1 fold, with
+      `field_remedy_admissible = False` (the <=7-arm figure is arithmetic, never advice - MH2.2).
+
+      PRECONDITION VERIFIED FROM INSIDE THE SERVED ARTIFACT, not assumed — `nf_inj2b_rate_ordering.SERVED_ARM` is `None`, so
       the board keeps serving NF-INJ2's `incumbent`, and `assert_coherent()` runs at import and
       refuses a flag flip the record does not support.
 
@@ -154,6 +177,116 @@ spec:
       injected-effect positive control declared APPLICABLE with its reason (arms 2-6 are near-clones
       on the assignment axis). The ordering constraint is NF-INJ2's bar VERBATIM, not relaxed.
     followUps: >
+      ══ PM DISPOSITIONS, 2026-08-29 — RULED. Recorded here so the successor inherits them. ══
+      All card actions are the PM's; none were taken by this session.
+
+      **D1 = FUND.** NF-INJ2c is carded — the FOURTH fix-the-spec successor (MARGIN2->3, W7->W7b,
+      VAL3->VAL3b, now this). Its BINDING SHAPE, carried verbatim so the successor inherits it:
+      (1) DIAGNOSE FIRST — the games-floor hypothesis (`max(games, 0.25)` on the assignment vs REAL
+      games on the check) is established or refuted BEFORE any tolerance is designed; a tolerance
+      built around an unproven mechanism is a guess wearing a gate's clothes. (2) The coherence
+      clause declared FORWARD: attribution rule + tolerance, on the DIAGNOSED mechanism — never
+      "= 0" demanded of a per-fold MEAN again. (3) PRIMARY = the assignment-rule arm in POINT space.
+      (4) The +1-fold question settled IN THE PREREG on DATA-FIDELITY grounds (the 2019-2025 window
+      was INHERITED from NF1.5's `score_from`, not chosen — if 2018 is data-honest, register it
+      forward; if not, say so and accept the power). Admissible precisely BECAUSE `classify_null`
+      read POWER_LIMITED with a REACHABLE fold — ⛔ it is NOT an NF-D18 more-seasons trigger.
+      (5) HONESTY CLAUSE: the CRPS and ordering outcomes are largely KNOWN; NF-INJ2c buys a
+      properly-specified RECORD, not a new answer. ⭐ PM: not repairing the gate in-study was
+      exactly right — E2.1-r held under the strongest temptation this program has produced.
+
+      **D2 = CARDED (PLAT-CVP2).** The diagnosis is adopted whole: the helper will accept a
+      DECLARED set of injection-invariant gates — declared FORWARD in the registration so the set
+      cannot become a laundering lever — and report `CONSTRAINT_BLOCKED` with the invariant gates
+      NAMED; `BLIND` keeps its meaning for gates the injection COULD have moved. MH2.7's
+      cross-vertical sweep discipline applies when it is built. This story's record stands on the
+      instrument version it RAN on; ✅ EXECUTED HERE: §6 of the report now carries a render-time
+      annotation pointing at the D2 finding so a future reader cannot take the badge at face value
+      (the control's own verdict string is left exactly as the instrument returned it — a result is
+      annotated, never re-labelled).
+
+      **D3 = PIN-AGAINST-CAPTURE** (the first option). Neither the bar tightens (it sizes staleness
+      alarms for everyone) nor the pin retires (it caught a real property). ⭐ THE CONVENTION, now
+      program-level: **a reproduction pin over a surface fed by a LIVE SNAPSHOT (`--market-refresh`
+      ADP/ECR) binds to an artifact CAPTURED AT STUDY START, never to a re-pull. A freshness bar
+      answers "is this stale?"; a pin answers "is this the same board?" — and 7.3h of ADP drift is
+      allowed to FAIL the second while PASSING the first.** The CLAUDE.md landmine rides NF-INJ2c as
+      the next repo-touching session, worded: "A repro pin over a live-snapshot-fed surface must pin
+      a CAPTURED artifact, not a re-pull; the freshness bar and the pin answer different questions
+      and 7h of ADP drift legitimately splits them."
+
+      **D4 = ANNOTATE**, as argued — ⛔ no re-run ("a provenance question answered is worth more
+      than a number refreshed"). A MARKED annotation block on NF-INJ2's record (the NF-C8
+      convention — corrected, never silently repaired) carrying: the `apply_2026`
+      self-referential-baseline caveat, the note that the figure did NOT decide that verdict
+      (`CONSTRAINT_REFUSED` was the ORDERING gate's call), and a pointer to the forward fix.
+      ⏭️ EXECUTED BY THE NF-INJ2c SESSION, which will be in those files anyway — ⛔ not this one.
+
+      **The open diagnostic is now NF-INJ2c's node 1.** The count and position survived (2019, QB,
+      one player) even though the row did not — which is what makes the hypothesis testable at all.
+
+      ══ POST-RUN (2026-08-29) — findings from the decisive run itself ══
+
+      (A) ⚖️ NEEDS YOUR CALL — A DEFECT IN THIS STUDY'S OWN COHERENCE GATE, FOUND AFTER THE RUN,
+      RECORDED RATHER THAN REPAIRED. `coherence_restored` demands `= 0`, and its input is (i) a
+      per-fold MEAN and (ii) NOT attribution-controlled, though the gate's own comment says
+      "attributable". No eligible arm reaches exactly 0: `rate_refit` carries ONE violating player
+      in ONE of seven folds (2019 only) for a mean of 0.1429. So the pre-registration's claim that
+      the rate arms are "coherent BY CONSTRUCTION" is REFUTED at the edge, and the gate reads False
+      for every arm in the field. ⛔ NOT re-scored: relaxing a gate after seeing it fail is the
+      E2.1-r inversion in its most literal form, and the verdict is robust to it either way (the
+      winner `stratified` fails coherence at 8.57/fold in-fold and 7 attributable on the board under
+      ANY tolerance). What it DOES change is the reading of item (B). The legitimate remedy is a
+      SUCCESSOR whose coherence clause declares its attribution rule and its tolerance FORWARD —
+      the MARGIN2->3 / W7->W7b / VAL3->VAL3b shape, four times now.
+
+      (B) ⭐ THE POSITIVE CONTROL RETURNED `BLIND`, AND THE MEASURED MECHANISM OF THE BLINDNESS IS A
+      DETERMINISTIC CONSTRAINT, NOT STATISTICAL INSENSITIVITY — a distinction PLAT-CVP1's taxonomy
+      cannot currently express. `BLIND` means "a null from this family is free." But the blocking
+      table shows `stratified` and `feasibility_clamp` blocked under injection by
+      `coherence_restored` ALONE — every metric gate AND `dsr` fire correctly for them at the
+      injected effect. Since the injection moves CRPS and tier-rho and cannot move a board's
+      coherence, that gate is INJECTION-INVARIANT, so the control could not have returned anything
+      but BLIND however sensitive the family is. ⇒ this is NF-D18's `CONSTRAINT_REFUSED` — the state
+      the seven-state null taxonomy had to add because it classified only STATISTICAL nulls —
+      appearing one level up, inside the positive control. The honest reading is neither "the null
+      is free" nor "the family is fine": the family's statistical half demonstrably fires, and its
+      verdict is decided by a hard constraint no injection can reach. ⭐ SUGGESTED INSTRUMENT FIX
+      (cross-vertical, your call whether to card): `injected_effect_positive_control` should take a
+      declared set of INJECTION-INVARIANT gates and report `CONSTRAINT_BLOCKED` when the only
+      blockers are in it — otherwise every study carrying a deterministic constraint gets a `BLIND`
+      badge that reads as "your gates are worthless" (the MH2.7 lesson: a defect corrected N times
+      downstream is a defect in the INSTRUMENT).
+
+      (C) ⭐ A RENDER DEFECT THAT MADE THE RECORD CONTRADICT ITSELF, FIXED WITHOUT A REFIT. The
+      leaderboard's coherence column printed a per-fold MEAN at 0 decimals, so `rate_refit`'s real
+      0.1429 RENDERED AS "0" — one page above a `coherence_restored` gate that demands exactly 0 and
+      read False. The table asserted and the gate denied the same fact about the same number (E9.61),
+      and the rounding is what hid finding (A) from a reader. Fixed by adding `--rewrite-report`,
+      which re-derives the markdown from the COMMITTED json with zero re-scoring (the NF-W2e rule:
+      derive the report at report time, so correcting a wrong record never costs a decisive re-run —
+      which is the pressure that leaves a known-wrong record published). Every number through
+      tier-rho is byte-identical after the re-render; only the coherence column's representation
+      changed, and it now carries the fold count beside the mean.
+
+      (D) ⚠️ THE REPRODUCTION PIN FAILED — 40.58 worst absolute difference over 797 rows against a
+      0.05 tolerance — and the freshness gate PASSED (7.30h against a 48h bar) on the same run. The
+      two are asking different questions and the passing one gave false comfort: `--market-refresh`
+      pulls a live ADP/ECR snapshot that FEEDS the ordering, so a 7.3h gap is enough for the market
+      to swap two players and open a full point-gap at those rows. ⇒ the 48h freshness bar is far
+      too loose to support a reproduction pin, and the caveat carried in the pre-registration is now
+      QUANTIFIED. What it does and does not invalidate: every arm in §9 is built from the SAME local
+      board, so ARM-VS-ARM comparisons (the give-back column, the attributable-violation counts that
+      drive the verdict) are internally consistent and the verdict is unaffected; what does NOT
+      transfer is treating those percentages as the numbers on the served board. A successor wanting
+      a clean pin must build and score inside the publish window.
+
+      (E) 📎 The 2x2 interaction is +0.0482 against a sum-of-halves of -0.1042 — the halves are
+      CANCELLING, not additive (NF-W7e). Reading either marginal delta as a measurement of the other
+      setting would be wrong in both directions; the joint cell was scored, not inferred.
+
+      ══ PRE-RUN (2026-08-27/28) — findings from building the harness ══
+
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.

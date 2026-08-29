@@ -11,32 +11,35 @@
 
 Folds **2019–2025** (7), inherited from NF1.5 stage-1 `score_from` — not chosen here. Declared field **10** arms; degenerates `mvp1_null`, `random_order`; reference `incumbent`.
 
-| arm | target | assignment | CRPS | MAE | cov80 | tier ρ | coherence viol. |
-|---|---|---|---|---|---|---|---|
-| oracle_incumbent | — | oracle | 18.3783 | 23.0032 | 0.9811 | 0.9981 | 21 |
-| oracle_feasibility_clamp | — | oracle | 18.5021 | 23.3939 | 0.9796 | 0.9933 | 2 |
-| oracle_stratified | — | oracle | 20.2010 | 26.7027 | 0.9720 | 0.9859 | 10 |
-| oracle_points_rate_permute | — | oracle | 21.4692 | 29.1842 | 0.9636 | 0.8944 | 0 |
-| oracle_rate_refit | — | oracle | 21.4692 | 29.1842 | 0.9636 | 0.8944 | 0 |
-| oracle_rate_refit_reselect | — | oracle | 21.4692 | 29.1842 | 0.9636 | 0.8944 | 0 |
-| oracle_points_rate_stratified | — | oracle | 21.5314 | 29.4966 | 0.9620 | 0.8969 | 1 |
-| oracle_rate_refit_stratified | — | oracle | 21.5314 | 29.4966 | 0.9620 | 0.8969 | 1 |
-| stratified | points | point_within_strata | 26.0576 | 37.1596 | 0.9019 | 0.5584 | 9 |
-| points_rate_permute | points | rate_by_score | 26.1882 | 37.6075 | 0.9063 | 0.5241 | 0 |
-| points_rate_stratified | points | rate_within_strata | 26.2051 | 37.6015 | 0.9056 | 0.5237 | 0 |
-| rate_refit_stratified | rate | rate_within_strata | 26.2442 | 37.6658 | 0.9041 | 0.5248 | 0 |
-| rate_refit | rate | rate_by_score | 26.2755 | 37.7249 | 0.9058 | 0.5213 | 0 |
-| rate_refit_reselect | rate_reselect | rate_by_score | 26.2828 | 37.7287 | 0.9071 | 0.5134 | 0 |
-| feasibility_clamp | points | point_by_score_clamped | 26.3486 | 37.4490 | 0.8950 | 0.5553 | 1 |
-| incumbent | points | point_by_score | 26.5028 | 37.6858 | 0.8953 | 0.5555 | 19 |
-| mvp1_null | — | identity | 27.5071 | 39.5893 | 0.8923 | 0.3913 | 0 |
-| random_order | — | random | 45.3578 | 62.8817 | 0.7456 | 0.1447 | 36 |
+| arm | target | assignment | CRPS | MAE | cov80 | tier ρ | coherence viol./fold | folds w/ ≥1 |
+|---|---|---|---|---|---|---|---|---|
+| oracle_incumbent | — | oracle | 18.3783 | 23.0032 | 0.9811 | 0.9981 | 21.0000 | 7/7 |
+| oracle_feasibility_clamp | — | oracle | 18.5021 | 23.3939 | 0.9796 | 0.9933 | 1.8571 | 7/7 |
+| oracle_stratified | — | oracle | 20.2010 | 26.7027 | 0.9720 | 0.9859 | 10.1429 | 7/7 |
+| oracle_points_rate_permute | — | oracle | 21.4692 | 29.1842 | 0.9636 | 0.8944 | 0.4286 | 3/7 |
+| oracle_rate_refit | — | oracle | 21.4692 | 29.1842 | 0.9636 | 0.8944 | 0.4286 | 3/7 |
+| oracle_rate_refit_reselect | — | oracle | 21.4692 | 29.1842 | 0.9636 | 0.8944 | 0.4286 | 3/7 |
+| oracle_points_rate_stratified | — | oracle | 21.5314 | 29.4966 | 0.9620 | 0.8969 | 0.5714 | 4/7 |
+| oracle_rate_refit_stratified | — | oracle | 21.5314 | 29.4966 | 0.9620 | 0.8969 | 0.5714 | 4/7 |
+| stratified | points | point_within_strata | 26.0576 | 37.1596 | 0.9019 | 0.5584 | 8.5714 | 7/7 |
+| points_rate_permute | points | rate_by_score | 26.1882 | 37.6075 | 0.9063 | 0.5241 | 0.2857 | 1/7 |
+| points_rate_stratified | points | rate_within_strata | 26.2051 | 37.6015 | 0.9056 | 0.5237 | 0.2857 | 1/7 |
+| rate_refit_stratified | rate | rate_within_strata | 26.2442 | 37.6658 | 0.9041 | 0.5248 | 0.2857 | 2/7 |
+| rate_refit | rate | rate_by_score | 26.2755 | 37.7249 | 0.9058 | 0.5213 | 0.1429 | 1/7 |
+| rate_refit_reselect | rate_reselect | rate_by_score | 26.2828 | 37.7287 | 0.9071 | 0.5134 | 0.1429 | 1/7 |
+| feasibility_clamp | points | point_by_score_clamped | 26.3486 | 37.4490 | 0.8950 | 0.5553 | 1.1429 | 4/7 |
+| incumbent | points | point_by_score | 26.5028 | 37.6858 | 0.8953 | 0.5555 | 19.1429 | 7/7 |
+| mvp1_null | — | identity | 27.5071 | 39.5893 | 0.8923 | 0.3913 | 0.0000 | 0/7 |
+| random_order | — | random | 45.3578 | 62.8817 | 0.7456 | 0.1447 | 36.0000 | 7/7 |
 
 
 ⛔ **CRPS selects. MAE never does** — the target is skewed and the low-availability cohort is exactly where the conditional median sits near the floor (NF-D11 / NF-D14). Disclosed, not used.
 
 
 ⚠️ **The coherence column is a PRECONDITION, ⛔ not a discriminator.** The pre-registration says so in advance: the `rate_*` arms satisfy it by construction, so it must not be presented as evidence that they beat anything. It is reported for EVERY arm — a constraint a degenerate satisfies is fine (the metric then eliminates it); a *criterion* a degenerate WINS is fatal (NF1.8).
+
+
+⭐ **AND THE PRE-REGISTRATION'S "by construction" IS REFUTED BY THIS COLUMN, at the edge.** The value is a per-fold MEAN, and no arm reaches exactly 0: `rate_refit` carries one violating player in ONE of seven folds. The `coherence_restored` gate demands `= 0`, so it reads **False for every arm in the field** — which is why the injected-effect control below can only return `BLIND`, and it is a fact about a deterministic constraint, ⛔ not about the family's statistical sensitivity. Recorded as it fell (E2.1-r); the remedy is a successor whose coherence clause declares its attribution and its tolerance FORWARD.
 
 
 ## 2. Could the re-fit ACT? (NF-D20 — counted, never assumed)
@@ -128,6 +131,9 @@ Trial Sharpes: `{"incumbent": 0.0, "points_rate_permute": 0.5983, "rate_refit": 
 
 
 not one arm clears even the METRIC gates at an injected effect of 0.75 — this family would return a null for a real, large effect, so a null from it is free (NF1.7 (a): a check that cannot fire is not a check that passed).
+
+
+⚠️ **⛔ DO NOT READ THAT BADGE AT FACE VALUE — the blockage is a DETERMINISTIC CONSTRAINT, not statistical insensitivity, and the instrument cannot yet say so.** `coherence_restored` is INJECTION-INVARIANT: the injection moves CRPS and tier-ρ and cannot move a board's coherence, so no arm could clear it however sensitive this family is — and `stratified` and `feasibility_clamp` are blocked under injection by it ALONE, with every metric gate AND `dsr` firing correctly for them. `BLIND` reads "a null from this family is free"; the honest reading is that the family's statistical half demonstrably fires and its verdict was decided by a constraint no injection can reach — NF-D18's `CONSTRAINT_REFUSED`, one level up, inside a positive control. Recorded as the instrument returned it; **PLAT-CVP2** is carded to accept a FORWARD-DECLARED set of injection-invariant gates and report `CONSTRAINT_BLOCKED`, leaving `BLIND` its meaning for gates the injection could have moved.
 
 
 * metric gates: `beats_incumbent`, `bh_fdr`, `coherence_restored`, `degenerates_lose`, `fold_consistency`, `ordering_not_regressed`, `own_form_ceiling`

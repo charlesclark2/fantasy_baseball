@@ -476,3 +476,113 @@ def test_the_module_docstrings_do_not_claim_an_unproven_zero_harm():
     tree = ast.parse(_MODULE.read_text())
     doc = (ast.get_docstring(tree) or "").lower()
     assert "zero violations" not in doc
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Post-run: the render defect the decisive run exposed
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+_REPORT_MD = _FANTASY / "ablation_results" / "nf_inj2b_rate_ordering.md"
+
+
+def test_the_coherence_column_cannot_round_a_violation_away(tmp_path):
+    """⭐ THE DEFECT THE DECISIVE RUN EXPOSED, and the reason it mattered.
+
+    `coherence_violating_players` is a per-fold MEAN. Rendered at 0 decimals, `rate_refit`'s real
+    0.1429 — one violating player in one of seven folds — PRINTED AS "0", in a table sitting a page
+    above a `coherence_restored` gate that demands exactly 0 and therefore read False. The record
+    asserted and denied the same fact about the same number (E9.61: a rounded render that
+    contradicts a gate reading the same value), and it hid the refutation of this story's own
+    "coherent by construction" premise.
+
+    The guard is on the RENDERED artifact, not on the format string: a pin on the constant is
+    satisfied by an author typing it, while this fails if the column ever again shows an integer
+    zero for an arm whose stored value is non-zero (NF-INJ1-C — pin the rendered output)."""
+    if not (_REPORT.exists() and _REPORT_MD.exists()):
+        pytest.skip("no committed report")
+    rep = json.loads(_REPORT.read_text())
+    # ⭐ TWO READS, because they pin DIFFERENT things and only together are they a guard.
+    #  (1) the COMMITTED artifact — what a reader actually meets (NF-INJ1-C: pin the rendered
+    #      output, not the constant, because a pin on a format string is satisfied by typing it);
+    #  (2) a FRESH in-process render of the same stored report — without which a renderer break
+    #      leaves the committed .md untouched and this clause stays GREEN on its own break (the
+    #      RED proof measured exactly that: the artifact read alone is VACUOUS against the renderer).
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_nf_inj2b_runner", _RUNNER)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    fresh = tmp_path / "rerender.md"
+    mod.write_report_md(rep, fresh)
+    for label, md in (("committed", _REPORT_MD.read_text()), ("re-rendered", fresh.read_text())):
+        _assert_coherence_column_is_faithful(rep, md, label)
+
+
+def _assert_coherence_column_is_faithful(rep: dict, md: str, label: str) -> None:
+    # ⭐ SCOPE TO §1's TABLE. Every arm name also heads a row in §9's 2026 table, so an unscoped
+    # scan keeps the LAST match and silently asserts against the wrong table — the anchor-uniqueness
+    # lesson (E11.24: a break that lands on the wrong symbol) applied to a guard's own read.
+    lo = md.index("## 1. The declared field")
+    section = md[lo:md.index("## 2.", lo)]
+    rows = {m.group(1): m.group(2)
+            for m in re.finditer(r"^\| (\w+) \|(.+)\|\s*$", section, flags=re.M)}
+    checked = 0
+    for arm, s in rep["leaderboard"].items():
+        raw = s.get("coherence_violating_players")
+        if raw is None or arm not in rows or not (0.0 < float(raw) < 0.5):
+            continue          # only the arms a 0-decimal render would erase
+        checked += 1
+        assert f"{float(raw):.4f}" in rows[arm], (
+            f"[{label}] {arm} stores {raw} coherence violations/fold and its rendered row "
+            f"{rows[arm]!r} does not carry that value — a reader is told this arm is coherent "
+            f"while `coherence_restored` refuses it for being non-zero")
+    assert checked, (
+        "NON-VACUITY: no arm in the committed report has a coherence mean a 0-decimal render would "
+        "erase, so this guard tested nothing (an iterating guard that matches nothing passes on "
+        "nothing — DSR-CONV #690)")
+
+
+def test_no_eligible_arm_satisfies_the_coherence_gate_and_the_control_says_so():
+    """The two readings that must travel TOGETHER, or the record is misleading in one direction or
+    the other.
+
+    `coherence_restored` demands `= 0`; only `mvp1_null` (a pre-registered degenerate, the ordering
+    step OFF) reaches it. The injected effect moves CRPS and tier-ρ — it cannot move a board's
+    coherence — so the gate is INJECTION-INVARIANT, and the control could not have returned anything
+    but `BLIND` however sensitive the family's statistical half is. That does not rescue the null
+    (NF1.7 (a): a check that cannot fire has not passed), and it does not damn the family either;
+    it says the blockage is a DETERMINISTIC CONSTRAINT, which is the state NF-D18 had to add to a
+    taxonomy that classified only statistical nulls — here appearing inside the positive control
+    rather than inside `classify_null`."""
+    if not _REPORT.exists():
+        pytest.skip("no committed report")
+    rep = json.loads(_REPORT.read_text())
+    gt, pc = rep["gate_table"], rep["positive_control"]
+    passing = {a for a, g in gt.items() if g.get("coherence_restored")}
+    assert passing <= set(B.DEGENERATE_ARMS), (
+        f"an eligible arm satisfies coherence_restored ({sorted(passing - set(B.DEGENERATE_ARMS))}) "
+        f"— then the control's BLIND verdict is NOT explained by this gate and the reading below "
+        f"must be re-derived rather than carried forward")
+    assert pc["verdict"] == "BLIND"
+    blocked_by_coherence = {a for a, b in pc["blocking_gates"].items()
+                            if "coherence_restored" in b}
+    assert blocked_by_coherence >= (set(B.ARMS) - set(B.DEGENERATE_ARMS) - {"incumbent"}), (
+        "not every eligible arm is blocked by coherence under injection — the constraint reading "
+        "of the BLIND verdict would then be wrong")
+
+
+def test_the_report_can_be_re_rendered_without_re_scoring():
+    """NF-W2e, made mechanical: `write_report_md` is a pure function of the stored report, so a
+    wrong sentence or a rounded column is fixable without a refit. That is the property that keeps a
+    known-wrong record from staying published because correcting it would cost a decisive re-run."""
+    src = _RUNNER.read_text()
+    tree = ast.parse(src)
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name == "write_report_md")
+    args = {a.arg for a in fn.args.args}
+    assert args == {"rep", "path"}, f"write_report_md took {sorted(args)}"
+    called = {n.func.id for n in ast.walk(fn)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    for forbidden in ("run", "apply_2026", "score_from_frames", "verdict", "positive_control"):
+        assert forbidden not in called, (
+            f"write_report_md calls {forbidden}() — the renderer must not be able to re-score, or "
+            f"a re-render silently becomes a re-run")
+    assert "--rewrite-report" in src, "the re-render path is not reachable from the CLI"
