@@ -298,6 +298,31 @@ BREAKS: tuple[Break, ...] = (
           '    suffix = ""',
           gone='suffix = "_smoke" if args.smoke else ""',
           tests=("test_the_runner_never_reruns_a_smoke_as_a_gate",)),
+
+    Break("the coherence column goes back to a 0-decimal render — a real 0.1429 prints as \"0\" in "
+          "a table one page above a gate that demands exactly 0 and reads False (E9.61)",
+          RUN,
+          '"coherence viol./fold": _fmt(s["coherence_violating_players"], 4),',
+          '"coherence viol./fold": _fmt(s["coherence_violating_players"], 0),',
+          gone='_fmt(s["coherence_violating_players"], 4)',
+          tests=("test_the_coherence_column_cannot_round_a_violation_away",)),
+
+    Break("the renderer regains the ability to re-score — a --rewrite-report then silently becomes "
+          "a re-run, and \"no number can move\" stops being true",
+          RUN,
+          "def write_report_md(rep: dict, path: Path) -> None:\n    L: list[str] = []",
+          "def write_report_md(rep: dict, path: Path) -> None:\n    rep = verdict(rep)\n"
+          "    L: list[str] = []",
+          gone="def write_report_md(rep: dict, path: Path) -> None:\n    L: list[str] = []",
+          tests=("test_the_report_can_be_re_rendered_without_re_scoring",)),
+
+    Break("the policy module drifts from the committed report's verdict — NF-INJ2's own defect, a "
+          "module claiming the study never ran",
+          RO,
+          'GATE_STATUS = "NULL"',
+          'GATE_STATUS = "CLEARED"',
+          gone='GATE_STATUS = "NULL"',
+          tests=("test_the_recorded_gate_status_matches_the_committed_report",)),
 )
 
 
