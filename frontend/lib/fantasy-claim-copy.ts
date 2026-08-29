@@ -415,6 +415,34 @@ export const FULL_SEASON_RATE_DEFINITION =
 export const FULL_SEASON_RATE_UNAVAILABLE =
   "We don't publish an expected-games figure for this player, so there is nothing to divide by."
 
+// ── NF-RATE1 — the rate we WITHHOLD, and why the wording has to be this narrow ───────────────────
+//
+// ⛔ NO FORECAST LANGUAGE AND NO INJURY CLAIM, and none is possible here: this says nothing about
+// the player, his health, his role or his season. Like NF-INJ1-C's sibling label it is a statement
+// about OUR OWN arithmetic for him — the rate our two published numbers imply is higher than any
+// full season a real player has ever produced, so we do not print it. `best_alpha = 0`.
+//
+// ⚠️ IT MUST KEEP NAMING THE CONDITION A READER CAN CHECK — "higher than any real season" is the
+// only part that says WHY, and it is checkable against the very board it appears on. A future trim
+// to a bare "withheld" loses that; a trim toward "he is expected to miss time" would be an injury
+// forecast we have never made, on a column that is not about availability at all.
+//
+// ⭐ AND IT SAYS THE TWO NUMBERS BESIDE IT ARE UNAFFECTED, because they are (NF-INJ3b-SHIP ruling
+// D3 keeps both served) — a reader who wants this rate can still divide, and the disclosure would
+// be misleading if it implied otherwise.
+
+/** The short label on the withheld cell's disclosure. */
+export const FULL_SEASON_RATE_WITHHELD_LABEL =
+  "rate withheld — higher than any full season on record"
+
+/** The accessible name for the withheld cell, read out instead of a bare em-dash — which a screen
+ *  reader announces as nothing at all, i.e. as an empty cell. */
+export const FULL_SEASON_RATE_WITHHELD_SR_LABEL = "Full-season rate withheld"
+
+/** The tappable detail behind it. */
+export const FULL_SEASON_RATE_WITHHELD_DETAIL =
+  "Stretching this player's projection back out to seventeen games implies a season higher than any real player has posted at his position since 2006, so we don't print it here — a number that far outside what football has done tells a drafter nothing. His projected points and projected games are unchanged and still shown beside it."
+
 // ══ THE FREE / PAID BOUNDARY — stated as a division of labour, never as a withheld feature ══════
 //
 // ⭐ THE PRODUCT POINT THIS COPY HAS TO CARRY (GROWTH-100 §1): the paid aha is "what changed

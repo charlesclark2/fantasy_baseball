@@ -1235,7 +1235,15 @@ def test_the_rate_renders_beside_the_expected_total(component):
     assert re.search(r"<InfoTip\s+label=\{FULL_SEASON_RATE_LABEL\}", code), (
         "no column is headed with the canonical full-season-rate label"
     )
-    assert "fullSeasonRate(" in code, "the column is headed but never populated"
+    # ⚠️ RE-ANCHORED BY NF-RATE1, NOT WEAKENED. The column used to be populated by a bare
+    # `fullSeasonRate(...)` call; it is now populated by `<FullSeasonRateCell>`, the ONE owner all
+    # four render sites share (the board column, the board's CSV export, this table, and the player
+    # page's two tiles). Matching the component rather than the old helper name keeps the clause
+    # pointed at what actually renders — and makes it stricter, because a site that reverted to
+    # calling the raw helper inline would now be a second owner of the rule and would fail here.
+    assert "<FullSeasonRateCell" in code, (
+        "the column is headed but is not populated through the shared full-season-rate owner"
+    )
 
     # Adjacency: no other InfoTip-headed column may sit between the two.
     headers = re.findall(r"<InfoTip\s+label=\{(\w+)\}", code)

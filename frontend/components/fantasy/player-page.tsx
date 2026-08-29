@@ -41,7 +41,7 @@ import {
 import { useAllTrackRecordSeasons, useTrackRecordManifest } from "@/lib/fantasy-track-record"
 import { positionTierMap, type Player } from "@/lib/draft-optimizer"
 import { initials, nflTeamLogoUrl } from "@/lib/nfl-teams"
-import { availabilityTier, fullSeasonRate } from "@/lib/fantasy"
+import { availabilityTier } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 import {
   EXPECTED_POINTS_LABEL,
@@ -89,6 +89,7 @@ import {
   WeeklyDesignation,
   ReportedAbsence,
   WithheldStat,
+  FullSeasonRateSubLine,
 } from "@/components/fantasy/shared"
 import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
@@ -528,17 +529,19 @@ function PlayerView({ playerId }: { playerId: string }) {
               {/* The full-season rate rides as a SUB-LINE on the two totals a drafter actually
                   reads, rather than as a fifth tile: it is the same number re-expressed, so it
                   belongs attached to its total, and a tile of its own would present it as an
-                  independent projection. `fullSeasonRate` returns null when there is no expected-
-                  games figure to divide by, and `combineSub` drops a false entry — so the line is
-                  simply absent rather than showing an em-dash of its own. */}
+                  independent projection. `FullSeasonRateSubLine` returns `false` when there is no
+                  expected-games figure to divide by and `combineSub` drops a false entry — so the
+                  line is simply absent rather than showing an em-dash of its own. ⭐ NF-RATE1's
+                  WITHHELD state DOES render, as a stated absence with the disclosure behind it:
+                  "we have this number and are not printing it" is a fact, and an omitted line
+                  cannot say it. Both tiles go through the same owner as the two table columns. */}
               <Tile
                 testId="format-tile-ppr"
                 label="Full PPR (reference)"
                 value={num(proj.fpPpr)}
                 sub={combineSub(
                   pctPpr != null && `${ordinal(pctPpr)} pct. among ${proj.pos}s`,
-                  fullSeasonRate(proj.fpPpr, proj.g) != null &&
-                    `${FULL_SEASON_RATE_LABEL}: ${num(fullSeasonRate(proj.fpPpr, proj.g))}`,
+                  FullSeasonRateSubLine({ pts: proj.fpPpr, games: proj.g, pos: proj.pos }),
                   proj.fpP10 != null && proj.fpP90 != null && `80%: ${int(proj.fpP10)}–${int(proj.fpP90)}`,
                 )}
               />
@@ -563,8 +566,7 @@ function PlayerView({ playerId }: { playerId: string }) {
                     ? "Not ranked in this format"
                     : combineSub(
                         pctLeague != null && `${ordinal(pctLeague)} pct. among ${proj.pos}s`,
-                        fullSeasonRate(boardRow?.pts, proj.g) != null &&
-                          `${FULL_SEASON_RATE_LABEL}: ${num(fullSeasonRate(boardRow?.pts, proj.g))}`,
+                        FullSeasonRateSubLine({ pts: boardRow?.pts, games: proj.g, pos: proj.pos }),
                         boardRow?.ptsP10 != null &&
                           boardRow?.ptsP90 != null &&
                           `80%: ${int(boardRow.ptsP10)}–${int(boardRow.ptsP90)}`,
