@@ -133,6 +133,9 @@ Trial Sharpes: `{"incumbent": 0.0, "points_rate_permute": 0.5983, "rate_refit": 
 not one arm clears even the METRIC gates at an injected effect of 0.75 — this family would return a null for a real, large effect, so a null from it is free (NF1.7 (a): a check that cannot fire is not a check that passed).
 
 
+⚠️ **⛔ DO NOT READ THAT BADGE AT FACE VALUE — the blockage is a DETERMINISTIC CONSTRAINT, not statistical insensitivity, and the instrument cannot yet say so.** `coherence_restored` is INJECTION-INVARIANT: the injection moves CRPS and tier-ρ and cannot move a board's coherence, so no arm could clear it however sensitive this family is — and `stratified` and `feasibility_clamp` are blocked under injection by it ALONE, with every metric gate AND `dsr` firing correctly for them. `BLIND` reads "a null from this family is free"; the honest reading is that the family's statistical half demonstrably fires and its verdict was decided by a constraint no injection can reach — NF-D18's `CONSTRAINT_REFUSED`, one level up, inside a positive control. Recorded as the instrument returned it; **PLAT-CVP2** is carded to accept a FORWARD-DECLARED set of injection-invariant gates and report `CONSTRAINT_BLOCKED`, leaving `BLIND` its meaning for gates the injection could have moved.
+
+
 * metric gates: `beats_incumbent`, `bh_fdr`, `coherence_restored`, `degenerates_lose`, `fold_consistency`, `ordering_not_regressed`, `own_form_ceiling`
 * deflation-class gates present: `dsr`
 * survivors: `none`  ·  metric survivors: `none`  ·  deflation-blocked: `none`

@@ -1391,6 +1391,24 @@ def write_report_md(rep: dict, path: Path) -> None:
       f"**+{c['effect_injected_tier_rho']} tier-ρ** per fold on every non-degenerate, "
       f"non-reference arm.\n")
     A(f"\n{c['reason']}\n")
+    # ⭐ PM ruling D2 (2026-08-29): annotate the badge at the point of reading, so a future reader
+    # cannot take it at face value. Render-time only — the control's own verdict string above is
+    # left exactly as the instrument returned it (E2.1-r: a result is annotated, never re-labelled).
+    _blockers = {g for b in c.get("blocking_gates", {}).values() for g in b}
+    _invariant = sorted(_blockers & {"coherence_restored"})
+    if c["verdict"] == "BLIND" and _invariant:
+        A(f"\n⚠️ **⛔ DO NOT READ THAT BADGE AT FACE VALUE — the blockage is a DETERMINISTIC "
+          f"CONSTRAINT, not statistical insensitivity, and the instrument cannot yet say so.** "
+          f"`{'`, `'.join(_invariant)}` is INJECTION-INVARIANT: the injection moves CRPS and tier-ρ "
+          f"and cannot move a board's coherence, so no arm could clear it however sensitive this "
+          f"family is — and `stratified` and `feasibility_clamp` are blocked under injection by it "
+          f"ALONE, with every metric gate AND `dsr` firing correctly for them. `BLIND` reads \"a "
+          f"null from this family is free\"; the honest reading is that the family's statistical "
+          f"half demonstrably fires and its verdict was decided by a constraint no injection can "
+          f"reach — NF-D18's `CONSTRAINT_REFUSED`, one level up, inside a positive control. "
+          f"Recorded as the instrument returned it; **PLAT-CVP2** is carded to accept a "
+          f"FORWARD-DECLARED set of injection-invariant gates and report `CONSTRAINT_BLOCKED`, "
+          f"leaving `BLIND` its meaning for gates the injection could have moved.\n")
     A(f"\n* metric gates: `{'`, `'.join(c['metric_gates'])}`\n"
       f"* deflation-class gates present: `{'`, `'.join(c['deflation_gates']) or '—'}`\n"
       f"* survivors: `{'`, `'.join(c['survivors']) or 'none'}`  ·  metric survivors: "
