@@ -1,0 +1,80 @@
+{
+ "PC_clean": {
+  "planted": {},
+  "expected": "NO_MEASURABLE_DEFECT",
+  "reps": 20,
+  "route_rate": 0.9,
+  "route_bar": 0.9,
+  "wrong_lever_rate": 0.0,
+  "wrong_lever_bar": 0.1,
+  "wrong_lever_key": null,
+  "passed": true,
+  "outcome_counts": {
+   "NO_MEASURABLE_DEFECT": 18,
+   "IRREDUCIBLE": 2
+  },
+  "median_closed_shape": 0.0,
+  "median_closed_feature": 0.0
+ },
+ "PC_dispersion": {
+  "planted": {
+   "sigma_cv": 0.35
+  },
+  "expected": "FEATURE-BOUND",
+  "reps": 20,
+  "route_rate": 0.9,
+  "route_bar": 0.8,
+  "wrong_lever_rate": 0.0,
+  "wrong_lever_bar": 0.1,
+  "wrong_lever_key": "closed_shape",
+  "passed": true,
+  "outcome_counts": {
+   "NO_MEASURABLE_DEFECT": 1,
+   "IRREDUCIBLE": 1,
+   "FEATURE-BOUND": 18
+  },
+  "median_closed_shape": 0.0,
+  "median_closed_feature": 1.0058217106756968
+ },
+ "PC_shape": {
+  "planted": {
+   "skew_alpha": 4.0
+  },
+  "expected": "SHAPE-BOUND",
+  "reps": 20,
+  "route_rate": 0.9,
+  "route_bar": 0.8,
+  "wrong_lever_rate": 0.0,
+  "wrong_lever_bar": 0.1,
+  "wrong_lever_key": "closed_feature",
+  "passed": true,
+  "outcome_counts": {
+   "NO_MEASURABLE_DEFECT": 1,
+   "IRREDUCIBLE": 1,
+   "SHAPE-BOUND": 18
+  },
+  "median_closed_shape": 1.0149371923275219,
+  "median_closed_feature": 0.0
+ },
+ "PC_both": {
+  "planted": {
+   "sigma_cv": 0.35,
+   "skew_alpha": 4.0
+  },
+  "expected": "BOTH",
+  "reps": 20,
+  "route_rate": 0.6,
+  "route_bar": 0.8,
+  "wrong_lever_rate": 0.0,
+  "wrong_lever_bar": 0.1,
+  "wrong_lever_key": null,
+  "passed": false,
+  "outcome_counts": {
+   "NO_MEASURABLE_DEFECT": 1,
+   "SHAPE-BOUND": 7,
+   "BOTH": 12
+  },
+  "median_closed_shape": 1.0060777245490848,
+  "median_closed_feature": 0.6118882736847315
+ }
+}

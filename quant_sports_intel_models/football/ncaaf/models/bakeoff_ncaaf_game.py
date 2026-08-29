@@ -283,20 +283,48 @@ def load_matrix(source: str) -> pd.DataFrame:
     return df
 
 
-def build_clv_staging(min_year: int = 2020) -> pd.DataFrame:
-    """The vs-market/CLV staging mart P1.4 OWNS: the leakage-safe CLOSING consensus line per game,
-    keyed to the matrix `game_id`.
+#: The `_snapshot_kind` a P0.6c T-1 (~24h-prior) row carries. Mirrors
+#: `odds_recurring_capture.SNAPSHOT_KIND_T1`; spelled here rather than imported so this bake-off
+#: module does not pull the paid-ingest module (and its Odds-API client) into a modelling import.
+#: Pinned equal by a guard test, which is what keeps the two from forking (E9.61).
+_SNAPSHOT_KIND_T1 = "t_minus_1"
+_SNAPSHOT_KIND_CLOSE = "close"
 
-    Path (a CROSS-SOURCE join — verified by row-count, the P1.2b dead-bridge lesson):
-      odds_ncaaf_historical (Odds-API team names, commence_time)
-        ⋈  games   (season + CFBD team-name PREFIX match + kickoff proximity)  →  CFBD game id
-      →  the CFBD id IS the matrix `game_id` (int).
-    Only snapshots with `_snapshot_ts < commence_time` are eligible (leakage-safe close); per game
-    we keep the LATEST such snapshot and take the cross-book MEDIAN home spread / total / home ML.
+#: The ahead-of-kickoff live board's OWN table (NCAAF-ODDS-LIVE). Named here rather than imported
+#: for the same reason as the kind strings above; pinned equal by a guard test.
+_ODDS_LIVE_SOURCE = "odds_ncaaf_live"
+
+
+#: Fold accents + punctuation before comparing two sources' school names. DuckDB's own
+#: `strip_accents`, then drop everything that is not alphanumeric or a space.
+#: ⚠️ OPT-IN (`accent_fold=`) and used ONLY by the live leg. Measured 2026-08-27: the raw prefix
+#: join MISSES `San José State` vs "San Jose State Spartans" and `Hawai'i` vs "Hawaii Rainbow
+#: Warriors" — 2 of the 8 opener games. Applying it to the DEFAULT leg would ADD rows to the CLV
+#: mart, i.e. change the population P1.4's model selection and VAL1's null were decided on, so the
+#: default stays byte-identical and the false-negative sweep for the historical legs is carded.
+_NAME_FOLD = "lower(regexp_replace(strip_accents({}), '[^a-zA-Z0-9 ]', '', 'g'))"
+
+
+def _clv_sql(O: str, G: str, min_year: int, *, kind: str | None, prefix: str,
+             accent_fold: bool = False) -> str:
+    """The odds→game staging join, ONE rule set, parameterised by snapshot kind and column prefix.
+
+    ⭐ NCAAF-P3.1b lifted this out of `build_clv_staging` so the T-1 read is the SAME join rather
+    than a second copy free to drift from the one the model was validated against (E9.61). With
+    `kind=None` it is byte-for-byte the query P1.4 decided on — no kind filter, latest pre-commence
+    snapshot per event, `close_` prefix.
     """
-    from quant_sports_intel_models.football.ncaaf.ingest.query_lake import q, delta
-    O, G = delta("odds_ncaaf_historical"), delta("games")
-    sql = f"""
+    kind_filter = "" if kind is None else (
+        # A row landed before P0.6c carries no `_snapshot_kind` at all and is implicitly a CLOSE
+        # (the only kind P0.6/P0.6b ever captured) — the same coalesce `odds_recurring_capture`
+        # uses, so legacy rows classify correctly without a backfill migration.
+        f"\n          and coalesce(json_extract_string(raw_json,'$._snapshot_kind'), "
+        f"'{_SNAPSHOT_KIND_CLOSE}') = '{kind}'"
+    )
+    fold = (lambda col: _NAME_FOLD.format(col)) if accent_fold else (lambda col: col)
+    home_match = f"{fold('c.odds_home')} like {fold('g.g_home')} || '%'"
+    away_match = f"{fold('c.odds_away')} like {fold('g.g_away')} || '%'"
+    return f"""
     with snaps as (
         select json_extract_string(raw_json,'$.id')            as event_id,
                season,
@@ -307,13 +335,13 @@ def build_clv_staging(min_year: int = 2020) -> pd.DataFrame:
                raw_json
         from {O}
         where json_extract_string(raw_json,'$._snapshot_ts')
-            < json_extract_string(raw_json,'$.commence_time')          -- leakage-safe close
-          and season >= {int(min_year)}
+            < json_extract_string(raw_json,'$.commence_time')   -- leakage-safe: strictly pre-kickoff
+          and season >= {int(min_year)}{kind_filter}
     ),
     latest as (   -- the single latest pre-commence snapshot per event
         select *, row_number() over (partition by event_id order by snap_ts desc) rn from snaps
     ),
-    close_snap as (select * from latest where rn = 1),
+    chosen_snap as (select * from latest where rn = 1),   -- the latest snapshot OF THE SELECTED KIND
     -- unnest bookmakers → markets → outcomes and pull the home spread / over total / home ML
     quotes as (
         select cs.event_id, cs.season, cs.odds_home, cs.odds_away, cs.commence, cs.snap_ts,
@@ -321,7 +349,7 @@ def build_clv_staging(min_year: int = 2020) -> pd.DataFrame:
                json_extract_string(oc,'$.name')                   as outcome_name,
                try_cast(json_extract_string(oc,'$.point') as double) as point,
                try_cast(json_extract_string(oc,'$.price') as double) as price
-        from close_snap cs,
+        from chosen_snap cs,
              unnest(cast(json_extract(cs.raw_json,'$.bookmakers') as json[])) as b(bm),
              unnest(cast(json_extract(bm,'$.markets')            as json[])) as m(mk),
              unnest(cast(json_extract(mk,'$.outcomes')           as json[])) as o(oc)
@@ -330,9 +358,9 @@ def build_clv_staging(min_year: int = 2020) -> pd.DataFrame:
         select event_id, any_value(season) season, any_value(odds_home) odds_home,
                any_value(odds_away) odds_away, any_value(commence) commence,
                any_value(snap_ts) snap_ts,
-               median(point) filter (where market='spreads' and outcome_name = odds_home) as close_home_spread,
-               median(point) filter (where market='totals'  and outcome_name = 'Over')    as close_total,
-               median(price) filter (where market='h2h'     and outcome_name = odds_home) as close_home_ml_american
+               median(point) filter (where market='spreads' and outcome_name = odds_home) as {prefix}home_spread,
+               median(point) filter (where market='totals'  and outcome_name = 'Over')    as {prefix}total,
+               median(price) filter (where market='h2h'     and outcome_name = odds_home) as {prefix}home_ml_american
         from quotes group by event_id
     ),
     games as (
@@ -342,23 +370,92 @@ def build_clv_staging(min_year: int = 2020) -> pd.DataFrame:
                json_extract_string(raw_json,'$.awayTeam')   g_away
         from {G}
     )
-    select g.season_game_id as game_id, c.close_home_spread, c.close_total,
-           c.close_home_ml_american, c.snap_ts as close_snapshot_ts
+    select g.season_game_id as game_id, c.{prefix}home_spread, c.{prefix}total,
+           c.{prefix}home_ml_american, c.snap_ts as {prefix}snapshot_ts
     from consensus c
     join games g
       on g.season = c.season
-     and c.odds_home like g.g_home || '%'
-     and c.odds_away like g.g_away || '%'
+     and {home_match}
+     and {away_match}
     """
-    clv = q(sql)
+
+
+def _run_clv_leg(q, O: str, G: str, min_year: int, *, kind: str | None, prefix: str,
+                 missing_ok: bool = False, accent_fold: bool = False) -> pd.DataFrame:
+    """One snapshot kind → `game_id` + its `{prefix}*` consensus columns, deduped, ML→prob added.
+
+    `missing_ok` is for the LIVE leg only: `odds_ncaaf_live` does not exist until the live capture
+    has fired once, and a serving read must treat a never-written table as "no line yet", not as a
+    failure. ⛔ It is NOT a blanket swallow — `query_or_missing` establishes absence by LISTING
+    `_delta_log/` and RAISES on anything it cannot prove absent (NCAAF-LAKE1), so a transient read
+    failure still surfaces instead of being served as an empty board.
+    """
+    if missing_ok:
+        from quant_sports_intel_models.football.ncaaf.ingest.query_lake import query_or_missing
+        clv = query_or_missing(_clv_sql(O, G, min_year, kind=kind, prefix=prefix,
+                                        accent_fold=accent_fold))
+        if clv is None or clv.empty:
+            return pd.DataFrame(columns=["game_id", f"{prefix}home_spread", f"{prefix}total",
+                                         f"{prefix}home_ml_american", f"{prefix}snapshot_ts",
+                                         f"{prefix}home_ml_prob"]).astype({"game_id": "int64"})
+    else:
+        clv = q(_clv_sql(O, G, min_year, kind=kind, prefix=prefix,
+                         accent_fold=accent_fold))
     # dedupe (a rare double-prefix match) — keep one row per game_id.
     clv = clv.dropna(subset=["game_id"]).drop_duplicates(subset=["game_id"], keep="first")
     clv["game_id"] = clv["game_id"].astype("int64")
     # American home ML → implied prob (vig-inclusive; the de-vig is a follow-on refinement).
-    ml = clv["close_home_ml_american"]
-    clv["close_home_ml_prob"] = np.where(
+    ml = clv[f"{prefix}home_ml_american"]
+    clv[f"{prefix}home_ml_prob"] = np.where(
         ml < 0, (-ml) / ((-ml) + 100.0), np.where(ml > 0, 100.0 / (ml + 100.0), np.nan)
     )
+    return clv
+
+
+def build_clv_staging(min_year: int = 2020, *, with_t1: bool = False,
+                      with_live: bool = False) -> pd.DataFrame:
+    """The vs-market/CLV staging mart P1.4 OWNS: the leakage-safe CLOSING consensus line per game,
+    keyed to the matrix `game_id`.
+
+    Path (a CROSS-SOURCE join — verified by row-count, the P1.2b dead-bridge lesson):
+      odds_ncaaf_historical (Odds-API team names, commence_time)
+        ⋈  games   (season + CFBD team-name PREFIX match + kickoff proximity)  →  CFBD game id
+      →  the CFBD id IS the matrix `game_id` (int).
+    Only snapshots with `_snapshot_ts < commence_time` are eligible (leakage-safe close); per game
+    we keep the LATEST such snapshot and take the cross-book MEDIAN home spread / total / home ML.
+
+    `with_t1` (NCAAF-P3.1b, default OFF — every modelling caller keeps TODAY'S FRAME EXACTLY):
+    ALSO return the P0.6c T-1 (~24h-prior) consensus as `t1_*` columns, so the serving layer can
+    show the market's own PRE-kickoff line beside a pre-kickoff projection. Two reasons it is
+    opt-in rather than always-on:
+
+      1. ⛔ **A `t1_*` column added to the default frame would become a MODEL FEATURE.**
+         `feature_columns` excludes `_ID_COLS`, labels and `_CLOSE_COLS` by NAME — a numeric
+         `t1_home_spread` matches none of those, so it would sail into every training contract and
+         `assert_market_blind` would (correctly) HALT the bake-off. Default-off means no recorded
+         P1.4/P2.1 result can move because of this story.
+      2. It costs a second lake read, which a modelling assemble has no use for.
+
+    ⚠️ The join is an OUTER merge, deliberately. A kickoff whose T-1 has been captured but whose
+    close has NOT is exactly the pre-kickoff case this exists for, and an inner/left merge onto the
+    close frame would drop it. (It is not dropped TODAY only because the kind-blind `close_` leg
+    picks the T-1 row up and mislabels it `close` — the mislabel `payloads._market` now fixes.)
+    """
+    from quant_sports_intel_models.football.ncaaf.ingest.query_lake import q, delta
+    O, G = delta("odds_ncaaf_historical"), delta("games")
+    clv = _run_clv_leg(q, O, G, min_year, kind=None, prefix="close_")
+    if with_t1:
+        t1 = _run_clv_leg(q, O, G, min_year, kind=_SNAPSHOT_KIND_T1, prefix="t1_")
+        clv = clv.merge(t1, on="game_id", how="outer")
+    if with_live:
+        # ⛔ A DIFFERENT TABLE, and that is the point: `odds_ncaaf_live` is the ahead-of-kickoff
+        # board, and it must never reach the CLV mart. This leg's own kind filter is None because
+        # every row in that table is a live observation — the separation is the TABLE, not a flag.
+        live = _run_clv_leg(q, delta(_ODDS_LIVE_SOURCE), G, min_year, kind=None, prefix="live_",
+                            missing_ok=True, accent_fold=True)
+        clv = clv.merge(live, on="game_id", how="outer")
+    if with_t1 or with_live:
+        clv["game_id"] = clv["game_id"].astype("int64")
     return clv
 
 

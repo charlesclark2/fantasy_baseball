@@ -69,8 +69,17 @@ def build_market_slate() -> dict:
     for game, row in zip(slate["games"][:N_WITH_MARKET], rows[:N_WITH_MARKET]):
         # The SHIPPING builder, not a literal — so the block's keys, its `source` and its
         # `reason: null` are production's answer rather than this script's.
-        game["market"] = payloads._market(row, read_failed=False)
+        #
+        # ⭐ NCAAF-P3.1b: the game's OWN kickoff goes in, because `_market` now REFUSES a line it
+        # cannot prove is pre-kickoff. Passing it means these fixtures clear the real leakage guard
+        # rather than routing around it — a fixture that could not survive the shipping builder is
+        # a fixture the app can never actually receive. (These 2025 closes precede the 2026 fixture
+        # kickoffs by ~11 months, so the guard passes on the facts, not by exemption.)
+        game["market"] = payloads._market(
+            row, read_failed=False,
+            commence_time=game.get("commence_time"), game_id=game.get("game_id"))
         assert game["market"]["status"] == "available", game["market"]
+        assert game["market"]["source"] == payloads.MARKET_SOURCE_CLOSE, game["market"]
     # Re-validate the whole slate through the contract: a fixture that would not survive the
     # response model is a fixture the app can never actually receive.
     return contract.NcaafSlate.model_validate(slate).model_dump()

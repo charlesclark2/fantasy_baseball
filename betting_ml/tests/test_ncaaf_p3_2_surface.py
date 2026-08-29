@@ -278,16 +278,64 @@ def test_the_market_panel_names_no_difference_between_the_two_columns():
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 3. Fixture provenance
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+def _split_fields_added_since_capture(validated, blob, path=""):
+    """Recursively strip keys the CONTRACT declares and the CAPTURE predates.
+
+    Returns `(stripped_validated, added_paths)`. Nothing the fixture CARRIES is touched, so the
+    caller can still demand exact equality on every captured key — the only thing tolerated is a
+    field declared after the bytes were captured.
+    """
+    added: list[str] = []
+    if isinstance(validated, dict) and isinstance(blob, dict):
+        out = {}
+        for key, value in validated.items():
+            here = f"{path}.{key}" if path else key
+            if key not in blob:
+                added.append(here)
+                continue
+            sub, sub_added = _split_fields_added_since_capture(value, blob[key], here)
+            out[key], _ = sub, added.extend(sub_added)
+        return out, added
+    if isinstance(validated, list) and isinstance(blob, list) and len(validated) == len(blob):
+        out_list = []
+        for i, (value, other) in enumerate(zip(validated, blob)):
+            sub, sub_added = _split_fields_added_since_capture(value, other, f"{path}[{i}]")
+            out_list.append(sub)
+            added.extend(sub_added)
+        return out_list, added
+    return validated, added
+
+
 @pytest.mark.parametrize(
     "path,model",
     [(_CAPTURED_MANIFEST, contract.NcaafManifest), (_CAPTURED_SLATE, contract.NcaafSlate)],
     ids=["manifest", "slate"],
 )
 def test_the_captured_fixtures_are_payloads_the_server_could_actually_send(path, model):
-    """Otherwise every E2E conclusion is "given a payload no caller can receive, the page renders Y"."""
+    """Otherwise every E2E conclusion is "given a payload no caller can receive, the page renders Y".
+
+    ⚠️ RE-ANCHORED by NCAAF-P3.1b, which declared `market.as_of` — an ADDITIVE field (NF-C0), so
+    the deployed server now sends one key these captured bytes predate. The property that matters
+    is unchanged and still exactly asserted: nothing the fixture carries may be REJECTED or altered
+    by the response model. A field the CAPTURE predates is tolerated ONLY when it validates to
+    `null`, i.e. it cannot be carrying content the fixture is silently missing — and the test NAMES
+    the fields it tolerated, so a stale capture stays visible rather than becoming invisible.
+    (Closing it properly is a re-capture through `capture-fixtures.mjs` AFTER the Lambda deploy —
+    the fixture cannot lead the wire.)
+    """
     blob = json.loads(path.read_text())
     validated = model.model_validate(blob).model_dump()
-    assert validated == blob, f"{path.name} does not round-trip the response model unchanged"
+    stripped, added = _split_fields_added_since_capture(validated, blob)
+    assert stripped == blob, f"{path.name} does not round-trip the response model unchanged"
+    for dotted in added:
+        node = validated
+        for part in re.findall(r"[^.\[\]]+", dotted):
+            node = node[int(part)] if part.isdigit() else node[part]
+        assert node is None, (
+            f"{path.name} predates the declared field {dotted!r} AND that field validates to "
+            f"{node!r}, not null — the capture is missing real content, not merely a new key. "
+            "Re-capture the fixture rather than tolerating this."
+        )
 
 
 def test_the_captured_slate_still_holds_the_state_the_specs_reason_from():

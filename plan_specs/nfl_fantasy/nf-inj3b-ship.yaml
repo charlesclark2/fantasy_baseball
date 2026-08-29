@@ -211,6 +211,56 @@ spec:
           Third member of the runner-clobber family; the durable fix is the run-scoped report path,
           folded into the next runner-touching session. The operator's --no-report workaround stands
           meanwhile.
+      d7_combined_read_gate:
+        ruling: >
+          (a) ACCEPT THE BOX'S PUBLISH — with the combined read CONVERTED from a pre-publish GATE
+          to a REQUIRED SAME-MORNING POST-PUBLISH CHECK.
+        source: PM response 2026-08-25, before the 09:15 CDT fire
+        reasoning_verbatim: >
+          D10's principle is that the read binds to the board that publishes. Strictly honoring it
+          here means holding the schedule and hand-publishing a board we KNOW is worse (17 name
+          regressions, a flaky casing read, a laptop whose mart runs days stale — your own §7
+          findings). The risk the pre-gate protects against is bounded three ways tonight: the read
+          passed on THREE builds across TWO injury vintages (the pass is not vintage-specific); the
+          D6 stamp guard means the one silent failure mode — incumbent under a fitted stamp — pages
+          CRITICAL instead of publishing; and reversal is one flag plus a republish, pinned by test.
+          Under those three conditions, converting the read to an immediate post-publish check
+          trades a bounded few-hours exposure for a strictly better board. THE PRECEDENT IS NARROW:
+          scheduled publish + read-passed-on-multiple-vintages + cheap tested reversal + a stamp
+          guard in the image. Absent any of those four, D10 stays a pre-gate.
+        precedent_conditions:
+          - a SCHEDULED publish (not a hand-run one)
+          - the combined read has PASSED on MULTIPLE board vintages
+          - reversal is cheap AND pinned by test (one flag + a republish)
+          - the D6 stamp guard is present IN THE DEPLOYED IMAGE
+        precedent_scope: >
+          ⛔ NARROW. Absent ANY of the four conditions above, D10 reverts to a PRE-publish gate.
+          This is not a general relaxation of D10 and must not be cited as one.
+        operator_morning_sequence: >
+          Due 09:30 CDT 2026-08-25, in order: (1) the §5 S3 check (Alec Pierce g ~3.7 = flip
+          applied; 'AJ DILLON' present = names repaired); (2) the ruling-3(a) by-name confirmation
+          on /projections-full (Pierce / Kittle / Higgins — stat line withheld + disclosure
+          present); (3) the POST-PUBLISH combined read against the PUBLISHED board.
+          ⭐ A FAILED READ TRIGGERS THE REVERSAL, NOT A DEBATE.
+      d8_triage_routings:
+        source: PM response 2026-08-25 (all executed PM-side; routings recorded here only)
+        findings_i_to_vi: >
+          ONE To Do card — the PUBLISH-CHAIN HARDENING BUNDLE: the input-vintage export guard, the
+          casing zero-resolve refusal, the operator runbook carrying the FIXED D10 glance (the one
+          that reads the injury vintage, not just overrides + rookie rows), the
+          `--injury-covariates` help-text fix, and the two-dbt-projects landmine (CLAUDE.md, via
+          that session).
+        follow_up_9: >
+          Its own To Do card — a RENDER fix across ALL FOUR sites including the CSV export column
+          `full_season_rate`; explicitly NOT new (WILL LEVIS renders 633 and predates the flip).
+        m_correction_note: >
+          The MICHAEL MAYER replacement evidence in the -M correction is noted with approval —
+          games-unchanged-points-moved is the clean exhibit the CHRIS COLLIER row never was.
+        section_4_corrections: >
+          Both acknowledged and recorded as IMPROVING the basis: Kittle is off the violator list on
+          fresh data (11, no TEs), and the urgency premise transferred from "the live board is
+          wrong" to "the live board is correct-but-incumbent." Ruling D3 stands on its remaining
+          legs — certified games accuracy, full attributability, and disclosure.
     verdict: >
       FLIPPED — DEPLOY-HELD, awaiting the operator's publish call. Every node ran and
       passed. D7: the covariate feed is built INSIDE the board build (758 rows for 2026)

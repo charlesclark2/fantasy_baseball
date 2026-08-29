@@ -46,3 +46,11 @@ the artifact the operator's run produced. Quick smokes and sub-2-minute
 harnesses stay in-session. Kickoff prompts carry this rule in their
 DISCIPLINES block; a spec whose plan contains a known long-running node names
 it as an OPERATOR-RUN step up front.
+
+## Backend-before-frontend sequencing (operator ruling 2026-08-25)
+When a backend/serving story and a frontend story touch the same surface or
+contract in the same window, the backend story **completes first** — the
+frontend consumes a landed contract, never a moving one, and absorbs any
+client-side change the backend story flagged. Kickoff prompts for the
+frontend half state the dependency explicitly. Genuinely disjoint stories
+(different surfaces, no shared contract) may still run in parallel.

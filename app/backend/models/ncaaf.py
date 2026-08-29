@@ -252,8 +252,21 @@ class NcaafMarketLine(BaseModel):
     status: Literal["available", "unavailable"] = "unavailable"
     #: machine-readable cause when `status == "unavailable"`; None when available.
     reason: str | None = None
+    #: WHICH observation this line is — `odds_api_live` (the ahead-of-kickoff board,
+    #: NCAAF-ODDS-LIVE), `odds_api_historical_t_minus_1` (the ~24h-prior snapshot, P0.6c) or
+    #: `odds_api_historical_close` (K−5min). All three can coexist per kickoff, and they are
+    #: materially different numbers — a live line days out and a close are a week of movement
+    #: apart — so a served number that did not SAY which one it is would be a number whose
+    #: meaning a reader cannot recover. The served line is the FRESHEST of them that is provably
+    #: pre-kickoff; `as_of` says when.
     source: str | None = None
     snapshot_ts: str | None = None
+    #: NCAAF-P3.1b, ADDITIVE (NF-C0): the instant the served line was captured — the same value as
+    #: `snapshot_ts`, declared under a reader-facing name because `snapshot_ts` means the MODEL's
+    #: snapshot in `provenance` and the MARKET's here, and one word meaning two instants on one
+    #: payload is the mislabelling class this vertical keeps paying for. A surface can quote
+    #: `as_of` beside the line without having to know which block it came from.
+    as_of: str | None = None
     home_spread: float | None = None
     total: float | None = None
     home_moneyline_american: float | None = None
