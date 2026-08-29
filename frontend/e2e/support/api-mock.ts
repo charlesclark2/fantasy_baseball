@@ -93,11 +93,16 @@ export const FIXTURES = {
   //
   //   ncaafManifest / ncaafSlate      CAPTURED verbatim from production on 2026-08-24, once P3.1's
   //                                   deploy + the API-Gateway NONE routes went live. Real bytes.
-  //   ncaafSlateWithMarket            GENERATED, because there is nothing to capture: every game on
-  //                                   the live wire is `market.status = "unavailable"` (the only
-  //                                   NCAAF odds capture scheduled for 2026 is the paid /historical
-  //                                   catch-up, which cannot reach a kickoff until it is PAST —
-  //                                   P3.1 closeout item 2). Its market blocks are REAL 2025 closes
+  //   ncaafSlateWithMarket            GENERATED, because at capture time there was nothing to
+  //                                   capture: every game on the wire was `market.status =
+  //                                   "unavailable"` (the only NCAAF odds capture scheduled for
+  //                                   2026 was the paid /historical catch-up, which cannot reach a
+  //                                   kickoff until it is PAST — P3.1 closeout item 2), and prod
+  //                                   still measured that way on 2026-08-28. NCAAF-ODDS-LIVE's
+  //                                   ahead-of-kickoff feed changes that once its data lands, at
+  //                                   which point this fixture stops being the only way to reach
+  //                                   the available branch — it stays useful as the MIXED slate.
+  //                                   Its market blocks are REAL 2025 closes
   //                                   run through the SHIPPING `payloads._market()`. It leaves five
   //                                   of the eight games without a line on purpose: an all-priced
   //                                   slate could not tell "the panel renders a line" from "the
@@ -2022,6 +2027,42 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
 
   await blockThirdParty(page)
   return mock
+}
+
+/** ⭐ NCAAF-P3.9 — the ESPN team-logo CDN, answered locally.
+ *
+ * ══ WHY IT IS ROUTED AT ALL ════════════════════════════════════════════════════════════════════
+ *
+ * `blockThirdParty` below cuts only the three analytics/error beacons, so `a.espncdn.com` would
+ * otherwise reach the REAL internet from a CI container — the one thing this harness's header says
+ * it does not do. That is not merely a purity point: an assertion about whether a logo rendered
+ * would then be an assertion about ESPN's uptime and the runner's egress, i.e. a flaky red that
+ * points at our code and is not about it.
+ *
+ * ══ WHY BOTH DIRECTIONS ARE NEEDED ═════════════════════════════════════════════════════════════
+ *
+ * `broken: true` is the whole point of the second half. E9.46's lesson is that a CSP refusal, a
+ * 404 and a dead CDN are INDISTINGUISHABLE from "there is no image for this team" once a fallback
+ * exists — so the fallback is exactly the branch that rots unobserved. Aborting the request is the
+ * only way to drive an `onError` deterministically; the live CDN answers 200 for every id we serve
+ * (verified for all sixteen opener teams), so there is no payload that reaches it by accident.
+ *
+ * ⚠️ A ONE-PIXEL PNG, NOT AN EMPTY BODY. `naturalWidth > 0` is what tells a LOADED image from an
+ * element that merely has a box because its width/height attributes reserved one — and a zero-byte
+ * "image/png" decodes to nothing, so it would fail an image the browser never actually rendered
+ * while the spec read it as a pass in the other direction.
+ */
+const ONE_PIXEL_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+)
+
+export async function mockTeamLogos(page: Page, { broken = false } = {}) {
+  await page.route("https://a.espncdn.com/**", (route) =>
+    broken
+      ? route.abort()
+      : route.fulfill({ status: 200, contentType: "image/png", body: ONE_PIXEL_PNG }),
+  )
 }
 
 /**

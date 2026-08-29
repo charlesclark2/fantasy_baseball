@@ -13,11 +13,14 @@ output cannot disconfirm it. So nothing below writes a field by hand: every blob
 contract in `app/backend/models/ncaaf.py` on the way out.
 
   1. ncaaf-slate-2026-08-29-market.synthetic.json — SOME GAMES CARRY A MARKET LINE.
-     Every game on the real wire is `status="unavailable"` and that is not a capture gap: the only
-     NCAAF odds capture scheduled for 2026 is the paid `/historical` catch-up, which by
-     construction cannot reach a kickoff until it is PAST (P3.1 closeout item 2). So the
-     market-available branch of the transparency panel has nothing to capture. The three market
-     rows are REAL 2025 closes read through P1.4's own odds join
+     Every game on the wire was `status="unavailable"` when the slate was captured, and that is
+     not a capture gap: the only NCAAF odds capture scheduled for 2026 was the paid `/historical`
+     catch-up, which by construction cannot reach a kickoff until it is PAST (P3.1 closeout item
+     2). So the market-available branch of the transparency panel had nothing to capture.
+     ⚠️ NCAAF-ODDS-LIVE's ahead-of-kickoff feed changes that once its data reaches the serving
+     store, at which point this file stops being the ONLY route to the available branch — it stays
+     the MIXED slate, which is the more useful thing it does.
+     The three market rows are REAL 2025 closes read through P1.4's own odds join
      (`ncaaf-real-close-lines.json` records how); this script runs them through the shipping
      `_market()` so the block's SHAPE is the production one.
      ⚠️ It deliberately leaves the OTHER five games `unavailable`. A fixture where every game had

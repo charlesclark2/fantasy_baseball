@@ -7,7 +7,7 @@ metadata:
   name: ncaaf-p3-9
   vertical: ncaaf
   card: https://trello.com/c/ikIt1qcm   # P3.2 record; P3.9 card linked/pulled at kickoff
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Make the live NCAAF surface FINDABLE before Saturday, plus two cheap
@@ -84,8 +84,187 @@ spec:
   graph:
     nodes: []   # MINI tier
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED — all four acceptance criteria met, on branch `ncaaf-p3.9`, PR #1046 → `dev`.
+      Frontend + CI-config only; no backend, no contract, and nothing market-related was
+      read, rendered or typed (the AMENDED P3.1b boundary held — see follow-up 1).
+      `best_alpha = 0` unchanged.
+
+      AC1 NAV. Top-level "NCAAF" in ALL FOUR menus `Nav` renders (signed-out bar, signed-out
+      phone panel, signed-in sub-nav, signed-in phone panel), highlighting on the existing
+      `activeLink="ncaaf-games"` the page has passed since P3.2 with nothing reading it.
+      ⭐ THE LOAD-BEARING HALF WAS `SIGNED_OUT_NAV`, NOT THE SPORT MODEL: `/ncaaf/games` is
+      free and unguarded, so the ANONYMOUS visitor is the surface's default reader and the
+      signed-in `SPORTS` menu — the obvious home for a sport — would have left it as
+      unfindable as before. That also meant teaching the signed-out bar a current-page state,
+      since it is the only nav a reader sees while standing on the board. `/ncaaf` →
+      `/ncaaf/games` at 307 (⛔ not 308: `/ncaaf` may become a real hub at P3.3/P3.6, and a
+      permanent redirect is cached past any future page). Footer NCAAF row promoted from
+      `COMING` to `PRODUCTS` as a live link, with the "Coming this season" group surviving on
+      NFL, which is genuinely unbuilt. The fourth door filled the signed-out bar and it had to
+      be paid for in layout — see follow-up 5, which is the most useful thing in this closeout
+      for whoever touches the nav next.
+
+      AC2 LOGOS. ESPN mark beside each team name, sized well under the probability. The
+      payload's `team_id` IS the ESPN id — re-verified in-session against the live CDN for all
+      16 opener teams (200 / image/png each), rather than inherited from the card. The
+      missing/failed state is a STATED placeholder mark, ⛔ never initials (E9.46: two letters
+      beside a college team read as a real abbreviation, i.e. as data we published, which is
+      exactly how a CSP block stayed invisible product-wide). Both branches share ONE size
+      string, and "decorative" is asserted as a DIFFERENCE: the same card with logos loaded
+      and with the CDN refused must place the probability AND the margin curve identically.
+      The pre-existing mobile "probability is biggest" clause stayed green untouched — and is
+      structurally blind to an image, since it compares FONT SIZES, so a box-measuring clause
+      was added beside it rather than relying on it.
+
+      AC3 CHANGELOG GUARD (P3.2 finding ⑧) — FIXED VIA THE FILTER, NOT AN E2E PORT.
+      Two reasons, both stated because the spec asked which and why.
+      (a) MECHANICAL: the "obvious" edit — adding `frontend/data/changelog.json` to the
+      `backend` filter — does not widen the gate, it DISARMS it. Measured against picomatch
+      with the action's own MatchOptions: under `predicate-quantifier: every` a file must
+      match EVERY pattern, so `backend` then resolves FALSE for `betting_ml/**`,
+      `pipeline/**`, `.github/**` AND for the changelog itself. No Python job would ever run
+      again and the changelog still would not be checked. Pinned by a guard rather than left
+      to a comment.
+      (b) OWNERSHIP: porting the Monday-week rule into an E2E clause would create a SECOND
+      implementation of one invariant in a second language, free to drift — this repo's
+      most-repeated defect class (INC-30 two crontabs, INC-36 two deploys, INC-38 four
+      callers, NF-C-LDA-1 five copies of one roster rule). The gap is a TRIGGER defect, not a
+      coverage defect: the guard is correct and already exists, it simply stopped being
+      reached. So the trigger changed and the invariant keeps exactly one owner.
+      SHAPE: a `changelog` paths-filter output + a `Changelog guard (Monday-week keys)` job
+      gated on `changelog == 'true' ALONE (⛔ never `backend || changelog` — an `||` fires on
+      THIS PR for the pre-existing reason and would destroy the evidence the spec asked for),
+      rolled into the named `Unit Tests (fast gate)` check so a red guard actually fails the
+      gate rather than running red beside it (finding ⑧ moved one job over).
+      PROOF, CAPTURED VERBATIM (PR #1046, run on 906ed69f — recorded here because an Actions
+      log expires and this is the evidence the spec asked for). `Detect backend changes` step
+      "Report the verdict":
+        backend=true
+        changelog=true
+        -> Python suites WILL run (the diff touches something outside frontend/docs)
+        -> changelog guard WILL run (frontend/data/changelog.json changed)
+      and the job `Changelog guard (Monday-week keys)` concluded SUCCESS, i.e. it RAN rather
+      than skipping. ⭐ THE SECOND LINE IS THE ONE THAT MATTERS: `backend` is true on this PR
+      (it edits `.github/workflows/ci.yml`), so the guard would have run for the OLD reason —
+      which is exactly why the job is gated on `changelog` ALONE. Its running is attributable
+      to the new trigger and to nothing else. The counterfactual is measured rather than
+      asserted: on a `frontend/`-only diff (PR #1036's shape) the same filter answers
+      backend=false / changelog=true, so the shards skip and the guard still runs.
+
+      AC4 CHANGELOG + PROMOTION. One user-facing entry added to the existing `2026-08-24`
+      Monday block as a 4-line insertion (the file round-trips byte-identically through
+      `json.dumps(indent=2)`, so the diff is only the insertion — deliberate, since several
+      stories are appending to that same block). Rebased on `dev` at 439ab3ee before writing
+      it. dev → main is the OPERATOR's step; post-promotion by-name checks are in the handoff.
+
+      VERIFICATION. `test_ncaaf_p3_9_nav.py` — 9 clauses, and every clause plus the two
+      re-anchored ones RED-proven (25/25) by `ncaaf_p3_9_nav_red_proof.py`, which asserts its
+      own mutation LANDED and that each anchor is UNIQUE (a non-unique anchor reports a FALSE
+      vacuity — the dangerous direction). 17 new E2E clauses on RENDERED output, desktop and
+      mobile; 7 new red-proof cases, each individually RED. Full local E2E suite: 631 passed,
+      0 failed, P3.2's clauses included. Football / guards / core Python shards green
+      (1964 / 723 / 5948).
+
+      ⭐ TWO GUARDS WENT RED ON CORRECT CODE AND WERE RE-ANCHORED, NOT WEAKENED — see
+      follow-up 2; that is the most transferable thing this story produced.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      ⭐ 1. THE P3.1b BOUNDARY HELD, AND THERE IS ONE MARKET-SIDE CLIENT NEED TO CARD.
+      Nothing market-related was touched: no market field read, no market rendering changed,
+      no payload type edited. The one thing spotted and DELIBERATELY NOT BUILT — flagged here
+      as the spec directs rather than actioned — is that `NcaafGameCard` reads
+      `market.status === "available"` in two places to decide whether a line exists, and P3.1b
+      is growing the odds cadence. If P3.1b introduces a third status (a captured-but-stale
+      line, say), those two call sites treat it as ABSENT and the card silently says no line
+      was captured for a game that has one. It is a one-line change in the client, but it
+      belongs to whoever owns the new contract, not to this story. → PM: checklist item on the
+      P3.1b card.
+
+      ⭐⭐ 2. A GUARD WHOSE PROXY IS A PRODUCT NAME ROTS THE DAY THAT PRODUCT SHIPS — AND IT
+      GOES RED ON CORRECT CODE, WHICH INVITES WEAKENING IT. Three instances surfaced in this
+      one story, so it is a class rather than an accident:
+        · `positioning-alignment.spec.ts`'s footer clause filtered footer links by
+          `/ncaaf|nfl betting/` and required zero. Promoting the LIVE product to a link — the
+          correct change — turned it red.
+        · `test_an_unshipped_product_is_listed_in_the_footer_but_carries_no_link` named both
+          products and required both in `COMING`. Same rot, same day.
+        · `test_the_signed_out_nav_has_no_mlb_door` (and its E2E twin) use
+          `product: "betting"` as their proxy for "an MLB door was re-added". This one was
+          DODGED rather than repaired: NCAAF is filed under a new `product: "ncaaf"` member,
+          because the two products genuinely differ on the axis those guards care about (every
+          MLB route refuses an anonymous caller; `/ncaaf/games` serves one) and because the
+          tempting repair is relaxing the one clause the operator marked ⛔ DO NOT DELETE.
+      The first two were re-anchored onto the STRUCTURAL property each actually defends
+      (nothing under the "Coming this season" heading carries a destination; the group is
+      non-empty), which is strictly stronger — the old forms could not have caught a THIRD
+      product being given an href — and both directions were RED-proven. ⛔ The `"betting"`
+      proxy is still live and will rot the day a public MLB surface ships; E9.60's own header
+      now carries that note. → PM: a new spec, or a checklist item wherever the guard-hygiene
+      work lives.
+
+      ⭐ 3. THE SAME CLASS REACHED A CI GUARD, AND ITS PREMISE WAS THE ONE FINDING ⑧ DISPROVED.
+      `test_every_job_that_runs_pytest_is_gated_on_the_filter` asserted every pytest job gates
+      on `backend` — true only while `changes` had ONE output, i.e. it encoded "a pytest job
+      running on a frontend-only PR is always a mistake". The changelog guard is the
+      counterexample by design. Split into "no pytest job is ungated (any `changes` output)"
+      PLUS "the SUITE jobs still gate on `backend` specifically", the latter identifying a
+      suite job by asking `scripts/ci_shards.py` rather than by a name list. The second clause
+      is what makes it not a relaxation: it refuses the six shards being moved onto the
+      narrower filter's door. → PM: no action needed, recorded so the next reader sees why the
+      clause was split.
+
+      ⚠️ 4. THE E2E RED-PROOF BOARD HAS DRIFTED, AND FIVE CASES ARE DEAD. Measured
+      mechanically while adding this story's seven cases, and RECORDED rather than repaired,
+      because `red-proof.mjs`'s own ⛔ note says a drift is a FINDING and not a number to edit:
+        · 216 cases exist against a recorded total of 192 before this story. Every entry says
+          its own figure is a PROJECTION confirmed by the next full run; no full run has
+          happened, so the projections have compounded. This story recorded 192 + 7 = 199 per
+          the convention, ⛔ NOT 216, which would assert a `red` split for 17 unmeasured cases.
+        · 5 cases whose `from` anchor NO LONGER EXISTS in the file they name
+          (`disclosure-dropped`, `yahoo-attribution-dropped`,
+          `save-reports-success-before-the-server-answers`, `note-never-reaches-the-server`,
+          `designation-nested-in-the-availability-branch`). A stale anchor is an UNPROVEN
+          clause reading as a quiet one — E9.64 found six of exactly these and is the reason
+          the board exists.
+        · 1 case whose anchor appears TWICE in its file
+          (`free-account-bounced-to-login-not-upsell`, `components/auth-guard.tsx`).
+          `String.replace` takes the FIRST occurrence, so that break may be landing on a
+          different call site than the one it names — which reports a FALSE VACUITY, the
+          dangerous direction, since it reads as a finding and invites weakening a correct
+          guard.
+      ⛔ NOT FIXED HERE ON PURPOSE: hardening the shared harness (asserting anchor uniqueness)
+      would turn a pre-existing case red for a reason unrelated to any story in flight, on a
+      deadline day. `betting_ml/tests/ncaaf_p3_9_nav_red_proof.py` DOES carry that assert, so
+      the pattern exists to copy. → PM: a new spec — a scheduled full board run plus the
+      uniqueness assert; the E9.64 lesson ("a red-proof harness nobody runs is decorative") is
+      one level up from where it currently bites.
+
+      ⚠️⚠️ 5. THE SIGNED-OUT DESKTOP BAR IS FULL, AND A BINARY OVERFLOW CHECK CANNOT SAY SO.
+      A fourth door put it past its own container at 640px — caught by
+      `positioning-alignment.spec.ts`, which exists for exactly this. ⭐ THE INSTRUCTIVE PART IS
+      THAT THE FIRST FIX PASSED LOCALLY AND STILL FAILED CI: a flex row SHRINKS its items
+      rather than overflowing, so the bar can sit at 100% capacity and report `overflow = 0` on
+      macOS while CI's Linux font metrics render the same strings ~5px wider and tip it over.
+      "Fits" and "fits by nothing" are the same green.
+      MEASURED at 640px: the `h-12` wordmark was 144px of a 640px bar — the single largest item
+      on it — so moving its step-up from `sm` to `md` took headroom from −14px to +26px.
+      ⛔ THE CHEAPEST-LOOKING RECLAIM WAS WRONG AND IS RECORDED AT THE CALL SITE: folding
+      `Sign In` away to `md` would have freed ~65px, but the hamburger is `sm:hidden`, so
+      between 640 and 767px there is no mobile menu either — a logged-out visitor would have had
+      NO Sign In affordance anywhere in that band, which is the E9.58 defect exactly. Demoting a
+      door was rejected for the same shape of reason: it re-hides a product from the bar, which
+      is the defect this story exists to fix.
+      `positioning-alignment.spec.ts` now ANNOTATES the measured headroom on every run — a
+      REPORT, not a new requirement; the pass/fail clause is untouched — so the next session
+      reads the number instead of spending a CI cycle discovering it.
+      ⚠️ A FIFTH desktop entry does not fit inside 26px. It needs a real positioning decision —
+      a dropdown, or demoting a company page to mobile-only (About and FAQ are both in the
+      footer's Credence column on every page, which is the E9.46 precedent). → PM: checklist
+      item wherever nav positioning lives.
+
+      ℹ️ 6. `next.config.mjs` now has TWO redirects with DELIBERATELY DIFFERENT permanence, and
+      the difference is load-bearing: `/pricing` → `/subscribe` is 308 because that URL is a
+      mistake being retired; `/ncaaf` → `/ncaaf/games` is 307 because it is a placeholder we
+      intend to fill (P3.3 team pages, P3.6 futures). A future session tidying them to match
+      would cache the NCAAF bounce in every reader's browser past any hub page we build.
+      Pinned by a guard. → PM: no action, recorded for the P3.3/P3.6 sessions.

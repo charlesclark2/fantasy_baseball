@@ -45,6 +45,26 @@ const ADMIN_ITEMS = [
 ] as const
 
 /**
+ * ⭐⭐ NCAAF-P3.9 — THE NCAAF DOOR, as the SIGNED-IN nav draws it.
+ *
+ * TOP-LEVEL rather than a `SPORTS` dropdown, and that is a PM positioning ruling (2026-08-25), not
+ * a shortcut: NCAAF has exactly ONE surface, so a dropdown would put a hover in front of a free
+ * board in the one week of the year college football is the biggest thing in American sport —
+ * `positioning-copy.ts` records the identical reasoning for declining a "Fantasy Sports ▾" wrapper
+ * around a single live sport. It sits BESIDE `Track Record`, which is top-level for the same shape
+ * of reason. Promoting it into `SPORTS` when a second NCAAF surface ships (P3.3's team pages,
+ * P3.6's futures) is a data edit there and a deletion here.
+ *
+ * ⚠️ THE SAME LINK IS ALSO DECLARED IN `SIGNED_OUT_NAV` (`positioning-copy.ts`), because the two
+ * menus are authored from different models — an entitlement-shaped sport model here, authored
+ * marketing navigation there — and `Track Record` already carries the same duplication. It is a
+ * "one logical thing, two owners" shape, so it is PINNED rather than commented:
+ * `test_ncaaf_p3_9_nav.py::test_the_two_ncaaf_nav_declarations_agree` fails if the href or the key
+ * drifts apart.
+ */
+const NCAAF_NAV = { label: "NCAAF", href: "/ncaaf/games", key: "ncaaf-games" } as const
+
+/**
  * ⭐⭐ E9.60 — THE MOBILE MENU PANEL. This class string is the fix for a LIVE bug, and every part
  * of it is load-bearing.
  *
@@ -152,19 +172,39 @@ export function Nav({
       {/* Top bar */}
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
         {/* `shrink-0` so the wordmark can never be squeezed into the links beside it, and a
-            smaller mark below `sm` — at h-12 the logo alone took a third of a 390px bar. */}
+            smaller mark below `sm` — at h-12 the logo alone took a third of a 390px bar.
+            ⭐ NCAAF-P3.9 MOVES THE STEP-UP FROM `sm` TO `md`, and it is MEASURED rather than eyeballed.
+            At 640px — the narrowest width at which the signed-out links render, i.e. the bar's worst
+            case — the h-12 wordmark was 144px of a 640px bar, the single largest item on it, and a
+            fourth door left the bar at ~100% capacity. It fit LOCALLY only because flex SHRANK the
+            items, and CI's Linux font metrics (the same strings, ~5px wider in total) tipped it
+            into a real overflow. Measured headroom at 640px: −14px before, +26px after.
+            ⛔ THE TEMPTING RECLAIM WAS FOLDING `Sign In` AWAY TO `md`, and it is WRONG: the
+            hamburger is `sm:hidden`, so between 640 and 767px there would be no Sign In affordance
+            ANYWHERE — E9.58's property, deleted at one viewport band. A wordmark step costs
+            nothing a reader can be denied. */}
         <Link href="/" className="shrink-0">
           <Image
             src="/brand/logo-full.svg"
             alt="Credence Sports"
             width={240}
             height={48}
-            className="h-9 w-auto sm:h-12"
+            className="h-9 w-auto md:h-12"
             priority
           />
         </Link>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* ⚠️ `md:gap-3`, NOT `sm:gap-3` — NCAAF-P3.9, and it is a MEASURED fix rather than a
+            tidy-up. `sm` (640px) is the NARROWEST width at which the signed-out links render at
+            all, so it is the bar's worst case, and adding a fourth door pushed it 7px past its own
+            container (caught by `positioning-alignment.spec.ts`, which exists for exactly this —
+            E9.58 had the wordmark overlapping the first link and "Track Record" wrapping). Six gaps
+            at 8px rather than 12px recovers 24px, which clears it with room; from `md` up the
+            spacing is unchanged.
+            ⛔ The alternatives were both worse: demoting a door to mobile-only re-hides a product
+            from the desktop bar — the defect this story exists to fix, moved sideways — and
+            shortening a label runs straight into the guards that pin what those labels must say. */}
+        <div className="flex items-center gap-2 md:gap-3">
           {/* ⭐⭐ E9.60 — THE SIGNED-OUT BAR.
 
               This used to render `publicNavItems()` — every `public: true` item in `nav-model.ts` —
@@ -196,13 +236,28 @@ export function Nav({
               bar moves together and that objection is gone.
               ⚠️ `item.short ?? item.label` — see the note on `SignedOutNavLink.short`. A wider type
               plus an extra link plus long labels is exactly how this bar overflowed at E9.58. */}
+          {/* ⭐ NCAAF-P3.9 — `data-nav-item` / `data-nav-active`. A door with a `key` can now be the
+              CURRENT page (NCAAF is the first signed-out entry with a page of its own), so it gets
+              the same "you are here" affordance the signed-in bar has always had.
+              ⚠️ THE TWO ATTRIBUTES ARE ALSO THE TEST HANDLE, and they are on all FOUR render sites
+              (signed-out bar, signed-out phone menu, signed-in sub-nav, signed-in phone menu). This
+              nav renders four structurally different menus, so a spec that located the entry by its
+              TEXT would silently be asserting about whichever one happened to match — and on
+              `/ncaaf/games` the reader is anonymous by default, i.e. the pair of menus a signed-in
+              locator would never reach. */}
           {!showSubNav &&
             SIGNED_OUT_NAV.filter((item) => item.desktop).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 data-signed-out-nav={item.product ?? "company"}
-                className="hidden whitespace-nowrap text-sm font-medium text-gray-300 hover:text-white transition-colors sm:block"
+                data-nav-item={item.key}
+                data-nav-active={item.key && item.key === activeLink ? "true" : "false"}
+                className={`hidden whitespace-nowrap text-sm font-medium transition-colors sm:block ${
+                  item.key && item.key === activeLink
+                    ? "text-white underline decoration-[#10b981] decoration-2 underline-offset-8"
+                    : "text-gray-300 hover:text-white"
+                }`}
               >
                 {item.short ?? item.label}
               </Link>
@@ -265,13 +320,18 @@ export function Nav({
             // opened on a phone. Sign Up is always visible; Sign In folds away under `sm` so the
             // bar cannot overflow on a small screen (the signup page carries its own "already
             // have an account?" link, so nothing is lost).
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               <Button
                 variant="ghost"
                 size="sm"
                 asChild
                 className="hidden sm:inline-flex text-gray-400 hover:text-white hover:bg-[#141414]"
               >
+                {/* ⛔ NCAAF-P3.9 CONSIDERED AND REJECTED folding this away to `md` for the ~65px it
+                    would have reclaimed. The hamburger is `sm:hidden`, so between 640 and 767px
+                    there is no mobile menu either — a logged-out visitor would have had NO Sign In
+                    affordance at all in that band, which is precisely the E9.58 defect. Only the
+                    GAP moves. */}
                 <Link href="/login">Sign In</Link>
               </Button>
               <Button
@@ -394,6 +454,22 @@ export function Nav({
             )
           })}
 
+          {/* ⭐ NCAAF — TOP-LEVEL (NCAAF-P3.9). See `NCAAF_NAV` above for why it is a link rather
+              than a `SPORTS` dropdown. It is drawn AFTER the sport dropdowns and BEFORE Track
+              Record so the sports stay together, which is the axis this bar is organised on. */}
+          <Link
+            href={NCAAF_NAV.href}
+            data-nav-item={NCAAF_NAV.key}
+            data-nav-active={activeLink === NCAAF_NAV.key ? "true" : "false"}
+            className={
+              activeLink === NCAAF_NAV.key
+                ? "border-b-2 border-[#10b981] pb-2.5 text-sm font-semibold text-white transition-colors whitespace-nowrap"
+                : "border-b-2 border-transparent pb-2.5 text-sm font-medium text-gray-400 hover:text-white transition-colors whitespace-nowrap"
+            }
+          >
+            {NCAAF_NAV.label}
+          </Link>
+
           {/* ⭐ TRACK RECORD — TOP-LEVEL (spec §20/§21, operator 2026-08-09). It is the site's
               central trust asset and the one record readable without an account, so it gets a
               first-class slot for a signed-in visitor too rather than living only inside the
@@ -481,7 +557,13 @@ export function Nav({
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
                     data-signed-out-nav={item.product ?? "company"}
-                    className="block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium text-gray-300 hover:bg-[#141414] hover:text-white transition-colors"
+                    data-nav-item={item.key}
+                    data-nav-active={item.key && item.key === activeLink ? "true" : "false"}
+                    className={`block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                      item.key && item.key === activeLink
+                        ? "bg-[#1a1a1a] text-white"
+                        : "text-gray-300 hover:bg-[#141414] hover:text-white"
+                    }`}
                   >
                     {item.label}
                   </Link>
@@ -570,6 +652,25 @@ export function Nav({
                 })}
               </div>
             ))}
+
+            <div className="my-2 border-t border-[#262626]" />
+            {/* ⭐ NCAAF-P3.9 — the phone half of the top-level door. ⚠️ Both signed-in render sites
+                are needed and neither substitutes for the other: the desktop sub-nav is
+                `hidden … sm:flex`, so a phone reader signed in to the app would otherwise have no
+                route to the NCAAF board at all. */}
+            <Link
+              href={NCAAF_NAV.href}
+              onClick={() => setMobileOpen(false)}
+              data-nav-item={NCAAF_NAV.key}
+              data-nav-active={activeLink === NCAAF_NAV.key ? "true" : "false"}
+              className={`block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                activeLink === NCAAF_NAV.key
+                  ? "bg-[#1a1a1a] text-white"
+                  : "text-gray-400 hover:bg-[#141414] hover:text-white"
+              }`}
+            >
+              {NCAAF_NAV.label}
+            </Link>
 
             <div className="my-2 border-t border-[#262626]" />
             <Link

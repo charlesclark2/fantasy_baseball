@@ -73,7 +73,9 @@ export interface DistributionCurveProps {
    *  ⛔ NOT a model quantity and never labelled as one. */
   zeroReference?: boolean
   /** The market's number for this quantity, drawn as a second vertical rule for comparison ONLY.
-   *  Null when no line has been captured — the commonest case today (P3.1 closeout item 2). */
+   *  Null when no line has been captured — universal through P3.2 (P3.1 closeout item 2) and
+   *  still ordinary after NCAAF-ODDS-LIVE, since a leakage refusal serves no line. A first-class
+   *  state, not an edge case. */
   marketValue?: number | null
   marketLabel?: string
   /** ⭐ This axis is honest as a BAND but not as an ORDERING on this payload — see

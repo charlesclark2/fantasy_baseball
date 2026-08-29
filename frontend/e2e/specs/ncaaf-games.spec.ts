@@ -23,10 +23,16 @@ import { forbiddenPhrasesIn } from "../support/claim-denylist"
  *      the shaded band's position, and — the load-bearing one — that the band's BOUNDS are the
  *      payload's `interval_lo`/`interval_hi` verbatim rather than something recomputed from μ/σ.
  *
- *   2. AN ABSENT MARKET LINE COULD RENDER AS PARITY. Every game on the live wire is
- *      `market.status = "unavailable"` (P3.1 closeout item 2), so this is the branch nearly every
- *      reader meets. A blank cell in a two-column comparison reads as agreement and a zero reads as
- *      a line of zero; both are a fabricated market view.
+ *   2. AN ABSENT MARKET LINE COULD RENDER AS PARITY. A blank cell in a two-column comparison
+ *      reads as agreement and a zero reads as a line of zero; both are a fabricated market view.
+ *      The CAPTURED slate is all-`unavailable` — the wire's state when it was taken, and still
+ *      prod's state as measured 2026-08-28 — while the available branch is covered by the
+ *      GENERATED `ncaaf-slate-2026-08-29-market.synthetic.json`.
+ *      ⚠️ NCAAF-ODDS-LIVE's ahead-of-kickoff feed makes `available` the ordinary case once its
+ *      data lands, so the captured fixture WILL change character on the next re-capture. When it
+ *      does: keep a genuinely absent game in the fixture and RE-ANCHOR the all-`unavailable`
+ *      clause below onto it — do not delete it. The stated-absence branch stays live whatever the
+ *      feed does, because a leakage refusal still serves no line.
  *
  *   3. THE COPY COULD DRIFT INTO A CLAIM. `best_alpha = 0` — VAL1 came back ALL_BUCKETS_NULL, ATS
  *      0.496 against the close, indistinguishable from a placebo. The denylist runs over the WHOLE
@@ -419,7 +425,10 @@ test("a margin curve carries the even-money reference and a total curve does not
 test("with no captured line the market column says so, and never blanks or zeroes", async ({ page }) => {
   await open(page)
   const g = SLATE.games[0]
-  expect(g.market.status).toBe("unavailable") // the capture's own state; see the file header
+  // ⚠️ RE-ANCHOR, NEVER DELETE (see the file header). This reads the CAPTURED fixture's own state
+  // rather than hard-coding a belief about the wire; when a re-capture brings live lines in, point
+  // it at whichever game is still absent instead of dropping the branch.
+  expect(g.market.status).toBe("unavailable")
   const panel = card(page, g.game_id).getByTestId("ncaaf-market-comparison")
   await expect(panel).toHaveAttribute("data-market-status", "unavailable")
   for (const row of ["margin", "total", "winprob"]) {

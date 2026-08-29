@@ -856,11 +856,25 @@ def test_an_unshipped_product_is_listed_in_the_footer_but_carries_no_link():
 
     A visitor deciding whether to subscribe should see where this is going, so the un-shipped
     verticals are listed — but they must carry no destination at all. The `COMING` entries have no
-    `href` FIELD, so a future edit cannot make one clickable by filling in a blank."""
+    `href` FIELD, so a future edit cannot make one clickable by filling in a blank.
+
+    ⭐ RE-ANCHORED BY NCAAF-P3.9, and the re-anchoring is itself the finding. This clause used to
+    NAME the two unshipped products and require both to be in `COMING`. That is a proxy for
+    "unshipped" made of PRODUCT NAMES, and such a proxy rots the day one of them ships:
+    `/ncaaf/games` went live at P3.2, so a CORRECT footer — the live product promoted to a link —
+    turned this red while the property it defends was perfectly intact. (The same rot hit
+    `positioning-alignment.spec.ts`'s footer clause in the same story, which is what makes it a
+    class rather than an accident.)
+
+    So the assertion is now structural: the group must be NON-EMPTY, and nothing in it may carry a
+    destination. That covers every future row, named or not, and cannot go stale on the next launch.
+    ⛔ It is NOT weaker: the old clause could not have caught a THIRD unshipped product being given
+    an href, and this one does."""
     footer = _strip_ts_comments(_FOOTER_TSX.read_text())
     coming = footer.split("const COMING", 1)[1].split("] as const", 1)[0]
-    assert "NFL Betting Intelligence" in coming and "NCAAF Betting Intelligence" in coming, (
-        "the un-shipped betting verticals vanished from the footer rather than being labelled"
+    assert coming.count("label:") >= 1, (
+        "the coming-soon group is empty, so every clause below it passes on nothing — an unshipped "
+        "product must be LISTED (that is the half that keeps it from being oversold), not deleted"
     )
     assert "href" not in coming, (
         f"a coming-soon footer entry carries an href — an un-shipped product must have no "

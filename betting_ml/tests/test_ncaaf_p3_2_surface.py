@@ -344,11 +344,23 @@ def test_the_captured_slate_still_holds_the_state_the_specs_reason_from():
     ⚠️ These are not assertions about the model — they are assertions that the fixture is still the
     kind of payload the surface was designed against. If one fails after a re-capture, the fixture
     has changed CHARACTER (a market line landed; a day was published for 'today') and the specs
-    that reason from it need re-reading, not silencing."""
+    that reason from it need re-reading, not silencing.
+
+    ⚠️ THE MARKET CLAUSE IS NOW EXPECTED TO FIRE EVENTUALLY, and the handling is prescribed rather
+    than left to judgement. NCAAF-ODDS-LIVE added a live ahead-of-kickoff feed, so `available`
+    becomes the ordinary case for an upcoming game once its data reaches the serving store (prod
+    still measured all-`unavailable` on 2026-08-28 — the contract and the data ship separately).
+    When a re-capture brings live lines in: KEEP A GENUINELY ABSENT GAME in the fixture and
+    RE-ANCHOR this clause onto it. Do NOT delete it — the stated-absence branch survives the feed,
+    because a leakage refusal (`market_snapshot_not_pre_kickoff`,
+    `market_snapshot_instant_unprovable`) still serves no line, and dropping the clause would
+    silently retire the coverage the surface's absent-branch design depends on."""
     slate = json.loads(_CAPTURED_SLATE.read_text())
     manifest = json.loads(_CAPTURED_MANIFEST.read_text())
     assert slate["games"], "the captured slate is empty"
-    # The market-absent branch is the one nearly every reader meets (P3.1 closeout item 2).
+    # The stated-absence branch — universal when this was captured (P3.1 closeout item 2). See the
+    # docstring: on a re-capture that brings live lines in, re-anchor this onto a still-absent
+    # game rather than deleting it.
     assert all(g["market"]["status"] == "unavailable" for g in slate["games"])
     # A full quantile ladder — what makes `data-curve-source="quantiles"` the expected state.
     assert all(len(g["margin"]["quantiles"]) >= 3 for g in slate["games"])

@@ -17,10 +17,12 @@
 //
 //  3. ⭐ AN ABSENT LINE IS A STATED ABSENCE, NEVER A BLANK AND NEVER A ZERO. In a two-column
 //     comparison a blank cell reads as parity and a zero reads as a line of zero; both would be a
-//     fabricated market view. This is the branch nearly every reader will actually meet — the only
-//     NCAAF odds capture scheduled for 2026 is the paid `/historical` catch-up, which by
-//     construction cannot reach a kickoff until it is PAST (P3.1 closeout item 2) — so it is
-//     designed for rather than tolerated.
+//     fabricated market view. So the absence is DESIGNED FOR rather than tolerated.
+//     ⚠️ It was the ONLY branch a reader could meet through P3.2 (the 2026 capture could not reach
+//     a kickoff until it was PAST — P3.1 closeout item 2). NCAAF-ODDS-LIVE's ahead-of-kickoff feed
+//     makes `available` the ordinary case once its data lands — but the absence does NOT become
+//     rare, because a leakage refusal still serves it. Both are live paths; neither may be coded
+//     as the exceptional one.
 //
 // ══ THE ONE CONVERSION, AND WHY IT IS NOT A DERIVATION ════════════════════════════════════════
 //

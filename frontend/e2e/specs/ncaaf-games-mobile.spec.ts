@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { collectPageErrors, mockApi } from "../support/api-mock"
+import { collectPageErrors, mockApi, mockTeamLogos } from "../support/api-mock"
 import { expectNoNaN, expectNoPageErrors } from "../support/assertions"
 
 /**
@@ -194,4 +194,109 @@ test("collapsing actually reclaims the height it exists to reclaim, on a phone",
     clientWidth: document.documentElement.clientWidth,
   }))
   expect(scrollWidth, "collapsing must not push the document sideways").toBeLessThanOrEqual(clientWidth + 1)
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// NCAAF-P3.9 — the phone half of the nav door, and the phone half of the logo constraint
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+/** ⚠️ Scoped to `[data-primary-nav]` and `:visible`. `SiteFooter` wraps its columns in `<nav>` (the
+ *  collision this repo has hit four times), and `:visible` rather than `.first()` because the
+ *  desktop bar renders its OWN copy of this door with `hidden … sm:block` and comes FIRST in the
+ *  DOM — `.first()` would resolve to an element correctly hidden at 412px and fail on the wrong
+ *  node, which is the exact mistake `positioning-alignment.spec.ts` records for its FAQ clause. */
+const phoneNavEntry = (page: import("@playwright/test").Page) =>
+  page.locator('[data-primary-nav] [data-nav-item="ncaaf-games"]:visible')
+
+test("the NCAAF door is reachable from the phone menu, not only from the desktop bar", async ({
+  page,
+}) => {
+  await mockApi(page)
+  await mockTeamLogos(page)
+  // From a page that is NOT the board — the requirement is that a stranger can FIND the surface.
+  await page.goto("/about")
+
+  // The desktop bar's links are `hidden sm:block`, so at this width the hamburger is the only nav
+  // there is. E9.58's second defect was exactly this shape: an affordance that existed at every
+  // viewport except the one most first-touch readers arrive on.
+  await expect(
+    phoneNavEntry(page),
+    "the NCAAF door is visible before the phone menu is opened — the bar links should be hidden here",
+  ).toHaveCount(0)
+
+  await page.getByRole("button", { name: /toggle menu/i }).click()
+  const entry = phoneNavEntry(page)
+  await expect(entry, "no NCAAF door in the signed-out phone menu").toHaveCount(1)
+
+  await entry.click()
+  await page.waitForURL(/\/ncaaf\/games$/)
+  await expect(page.getByTestId("ncaaf-game-card").first()).toBeVisible()
+})
+
+test("the phone menu marks the NCAAF door current while standing on the board", async ({ page }) => {
+  await mockApi(page)
+  await mockTeamLogos(page)
+  await page.goto(PATH)
+  await page.getByRole("button", { name: /toggle menu/i }).click()
+  await expect(phoneNavEntry(page)).toHaveAttribute("data-nav-active", "true")
+})
+
+test("the team marks stay smaller than the win probability on a phone", async ({ page }) => {
+  // ⭐ THE BRAND DIRECTIVE'S LEAD CLAUSE, EXTENDED TO A NON-TEXT ELEMENT. The existing clause above
+  // compares FONT SIZES, which an image cannot have — so a logo could grow to dominate the card
+  // without moving that assertion by a pixel. This measures the RENDERED BOX, which is the only
+  // comparison that can hold between an image and a number.
+  await mockApi(page, { ncaafSlate: "market" }) // the most crowded card
+  await mockTeamLogos(page)
+  await page.goto(PATH)
+  const c = page.getByTestId("ncaaf-game-card").first()
+  await expect(c.getByTestId("ncaaf-market-comparison")).toBeVisible()
+
+  const prob = (await c.getByTestId("ncaaf-win-probability-home").boundingBox())!
+  const logoBoxes = await c
+    .getByTestId("ncaaf-team-logo")
+    .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))
+  expect(logoBoxes.length, "no logos rendered — this clause would be vacuous").toBeGreaterThan(0)
+  expect(
+    Math.max(...logoBoxes),
+    `a team mark is ${Math.max(...logoBoxes)}px against a ${prob.height}px probability`,
+  ).toBeLessThan(prob.height)
+})
+
+test("a failed logo moves nothing on the card", async ({ page }) => {
+  // ⭐ "DECORATIVE ONLY — no layout shift that moves the probability or curves" is a claim about a
+  // DIFFERENCE, so it is measured as one: the SAME card, rendered with the marks loaded and then
+  // with the CDN refused, must put the probability and the curve in the same place. A single-state
+  // assertion could not see a fallback that occupied a different box, which is the ordinary way
+  // this goes wrong — and it is why the component shares one size string between both branches.
+  await mockApi(page)
+  await mockTeamLogos(page)
+  await page.goto(PATH)
+
+  const card = page.getByTestId("ncaaf-game-card").first()
+  // ⚠️ Fonts settle before ANY layout read. Measured across four runs the same slate reported a 20%
+  // height spread against fallback metrics (see `settledHeight` above), which would swamp a 20px
+  // logo either way — the difference this clause is looking for is smaller than the noise it would
+  // otherwise be measuring.
+  const geometry = async () => {
+    await page.evaluate(() => document.fonts.ready)
+    const prob = (await card.getByTestId("ncaaf-win-probability-home").boundingBox())!
+    const curve = (await card.getByTestId("ncaaf-curve-margin").boundingBox())!
+    return { probY: prob.y, probH: prob.height, curveY: curve.y }
+  }
+
+  await expect(card.getByTestId("ncaaf-team-logo").first()).toBeVisible()
+  const loaded = await geometry()
+
+  // A NEWER handler wins in Playwright, so this replaces the fulfilling route with an aborting one
+  // without tearing down the API mock underneath it.
+  await mockTeamLogos(page, { broken: true })
+  await page.reload()
+  await expect(card.getByTestId("ncaaf-team-logo-fallback").first()).toBeVisible()
+  await expect(card.getByTestId("ncaaf-team-logo")).toHaveCount(0)
+  const failed = await geometry()
+
+  expect(failed.probY, "a failed logo moved the win probability").toBeCloseTo(loaded.probY, 0)
+  expect(failed.probH).toBeCloseTo(loaded.probH, 0)
+  expect(failed.curveY, "a failed logo moved the margin curve").toBeCloseTo(loaded.curveY, 0)
 })

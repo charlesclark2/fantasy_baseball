@@ -118,28 +118,73 @@ def test_the_backend_filter_still_excludes_the_frontend_and_docs():
     assert "!docs/**" in backend, f"`backend` no longer excludes docs/: {backend}"
 
 
-def test_every_job_that_runs_pytest_is_gated_on_the_filter():
-    """The filter is only as good as its consumers.
-
-    `changes` computing `backend=false` achieves nothing if a test job forgets its `if:`. This
-    walks the jobs rather than trusting the comment above them — a job added later inherits the
-    requirement automatically.
-    """
+def _pytest_jobs() -> dict[str, dict]:
+    """Every job with a step that invokes pytest, keyed by job name."""
     assert CI_WORKFLOW.is_file(), f"{CI_WORKFLOW} not found — did the workflow move?"
     workflow = yaml.safe_load(CI_WORKFLOW.read_text())
-    ungated = []
-    for name, job in workflow.get("jobs", {}).items():
-        runs_pytest = any(
-            "pytest" in str(step.get("run", "")) for step in (job.get("steps") or []) if isinstance(step, dict)
-        )
-        if not runs_pytest:
-            continue
-        if "needs.changes.outputs.backend" not in str(job.get("if", "")):
-            ungated.append(name)
+    out = {}
+    for name, job in (workflow.get("jobs") or {}).items():
+        steps = job.get("steps") or []
+        if any("pytest" in str(s.get("run", "")) for s in steps if isinstance(s, dict)):
+            out[name] = job
+    return out
 
+
+def _job_script(job: dict) -> str:
+    return " ".join(str(s.get("run", "")) for s in (job.get("steps") or []) if isinstance(s, dict))
+
+
+def test_no_job_that_runs_pytest_is_ungated():
+    """The filter is only as good as its consumers.
+
+    `changes` computing an output achieves nothing if a test job forgets its `if:`. This walks the
+    jobs rather than trusting the comment above them, so a job added later inherits the requirement.
+
+    ⭐ RE-ANCHORED BY NCAAF-P3.9 — from "gates on `backend`" to "gates on SOME `changes` output", and
+    the reason is a real finding rather than a convenience. This clause encoded a premise that was
+    true only while `changes` had ONE output: that a pytest job running on a frontend-only PR is
+    always a mistake. P3.2 finding ⑧ is the counterexample — `test_changelog_guard.py` guards
+    `frontend/data/changelog.json`, so the PR class it must run on is precisely the one `backend`
+    resolves to false for, and it had silently not run there since E9.63b.
+
+    ⛔ THIS IS NOT A RELAXATION, and the clause below is what makes that true: every job that runs
+    the ACTUAL SUITES still has to gate on `backend` specifically. What is dropped is only the
+    assumption that `backend` is the only gate there can be.
+    """
+    jobs = _pytest_jobs()
+    assert jobs, "no job in ci.yml runs pytest — this clause would be vacuous"
+    ungated = [
+        name for name, job in jobs.items()
+        if "needs.changes.outputs." not in str(job.get("if", ""))
+    ]
     assert not ungated, (
-        f"job(s) {ungated} run pytest without gating on `needs.changes.outputs.backend` — they will "
-        f"run on a frontend-only PR no matter what the filter decides"
+        f"job(s) {ungated} run pytest without gating on ANY `changes` output — they run on every "
+        f"PR no matter what the filter decides"
+    )
+
+
+def test_the_suite_jobs_still_gate_on_backend_specifically():
+    """⭐ THE OTHER HALF of the clause above, and the half that keeps it strong.
+
+    "Gates on some `changes` output" would be satisfied by a job running the six pytest shards off
+    the `changelog` filter — i.e. by putting the whole Python suite back on a frontend PR through a
+    different door, which is exactly the cost E9.7 built the `changes` job to avoid.
+
+    A SUITE job is identified by what it DOES — it asks `scripts/ci_shards.py` which files to run —
+    rather than by a name list, so a seventh shard or a renamed job inherits the requirement.
+    """
+    suite_jobs = {n: j for n, j in _pytest_jobs().items() if "ci_shards.py" in _job_script(j)}
+    assert suite_jobs, (
+        "no job resolves its targets through scripts/ci_shards.py — either the suites moved or this "
+        "clause has gone vacuous"
+    )
+    wrong = [
+        name for name, job in suite_jobs.items()
+        if "needs.changes.outputs.backend" not in str(job.get("if", ""))
+    ]
+    assert not wrong, (
+        f"job(s) {wrong} run the pytest SUITES without gating on `backend` — a frontend-only PR "
+        f"would run the whole Python gate through a narrower filter's door"
     )
 
 

@@ -3,6 +3,10 @@
     "week": "2026-08-24",
     "items": [
       {
+        "tag": "added",
+        "text": "College football now has a home in the navigation, and the game cards carry team logos. The board has been live since it shipped, but there was no way to find it: no nav entry at any screen size, a bare /ncaaf that 404'd, and a footer still calling it \u201ccoming this season\u201d. NCAAF is now a top-level item in the nav \u2014 signed in or not, on a phone or a laptop \u2014 /ncaaf takes you to the slate, and the footer links it like the live product it is. On the cards themselves, each team's logo now sits beside its name. That is decoration and nothing more: the logos are deliberately smaller than the win probability, they change no number on the card, and if one fails to load you get a plain placeholder mark rather than initials that could be mistaken for something we published. Still free, still no account needed."
+      },
+      {
         "tag": "improved",
         "text": "College football game cards can now be collapsed. A collapsed card keeps the win probability and swaps each curve for the same 80% range in words, so you can take in a whole Saturday without scrolling past eight full cards \u2014 on a phone the slate went from roughly nine screens to under three. Cards still open expanded, because the curves are the point; if you collapse them, we remember that on your next visit."
       },
