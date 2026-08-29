@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-25T04:03:57.592629+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-29T21:37:01.978501+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -18,10 +18,10 @@
 
 ```json
 {
-  "n_total": 794,
-  "n_veterans": 713,
+  "n_total": 797,
+  "n_veterans": 716,
   "n_rookies": 81,
-  "n_returning_from_absence": 71,
+  "n_returning_from_absence": 74,
   "top_returning_from_absence": [
     {
       "player": "DESHAUN WATSON",
@@ -57,20 +57,20 @@
       "player": "WILL LEVIS",
       "pos": "QB",
       "anchor_season": 2024.0,
-      "proj_fp_ppr": 39.1,
+      "proj_fp_ppr": 39.0,
       "p10_p90": [
         0.0,
-        104.3
+        102.4
       ]
     },
     {
       "player": "DESMOND RIDDER",
       "pos": "QB",
       "anchor_season": 2024.0,
-      "proj_fp_ppr": 27.4,
+      "proj_fp_ppr": 26.9,
       "p10_p90": [
         0.0,
-        61.3
+        58.3
       ]
     },
     {
@@ -100,7 +100,7 @@
       "proj_fp_ppr": 20.9,
       "p10_p90": [
         0.0,
-        43.5
+        42.8
       ]
     },
     {
@@ -127,8 +127,8 @@
   "by_position": {
     "FB": 17,
     "QB": 106,
-    "RB": 180,
-    "TE": 170,
+    "RB": 181,
+    "TE": 172,
     "WR": 321
   },
   "n_rookies_by_pos": {
@@ -138,7 +138,7 @@
     "TE": 22,
     "WR": 36
   },
-  "n_base_relevant_players_ge4g": 642,
+  "n_base_relevant_players_ge4g": 644,
   "n_relevant_gap": 43,
   "pct_relevant_covered": 93.3
 }
@@ -157,44 +157,44 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | BIJAN ROBINSON      | RB         | ATL       | veteran  |         15.2 |         313.6 |        101.1 |        345.8 |
 | JONATHAN TAYLOR     | RB         | IND       | veteran  |         15.4 |         309.3 |        103.7 |        347.4 |
 | JAHMYR GIBBS        | RB         | DET       | veteran  |         14.4 |         303.3 |        103.7 |        347.4 |
-| JOSH ALLEN          | QB         | BUF       | veteran  |         16.5 |         302.7 |        130.7 |        447.0 |
-| JALEN HURTS         | QB         | PHI       | veteran  |         16.5 |         295.9 |        134.0 |        449.1 |
-| JARED GOFF          | QB         | DET       | veteran  |         16.5 |         289.8 |        134.0 |        447.0 |
+| JOSH ALLEN          | QB         | BUF       | veteran  |         16.5 |         302.6 |        130.7 |        447.0 |
+| JALEN HURTS         | QB         | PHI       | veteran  |         16.5 |         296.0 |        134.0 |        449.1 |
+| JARED GOFF          | QB         | DET       | veteran  |         16.5 |         288.2 |        130.7 |        447.0 |
 | JA'MARR CHASE       | WR         | CIN       | veteran  |         15.8 |         287.6 |         99.8 |        341.3 |
 | DE'VON ACHANE       | RB         | MIA       | veteran  |         14.4 |         276.4 |        100.0 |        333.1 |
-| LAMAR JACKSON       | QB         | BAL       | veteran  |         14.5 |         274.5 |        134.3 |        433.2 |
+| LAMAR JACKSON       | QB         | BAL       | veteran  |         14.5 |         274.6 |        134.3 |        436.9 |
 | DAK PRESCOTT        | QB         | DAL       | veteran  |         16.5 |         274.5 |        134.3 |        433.2 |
 | AMON-RA ST. BROWN   | WR         | DET       | veteran  |         15.8 |         272.5 |         99.8 |        341.3 |
-| JUSTIN HERBERT      | QB         | LAC       | veteran  |         16.5 |         268.9 |        130.7 |        433.2 |
-| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |         47.3 |        473.1 |
-| MATTHEW STAFFORD    | QB         | LAR       | veteran  |         16.5 |         264.8 |        129.3 |        430.7 |
+| JUSTIN HERBERT      | QB         | LAC       | veteran  |         16.5 |         269.0 |        130.7 |        433.2 |
+| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |         47.4 |        472.9 |
+| MATTHEW STAFFORD    | QB         | LAR       | veteran  |         16.5 |         264.9 |        129.3 |        430.7 |
 | PUKA NACUA          | WR         | LAR       | veteran  |         15.1 |         263.1 |        102.3 |        342.2 |
-| TREVOR LAWRENCE     | QB         | JAX       | veteran  |         16.5 |         262.6 |        130.4 |        427.1 |
+| TREVOR LAWRENCE     | QB         | JAX       | veteran  |         16.5 |         262.5 |        130.4 |        427.1 |
 | SAQUON BARKLEY      | RB         | PHI       | veteran  |         15.3 |         259.3 |        100.8 |        335.3 |
-| BAKER MAYFIELD      | QB         | TB        | veteran  |         16.5 |         258.0 |        124.7 |        424.3 |
-| PATRICK MAHOMES     | QB         | KC        | veteran  |         15.0 |         251.9 |        130.7 |        430.7 |
-| CALEB WILLIAMS      | QB         | CHI       | veteran  |         16.5 |         250.5 |        132.8 |        432.8 |
+| BAKER MAYFIELD      | QB         | TB        | veteran  |         16.5 |         257.9 |        124.7 |        424.3 |
+| CALEB WILLIAMS      | QB         | CHI       | veteran  |         16.5 |         252.0 |        130.7 |        430.7 |
+| PATRICK MAHOMES     | QB         | KC        | veteran  |         15.0 |         251.8 |        130.7 |        430.7 |
 | Jeremiyah Love      | RB         | nan       | rookie   |         16.0 |         250.0 |         31.6 |        398.2 |
 | DERRICK HENRY       | RB         | BAL       | veteran  |         14.0 |         249.0 |        100.8 |        329.3 |
 | KYREN WILLIAMS      | RB         | LAR       | veteran  |         15.1 |         249.0 |        100.8 |        329.3 |
-| BO NIX              | QB         | DEN       | veteran  |         16.5 |         246.5 |        130.0 |        429.6 |
+| BO NIX              | QB         | DEN       | veteran  |         16.5 |         246.2 |        130.0 |        429.6 |
 
 ### Top 12 QB
 
 | player_name      | position   | team_id   | source   |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:-----------------|:-----------|:----------|:---------|-------------:|--------------:|-------------:|-------------:|
-| JOSH ALLEN       | QB         | BUF       | veteran  |         16.5 |         302.7 |        130.7 |        447.0 |
-| JALEN HURTS      | QB         | PHI       | veteran  |         16.5 |         295.9 |        134.0 |        449.1 |
-| JARED GOFF       | QB         | DET       | veteran  |         16.5 |         289.8 |        134.0 |        447.0 |
-| LAMAR JACKSON    | QB         | BAL       | veteran  |         14.5 |         274.5 |        134.3 |        433.2 |
+| JOSH ALLEN       | QB         | BUF       | veteran  |         16.5 |         302.6 |        130.7 |        447.0 |
+| JALEN HURTS      | QB         | PHI       | veteran  |         16.5 |         296.0 |        134.0 |        449.1 |
+| JARED GOFF       | QB         | DET       | veteran  |         16.5 |         288.2 |        130.7 |        447.0 |
+| LAMAR JACKSON    | QB         | BAL       | veteran  |         14.5 |         274.6 |        134.3 |        436.9 |
 | DAK PRESCOTT     | QB         | DAL       | veteran  |         16.5 |         274.5 |        134.3 |        433.2 |
-| JUSTIN HERBERT   | QB         | LAC       | veteran  |         16.5 |         268.9 |        130.7 |        433.2 |
-| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |         47.3 |        473.1 |
-| MATTHEW STAFFORD | QB         | LAR       | veteran  |         16.5 |         264.8 |        129.3 |        430.7 |
-| TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         262.6 |        130.4 |        427.1 |
-| BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         258.0 |        124.7 |        424.3 |
-| PATRICK MAHOMES  | QB         | KC        | veteran  |         15.0 |         251.9 |        130.7 |        430.7 |
-| CALEB WILLIAMS   | QB         | CHI       | veteran  |         16.5 |         250.5 |        132.8 |        432.8 |
+| JUSTIN HERBERT   | QB         | LAC       | veteran  |         16.5 |         269.0 |        130.7 |        433.2 |
+| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |         47.4 |        472.9 |
+| MATTHEW STAFFORD | QB         | LAR       | veteran  |         16.5 |         264.9 |        129.3 |        430.7 |
+| TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         262.5 |        130.4 |        427.1 |
+| BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         257.9 |        124.7 |        424.3 |
+| CALEB WILLIAMS   | QB         | CHI       | veteran  |         16.5 |         252.0 |        130.7 |        430.7 |
+| PATRICK MAHOMES  | QB         | KC        | veteran  |         15.0 |         251.8 |        130.7 |        430.7 |
 
 ### Top 12 RB
 
@@ -276,7 +276,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 
 | player_name        | position   |   draft_overall |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:-------------------|:-----------|----------------:|-------------:|--------------:|-------------:|-------------:|
-| Fernando Mendoza   | QB         |             1.0 |         12.4 |         268.3 |         47.3 |        473.1 |
+| Fernando Mendoza   | QB         |             1.0 |         12.4 |         268.3 |         47.4 |        472.9 |
 | Jeremiyah Love     | RB         |             3.0 |         16.0 |         250.0 |         31.6 |        398.2 |
 | Jordyn Tyson       | WR         |             8.0 |         13.6 |         200.8 |         18.7 |        326.3 |
 | Carnell Tate       | WR         |             4.0 |         13.6 |         180.7 |         26.5 |        356.9 |
@@ -285,36 +285,36 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | Jadarian Price     | RB         |            32.0 |         13.8 |         107.3 |          6.4 |        218.3 |
 | KC Concepcion      | WR         |            24.0 |         14.1 |          83.6 |          7.7 |        216.7 |
 | De'Zhaun Stribling | WR         |            33.0 |         14.1 |          72.7 |          5.5 |        195.3 |
-| Omar Cooper Jr.    | WR         |            30.0 |         14.1 |          72.1 |          6.1 |        198.9 |
+| Omar Cooper Jr.    | WR         |            30.0 |         14.1 |          72.1 |          6.1 |        198.8 |
 | Denzel Boston      | WR         |            39.0 |         14.1 |          71.7 |          4.6 |        187.7 |
 | Eli Stowers        | TE         |            54.0 |         13.9 |          61.1 |          2.9 |        166.5 |
 | Germie Bernard     | WR         |            47.0 |         14.1 |          60.0 |          3.5 |        171.0 |
-| Ty Simpson         | QB         |            13.0 |         12.4 |          58.1 |         11.0 |        223.7 |
+| Ty Simpson         | QB         |            13.0 |         12.4 |          58.1 |         11.1 |        223.6 |
 | Antonio Williams   | WR         |            71.0 |         14.1 |          52.5 |          1.8 |        148.9 |
 
 ## 6. NF-D11 — projection UNIVERSE (injured-all-year rescue) + the ADP coverage audit
 
 The base-season anchor used to DELETE any player who missed the entire base season — a whole-season injury was indistinguishable from retirement — so productive, actively-drafted players (2026: Brandon Aiyuk, Tank Dell, Jonathon Brooks, MarShawn Lloyd) had no board row at all. They are now anchored on their MOST-RECENT PLAYED season, gated on projection-season roster/depth-chart evidence (retired / out-of-league players stay excluded), and discounted by the RETURN-FROM-ABSENCE availability prior: expected games capped toward the empirical return level (historically a returner plays ~4.1 games vs ~10.4 for a base-season-present player; ~43% play ZERO) with the games band widened to the empirical returner SD. **Honest by construction — a returning player carries a WIDE band and `confidence = low`, never a rosy point.** See `ablation_results/nf_d11_absence_prior.md` for the §0.5 bake-off.
 
-**Rescued this run: 71** (rows anchored on a prior played season).
+**Rescued this run: 74** (rows anchored on a prior played season).
 
-| player_name       | position   | team_id   |   anchor_season |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 | confidence   |
-|:------------------|:-----------|:----------|----------------:|-------------:|--------------:|-------------:|-------------:|:-------------|
-| DESHAUN WATSON    | QB         | CLE       |          2024.0 |          6.1 |          67.9 |          0.0 |        162.4 | low          |
-| TANK DELL         | WR         | HOU       |          2024.0 |          5.5 |          58.6 |          0.0 |        132.5 | low          |
-| BRANDON AIYUK     | WR         | SF        |          2024.0 |          4.7 |          48.4 |          0.0 |        109.5 | low          |
-| WILL LEVIS        | QB         | TEN       |          2024.0 |          3.7 |          39.1 |          0.0 |        104.3 | low          |
-| DESMOND RIDDER    | QB         | GB        |          2024.0 |          2.4 |          27.4 |          0.0 |         61.3 | low          |
-| A.T. PERRY        | WR         | PIT       |          2023.0 |          4.4 |          26.8 |          0.0 |         59.7 | low          |
-| EASTON STICK      | QB         | IND       |          2023.0 |          1.9 |          24.7 |          0.0 |         67.7 | low          |
-| TOMMY DEVITO      | QB         | NE        |          2024.0 |          1.9 |          20.9 |          0.0 |         43.5 | low          |
-| TREY PALMER       | WR         | NO        |          2024.0 |          5.1 |          20.6 |          0.0 |         31.4 | low          |
-| QUEZ WATKINS      | WR         | PHI       |          2023.0 |          4.2 |          20.4 |          0.0 |         32.8 | low          |
-| K.J. OSBORN       | WR         | TEN       |          2024.0 |          4.5 |          18.8 |          0.0 |         32.7 | low          |
-| MARSHAWN LLOYD    | RB         | GB        |          2024.0 |          3.0 |          18.3 |          0.0 |         29.7 | low          |
-| SALVON AHMED      | RB         | CHI       |          2023.0 |          3.3 |          18.1 |          0.0 |         29.5 | low          |
-| ERICK ALL JR.     | TE         | CIN       |          2024.0 |          4.7 |          18.0 |          0.0 |         36.5 | low          |
-| SINCERE MCCORMICK | RB         | SF        |          2024.0 |          2.9 |          17.1 |          0.0 |         21.8 | low          |
+| player_name        | position   | team_id   |   anchor_season |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 | confidence   |
+|:-------------------|:-----------|:----------|----------------:|-------------:|--------------:|-------------:|-------------:|:-------------|
+| DESHAUN WATSON     | QB         | CLE       |          2024.0 |          6.1 |          67.9 |          0.0 |        162.4 | low          |
+| TANK DELL          | WR         | HOU       |          2024.0 |          5.5 |          58.6 |          0.0 |        132.5 | low          |
+| BRANDON AIYUK      | WR         | SF        |          2024.0 |          4.7 |          48.4 |          0.0 |        109.5 | low          |
+| WILL LEVIS         | QB         | TEN       |          2024.0 |          3.7 |          39.0 |          0.0 |        102.4 | low          |
+| DESMOND RIDDER     | QB         | GB        |          2024.0 |          2.4 |          26.9 |          0.0 |         58.3 | low          |
+| A.T. PERRY         | WR         | PIT       |          2023.0 |          4.4 |          26.8 |          0.0 |         59.7 | low          |
+| EASTON STICK       | QB         | IND       |          2023.0 |          1.9 |          24.7 |          0.0 |         67.7 | low          |
+| TOMMY DEVITO       | QB         | NE        |          2024.0 |          1.9 |          20.9 |          0.0 |         42.8 | low          |
+| TREY PALMER        | WR         | NO        |          2024.0 |          5.1 |          20.6 |          0.0 |         31.4 | low          |
+| QUEZ WATKINS       | WR         | PHI       |          2023.0 |          4.2 |          20.4 |          0.0 |         32.8 | low          |
+| K.J. OSBORN        | WR         | TEN       |          2024.0 |          4.5 |          18.9 |          0.0 |         32.7 | low          |
+| MARSHAWN LLOYD     | RB         | GB        |          2024.0 |          3.0 |          18.3 |          0.0 |         29.7 | low          |
+| SALVON AHMED       | RB         | CHI       |          2023.0 |          3.3 |          18.0 |          0.0 |         27.4 | low          |
+| PATRICK TAYLOR JR. | RB         | SF        |          2024.0 |          4.3 |          17.7 |          0.0 |         27.4 | low          |
+| JONATHON BROOKS    | RB         | CAR       |          2024.0 |          3.2 |          17.1 |          0.0 |         21.8 | low          |
 
 ### Standing ADP coverage audit (the check that found this)
 
@@ -323,81 +323,92 @@ Every ADP name is normalized and diffed against the projection's own (name, posi
 ```json
 {
   "n_samples": 8,
-  "pct_matched_min": 100.0,
-  "pct_matched_mean": 100.0,
-  "n_true_absences": 0,
+  "pct_matched_min": 99.5,
+  "pct_matched_mean": 99.9,
+  "n_true_absences": 1,
   "n_alias_candidates": 0,
-  "n_actionable_true_absences": 0,
-  "true_absences": [],
+  "n_actionable_true_absences": 1,
+  "true_absences": [
+    {
+      "adp_name": "Dean Connors",
+      "position": "RB",
+      "adp": 170.4,
+      "samples": [
+        "ppr/12",
+        "ppr/10"
+      ],
+      "best_adp": 170.4
+    }
+  ],
   "alias_candidates": [],
   "by_sample": {
     "ppr/12": {
-      "n_adp_rows": 267,
-      "n_adp_covered_positions": 220,
+      "n_adp_rows": 271,
+      "n_adp_covered_positions": 221,
       "n_matched": 220,
-      "pct_matched": 100.0,
+      "pct_matched": 99.5,
       "n_alias_candidates": 0,
-      "n_true_absences": 0,
-      "n_actionable_true_absences": 0
+      "n_true_absences": 1,
+      "n_actionable_true_absences": 1
     },
     "ppr/10": {
-      "n_adp_rows": 267,
-      "n_adp_covered_positions": 220,
+      "n_adp_rows": 271,
+      "n_adp_covered_positions": 221,
       "n_matched": 220,
-      "pct_matched": 100.0,
+      "pct_matched": 99.5,
       "n_alias_candidates": 0,
-      "n_true_absences": 0,
-      "n_actionable_true_absences": 0
+      "n_true_absences": 1,
+      "n_actionable_true_absences": 1
     },
     "half-ppr/12": {
-      "n_adp_rows": 230,
-      "n_adp_covered_positions": 191,
-      "n_matched": 191,
+      "n_adp_rows": 232,
+      "n_adp_covered_positions": 192,
+      "n_matched": 192,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "half-ppr/10": {
-      "n_adp_rows": 230,
-      "n_adp_covered_positions": 191,
-      "n_matched": 191,
+      "n_adp_rows": 232,
+      "n_adp_covered_positions": 192,
+      "n_matched": 192,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "standard/12": {
-      "n_adp_rows": 217,
-      "n_adp_covered_positions": 180,
-      "n_matched": 180,
+      "n_adp_rows": 223,
+      "n_adp_covered_positions": 184,
+      "n_matched": 184,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "standard/10": {
-      "n_adp_rows": 217,
-      "n_adp_covered_positions": 180,
-      "n_matched": 180,
+      "n_adp_rows": 223,
+      "n_adp_covered_positions": 184,
+      "n_matched": 184,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "2qb/12": {
-      "n_adp_rows": 243,
-      "n_adp_covered_positions": 202,
-      "n_matched": 202,
+      "n_adp_rows": 247,
+      "n_adp_covered_positions": 204,
+      "n_matched": 204,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "2qb/10": {
-      "n_adp_rows": 243,
-      "n_adp_covered_positions": 202,
-      "n_matched": 202,
+      "n_adp_rows": 247,
+      "n_adp_covered_positions": 204,
+      "n_matched": 204,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,

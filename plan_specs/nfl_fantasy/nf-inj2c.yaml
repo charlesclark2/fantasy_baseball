@@ -1,0 +1,149 @@
+# Plan spec — NF-INJ2c (FULL tier: fresh registration of the assignment-rule fix)
+# Authored by PM 2026-08-29 per NF-INJ2b rulings D1/D3/D4 + the §9#2 disposition ruling.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj2c
+  vertical: nfl_fantasy
+  card: https://trello.com/c/Dsz8CROW
+  status: ACCEPTED
+spec:
+  description: >
+    Fresh forward registration of the ASSIGNMENT-RULE fix — the mechanism
+    NF-INJ2b's matched foils actually isolated (+0.4452 CRPS, 7/7 folds,
+    p=0.0009, ordering held at all four positions; the rate fit-target
+    read mildly harmful, refuting NF-INJ2's stated mechanism). NF-INJ2b
+    nulled on (a) a mis-specified coherence gate (=0 demanded of a
+    per-fold mean, not attribution-controlled) and (b) DSR 0.9325 vs 0.95,
+    POWER_LIMITED at +1 fold. This is the fourth fix-the-spec successor
+    (MARGIN2->3, W7->W7b, VAL3->VAL3b). HONESTY CLAUSE (verbatim, per the
+    2b session's own seam): the assignment-rule result is settled; what is
+    NOT settled is whether that arm can clear a correctly-specified
+    coherence clause at all — 8.57 violations/fold is not an edge case a
+    tolerance absorbs, and this story may buy a properly-specified record
+    of a second refusal. Still funded: either outcome closes the question
+    honestly. best_alpha=0; DEPLOY-HELD; SERVED_ARM stays incumbent until
+    the gated ship path + operator approval.
+  acceptanceCriteria:
+    - description: >
+        NODE 1 IS A HARD GATE — DIAGNOSE THE GAMES-FLOOR FIRST: establish
+        or refute the hypothesis (assignment floors at max(games, 0.25)
+        while the check uses real games; surviving evidence is only a
+        count+position, 2019/QB/1 player — the row is gone). ⛔ IF REFUTED:
+        STOP after node 1 and return to the PM — clauses below get
+        re-scoped BEFORE the pre-registration is written, not after. Only
+        a confirmed-or-refuted mechanism licenses a tolerance.
+    - description: >
+        THE PRE-REGISTRATION (committed before any scoring) carries:
+        (a) the coherence clause declared FORWARD — attribution rule +
+        tolerance, designed on the node-1 diagnosis, never "=0" of a
+        per-fold mean; (b) primary arm = the assignment rule in point
+        space (stratified's isolation), with the 2b field members carried
+        by name; (c) the +1-fold question settled on DATA-FIDELITY grounds
+        (the 2019-2025 window was inherited from NF1.5 score_from, not
+        chosen — extend to 2018 only if data-honest, declared forward;
+        admissible because classify_null read POWER_LIMITED with a
+        reachable fold, not an NF-D18 trigger); (d) V-membership, BH
+        family, pbo_application="field", and the positive control per the
+        2b conventions (note PLAT-CVP2's CONSTRAINT_BLOCKED fix may not
+        have landed — if BLIND fires on injection-invariant gates, carry
+        the 2b annotation pattern).
+    - description: >
+        REGISTERED DISPOSITIONS, in order (PM ruling on 2b §9#2, declared
+        HERE forward — 2b's record is never re-read on this):
+        PRIMARY: full coherence restoration under the correctly-specified
+        clause + all standing gates -> the normal gated ship path.
+        SECONDARY — STRICT-DOMINANCE-IMPROVEMENT: shippable ONLY if the
+        arm improves or ties EVERY registered coherence + give-back
+        measure vs the SERVED incumbent (violations/fold, give-back %,
+        each declared with a forward margin) AND regresses NOTHING
+        (ordering per position, CRPS, interval floors) — with the residual
+        incoherence still disclosed on-surface (NF-INJ1-C suppression +
+        chips remain load-bearing and their guards must stay green on the
+        counterfactual). A dominance ship is still deploy-held to the
+        operator with the full measurement.
+        NULL: closes cleanly with its class; no re-test trigger unless
+        genuinely reachable.
+    - description: >
+        Carried executions from 2b's rulings: D4 — the marked annotation
+        on NF-INJ2's give-back figure (self-referential apply_2026
+        baseline; the figure did not decide that verdict; pointer to the
+        forward fix) — annotate, never re-run; D3 — the pin-against-
+        capture landmine appended to CLAUDE.md in the staged wording
+        (a repro pin over a live-snapshot-fed surface pins a captured
+        artifact, not a re-pull); plus the 2b uniform-injection/PBO
+        lesson if not already landed.
+    - description: >
+        Reproduction discipline per the D3 convention: capture the board
+        + its market snapshot at study start and pin against the capture;
+        record the freshness reading beside it. Standing rules: no bitwise
+        comparisons (population-scoped 1e-9; rookie-band motion vs a
+        >=5-draw same-commit envelope); RED-proofs with unique mutation
+        anchors (the 2b harness lesson); >2-min commands to the operator
+        paste-ready; run the owning CI shard for any shared guard touched.
+    - description: >
+        IF EITHER SHIP DISPOSITION FIRES: the level-adjacent path —
+        counterfactual rebuild, diff, placement read + interval reval via
+        --out stems, served give-back measured with the FIXED apply_2026
+        (arm-independent baseline), operator packet with top-25 moves per
+        config incl. superflex; combined read on the exact
+        publish-candidate board; the publish decision is the operator's.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj2c
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ2" / "ordering" / "assignment" (board Credence Sports, 2026-08-29)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ2b (Done, PR #1048/#1051) — the evidence base; its record stands and is never re-read on the new dispositions."
+      - "PLAT-CVP2 (To Do) — the BLIND/CONSTRAINT_BLOCKED instrument fix; consumed if landed, annotated-around if not."
+      - "NF-INJ1-C suppression + NF-C8 chips (live) — load-bearing under the dominance disposition; guards stay green."
+      - "Full-season-rate render card (To Do) — display; unaffected."
+  triedLedger:
+    files:
+      - "ablation_results nf_inj2b record (PR #1051: the 2x2, the matched-pair isolations, the gate ledger, §9)"
+      - "ablation_results/nf_inj2_rate_permutation.md (the refusal whose mechanism is now annotated as refuted-by-measurement; verdict untouched)"
+    recordedNulls:
+      - "NF-INJ2b NULL (branch 3) — this IS its sanctioned successor per ruling D1; what is new: the diagnosed coherence clause, the forward dispositions, and the fold ruling. Not a re-read."
+      - "NF-INJ2 CONSTRAINT_REFUSED — verdict stands; its MECHANISM claim is superseded by 2b's measurement, recorded via the D4 annotation, never edited."
+  supersedes: []
+  dependsOn:
+    - "PR #1051 merged to dev"
+  feedsInto:
+    - "Coherence + ordering + the give-back resolved on the flagship board — the terminal story of the injury thread's NF1.5 branch"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj2c-plan
+spec:
+  goalRef: { name: nf-inj2c }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-diagnose
+        desc: "Games-floor hypothesis: establish or refute. ⛔ REFUTED -> STOP, return to PM for re-scoping."
+      - id: 2-carried-executions
+        desc: "D4 annotation on NF-INJ2's record + the D3/2b CLAUDE.md landmines (separate commits)."
+      - id: 3-prereg
+        desc: "The full registration incl. both ship dispositions with forward margins; committed BEFORE scoring."
+      - id: 4-run
+        desc: "Decisive run (operator handoff if >2 min; capture-pinned board)."
+      - id: 5-classify
+        desc: "Gates + dispositions in registered order; decisive record."
+      - id: 6-ship-path
+        desc: "Only if a ship disposition fires: the level-adjacent path + operator packet."
+      - id: 7-closeout
+        desc: "Verdict + findings into closeout.followUps; operator summary."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

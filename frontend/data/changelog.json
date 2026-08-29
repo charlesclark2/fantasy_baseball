@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "added",
+        "text": "College football cards now carry a market line ahead of kickoff, not just after it. Until now we only captured a book's number once a game had already started, so an upcoming card had nothing to sit beside our own projection and simply said so. We now pull the board days out and refresh it more often as kickoff approaches, and every game on the opening Saturday slate showed a real spread and total alongside our numbers. Each line is stamped with when we captured it, because a line from this morning and a line from ten minutes ago are different things and you should be able to tell which one you are looking at. If we cannot prove a captured line was taken before kickoff we drop it rather than show it \u2014 a number taken after the game started is not a market line, and we would rather show nothing than something misleading. As always this is context, not a recommendation: we are showing you where our model and the market disagree, we are not telling you that either one is right."
+      },
+      {
+        "tag": "added",
         "text": "College football now has a home in the navigation, and the game cards carry team logos. The board has been live since it shipped, but there was no way to find it: no nav entry at any screen size, a bare /ncaaf that 404'd, and a footer still calling it \u201ccoming this season\u201d. NCAAF is now a top-level item in the nav \u2014 signed in or not, on a phone or a laptop \u2014 /ncaaf takes you to the slate, and the footer links it like the live product it is. On the cards themselves, each team's logo now sits beside its name. That is decoration and nothing more: the logos are deliberately smaller than the win probability, they change no number on the card, and if one fails to load you get a plain placeholder mark rather than initials that could be mistaken for something we published. Still free, still no account needed."
       },
       {
