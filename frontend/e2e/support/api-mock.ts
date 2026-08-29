@@ -93,11 +93,16 @@ export const FIXTURES = {
   //
   //   ncaafManifest / ncaafSlate      CAPTURED verbatim from production on 2026-08-24, once P3.1's
   //                                   deploy + the API-Gateway NONE routes went live. Real bytes.
-  //   ncaafSlateWithMarket            GENERATED, because there is nothing to capture: every game on
-  //                                   the live wire is `market.status = "unavailable"` (the only
-  //                                   NCAAF odds capture scheduled for 2026 is the paid /historical
-  //                                   catch-up, which cannot reach a kickoff until it is PAST —
-  //                                   P3.1 closeout item 2). Its market blocks are REAL 2025 closes
+  //   ncaafSlateWithMarket            GENERATED, because at capture time there was nothing to
+  //                                   capture: every game on the wire was `market.status =
+  //                                   "unavailable"` (the only NCAAF odds capture scheduled for
+  //                                   2026 was the paid /historical catch-up, which cannot reach a
+  //                                   kickoff until it is PAST — P3.1 closeout item 2), and prod
+  //                                   still measured that way on 2026-08-28. NCAAF-ODDS-LIVE's
+  //                                   ahead-of-kickoff feed changes that once its data lands, at
+  //                                   which point this fixture stops being the only way to reach
+  //                                   the available branch — it stays useful as the MIXED slate.
+  //                                   Its market blocks are REAL 2025 closes
   //                                   run through the SHIPPING `payloads._market()`. It leaves five
   //                                   of the eight games without a line on purpose: an all-priced
   //                                   slate could not tell "the panel renders a line" from "the

@@ -85,14 +85,41 @@ export interface NcaafDistribution {
 }
 
 /** ⚠️ `status`/`reason` exist because a null market line has SEVERAL causes that must not render
- *  identically (NF-C6b). Today EVERY upcoming game is `unavailable` — the only NCAAF odds capture
- *  scheduled for 2026 is the paid `/historical` catch-up, which by construction cannot reach a
- *  kickoff until it is PAST (P3.1 closeout item 2) — so the absent branch is the one users meet. */
+ *  identically (NF-C6b).
+ *
+ *  ⭐ BOTH BRANCHES ARE ORDINARY — do not optimise either away. Through P3.2 every upcoming game
+ *  was `unavailable` BY CONSTRUCTION (the only 2026 capture was the paid `/historical` catch-up,
+ *  which cannot reach a kickoff until it is PAST — P3.1 closeout item 2), so the absent branch was
+ *  the only one a reader could meet. NCAAF-ODDS-LIVE added a live ahead-of-kickoff feed, which
+ *  makes `available` the ordinary case for an upcoming game once its data reaches the serving
+ *  store.
+ *
+ *  ⚠️ THE CONTRACT AND THE DATA SHIP SEPARATELY, so a reader of this file may find either state on
+ *  the wire. Measured on prod 2026-08-28: the contract half IS deployed (`as_of` is served,
+ *  null) while the data half is NOT (8/8 of the 8/29 board still `source: null` with reason
+ *  `no_line_captured_for_this_kickoff`). Do not infer one from the other.
+ *
+ *  ⛔ THE ABSENT BRANCH DOES NOT RETIRE WHEN THE FEED LANDS. A leakage refusal still emits
+ *  `unavailable` (`market_snapshot_not_pre_kickoff`, `market_snapshot_instant_unprovable`), and
+ *  those two deliberately have NO `MARKET_REASON_COPY` entry — they fall through to
+ *  `MARKET_REASON_FALLBACK`, because a refusal of ours is our defect and not something a reader
+ *  can act on — a fallback that is RED-proven by that same file's `absent_reason_copy_falls_back`,
+ *  so a NEW reason can never render as a blank. */
 export interface NcaafMarketLine {
   status: "available" | "unavailable"
   reason: string | null
+  /** ⚠️ THREE values since NCAAF-ODDS-LIVE — `odds_api_live`, `odds_api_historical_t_minus_1`,
+   *  `odds_api_historical_close`. Nothing in the panel reads it, and that is asserted MECHANICALLY
+   *  rather than by convention: the `ncaaf_p3_1b_red_proof.py` case
+   *  `branches_on_status_not_on_which_snapshot` mutates the panel to branch on `market.source`
+   *  and proves a test goes red.
+   *  It is provenance for us, not copy for a reader. */
   source: string | null
   snapshot_ts: string | null
+  // ⚠️ The wire ALSO carries `market.as_of` (the instant the served line was captured) since
+  // NCAAF-ODDS-LIVE, and it is deliberately NOT declared here: nothing renders it, and a field
+  // declared ahead of its reader is the NF-C0e "wired ≠ invoked" shape. Extra JSON keys are
+  // ignored at runtime, so nothing breaks meanwhile — add it WITH its consumer, not before.
   /** Negative = the home team is favoured by that many points, the book's own convention. */
   home_spread: number | null
   total: number | null

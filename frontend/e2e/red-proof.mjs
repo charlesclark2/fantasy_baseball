@@ -2852,10 +2852,10 @@ const CASES = [
   {
     id: "ncaaf-absent-market-renders-as-a-blank",
     shipped: "NCAAF-P3.2 — an absent market line reading as PARITY",
-    // The branch nearly every reader meets: the only NCAAF odds capture scheduled for 2026 is the
-    // paid /historical catch-up, which cannot reach a kickoff until it is PAST (P3.1 closeout
-    // item 2). In a two-column comparison a blank cell reads as agreement — a fabricated market
-    // view, rendered by a component doing nothing at all.
+    // The stated-absence branch: universal through P3.2 (the 2026 capture could not reach a
+    // kickoff until it was PAST — P3.1 closeout item 2) and still live after NCAAF-ODDS-LIVE,
+    // because a leakage refusal serves no line. In a two-column comparison a blank cell reads as
+    // agreement — a fabricated market view, rendered by a component doing nothing at all.
     detail: "Falls back to an em-dash instead of naming the absence.",
     file: "components/ncaaf/market-comparison.tsx",
     from: '      {market ?? <span className="text-[11px] text-gray-500">{MARKET_ABSENT_LABEL}</span>}',
