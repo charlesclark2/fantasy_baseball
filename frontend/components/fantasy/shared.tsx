@@ -1759,14 +1759,31 @@ export function Pagination({
 }
 
 /** Download rows as CSV. Exports the WHOLE filtered set, not just the visible page — a paginated
- *  export would silently hand back 50 of 700 rows. */
-export function downloadCsv(filename: string, headers: string[], rows: (string | number | null)[][]) {
+ *  export would silently hand back 50 of 700 rows.
+ *
+ *  NF-CSV1 — `note`, when given, is appended as ONE ROW AFTER THE DATA: its text in the first cell
+ *  and the remaining cells empty, so the row keeps the header's arity. That placement is the whole
+ *  design and it is owned HERE rather than at the call site, because every part of it is a property
+ *  of the FILE rather than of any one export: the header stays row 1 so a header-first parser is
+ *  untouched, the note trails the data so a reader who slices rows by index is untouched, and the
+ *  arity holds so column tooling is untouched. ⛔ Falsy ⇒ NO ROW AT ALL, never an empty one — an
+ *  export with nothing to disclose must be byte-identical to what it was before the note existed. */
+export function downloadCsv(
+  filename: string,
+  headers: string[],
+  rows: (string | number | null)[][],
+  note?: string | null,
+) {
   const esc = (v: string | number | null) => {
     if (v == null) return ""
     const s = String(v)
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
-  const csv = [headers.map(esc).join(","), ...rows.map((r) => r.map(esc).join(","))].join("\n")
+  const lines = [headers.map(esc).join(","), ...rows.map((r) => r.map(esc).join(","))]
+  if (note) {
+    lines.push([note, ...Array(Math.max(headers.length - 1, 0)).fill(null)].map(esc).join(","))
+  }
+  const csv = lines.join("\n")
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }))
   const a = document.createElement("a")
   a.href = url
