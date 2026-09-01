@@ -253,3 +253,27 @@ def test_the_replication_leg_is_the_stop_gate_and_fresh_cannot_trigger_it():
         "the 93-row FRESH slice is UNDERPOWERED BY DESIGN and cannot trigger STOP (§3.3)")
     run = re.search(r"def run\(.*?\n(?=\ndef )", CODE, re.S).group(0)
     assert '"STOP_PREMISE_FAILED"' in run and "return out" in run
+
+
+# ── the serializer must survive every object the run produces ──────────────────────────────────
+
+def test_the_serializer_survives_a_nested_dataclass(M):
+    """`NullVerdict` carries a NESTED `LockstepReport`, so a `vars()`-based conversion leaves an
+    unserializable object one level down. Found by exercising the FULL run on planted data before
+    handing the operator an 8-minute job — it would otherwise have completed every computation and
+    then died writing its own output."""
+    import dataclasses
+    import json
+    from betting_ml.utils.cv_power import lockstep_variance_lever, classify_null
+
+    nv = classify_null(metric="p_over_gap_abs", n_folds=8, n_arms=4, beats_foil=True,
+                       observed_sr=0.7, var_trials_sr=0.001, fold_wins=6, p_one_sided=0.002,
+                       bh_cutoff=0.0125, pbo=0.5, pbo_application="field",
+                       degenerates_excluded_from_v=True, declared_field_size=4)
+    assert dataclasses.is_dataclass(nv)
+    nested = [f.name for f in dataclasses.fields(nv)
+              if dataclasses.is_dataclass(getattr(nv, f.name))]
+    assert nested, "this guard is vacuous unless NullVerdict actually carries a nested dataclass"
+    json.dumps(M._strip(nv))          # must not raise
+    json.dumps(M._strip({"lockstep": lockstep_variance_lever(
+        observed_sr=0.7, n_trials=8, var_trials_sr=0.001, n_obs=8)}))

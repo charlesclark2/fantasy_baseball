@@ -946,8 +946,10 @@ def cvp1_control(mu, sigma, dates, *, seed=SEED):
     pbos = state.get("pbo", [])
     # ⚠️ NF-INJ2b — a field-level statistic the injection cannot MOVE is INERT, never a passed leg.
     moved = bool(len(pbos) >= 2 and abs(pbos[0] - pbos[-1]) > 1e-12)
-    return {"verdict": rep.verdict, "detail": {k: v for k, v in vars(rep).items()
-                                               if k != "verdict"},
+    import dataclasses
+    return {"verdict": rep.verdict,
+            "detail": _strip({k: v for k, v in dataclasses.asdict(rep).items()
+                              if k != "verdict"}),
             "pbo_under_null_and_injected": [float(x) for x in pbos],
             "field_statistic_moved": moved,
             "field_statistic_reading": "ACTIVE" if moved else "INERT",
@@ -1024,8 +1026,8 @@ def classify(res, defl, verd, winner):
         fold_wins=v["fold_wins"], p_one_sided=v["p_one_sided"], bh_cutoff=res["bh_cutoff"],
         pbo=defl["pbo"], pbo_gate=PBO_GATE, pbo_application=PBO_APPLICATION,
         declared_field_size=DECLARED_FIELD_SIZE)
-    out = {k: (v2.item() if isinstance(v2, (np.floating, np.integer)) else v2)
-           for k, v2 in vars(nv).items()}
+    import dataclasses
+    out = _strip(dataclasses.asdict(nv))
     # ⭐ A HARD CONSTRAINT BINDS over any statistical shortfall, and publishes NO data trigger
     #    (NF-D18): no number of served games can move a collapse, a mechanism foil or an oracle.
     if hard:
@@ -1046,8 +1048,8 @@ def lockstep(defl):
     from betting_ml.utils.cv_power import lockstep_variance_lever
     r = lockstep_variance_lever(observed_sr=defl["observed_sr"], n_trials=defl["n_trials"],
                                 var_trials_sr=defl["var_trials_sr"], n_obs=N_BLOCKS)
-    return {k: (v.item() if isinstance(v, (np.floating, np.integer)) else v)
-            for k, v in vars(r).items()}
+    import dataclasses
+    return _strip(dataclasses.asdict(r))
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -1400,12 +1402,24 @@ def write_report(r, path=_REPORT_MD):
 
 
 def _strip(o):
+    """The ONE serializer. It must survive every object the run can produce.
+
+    ⚠️ `cv_power`'s `NullVerdict` carries a NESTED `LockstepReport` dataclass, so a `vars()`-based
+    conversion leaves an unserializable object one level down — caught by exercising the FULL run
+    on planted data before handing the operator an 8-minute job, which would otherwise have
+    completed every computation and then died writing its own output.
+    """
+    import dataclasses
+    if dataclasses.is_dataclass(o) and not isinstance(o, type):
+        return _strip(dataclasses.asdict(o))
     if isinstance(o, dict):
         return {k: _strip(v) for k, v in o.items() if k not in ("arms", "rows", "boot")}
     if isinstance(o, (list, tuple)):
         return [_strip(v) for v in o]
     if isinstance(o, (np.floating, np.integer)):
         return o.item()
+    if isinstance(o, (np.bool_,)):
+        return bool(o)
     if isinstance(o, np.ndarray):
         return _strip(o.tolist())
     return o

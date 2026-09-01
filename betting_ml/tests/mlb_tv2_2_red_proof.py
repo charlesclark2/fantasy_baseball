@@ -94,6 +94,12 @@ CASES = [
      "    arms = {n: Arm(n, mu * 1.01, sigma, L, block) for n, L in {**laws, **oracle_laws}.items()}",
      "test_mu_is_held_at_the_served_value_for_every_arm", None),
 
+    ("the serializer stops recursing into dataclasses", SRC,
+     "    if dataclasses.is_dataclass(o) and not isinstance(o, type):\n"
+     "        return _strip(dataclasses.asdict(o))",
+     "    if False:\n        pass",
+     "test_the_serializer_survives_a_nested_dataclass", None),
+
     ("the pull SQL starts reading a market column", SRC,
      "    s.mu, s.sigma, s.insert_lag_days,",
      "    s.mu, s.sigma, s.insert_lag_days, s.total_line_consensus,",
