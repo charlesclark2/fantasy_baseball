@@ -350,6 +350,15 @@ spec:
         * RULING 4 STAYS STANDING, UNEDITED, with node 3c as the correction beside it —
           the PM's ruling on the shape of the record, not an oversight.
 
+      ⚠️ FOR PM TRIAGE — ONE CONDITION THE REGISTRATION PUTS ON THE 2026 TRIGGER (node 3).
+      The ruling permits publishing the calendar-bound 2026 fold as a re-test trigger ("may be
+      published as one"). The prereg publishes it CONDITIONALLY: a fold trigger is only meaningful
+      when `SR > SR0`, because `n` enters DSR through `√(n−1)` and can scale a positive gap but
+      cannot create one (NF-W8-0d's lockstep invariant). If the decisive run reads DSR_UNREACHABLE,
+      the trigger is WITHHELD WITH THAT REASON STATED rather than published, because publishing it
+      would be the actively-misleading NF-D18 direction. Read as a standing-rule application of a
+      PERMISSIVE ruling, ⛔ not a departure from it — flagged here so the PM can overrule it.
+
       REMAINING FINDINGS from nodes 3-7 land here. PM triages into: checklist item on the
       parent card | merge into an existing card (name it) | a new spec. Worker sessions
       never create Trello cards.

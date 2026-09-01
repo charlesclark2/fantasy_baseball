@@ -213,14 +213,21 @@ def test_the_spec_carries_the_pm_rescope():
     assert "STRICT-DOMINANCE disposition, alone" in txt
 
 
-def test_the_spec_records_the_field_declaration_as_HELD_for_the_pm():
-    """⭐ The hold must live in the SPEC, not only in a handoff message. A blocking question that
-    exists only in prose somewhere is one a later session answers by not noticing it — and the
-    thing it would answer by accident (which field the deflation gates run over) is precisely the
-    selection bias DSR exists to deflate (MH2.2)."""
+def test_the_spec_records_the_field_declaration_and_who_made_it():
+    """⭐ RE-ANCHORED (2026-09-01), not deleted. This guard was written to pin the HOLD; the PM has
+    since RULED, so it now pins the same invariant on the other side of that ruling — the field
+    declaration lives in the SPEC and is attributed to the PM.
+
+    The invariant is unchanged and is the reason the guard exists: a question that lives only in a
+    handoff message is one a later session answers by not noticing it, and the thing it would
+    answer by accident (which field the deflation gates run over) is precisely the selection bias
+    DSR exists to deflate (MH2.2). ⛔ Weakening or deleting a guard because the world moved past
+    it is what re-anchoring exists to prevent (MH2.7)."""
     txt = _flat(_SPEC)
-    assert "HELD FOR A PM RULING — THE DSR FIELD DECLARATION" in txt
-    assert "no per-candidate-family DSR has been computed" in txt.lower() or \
-           "No per-candidate-family DSR has been computed" in txt
-    assert "HELD" in _flat(_SPEC).split("status:")[1][:120], (
-        "the spec's STATUS must carry the hold too — a followUp nobody reads is not a gate")
+    assert "PM ruling (2026-09-01, NF-INJ2c prereg)" in txt, (
+        "the field declaration is no longer attributed to the PM in the spec")
+    assert "the deflation gates' BINDING field is NF-INJ2c's own coherent family" in txt
+    assert "per-candidate-family DSR was computed" in txt, (
+        "the record must still state that no per-family DSR preceded the declaration (NF-INJ3b-M)")
+    assert "HELD FOR A PM RULING — THE DSR FIELD DECLARATION" not in txt, (
+        "a stale HELD marker survives the ruling — the spec would misreport the story's state")

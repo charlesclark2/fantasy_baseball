@@ -33,6 +33,9 @@ _RULE = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_result
                  "nf_inj2c_margin_construction_rule.md")
 _FOLD = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
                  "nf_inj2c_fold_fidelity_finding.md")
+_PREREG = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
+                   "nf_inj2c_preregistration.md")
+_SPEC = _REPO / "plan_specs/nfl_fantasy/nf-inj2c.yaml"
 _SUITE = "betting_ml/tests/test_nf_inj2c_coherence_diagnosis.py"
 #: nodes 3a/3b/3c live in their own suite; the harness routes each break to the suite that owns it.
 _SUITE_BY_NODE = {}
@@ -171,6 +174,165 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "rebuilds caches",
      "SILENTLY REBUILDS THE GITIGNORED FEATURE CACHES FROM A LIVE UPSTREAM",
      "test_the_fresh_worktree_cache_rebuild_landmine_is_in_claude_md"),
+    # ── node 3 — the PRE-REGISTRATION and the PM ruling of 2026-09-01 ─────────────────────────
+    ("the PM's field declaration loses its no-third-field clause", _SPEC,
+     "        no third field is ever computed. If the binding family's DSR refuses, that is\n",
+     "        a third field may be computed if needed. If the binding family's DSR refuses, that is\n",
+     "no third field is ever computed. If the binding family's DSR refuses",
+     "test_the_pm_field_declaration_is_transcribed_verbatim"),
+
+    # ⭐ this break is aimed at ruling 4's OPENING clause, not at the sentence the correction
+    # annotation quotes — the first cut used the quoted sentence and the harness refused it,
+    # exposing a VACUOUS guard (the annotation satisfied the check written to police it).
+    ("ruling 4 is TIDIED AWAY in place instead of annotated beside", _SPEC,
+     "        4. THE +1 FOLD is registered forward on the data-fidelity ruling already given\n",
+     "        4. THE +1 FOLD is WITHDRAWN; the registration runs at seven folds\n",
+     "4. THE +1 FOLD is registered forward on the data-fidelity ruling already given",
+     "test_ruling_4_stays_standing_unedited_with_the_correction_beside_it"),
+
+    ("the correction annotation stops saying the premise is false", _SPEC,
+     "        fold would settle the gate, so \"DSR at 8 folds is then a real gate, not a\n        formality\" — is MEASURED FALSE",
+     "        fold would settle the gate — is NOTED",
+     "is MEASURED FALSE",
+     "test_ruling_4_stays_standing_unedited_with_the_correction_beside_it"),
+
+    ("the calendar-bound trigger loses the PM's reason for allowing it", _SPEC,
+     "        8th fold as calendar-bound: the realized 2026 season — that is a genuinely\n        reachable trigger and may be published as one",
+     "        8th fold as calendar-bound",
+     "that is a genuinely\n        reachable trigger and may be published as one",
+     "test_the_calendar_bound_eighth_fold_is_recorded_as_the_only_remaining_one"),
+
+    ("the resolved hold reverts to a stale HELD marker", _SPEC,
+     "      ✅ RESOLVED BY PM RULING 2026-09-01 — THE FOLD AND THE FIELD",
+     "      ⛔ HELD FOR A PM RULING — THE DSR FIELD DECLARATION — THE FOLD AND THE FIELD",
+     "RESOLVED BY PM RULING 2026-09-01",
+     "test_the_spec_no_longer_records_the_field_as_held"),
+
+    ("the binding field silently widens back to ten arms", _PREREG,
+     "`declared_field_size = 5`, passed to `cv_power.classify_null(declared_field_size=5)`",
+     "`declared_field_size = 10`, passed to `cv_power.classify_null(declared_field_size=10)`",
+     "`declared_field_size = 5`",
+     "test_the_binding_field_is_the_five_point_space_arms_and_only_those"),
+
+    ("the exclusion stops saying it is not on the arms' scores", _PREREG,
+     "different mechanism, ⛔ not because of anything they scored.",
+     "different mechanism.",
+     "not because of anything they scored",
+     "test_the_binding_field_is_the_five_point_space_arms_and_only_those"),
+
+    ("the two-member V is declared but left as an escape hatch", _PREREG,
+     "an explanation after a number arrives. ⛔ It is not a licence to change the field afterwards.",
+     "an explanation after a number arrives.",
+     "It is not a licence to change the field afterwards",
+     "test_the_two_member_V_is_declared_forward_as_a_fragility"),
+
+    ("the field-trim reading stops being declared structurally unavailable", _PREREG,
+     "if DSR refuses, the 2×2 is reported as **STRUCTURALLY UNAVAILABLE**, ⛔ never as a trimmed number.",
+     "if DSR refuses, the 2×2 is reported with its largest contributor dropped.",
+     "the 2×2 is reported as **STRUCTURALLY UNAVAILABLE**",
+     "test_the_field_trim_reading_is_declared_structurally_unavailable"),
+
+    ("DSR-CONV's non-monotonicity is dropped, so exclusion reads as a lever", _PREREG,
+     "**(c) DSR-CONV'S EXCLUSION IS NON-MONOTONE, SO IT IS NOT A LEVER.**",
+     "**(c) DSR-CONV'S EXCLUSION LOWERS THE BAR.**",
+     "NON-MONOTONE",
+     "test_dsr_conv_non_monotonicity_is_declared_so_it_is_not_read_as_a_lever"),
+
+    ("the diagnostic field is left able to rescue a binding refusal", _PREREG,
+     "where it is more favourable than the binding number. It ⛔ **cannot rescue a binding refusal** and no\ndisposition reads it.",
+     "where it is more favourable than the binding number.",
+     "cannot rescue a binding refusal",
+     "test_the_diagnostic_field_is_declared_non_binding_in_advance"),
+
+    ("the registration quietly runs at eight folds", _PREREG,
+     "* **Folds: SEVEN — 2019–2025**, inherited from NF1.5's own `score_from`",
+     "* **Folds: EIGHT — 2018–2025**, inherited from NF1.5's own `score_from`",
+     "**Folds: SEVEN — 2019–2025**",
+     "test_the_registration_runs_at_seven_folds"),
+
+    ("the 2026 trigger loses its reachability condition", _PREREG,
+     "  **WITHHELD with that reason stated** rather than published",
+     "  published anyway",
+     "WITHHELD with that reason stated",
+     "test_the_2026_trigger_carries_its_reachability_condition"),
+
+    ("a design quantity is transcribed wrong rather than computed", _PREREG,
+     "`cv_power.dsr_ceiling(7) = 0.99973` against a 0.95 bar",
+     "`cv_power.dsr_ceiling(7) = 0.94210` against a 0.95 bar",
+     "0.99973",
+     "test_the_design_quantities_are_the_ones_cv_power_actually_computes"),
+
+    ("coherence drifts back toward being read as a distance from zero", _PREREG,
+     "incumbent**, ⛔ never as a distance from zero.",
+     "incumbent**.",
+     "never as a distance from zero",
+     "test_coherence_is_measured_and_reported_never_gated_at_zero"),
+
+    ("the prereg starts RESTATING the bands instead of pointing at them", _PREREG,
+     "was committed before the re-measure; this is a pointer, not a restatement with room to drift.",
+     "was committed before the re-measure.",
+     "this is a pointer, not a restatement",
+     "test_the_prereg_points_at_the_margin_rule_rather_than_restating_it"),
+
+    ("a declared dominance measure is dropped between 3a and the registration", _PREREG,
+     "| M6 | per-group interval coverage |",
+     "| M6-REMOVED | per-group interval coverage |",
+     "| M6 | per-group interval coverage |",
+     "test_every_margin_rule_measure_survives_into_the_registration"),
+
+    ("a regression stops being a NULL and becomes a band to widen", _PREREG,
+     "regression, and by PM ruling 3 that is a NULL** — ⛔ never a band to widen, a measure to drop, or a\ndimension to re-classify as disclosed-only.",
+     "regression** — the band is widened to the observed gap.",
+     "never a band to widen",
+     "test_a_single_regression_is_a_null_and_not_a_band_to_widen"),
+
+    ("the injection-invariant partition is dropped from the control", _PREREG,
+     "| **INJECTION-INVARIANT** | M2, M3, M4 (board coherence + give-back), M6 floors |",
+     "| **ALSO CHECKED** | M2, M3, M4 (board coherence + give-back), M6 floors |",
+     "INJECTION-INVARIANT",
+     "test_the_injection_invariant_partition_is_declared_forward"),
+
+    ("the control is left re-runnable with the blocker removed", _PREREG,
+     "⛔ **The control is never re-run\nwith a constraint removed to obtain a nicer badge** (E2.1-r).",
+     "The control may be re-run without the blocker.",
+     "never re-run\nwith a constraint removed",
+     "test_the_injection_invariant_partition_is_declared_forward"),
+
+    ("the PLAT-CVP2 status claim is removed rather than checked", _PREREG,
+     "(the `CONSTRAINT_BLOCKED` instrument fix) **has not landed**: verified at this",
+     "(the `CONSTRAINT_BLOCKED` instrument fix) is not discussed here: verified at this",
+     "**has not landed**",
+     "test_the_plat_cvp2_claim_is_true_of_the_installed_instrument"),
+
+    ("the deflation-gate partition stops taking the shipped defaults", _PREREG,
+     "The shipped `cv_power` defaults are taken **unchanged** — ⛔ no `deflation_gates=`\noverride is registered, so none may be passed.",
+     "A `deflation_gates=` override is registered for this study.",
+     "override is registered, so none may be passed",
+     "test_the_deflation_gate_partition_takes_the_shipped_defaults"),
+
+    ("the provenance claim about node 3b is removed", _PREREG,
+     "**Committed BEFORE any arm is scored, and BEFORE the node-3b re-measure has been run**",
+     "**Committed at some point in the story**",
+     "BEFORE the node-3b re-measure has been run",
+     "test_the_prereg_was_written_before_the_remeasure_and_says_so_checkably"),
+
+    ("the prereg opens an edit path for the incumbent baseline", _PREREG,
+     "⛔ never copied into this one. That is deliberate",
+     "copied into this one once node 3b runs. That is deliberate",
+     "⛔ never copied into this one",
+     "test_the_prereg_does_not_quote_the_incumbent_baseline"),
+
+    ("the NF-INJ3b-M no-menu-of-DSRs claim is dropped", _PREREG,
+     "  any candidate family** — ⛔ no per-candidate-family DSR was computed, per the NF-INJ3b-M rule.",
+     "  any candidate family**.",
+     "no per-candidate-family DSR was computed",
+     "test_no_per_candidate_family_dsr_was_computed_before_the_declaration"),
+
+    ("3a's superseded branch is REWRITTEN in place instead of marked", _RULE,
+     "5. **DSR at 8 folds does not clear 0.95**",
+     "5. **DSR at 7 folds does not clear 0.95**",
+     "DSR at 8 folds does not clear 0.95",
+     "test_the_superseded_margin_rule_branch_is_marked_not_edited"),
 ]
 
 
@@ -198,19 +360,23 @@ def _run(node_id: str) -> bool:
     return r.returncode == 0
 
 
-_NODE3_SUITE = "betting_ml/tests/test_nf_inj2c_dominance_baseline.py"
-for _b in ():
-    pass
+#: every suite a break may belong to. The harness routes each break to the suite that OWNS its
+#: guard, so a shared guard is never run from the wrong shard (CLAUDE.md's owning-shard rule).
+_OTHER_SUITES = (
+    "betting_ml/tests/test_nf_inj2c_dominance_baseline.py",
+    "betting_ml/tests/test_nf_inj2c_preregistration.py",
+)
 
 
 def main() -> int:
-    # route every node-3 break to the suite that owns it (the shared-guard/owning-shard rule)
     import subprocess as _sp
-    names = _sp.run([sys.executable, "-m", "pytest", _NODE3_SUITE, "--collect-only", "-q",
-                     "-p", "no:cacheprovider"], cwd=_REPO, capture_output=True, text=True).stdout
-    for _label, _p, _a, _r, _g, _node in BREAKS:
-        if f"::{_node}" in names:
-            _SUITE_BY_NODE[_node] = _NODE3_SUITE
+    for _suite in _OTHER_SUITES:
+        names = _sp.run([sys.executable, "-m", "pytest", _suite, "--collect-only", "-q",
+                         "-p", "no:cacheprovider"], cwd=_REPO,
+                        capture_output=True, text=True).stdout
+        for _label, _p, _a, _r, _g, _node in BREAKS:
+            if f"::{_node}" in names:
+                _SUITE_BY_NODE[_node] = _suite
     _restore_stale()
     reds, greens = 0, []
     for label, path, anchor, repl, gone, node in BREAKS:
@@ -227,10 +393,15 @@ def main() -> int:
         try:
             path.write_text(src.replace(anchor, repl, 1))
             after = path.read_text()
-            assert after != src, f"the mutation for {label!r} did not LAND on disk (#682)"
-            assert gone not in after, (
-                f"the mutation for {label!r} landed but the asserted token {gone!r} SURVIVED, so it "
-                f"cannot move the predicate the guard reads (#815)")
+            if after == src:
+                print(f"  ✗ MALFORMED BREAK — the mutation for {label!r} did not LAND (#682)")
+                greens.append(label)
+                continue
+            if gone in after:
+                print(f"  ✗ MALFORMED BREAK — {label!r} landed but {gone!r} SURVIVED, so it cannot "
+                      f"move the predicate the guard reads (#815)")
+                greens.append(label)
+                continue
             if _run(node):
                 print(f"  ✗ GREEN on broken source — {label}  →  {node}")
                 greens.append(label)
