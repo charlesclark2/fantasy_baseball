@@ -25,7 +25,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { canUse } from "@/lib/entitlements"
 import { assignTiers, freeSelection, type Player } from "@/lib/draft-optimizer"
-import { fullSeasonRateCsv, rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
+import { fullSeasonRateCsv, fullSeasonRateDisplay, rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
 import { computeLeagueDelta, draftablePoolSize } from "@/lib/league-delta"
 import {
   GenericDeltaBand,
@@ -35,6 +35,8 @@ import {
 import {
   BOARD_LOAD_ERROR_DETAIL,
   EXPECTED_POINTS_LABEL,
+  csvWithheldNote,
+  type CsvWithheldClass,
   GENERIC_DELTA_LABEL,
   LEAGUE_DELTA_DEFINITION,
   FORMAT_LOCK_EXPLANATION,
@@ -276,6 +278,23 @@ export function RankingsBoard() {
   const adpRefOf = (p: Player) => (adpPosRank ? (adpPosRank.get(p.id) ?? null) : p.adp ?? null)
 
   const exportCsv = () => {
+    // ⭐ NF-CSV1 — WHICH WITHHELD CLASSES ARE ACTUALLY IN *THIS* FILE, computed BEFORE the rows are
+    // built so the note can only ever describe what the export contains. The filtered board is what
+    // gets exported, so a position tab holding no withheld row exports no note — which is right:
+    // the note is a statement about the file, not about the board it was sliced from.
+    //
+    // ⛔ THE PREDICATE IS `kind === "withheld"`, NEVER `the cell came out empty`. The two are not
+    // the same test and the difference is the whole story: `fullSeasonRateCsv` returns `null` for
+    // the `unavailable` state as well, so an emptiness-keyed trigger would attach this note to the
+    // three rows in the served board that simply have no games figure to divide by — a note
+    // claiming a withholding on a file that contains none. It also goes through the SAME owner as
+    // every other site (`fullSeasonRateDisplay`); re-deriving the condition here would be the
+    // second owner NF-RATE1 exists to prevent.
+    const withheldClasses: CsvWithheldClass[] = []
+    if (rows.some((p) => fullSeasonRateDisplay(p.pts, p.g, p.pos).kind === "withheld")) {
+      withheldClasses.push("full-season-rate")
+    }
+
     downloadCsv(
       `credence-rankings-${configName}-${size}team-${pos.toLowerCase()}.csv`,
       // A downloaded board leaves the page and its tooltips behind, so the COLUMN NAME is the only
@@ -287,8 +306,8 @@ export function RankingsBoard() {
       // ⭐ NF-RATE1 — AND `full_season_rate` IS EMPTY ON A WITHHELD ROW. This is the fourth render
       // site of one rule and the one a table-only fix silently misses, so it goes through the SAME
       // owner as the three on-page ones (`fullSeasonRateCsv` → `fullSeasonRateDisplay`). ⚠️ THE
-      // SEMANTICS OF THE EMPTY CELL, stated here because this export has no header note and no data
-      // dictionary to state them in: a column that carries a number on other rows and nothing on
+      // SEMANTICS OF THE EMPTY CELL, stated here and — since NF-CSV1 — in the FILE, as a trailing
+      // note row on any export that actually contains one: a column with a number on other rows and
       // this one is a WITHHOLDING, not a missing field — we have the number and are declining to
       // publish it, because it is above any full season on record at that position. `expected_pts`
       // and `expected_games` are in the same file two columns left, so a reader who wants the
@@ -313,6 +332,10 @@ export function RankingsBoard() {
           ...(delta ? [deltaOnScale(deltaById.get(p.id), deltaScale)] : []),
         ]
       }),
+      // NF-CSV1 — the note row, or `null` when this file withholds nothing. `downloadCsv` owns WHERE
+      // it lands (after the data, first cell only, header arity kept) and the copy module owns WHAT
+      // it says; this call site only says WHICH CLASSES are in the file.
+      csvWithheldNote(withheldClasses),
     )
   }
 

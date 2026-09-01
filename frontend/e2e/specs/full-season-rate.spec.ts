@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test"
 import { FIXTURES, mockApi, collectPageErrors, type MockOptions } from "../support/api-mock"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../support/assertions"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
+import { noteCell, readExportedCsv } from "../support/exported-csv"
+import { CSV_WITHHELD_NOTE, csvWithheldNote } from "@/lib/fantasy-claim-copy"
 
 /**
  * NF-RATE1 — THE FULL-SEASON RATE IS NOT PRINTED WHEN IT IS ABOVE ANY FULL SEASON ON RECORD.
@@ -229,6 +231,74 @@ test.describe("the CSV export — the site a table-only fix misses", () => {
     ).not.toBe("")
     expect(Number(cleanCells[iRate])).toBeGreaterThan(0)
     expect(cleanCells[iName]).toContain(CLEAN.name)
+
+    expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("the file STATES the withholding — the note row's bytes are the copy module's", async ({
+    page,
+  }) => {
+    // ⭐ NF-CSV1 — THE HALF THE CASE ABOVE DELIBERATELY DOES NOT COVER. That one proves the number
+    // is gone; this one proves the reader is told WHY. An empty cell with no explanation anywhere
+    // in the file is "we have nothing for this player" to a spreadsheet reader — the same E9.56c
+    // inversion the on-page popover exists to prevent, arriving through the one surface that
+    // leaves the popover behind.
+    //
+    // ⭐⭐ THE RENDERED BYTES, PINNED AGAINST THE COPY MODULE. `fantasy-claim-copy.ts` is what the
+    // Python suite screens; only reading it back OUT OF THE DOWNLOADED FILE proves the wording a
+    // reader actually meets is the wording that was screened (the NF-INJ1-C "pin the rendered
+    // string, per surface" rule — and here the surface is a file, so no DOM assertion can do it).
+    const errors = collectPageErrors(page)
+    const mock = await mockApi(page, withCappedGames())
+    await openBoard(page, "/fantasy/rankings")
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Export CSV" }).click(),
+    ])
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+    const { noteLines } = readExportedCsv(Buffer.concat(chunks).toString("utf8"))
+
+    expect(
+      noteLines.length,
+      `${WITHHELD.name}'s rate is withheld in this file and it explains nothing — the export is ` +
+        `a blank cell a reader cannot ask about`,
+    ).toBe(1)
+
+    const note = noteCell(noteLines[0])
+    expect(
+      note,
+      "the exported note is not the wording the copy module screens",
+    ).toBe(csvWithheldNote(["full-season-rate"]))
+
+    // ⛔ IT ENUMERATES THE CLASSES PRESENT, so the clause for the one class this file can withhold
+    // is there — and the note stays a statement about THIS file rather than a fixed paragraph.
+    expect(note, "the note omits the class it is describing").toContain(
+      CSV_WITHHELD_NOTE.clause["full-season-rate"],
+    )
+    // ...and points the reader at the surface that carries the per-row disclosure.
+    expect(note, "the note does not say where the full disclosure is").toContain(
+      CSV_WITHHELD_NOTE.trailer,
+    )
+
+    // ⛔ NO OVERCLAIM, NO FORECAST, NO INJURY VERB — the same bar the on-page disclosure is held
+    // to, applied to the copy in the file, because a downloaded claim is still a published claim.
+    expect(forbiddenPhrasesIn(note), "the exported note carries an overclaim").toEqual([])
+    for (const banned of [/expected to miss/i, /will miss/i, /is injured/i, /injury/i]) {
+      expect(note, `the exported note makes a forecast: ${banned}`).not.toMatch(banned)
+    }
+
+    // ⚠️ AND IT DOES NOT COLLAPSE THE TWO REASONS A CELL IS BLANK. `fullSeasonRateCsv` returns
+    // `null` for `unavailable` as well, so a note reading "a blank here is a withholding" would be
+    // false about the rows that simply have no games figure. It has to say the file cannot tell
+    // them apart, and this is the clause that keeps it saying so.
+    expect(
+      note.toLowerCase(),
+      "the note claims every blank in the column is a withholding, which is not true of this file",
+    ).toContain("cannot tell the two apart")
 
     expectApiFullyMocked(mock)
     expectNoPageErrors(errors)
