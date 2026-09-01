@@ -72,6 +72,17 @@ def staged(tmp_path, monkeypatch):
                                   "players": [{"id": "x", "fpPpr": 10.0, "g": 17.0}]}))
     monkeypatch.setattr(DB, "_SERVED_JSON", served)
     monkeypatch.setattr(DB, "_CAPTURE_STAMP", tmp_path / "nf_inj2c_capture.json")
+    # ⭐ RE-ANCHORED 2026-09-01: `capture()` now enforces the MARKET-VINTAGE precondition, so the
+    # fixture stages a MATCHING manifest + local vintage. These tests are about the BOARD-BYTES
+    # pin, and a fixture that failed the market check would make them pass for the wrong reason —
+    # ⛔ the precondition is satisfied here, never disabled (its own two-sided guards live below).
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"adp_as_of": "2026-08-31", "ecr_as_of": "2026-08-31"}))
+    monkeypatch.setattr(DB, "_MANIFEST_JSON", manifest)
+    from quant_sports_intel_models.football.nfl.fantasy import market_freshness as _MF
+    monkeypatch.setattr(_MF, "market_as_of", lambda season, **kw: {
+        "adp": {"source": "ffc", "as_of": "2026-08-31"},
+        "ecr": {"source": "fantasypros", "as_of": "2026-08-31", "label": "8/31"}})
     return served
 
 
@@ -231,3 +242,135 @@ def test_the_spec_records_the_field_declaration_and_who_made_it():
         "the record must still state that no per-family DSR preceded the declaration (NF-INJ3b-M)")
     assert "HELD FOR A PM RULING — THE DSR FIELD DECLARATION" not in txt, (
         "a stale HELD marker survives the ruling — the spec would misreport the story's state")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# THE MARKET-VINTAGE PRECONDITION (PM ruling 2026-09-01 (a)) — guarded BOTH ways
+#
+# Node 3b run 1 burned a full >2-min build and returned VOID because the local ECR cache was six
+# days older than the served board's. The precondition converts that into an up-front refusal. A
+# guard that only proved it REFUSES would be half a guard: a check that refuses everything is as
+# useless as one that refuses nothing, so the matched case is asserted to PASS just as hard.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+import json as _json  # noqa: E402
+import sys as _sys  # noqa: E402
+
+import pytest as _pytest  # noqa: E402
+
+_sys.path.insert(0, str(_REPO))
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    run_nf_inj2c_dominance_baseline as _B,
+)
+
+
+def _stage_manifest(tmp_path, adp: str | None, ecr: str | None, monkeypatch) -> None:
+    """Point the module at a manifest declaring the SERVED vintage, without touching real files."""
+    man = tmp_path / "manifest.json"
+    payload: dict = {"generated_at": "2026-08-31T14:18:54Z"}
+    if adp is not None:
+        payload["adp_as_of"] = adp
+    if ecr is not None:
+        payload["ecr_as_of"] = ecr
+    man.write_text(_json.dumps(payload))
+    monkeypatch.setattr(_B, "_MANIFEST_JSON", man)
+
+
+def _stub_local(monkeypatch, adp: str | None, ecr: str | None) -> None:
+    """Stub the LOCAL cache vintages that `market_as_of` reads off disk."""
+    from quant_sports_intel_models.football.nfl.fantasy import market_freshness as MF
+
+    def _fake(season, **kw):
+        return {
+            "adp": None if adp is None else {"source": "ffc", "as_of": adp},
+            "ecr": None if ecr is None else {"source": "fantasypros", "as_of": ecr, "label": "x"},
+        }
+
+    monkeypatch.setattr(MF, "market_as_of", _fake)
+
+
+def test_a_matched_market_vintage_PASSES(tmp_path, monkeypatch) -> None:
+    """⭐ The half that is easy to leave untested. A precondition that refuses everything blocks the
+    study exactly as effectively as the defect it replaced."""
+    _stage_manifest(tmp_path, adp="2026-08-31", ecr="2026-08-31", monkeypatch=monkeypatch)
+    _stub_local(monkeypatch, adp="2026-08-31", ecr="2026-08-31")
+    got = _B.assert_market_vintage_matches()
+    assert got["ecr"]["served_as_of"] == got["ecr"]["local_as_of"] == "2026-08-31"
+
+
+def test_the_run_1_mismatch_REFUSES_and_names_input_both_vintages_and_the_fix(
+        tmp_path, monkeypatch) -> None:
+    """The exact shape that cost run 1: ADP matched, ECR six days stale."""
+    _stage_manifest(tmp_path, adp="2026-08-31", ecr="2026-08-31", monkeypatch=monkeypatch)
+    _stub_local(monkeypatch, adp="2026-08-31", ecr="2026-08-25")
+    with _pytest.raises(SystemExit) as ei:
+        _B.assert_market_vintage_matches()
+    msg = str(ei.value)
+    assert "ECR" in msg, "the refusal must NAME the mismatched input"
+    assert "2026-08-31" in msg and "2026-08-25" in msg, "it must carry BOTH vintages"
+    assert "run_ecr_ingest" in msg and "--refresh" in msg, (
+        "a refusal that does not name its own remedy has converted nothing — that is the whole "
+        "point of the precondition (PM ruling 2026-09-01 (a))")
+    assert "ADP" not in msg.split("WHY:")[0], (
+        "ADP matched here and must NOT be reported as a problem — a refusal that blames every "
+        "input tells the operator nothing about which one to fix")
+
+
+def test_an_unreadable_local_vintage_REFUSES_rather_than_passing(tmp_path, monkeypatch) -> None:
+    """NF1.7 (a): a check that cannot be evaluated is never scored as a pass."""
+    _stage_manifest(tmp_path, adp="2026-08-31", ecr="2026-08-31", monkeypatch=monkeypatch)
+    _stub_local(monkeypatch, adp="2026-08-31", ecr=None)
+    with _pytest.raises(SystemExit) as ei:
+        _B.assert_market_vintage_matches()
+    assert "UNREADABLE OR ABSENT" in str(ei.value)
+
+
+def test_a_manifest_without_the_vintage_REFUSES_rather_than_passing(
+        tmp_path, monkeypatch) -> None:
+    """A served board that does not state its vintage makes the precondition UNEVALUABLE, which is
+    a refusal — ⛔ never a silent pass on a board whose inputs are unknown."""
+    _stage_manifest(tmp_path, adp="2026-08-31", ecr=None, monkeypatch=monkeypatch)
+    _stub_local(monkeypatch, adp="2026-08-31", ecr="2026-08-31")
+    with _pytest.raises(SystemExit) as ei:
+        _B.assert_market_vintage_matches()
+    assert "CANNOT be evaluated" in str(ei.value)
+
+
+def test_a_missing_manifest_REFUSES_with_the_staging_command(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(_B, "_MANIFEST_JSON", tmp_path / "absent.json")
+    with _pytest.raises(SystemExit) as ei:
+        _B.market_vintage()
+    assert "aws s3 cp" in str(ei.value) and "manifest.json" in str(ei.value)
+
+
+def test_capture_enforces_the_precondition_so_it_cannot_be_bypassed() -> None:
+    """A precondition the capture path does not CALL is documentation, not a gate (NF-C0e:
+    wired is not invoked)."""
+    import inspect
+
+    src = inspect.getsource(_B.capture)
+    assert "assert_market_vintage_matches()" in src, (
+        "`capture` no longer enforces the market precondition — it would stamp a capture that "
+        "cannot be pinned")
+
+
+def test_the_run_path_rechecks_that_the_caches_did_not_move_after_the_capture() -> None:
+    """⭐ The caches are ordinary files a later refresh can move underneath a VALID capture. The
+    board's sha256 does not constrain them, so an unchanged board is NOT evidence the ordering
+    inputs are unchanged."""
+    import inspect
+
+    src = inspect.getsource(_B.assert_capture_intact)
+    assert "assert_market_vintage_matches()" in src
+    assert "market_vintage" in src and "--recapture" in src
+
+
+def test_every_declared_market_input_carries_a_real_refresh_command() -> None:
+    """The registry is the refusal's remedy. An entry naming a command that does not exist would
+    send an operator at a script that is not there."""
+    assert _B._MARKET_INPUTS, "the market-input registry is empty — the precondition checks nothing"
+    for name, manifest_key, cmd in _B._MARKET_INPUTS:
+        assert manifest_key.endswith("_as_of"), f"{name}: not a manifest vintage key"
+        mod = cmd.split("run_")[1].split(" ")[0]
+        assert (_REPO / "quant_sports_intel_models" / "football" / "nfl" / "fantasy"
+                / f"run_{mod}.py").exists(), f"{name}: refresh command names a missing module"
+        assert "--refresh" in cmd, f"{name}: the command would not actually refresh anything"

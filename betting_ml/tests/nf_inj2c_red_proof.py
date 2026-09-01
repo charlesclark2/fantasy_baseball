@@ -333,6 +333,57 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "5. **DSR at 7 folds does not clear 0.95**",
      "DSR at 8 folds does not clear 0.95",
      "test_the_superseded_margin_rule_branch_is_marked_not_edited"),
+    # ── node 3b (PM ruling 2026-09-01 (a)) — the MARKET-VINTAGE precondition ──────────────────
+    ("a mismatched market vintage stops being refused", _BASE,
+     '        elif str(mine) != str(served):',
+     '        elif False:',
+     'elif str(mine) != str(served):',
+     "test_the_run_1_mismatch_REFUSES_and_names_input_both_vintages_and_the_fix"),
+
+    ("an UNREADABLE local vintage is scored as a pass", _BASE,
+     '        elif mine is None:\n            problems.append(',
+     '        elif mine is None:\n            _ignored = (',
+     'elif mine is None:\n            problems.append(',
+     "test_an_unreadable_local_vintage_REFUSES_rather_than_passing"),
+
+    ("a manifest with no vintage is scored as a pass", _BASE,
+     '        if served is None:\n            problems.append(',
+     '        if served is None:\n            _skipped = (',
+     'if served is None:\n            problems.append(',
+     "test_a_manifest_without_the_vintage_REFUSES_rather_than_passing"),
+
+    ("the refusal drops the remedy the operator needs", _BASE,
+     '                f" — MISMATCHED. Refresh it, then re-capture:\\n      {cmd}")',
+     '                f" — MISMATCHED.")',
+     'MISMATCHED. Refresh it, then re-capture',
+     "test_the_run_1_mismatch_REFUSES_and_names_input_both_vintages_and_the_fix"),
+
+    ("capture stops enforcing the precondition, so it can be bypassed", _BASE,
+     '    vintage = assert_market_vintage_matches()\n    doc = json.loads(_SERVED_JSON.read_text())',
+     '    vintage = market_vintage()\n    doc = json.loads(_SERVED_JSON.read_text())',
+     # ⚠️ the gone-token must not be a SUBSTRING of the sibling call: `now_vintage = assert_…`
+     # in `assert_capture_intact` contains `vintage = assert_…` verbatim (the E11.24 wrong-symbol
+     # class, caught by the harness rather than by review).
+     '    vintage = assert_market_vintage_matches()\n    doc = json.loads',
+     "test_capture_enforces_the_precondition_so_it_cannot_be_bypassed"),
+
+    ("the run path stops re-checking that the caches held still", _BASE,
+     '    now_vintage = assert_market_vintage_matches()\n    captured_vintage = stamp.get("market_vintage")',
+     '    now_vintage = market_vintage()\n    captured_vintage = None',
+     'now_vintage = assert_market_vintage_matches()',
+     "test_the_run_path_rechecks_that_the_caches_did_not_move_after_the_capture"),
+
+    ("the market-input registry is emptied, so the precondition checks nothing", _BASE,
+     '_MARKET_INPUTS: tuple[tuple[str, str, str], ...] = (\n    ("adp", "adp_as_of",',
+     '_MARKET_INPUTS: tuple[tuple[str, str, str], ...] = ()\n_UNUSED = (\n    ("adp", "adp_as_of",',
+     '_MARKET_INPUTS: tuple[tuple[str, str, str], ...] = (\n    ("adp", "adp_as_of",',
+     "test_every_declared_market_input_carries_a_real_refresh_command"),
+
+    ("a MATCHED vintage starts being refused too, blocking the study outright", _BASE,
+     '        elif str(mine) != str(served):',
+     '        elif True:',
+     'elif str(mine) != str(served):',
+     "test_a_matched_market_vintage_PASSES"),
 ]
 
 
