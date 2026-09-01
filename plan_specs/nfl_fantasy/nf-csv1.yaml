@@ -1,0 +1,124 @@
+# Plan spec — NF-CSV1 (MINI tier: CSV export withheld-cell disclosure — note row + row-count contract)
+# Authored by PM 2026-09-01 per NF-RATE1 closeout ruling ①. Premises quoted from the
+# NF-RATE1 record verbatim (the spec-premise rule, plan_spec_process.md 2026-09-01).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-csv1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/s8nBTYFB
+  status: ACCEPTED
+spec:
+  description: >
+    Close the export-honesty gap NF-RATE1 left open by design: a
+    suppressed full-season-rate renders as an EMPTY CELL in the exported
+    CSV with no explanation anywhere in the file. The on-page column is
+    fully disclosed (em-dash + InfoTip); a reader who works from the
+    file sees a blank with no way to ask about it. Premises, verbatim
+    from the NF-RATE1 record: the CSV is built ENTIRELY CLIENT-SIDE
+    (exportCsv -> downloadCsv -> a browser Blob in rankings-board.tsx;
+    full_season_rate appears in no Python file; there is NO exporter
+    half, nothing rides deploy.sh or the box image); the suppression
+    owner is fullSeasonRateDisplay in lib/fantasy.ts with
+    fullSeasonRateCsv -> null -> the empty cell; the row-count contract
+    lives in fantasy-board-flows.spec.ts (lines - 1 == board total).
+    Sanctioned shape (ruled): a NOTE ROW in the CSV + updating that
+    contract — NOT a companion README-in-zip, NOT a title= on the
+    Export button. Frontend-only; auto-deploys with main; best_alpha=0;
+    no projection value, ordering, band, or served-field change.
+  acceptanceCriteria:
+    - description: >
+        THE NOTE ROW preserves machine-readability: the header row stays
+        row 1 and the data columns are untouched; the note is appended
+        AFTER the data rows (first cell carries the text, remaining
+        cells empty), so header-first parsers and column tooling keep
+        working. The note appears ONLY when the export actually contains
+        at least one withheld cell, and it enumerates EACH withheld
+        class present in the file — before writing the copy, CHECK
+        whether the NF-INJ1-C stat-line suppression's withheld values
+        also reach any exported column; if they do, the note names both
+        classes; if they do not, record that check in the closeout
+        rather than silently assuming it. No withheld cells -> no note
+        row -> the file is byte-identical to today's.
+    - description: >
+        THE ROW-COUNT CONTRACT is UPDATED, not weakened: the
+        fantasy-board-flows.spec.ts assertion moves to an exact form
+        that accounts for the conditional note (e.g. dataLines == board
+        total AND noteLines == 0-or-1 keyed on whether a withheld cell
+        exists) — never a >= or a tolerance. The updated clause must
+        FAIL on a note row appearing when nothing is withheld, and on a
+        withheld cell appearing with no note (both directions).
+    - description: >
+        COPY through fantasy-claim-copy.ts (a new CSV_WITHHELD_NOTE
+        constant beside the NF-RATE1 labels): no forecast language, no
+        injury verbs, states what is withheld and why in the Option-C
+        register, and points the reader at the on-page column for the
+        full disclosure. The note-copy constant is pinned on the
+        RENDERED bytes (the NF-INJ1-C lesson: pin the rendered string,
+        per surface — here the surface is the downloaded file), with the
+        retired absence asserted beside it where a wording is replaced.
+    - description: >
+        E2E reads the ACTUAL DOWNLOADED CSV BYTES both ways (the
+        NF-RATE1 pattern): a planted withheld row (fixture via
+        transform — the committed 858-row board has zero breaching
+        rows, so asserting against it as-is asserts nothing) proving
+        the note row + its copy + the empty cell; and the untouched
+        board proving NO note row and byte-stability. Guards RED-proven
+        with unique mutation anchors, and the Python red-proof harness
+        (if one is added) carries the two NF-RATE1 controls —
+        baseline-pass + NOT-SELECTED — from day one (reference:
+        betting_ml/tests/nf_rate1_red_proof.py).
+    - description: >
+        Scope discipline: fullSeasonRateDisplay, the envelope, and
+        MIN_GAMES are UNTOUCHED (their guards stay green); the on-page
+        rendering is untouched; no backend file changes (the stale
+        fantasy.py docstring card is explicitly NOT ridden here — it
+        stays its own item). Changelog entry (user-facing); surgical
+        JSON insert, rebase before push (the week-block is shared with
+        in-flight stories). Verify the live export post-deploy on the
+        published board — merged never means served, even on the
+        auto-deploy path (confirm the Vercel build actually ran; a
+        docs-only HEAD commit gets skipped by the ignoreCommand).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-csv1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "frontend NFL" / "CSV" (board Credence Sports, 2026-09-01)'
+    duplicates: []
+    adjacent:
+      - "NF-RATE1 (Done, live) — the parent; its owner/envelope/guards untouched; this story completes its disclosure to the export surface."
+      - "NF-INJ1-C (Done, live) — the sibling withheld class; checked for CSV reach, named in the note if present, machinery untouched."
+      - "Stale fantasy.py docstring card (ESfAgreu, Follow Ups) — NOT ridden; this story touches no backend file."
+      - "NF-INJ2c / MLB-TV2-2 (IN FLIGHT) — disjoint files; changelog week-block is the only shared surface (rebase)."
+      - "Next NCAAF frontend story (fixture ADD card, Backlog) — queued BEHIND this one; one frontend story at a time."
+  triedLedger:
+    files:
+      - "plan_specs/nfl_fantasy/nf-rate1.yaml closeout followUps (items 1+2: the no-exporter-half correction; the no-header-note/no-data-dictionary finding; the session's analysis of why zip-README and button-tooltip fail)"
+      - "frontend/components/fantasy/rankings-board.tsx (exportCsv/downloadCsv/fullSeasonRateCsv) + frontend/e2e/specs/fantasy-board-flows.spec.ts (the row-count contract)"
+      - "frontend/lib/fantasy-claim-copy.ts (the Option-C copy conventions + NF-RATE1 labels)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn:
+    - "PR #1056 on main (landed — the withheld cell this discloses)"
+  feedsInto:
+    - "Paid-surface honesty through Week 1 (9/9): the export a subscriber works from is as disclosed as the page"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-csv1-plan
+spec:
+  goalRef: { name: nf-csv1 }
+  graph:
+    nodes: []   # MINI tier — sequence in acceptanceCriteria
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
