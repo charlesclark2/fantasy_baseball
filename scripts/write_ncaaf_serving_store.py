@@ -202,6 +202,84 @@ def read_snapshots(season: int, source: str, *, local_root: str | None = None):
     return gps.read_existing_snapshots(season, source, local_root=local_root)
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# The re-serve tier (NCAAF-ODDS-LIVE followUp ⑦ — operator chose option (b), 2026-08-29)
+# ══════════════════════════════════════════════════════════════════════════════════════════
+
+#: The America/Los_Angeles hour the BASELINE re-serve fires at. This is the schedule that has
+#: always run — daily 06:00 PT, before the earliest ~09:00 PT kickoff window — and it is preserved
+#: EXACTLY, so this whole tier is MONOTONE: every write that happened before still happens, and
+#: the dense tier only ADDS refreshes. A cadence change that can only add work is a change whose
+#: worst case is "no better than today", which is the only reason it is safe to make in-season.
+SERVING_BASELINE_HOUR_LOCAL = 6
+
+#: The timezone `SERVING_BASELINE_HOUR_LOCAL` is expressed in — the same US baseball/football day
+#: the whole serving path is keyed on (INC-22).
+SERVING_TZ = "America/Los_Angeles"
+
+
+def upcoming_kickoffs(season: int, *, now: datetime | None = None,
+                      local_root: str | None = None) -> list[datetime]:
+    """Kickoff instants, for games WE SERVE, that have not happened yet.
+
+    ⛔ NOT `sources._season_kickoffs` — that is a CFBD call, and this job's contract is
+    lake-only-plus-AWS (no CFBD key, no Odds credits, no gitignored parquet). Putting a CFBD
+    dependency behind a HALT-tier serving write would mean a missing key could stop the board from
+    refreshing, which is a strictly worse failure than the staleness this tier exists to fix.
+
+    ⭐ Reading the SNAPSHOT table instead is also the better gate on its merits: it answers "is a
+    game we actually have a projection for about to kick off?", and a kickoff we serve nothing for
+    is a kickoff no re-serve could improve.
+    """
+    from quant_sports_intel_models.football.ncaaf.models import game_prediction_snapshot as gps
+
+    now = now or datetime.now(timezone.utc)
+    raw = read_snapshots(season, gps.SNAPSHOT_SOURCE, local_root=local_root)
+    if raw is None or getattr(raw, "empty", True) or "commence_time" not in raw.columns:
+        return []
+    kicks = pd.to_datetime(raw["commence_time"], utc=True, errors="coerce").dropna().unique()
+    return [k.to_pydatetime() for k in pd.to_datetime(kicks) if k.to_pydatetime() > now]
+
+
+def should_reserve(kickoffs, *, now: datetime | None = None,
+                   baseline_hour_local: int = SERVING_BASELINE_HOUR_LOCAL,
+                   tz: str = SERVING_TZ) -> tuple[bool, str]:
+    """Does THIS hourly tick re-publish the serving store? A pure function of the clock.
+
+    Mirrors `odds_live_capture.should_capture` deliberately, and shares its window by IMPORT rather
+    than by copy — the producer's cadence defines the consumer's, so a change to
+    `DENSE_WINDOW_HOURS` moves both at once (E9.61).
+
+      * inside the capture's dense window → re-serve EVERY hour. This is the whole point: the
+        capture is hourly there, so a daily re-serve would leave a Saturday-morning line move
+        reaching the reader after the games (an INC-25 ordering mismatch on the REFRESH axis
+        rather than the build axis).
+      * otherwise → the baseline daily write, unchanged.
+      * otherwise → skip, and SAY SO. A silent skip is indistinguishable from a schedule that has
+        stopped firing (NF-FRESH1), and this job is cheap and always-succeeding, which is exactly
+        the shape that invites 19 green runs over a frozen store.
+
+    ⭐ The tier is CLOCK-driven, not lake-diff-driven, on purpose: "has a newer odds row landed
+    since the last serve?" needs persisted state, and the write is idempotent anyway, so a diff
+    would buy nothing but a thing to go wrong.
+    """
+    from zoneinfo import ZoneInfo
+
+    from quant_sports_intel_models.football.ncaaf.ingest.odds_live_capture import in_dense_window
+
+    now = now or datetime.now(timezone.utc)
+    dense, why = in_dense_window(kickoffs, now=now)
+    if dense:
+        return True, (f"dense tier: {why} — re-serving every hour so a moving line reaches the "
+                      "reader before kickoff, not after")
+    local_hour = now.astimezone(ZoneInfo(tz)).hour
+    if local_hour == baseline_hour_local:
+        return True, (f"baseline tier: the daily {baseline_hour_local:02d}:00 {tz} write "
+                      f"({why})")
+    return False, (f"skip: {local_hour:02d}:00 {tz} is not the {baseline_hour_local:02d}:00 "
+                   f"baseline write and {why} — nothing to refresh, 0 writes")
+
+
 def read_market_lines(season: int) -> tuple[dict[int, dict], bool]:
     """`{game_id: close-line row}` for `season`, plus a `read_failed` flag. WARN tier: never raises.
 

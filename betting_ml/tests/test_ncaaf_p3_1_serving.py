@@ -762,11 +762,31 @@ def test_the_serving_write_schedule_is_daily_and_in_season():
 
 
 def test_the_serving_write_op_is_halt_tier():
-    """Manifest-FREE: the op must not wrap the write in a `try`. A swallowed failure here is a
-    serving outage that reports success — the class that produced 19 green runs (NF-FRESH1)."""
-    src = _code_only((_REPO / "pipeline/jobs/sports_ncaaf_serving_write_job.py").read_text())
-    assert "try" not in src.split(), (
-        "the serving write is HALT tier: it must raise, not swallow")
+    """Manifest-FREE: no `try` may ENCLOSE the write. A swallowed failure here is a serving outage
+    that reports success — the class that produced 19 green runs (NF-FRESH1).
+
+    ⚠️ RE-ANCHORED 2026-08-29 (NCAAF-ODDS-LIVE followUp ⑦), NOT weakened. This asserted "the token
+    `try` appears nowhere in the file", which was a fine PROXY while the file did one thing. The
+    re-serve tier added a `try` around the TIER READ — which must fail OPEN, i.e. fall through to
+    the write — and the proxy fired on it even though the write is not wrapped at all. A proxy that
+    fires on a compliant change is one that will be silenced by the next author, so it is now the
+    PROPERTY: walk the AST and require that no `try` encloses a call to `_run_serving_write`. That
+    is strictly stronger than the token scan — the scan could not have told a `try` around the
+    write from a `try` anywhere else, which is exactly the distinction that matters here.
+    """
+    import ast
+    tree = ast.parse((_REPO / "pipeline/jobs/sports_ncaaf_serving_write_job.py").read_text())
+    guarded = [n for t in ast.walk(tree) if isinstance(t, ast.Try) for n in ast.walk(t)
+               if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "_run_serving_write"]
+    assert not guarded, (
+        "the serving write is HALT tier: it must raise, not swallow — a `try` now encloses the "
+        "call to _run_serving_write")
+    # and the write must actually still be called, or the guard above passes on nothing
+    calls = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "_run_serving_write"]
+    assert len(calls) >= 2, (
+        f"expected the write to be called by both ops, found {len(calls)} call(s) — this guard "
+        "would otherwise be satisfied by a file that never writes at all")
 
 
 def test_the_serving_write_op_runs_after_the_snapshot_ops(writer):

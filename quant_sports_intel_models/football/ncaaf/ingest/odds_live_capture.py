@@ -252,6 +252,32 @@ def next_kickoff(kickoffs, *, now: datetime | None = None) -> datetime | None:
     return min(future) if future else None
 
 
+def in_dense_window(kickoffs, *, now: datetime | None = None,
+                    dense_window_hours: int = DENSE_WINDOW_HOURS) -> tuple[bool, str]:
+    """"Is a kickoff close enough that the line is actively moving?" — the DENSE half of the tier,
+    on its own, as a pure function of the clock.
+
+    ⭐ EXTRACTED so the SERVING re-serve can share it (`write_ncaaf_serving_store.should_reserve`).
+    That re-serve exists because the capture got FASTER than its consumer: an hourly capture behind
+    a daily re-serve means a line that moves on a Saturday morning reaches the reader only after
+    the games. Its window must therefore BE this window, not a copy of it — a second `24` living
+    somewhere else is a second rule, free to drift the moment either is tuned (E9.61: two callers
+    of one rule must not be two rules). Every caller reads `DENSE_WINDOW_HOURS` through here.
+
+    Returns `(inside?, why)` — a reason on BOTH branches, because the caller must be able to say
+    why it did nothing (NF-FRESH1: a silent skip is indistinguishable from a schedule that has
+    quietly stopped firing).
+    """
+    now = _now(now)
+    nxt = next_kickoff(kickoffs, now=now)
+    if nxt is None:
+        return False, "no upcoming kickoff"
+    hours = (nxt - now).total_seconds() / 3600.0
+    if hours <= dense_window_hours:
+        return True, f"next kickoff in {hours:.1f}h (≤{dense_window_hours}h)"
+    return False, f"next kickoff in {hours:.1f}h (>{dense_window_hours}h)"
+
+
 def should_capture(kickoffs, *, now: datetime | None = None,
                    dense_window_hours: int = DENSE_WINDOW_HOURS,
                    baseline_every_h: int = BASELINE_EVERY_H) -> tuple[bool, str]:
@@ -264,20 +290,14 @@ def should_capture(kickoffs, *, now: datetime | None = None,
     schedule that stopped firing (the NF-FRESH1 19-green-runs class).
     """
     now = _now(now)
-    nxt = next_kickoff(kickoffs, now=now)
-    if nxt is not None:
-        hours = (nxt - now).total_seconds() / 3600.0
-        if hours <= dense_window_hours:
-            return True, (f"dense tier: next kickoff in {hours:.1f}h (≤{dense_window_hours}h) — "
-                          "capturing every hour while the line is moving")
+    dense, why = in_dense_window(kickoffs, now=now, dense_window_hours=dense_window_hours)
+    if dense:
+        return True, f"dense tier: {why} — capturing every hour while the line is moving"
     if now.hour % baseline_every_h == 0:
-        return True, (f"baseline tier: {baseline_every_h}-hourly tick (UTC hour {now.hour})"
-                      + ("" if nxt is None else
-                         f"; next kickoff in {(nxt - now).total_seconds()/3600.0:.1f}h"))
+        return True, (f"baseline tier: {baseline_every_h}-hourly tick (UTC hour {now.hour}); "
+                      f"{why}")
     return False, (f"skip: UTC hour {now.hour} is not a {baseline_every_h}-hourly tick and no "
-                   f"kickoff is within {dense_window_hours}h"
-                   + ("" if nxt is None else
-                      f" (next in {(nxt - now).total_seconds()/3600.0:.1f}h)") + " — 0 credits")
+                   f"kickoff is within {dense_window_hours}h ({why}) — 0 credits")
 
 
 def fetch_live_board(ctx, *, now: datetime | None = None) -> list[dict]:
