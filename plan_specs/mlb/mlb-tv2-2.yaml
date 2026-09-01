@@ -7,7 +7,7 @@ metadata:
   name: mlb-tv2-2
   vertical: mlb
   card: https://trello.com/c/J9G2VHu8
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The funded shape fix. TV2-0 measured (served rows, post_lineup n=758,
