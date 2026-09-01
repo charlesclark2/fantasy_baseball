@@ -207,11 +207,17 @@ BREAKS: list[tuple[str, Path, str, str, str, str | None]] = [
     # bytes, so a generator-only mutation would be a false GREEN (#815 — it lands but does not move
     # the asserted predicate). The generator↔fixture link is RED-proven by P3.2's own
     # `test_the_generated_fixtures_are_the_shipping_builders_own_output`.
+    # ⚠️ ANCHORED ON THE ONE GAME WHOSE SNAPSHOT INSTANT IS UNIQUE IN THE FILE. `"source":
+    # "odds_api_live",` alone occurs SEVEN times, and this harness refuses a non-unique anchor for
+    # exactly the right reason (#815) — a single-occurrence replace could land anywhere. Pairing it
+    # with the one snapshot_ts that appears once makes the break land on a named game, and the
+    # paired string is what must vanish.
     ("the shipped market fixture stops carrying a recognisable source",
-     _REPO / "frontend/e2e/fixtures/api/ncaaf-slate-2026-08-29-market.synthetic.json",
-     '"source": "odds_api_historical_close",\n        "snapshot_ts": "2025-10-03T22:50:39Z",',
-     '"source": "somewhere_else",\n        "snapshot_ts": "2025-10-03T22:50:39Z",',
-     "generated_e2e_fixtures_still_clear", None),
+     _REPO / "frontend/e2e/fixtures/api/ncaaf-slate-2026-08-29-mixed.json",
+     '"source": "odds_api_live",\n        "snapshot_ts": "2026-08-30T01:00:30Z",',
+     '"source": "somewhere_else",\n        "snapshot_ts": "2026-08-30T01:00:30Z",',
+     "shipped_e2e_market_fixture_carries",
+     '"source": "odds_api_live",\n        "snapshot_ts": "2026-08-30T01:00:30Z",'),
 
     # ── the binary-status contract (PM addendum, 2026-08-29) ─────────────────────────────────
     ("the serving layer gains a THIRD market status, which every client site renders as ABSENT",

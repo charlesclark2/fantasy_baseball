@@ -29,7 +29,7 @@ const PATH = "/ncaaf/games"
 
 test("the page never scrolls sideways on a phone", async ({ page }) => {
   const errors = collectPageErrors(page)
-  await mockApi(page, { ncaafSlate: "market" }) // the widest variant: three populated columns
+  await mockApi(page, { ncaafSlate: "mixed" }) // the widest variant: three populated columns
   await page.goto(PATH)
   await expect(page.getByTestId("ncaaf-game-card").first()).toBeVisible()
 
@@ -100,7 +100,7 @@ test("both curves render at a readable height on a phone", async ({ page }) => {
 
 test("the win probability stays the biggest thing on the card at phone width", async ({ page }) => {
   // The brand directive's lead clause has to survive the viewport where the card is most crowded.
-  await mockApi(page, { ncaafSlate: "market" })
+  await mockApi(page, { ncaafSlate: "mixed" })
   await page.goto(PATH)
   const c = page.getByTestId("ncaaf-game-card").first()
   // ⚠️ Wait for the panel BEFORE measuring. `evaluateAll` does not auto-retry, and an under-collected
@@ -246,7 +246,7 @@ test("the team marks stay smaller than the win probability on a phone", async ({
   // compares FONT SIZES, which an image cannot have — so a logo could grow to dominate the card
   // without moving that assertion by a pixel. This measures the RENDERED BOX, which is the only
   // comparison that can hold between an image and a number.
-  await mockApi(page, { ncaafSlate: "market" }) // the most crowded card
+  await mockApi(page, { ncaafSlate: "mixed" }) // the most crowded card
   await mockTeamLogos(page)
   await page.goto(PATH)
   const c = page.getByTestId("ncaaf-game-card").first()
