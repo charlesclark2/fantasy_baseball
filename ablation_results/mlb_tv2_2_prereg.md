@@ -469,3 +469,232 @@ mechanism, ⛔ never more served games (NF-D18 / E7.15).
   `deploy.sh` is not run. The merge decision is the operator's.
 - **A null that closes the shape question honestly is a valid outcome**, and is reported with its
   MDE and its null STATE, never as a shrug.
+
+---
+
+## 12. AMENDMENT 1 — the DEFLATION SERIES (filed BEFORE any scoring)
+
+**Filed 2026-08-31, before any statistic involving a realized outcome was computed on this
+population.** §8 C7 named a PBO bar and a DSR bar but did not name the SERIES each reads. That is a
+specification gap of exactly the kind that only becomes interesting after a result, so it is closed
+now rather than settled later (E2.1-r; NF-INJ3b: a pre-registration must name its deflation
+conventions, not just its arms, folds, metric and thresholds).
+
+### 12.1 PBO and DSR want DIFFERENT series — NCAAF-P2.1 measured the cost of sharing one
+
+CSCV/PBO needs MANY buckets; DSR needs LOW-NOISE INDEPENDENT observations. NCAAF-P2.1 measured a
+real effect whose per-BUCKET Sharpe was ~3× below its per-FOLD Sharpe — the same effect on the same
+folds, the gap being the SERIES DEFINITION alone — and sharing one series silently taxed DSR.
+Registered, separately:
+
+| gate | series | n |
+|---|---|---:|
+| **DSR** | per-BLOCK paired lift over `foil_k1` on the PRIMARY statistic | 5 (= `N_BLOCKS`) |
+| **PBO/CSCV** | per-DATE-BUCKET `−p_over_gap_abs` over 16 contiguous buckets, 16 CSCV splits | 16 |
+
+⛔ Neither gate is re-read on the other's series after seeing it fail.
+
+### 12.2 Three PBO readings, and which BINDS
+
+NF1.8 requires PBO over the ELIGIBLE set — the search the selection actually ran — not over every
+config scored; NCAAF-VAL3 measured that an eligible-set PBO can be WORSE than the declared-field
+one, so the two-arm decision is reported as a diagnostic and never as a rescue.
+
+| reading | configs | role |
+|---|---|---|
+| `declared` | all 8 in `n_trials` | reported |
+| **`eligible`** | the **4 TRIAL arms** — the search the selection ran | ⭐ **BINDS** |
+| `two_arm` | winner vs `foil_k1` — the decision actually taken | reported as a diagnostic |
+
+⚠️ Registered forward: at 4 configs PBO is STRUCTURALLY COARSE (a middle finish already counts as
+an overfit event), so a high eligible-set PBO over near-clone arms is read as the signature of a
+TIE, not of overfitting — and the discriminator is the SPREAD, reported beside it (NF1.8; the
+E2.1-r tied-field reading). ⛔ This is a reading registered in advance, never a post-hoc rescue,
+and ⛔ no field is trimmed at any point (MH2.2), least of all one that would delete the winner
+(NF-W7h).
+
+### 12.3 The lockstep check is computed, not felt
+
+`cv_power.lockstep_variance_lever` is EXECUTED on the winner's own numbers and reported. A design
+change that scales every arm's per-fold dispersion by a common factor scales the winner's `SR` and
+the benchmark `SR0` in LOCKSTEP, so the sign of `SR − SR0` is invariant: "get a lower-variance
+design" is deterministically void as a remedy (NF-W8-0d). If `DSR_UNREACHABLE` fires, ⛔ no
+fold/season/row re-test trigger is published.
+
+### 12.4 What this amendment does NOT do
+
+It changes no bar, no arm, no population, no primary statistic and no ship clause. It names series
+that §8 left unnamed. Nothing had been scored when it was filed, and the commit order is the proof.
+
+---
+
+## 13. AMENDMENT 2 — the per-fold SERIES is a PROPER score (filed BEFORE any scoring)
+
+**Filed 2026-08-31, before any statistic involving a realized outcome was computed on this
+population — forced by the VACUITY CONTROL of §7.6, which is exactly what it is for.** TV2-0 filed
+its own node-2 amendment for the same reason: *"the controls PROVED a single yardstick cannot
+separate the levers."*
+
+### 13.1 `|p_over_gap|` per block cannot be the per-fold series
+
+`p_over_gap = mean(stated) − mean(over)` is additive per row, so `over_i` cancels EXACTLY between
+two arms scored on the same rows. **`|·|` has a KINK at zero and destroys that cancellation** in
+any block whose realized rate happens to fall between the two arms' stated values — and at ~106
+rows a block's realized rate carries an SE of **0.049** against an effect of **0.073**.
+
+Measured on the committed fixture, same arms, same data:
+
+| reading | point | paired 95% CI | fold wins |
+|---|---:|---|---:|
+| `|gap|` per block | +0.0436 | **[−0.0391, +0.0524]** — spans zero | 3/5 |
+| MOVEMENT of the printed probability | +0.0518 | **[+0.0512, +0.0525]** | 5/5 |
+
+### 13.2 What replaces it — and why not the MOVEMENT series
+
+**C2 (the PRIMARY asymmetry clause) is read exactly as TV2-0's ASYMMETRY CHANNEL** — the MOVEMENT
+of the stated probability, in which the realized over-rate cancels EXACTLY, gated on the
+incumbent's SIGNED gap being materially non-zero (TV2-0 §3 registered precisely this construction
+and measured `[0.0724, 0.0732]` with it). C2 additionally requires the move to actually REDUCE the
+pooled `|gap|` and to close ≥ `MATERIAL_SHARE` of it, so an overshoot cannot pass on magnitude.
+
+⛔ **The MOVEMENT series is NOT the DSR/fold series: it has NO correctness content.** Measured —
+every arm wins 5 of 5 folds on movement with a Sharpe of 5.5–12.7, *including arms that overshoot*,
+because moving the number always "wins" regardless of direction. A gate every arm passes by
+construction is décor (NF-MARGIN2).
+
+⭐ **The DSR and fold-consistency series is the per-ROW BRIER score of the printed probability**,
+`(stated_i − over_i)²`, as an improvement over `foil_k1`. It is PROPER (an arm that moves the
+printed number the WRONG way is penalised), per-row, and paired on the same `over_i`. Registered
+for both `dsr` and `fold_consistency`; the PBO bucket series of §12.1 is unchanged.
+
+---
+
+## 14. AMENDMENT 3 — `N_BLOCKS` and the FIELD-LEVEL PBO (filed BEFORE any scoring)
+
+Also forced by the vacuity control, and both defects are ones this repo has already paid for once.
+
+### 14.1 ⭐ At `N_BLOCKS = 5` the multiplicity clause was STRUCTURALLY UNPASSABLE (E7.14)
+
+A signed-rank test over `n` folds has a minimum attainable one-sided p of `2^-n`. The BH threshold
+for the smallest of 4 p-values at α = 0.05 is **0.0125**. At `n = 5` the floor is **0.03125** —
+**above the cutoff, so NO EFFECT OF ANY SIZE could pass C8.** This is E7.14 verbatim ("the fold-SIGN
+floor `2⁻ⁿ` can sit ABOVE the BH cutoff so no effect of any size could pass"), and
+`cv_power.folds_for_sign_certifiability(0.0125)` returns **7**. §2.3 checked the DSR ceiling, the
+fold clause and PBO evaluability for reachability and did not check this one; the control caught it.
+
+**`N_BLOCKS = 8`, by a rule stated forward:** the SMALLEST `n` at which the sign floor is ≤ HALF the
+BH cutoff (margin, so a borderline p can still clear) AND the fold clause's false-fire rate is
+≤ 0.20. Measured: `n = 7` → floor 0.0078 (0.62 of the cutoff — no margin); **`n = 8` → floor 0.0039
+(0.31), fold clause 6 of 8, false-fire 0.145, `dsr_ceiling` 0.9999.** Derived from `n` and the GATE
+SET alone — a design quantity known before any result (NF1.8), ⛔ never chosen to make a gate pass.
+
+**Its power, stated in the unit that grows:** at 106 rows/block the per-block realized rate has
+SE 0.049, so against TV2-0's measured 0.0726 gap the per-block win probability is 0.773 and the
+**fold clause's power is 0.735**. ⇒ a C6 failure at this design is ~1-in-4 under a TRUE effect of
+the measured size and must be read as POWER-LIMITED, not as absence.
+
+### 14.2 C7 carries DSR only — PBO is FIELD-LEVEL and never a per-arm veto
+
+§5.5 registered `pbo_application = "field"` and said PBO is "⛔ never carried as a per-arm pass/fail".
+The first cut of the ship rule contradicted its own registration by ANDing `pbo_pass` into C7. That
+is the defect MLB-HV2-1 MEASURED: a planted 6-percentage-point effect drove PBO to 0.426 *precisely
+because* it made the arms near-clones, so the per-arm reading VETOED a real, large effect —
+NF1.8's lesson that a high PBO over a near-clone field is the signature of a **TIE**, not of
+overfitting, and `classify_null` refuses to convert a field-level refusal into a per-arm verdict.
+
+**C7 = `dsr_ok` alone.** PBO is computed under all three readings of §12.2, reported at the FIELD
+level beside the verdict, and read as a field diagnostic. ⚠️ Registered forward: this field is FOUR
+arms expressing ONE marginal shape, i.e. near-clones by construction, so a HIGH eligible-set PBO is
+the EXPECTED reading and is not evidence against the mechanism.
+
+### 14.3 What amendments 2 and 3 do NOT do
+
+They change no bar, no arm, no population, no primary statistic, no ship clause and no threshold.
+They fix a series that could not carry a signal, a fold count at which a registered gate was
+unpassable, and a line of code that contradicted its own registration. Every one was found by a
+CONTROL before any realized outcome on this population was read, and the commit order is the proof.
+
+---
+
+## 15. AMENDMENT 4 — the per-fold series, C8's statistic, and C10's anchor (BEFORE any scoring)
+
+All three defects were found by the VACUITY CONTROL of §7.6 running on PLANTED data over the real
+served `(μ, σ)` — **no realized outcome on this population had been read**, and the commit order is
+the proof. Each is a defect this repo has already paid for once.
+
+### 15.1 The per-fold series is the per-ROW CRPS improvement
+
+§13 replaced `|gap|` with the per-row BRIER score. Measured, the Brier series is still too coarse
+for a FOLD-level test: **the printed probability is a property of the BLOCK'S LAW, so it is
+CONSTANT within a block** — a Brier series therefore carries ~ONE effective observation per fold.
+
+| per-fold series | fold clause on a PLANTED GROSS defect | on CLEAN data |
+|---|---:|---:|
+| per-block `|gap|` | 3/5 typical | — |
+| per-row BRIER | **4 of 6** | 0 of 6 |
+| ⭐ per-row **CRPS** | **6 of 6** | 0 of 6 |
+
+**Registered: the per-fold series (for `fold_consistency` and the DSR return series) is the
+per-ROW CRPS improvement over `foil_k1`** — a proper score of the DENSITY the mixture actually
+changes, which TV2-0 measured the shape oracle improves (2.5301 → 2.5114). It is two-sided: it
+detects the planted defect 6/6 and fires on clean data 0/6. The Brier series is still REPORTED.
+
+### 15.2 C8 corrects the statistic that carries the CLAIM
+
+The first cut tested a per-fold signed-rank for multiplicity while C2's claim lived in a pooled
+statistic with ~100× the resolution. **A multiplicity correction must be applied to the statistic
+that carries the claim.** Registered: **C8 is BH across the 4 trial arms on C2's OWN paired
+bootstrap p-value** (one-sided, `+1` corrected). The per-fold signed-rank p is REPORTED beside it,
+never binding.
+
+⚠️ **The N_BLOCKS = 8 choice of §14.1 was derived to make a per-fold sign test clear the BH cutoff.
+This amendment retires that premise.** A re-derivation of `N_BLOCKS` would now be legitimate
+*forward* — and it is **deliberately NOT done**, because it is being contemplated *after* observing
+a DSR of 0.948 against a 0.95 bar, and re-tuning a design quantity at that moment is the E2.1-r
+inversion whatever the premise. `N_BLOCKS` stays **8**, as registered.
+
+### 15.3 C10's anchor needed a TIE BAND, and at this `n` it is INACTIVE
+
+Both C10 anchors sit at the peek's `n` (~106 out-of-block rows), so the comparison is same-FAMILY
+and same-SAMPLE (NF1.7 (b) / NF1.9 (f)) and the clause is a METRIC-INVERSION detector: a peek that
+LOSES to an honest fit at its own `n` means the metric is inverted.
+
+Two corrections: **(a)** the first cut required the FULL-`n` arm not to beat the peek — but the
+honest arm trains on ~745 rows against the peek's ~106, so beating it is **CAPACITY, not leakage**,
+and NF1.9 (f) is explicit that such a win is admissible. That cut vetoed live arms. **(b)** the tie
+band was `1e-6` against a statistic whose SE at this `n` is **0.017**, so the anchor pair read
+ACTIVE on pure noise. Measured: **22 of 24** peek-minus-control differences sit inside one SE.
+**Registered: the tie band is ONE SE of the primary statistic at this `n`** — a design quantity
+from `n` alone. NF-W6d: an anchor pair that TIES is **INACTIVE**, not a refusal; NF-D20: an
+inactive anchor is UNINFORMATIVE and is reported beside the pass count, never as a pass.
+
+---
+
+## 16. AMENDMENT 5 — the VACUITY FLOOR reads the PLAT-CVP1 taxonomy (BEFORE any scoring)
+
+§7.6's floor asked for a "detection rate on a planted gross defect ≥ 0.80" and §7.5 defined the
+clean rate on the FULL ship rule, so by symmetry the gross rate was also read on the full rule.
+Measured, that conflates two different questions — and the spec itself names the answer:
+*"expect `DEFLATION_REFUSED` as a reachable state."*
+
+The helper's own taxonomy separates them: **`VACUOUS` means an arm survives the NO-EFFECT payload**
+(the family certifies noise); **`DEFLATION_BLOCKED` means every METRIC gate fires on a planted
+effect while the deflation half blocks** — a reachable, reportable state, not a broken harness.
+
+Registered:
+
+| leg | statistic | bar |
+|---|---|---|
+| negative control (CLEAN payload) | the **FULL ship rule** produces a shippable margin | ≤ 0.05 |
+| gross-defect detection | every **METRIC** clause (all of C0–C10 except C7) fires | ≥ 0.80 |
+| the deflation half | the **PLAT-CVP1 verdict**, executed | reported, `DEFLATION_BLOCKED` reachable |
+
+Both legs report the FULL ship rate and the PER-CLAUSE detection rate, so a failure NAMES the
+clause that is power-limited instead of condemning the whole harness.
+
+⚠️ **Registered forward, so it cannot be discovered later: at this design a planted GROSS defect
+(skew-normal α = 4.0, closing ~100% of the printed gap) yields DSR ≈ 0.92–0.95 against the 0.95
+bar.** The deflation half is therefore expected to be the binding clause, and a `DEFLATION_BLOCKED`
+outcome on the real data would be a statement about the DESIGN's power at 8 folds, ⛔ not evidence
+against the mechanism. The DSR bar is **NOT** moved: 0.95 is the program standard, and lowering a
+registered threshold because it blocks is the E2.1-r inversion.
