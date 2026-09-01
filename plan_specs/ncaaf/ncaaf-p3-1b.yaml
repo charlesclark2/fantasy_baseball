@@ -89,14 +89,29 @@ spec:
   graph:
     nodes: []   # MINI tier
   closeout:
-    verdict: SHIPPED_CODE_NO_USER_VISIBLE_LINE_YET
+    verdict: SHIPPED_AND_SERVING
     verdictNote: >
-      Every acceptance criterion is met in code and RED-proven, and the change is
+      ⭐ AMENDED 2026-08-29 AFTER THE RUNTIME GATE. The line is LIVE. Measured on the
+      deployed Lambda for the 8/29 opener slate: 8 of 8 games carry a real spread and
+      total, market_lines_by_source={"odds_api_live": 8}, market_reasons={} (zero
+      leakage refusals), every as_of strictly pre-kickoff. The original verdict is
+      preserved verbatim below rather than rewritten — it was correct when written,
+      and what changed is the world, not the reading.
+      WHAT CLOSED IT was NOT followUp ①'s proposed manual Friday capture. It was the
+      NCAAF-ODDS-LIVE story that followed: an ahead-of-kickoff live /odds feed
+      (sports_ncaaf_odds_live_schedule, tiered 6h baseline / hourly inside 24h,
+      measured 3 credits per capture against the /historical path's 30 per kickoff
+      window). The premise-gap ① named was real; the remedy it proposed was the
+      expensive one. Changelog entry added 2026-08-29, and only now — the
+      declaration did not outrun the production.
+      SUPERSEDED ORIGINAL (2026-08-25, verdict SHIPPED_CODE_NO_USER_VISIBLE_LINE_YET):
+      "Every acceptance criterion is met in code and RED-proven, and the change is
       verified end-to-end against real captured data (2025). It produces NOTHING on
       the 2026 board today: the lake holds ZERO 2026 odds rows of either kind, so
-      the opener cards still read "No market line" unless an operator runs the paid
+      the opener cards still read 'No market line' unless an operator runs the paid
       capture on Fri 8/28. NO changelog entry was added — the user-visible line has
-      not appeared, and a declaration must not outrun its production. Full readout:
+      not appeared, and a declaration must not outrun its production."
+      Full readout:
       quant_sports_intel_models/football/ncaaf/ablation_results/ncaaf_p3_1b_market_source_readout.md
     followUps: >
       ① ⭐ THE PM PREMISE IS ONE CAPTURE-RUN SHORT, and this is the item that decides
@@ -146,3 +161,22 @@ spec:
       API Lambda; the box also needs the merged code for the serving WRITE. Both are
       operator steps in the handoff, and the runtime gate is only answerable after ① has
       put a 2026 line in the lake.
+      ⑦ ⭐ ADDED 2026-08-29, AND IT IS THE ONE OPEN ITEM: THE CAPTURE IS HOURLY, THE
+      RE-SERVE IS DAILY — so the SERVED as_of can trail the LAKE by up to 24h, and on a
+      kickoff day that is the whole point of the line. sports_ncaaf_odds_live_schedule
+      ticks hourly inside 24h of kickoff (that is what "the line is moving" means), but
+      the served payload only changes when write_ncaaf_serving_store runs, and
+      sports_ncaaf_serving_write_schedule is DAILY 06:00 PT (NCAAF_SERVING_WRITE_CRON
+      "0 6 * 8-12,1 *"). ⇒ every line that moves after 06:00 PT on a Saturday reaches
+      the reader only AFTER the games. This is NOT a defect of either story — each
+      schedule is correct for the cadence it was written against, and the served line is
+      HONEST at every moment because as_of is stamped (a reader can always see the line
+      is from this morning). It is a CADENCE MISMATCH between a consumer and its newly
+      faster producer — the INC-25 ordering family, on the refresh axis rather than the
+      build axis. Three options, a PM call: (a) leave it — "as of this morning" is a
+      defensible product, costs nothing, and the stamp keeps it honest; (b) add an
+      in-window re-serve tier mirroring the capture's own tiering (the write is free:
+      two Delta reads and a few dozen small puts, no credits, no warehouse); (c) chain a
+      re-serve off the live-capture op when it actually captured, which couples the two
+      and is the least reversible. Suggest (b) if the market line is meant to be a live
+      comparator, (a) if it is meant to be a daily reference point.
