@@ -27,7 +27,15 @@ _DIAG = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_nf_inj2c_coh
 _INJ2_MD = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
                     "nf_inj2_rate_permutation.md")
 _CLAUDE = _REPO / "CLAUDE.md"
+_BASE = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/"
+                 "run_nf_inj2c_dominance_baseline.py")
+_RULE = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
+                 "nf_inj2c_margin_construction_rule.md")
+_FOLD = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
+                 "nf_inj2c_fold_fidelity_finding.md")
 _SUITE = "betting_ml/tests/test_nf_inj2c_coherence_diagnosis.py"
+#: nodes 3a/3b/3c live in their own suite; the harness routes each break to the suite that owns it.
+_SUITE_BY_NODE = {}
 
 #: (label, file, anchor, replacement, token that must be GONE afterwards, the guard(s) it must break)
 BREAKS: list[tuple[str, Path, str, str, str, str]] = [
@@ -94,6 +102,70 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "40.58 over 797 rows",
      "test_the_d3_pin_against_capture_landmine_is_in_claude_md"),
 
+    # ── nodes 3a / 3b / 3c ────────────────────────────────────────────────────────────────────
+    ("the runner invents a tie band the committed rule does not name", _BASE,
+     "M4_TIE_BAND = 0.01",
+     "M4_TIE_BAND = 5.0",
+     "M4_TIE_BAND = 0.01",
+     "test_every_band_the_runner_applies_is_named_in_the_rule"),
+
+    ("the capture-pin stops refusing a RE-PULLED board", _BASE,
+     "    if now != stamp.get(\"sha256\"):",
+     "    if False:",
+     "if now != stamp.get(\"sha256\"):",
+     "test_a_REPULLED_board_is_refused_which_is_the_whole_point_of_D3"),
+
+    ("a mid-study recapture stops being refused", _BASE,
+     "    if _CAPTURE_STAMP.exists() and not force:",
+     "    if False:",
+     "if _CAPTURE_STAMP.exists() and not force:",
+     "test_recapturing_mid_study_is_refused_without_an_explicit_flag"),
+
+    ("an unevaluable measure is scored as a pass", _BASE,
+     '                row[f"{key}_verdict"] = "UNEVALUABLE"   # ⛔ never scored as a pass (NF1.7 (a))',
+     '                row[f"{key}_verdict"] = "IMPROVES"',
+     'row[f"{key}_verdict"] = "UNEVALUABLE"',
+     "test_a_measure_with_no_value_is_UNEVALUABLE_and_never_a_pass"),
+
+    ("the give-back measure reverts to the SIGNED value and rewards over-discounting", _BASE,
+     "    return None if pct is None else max(float(pct), 0.0)",
+     "    return None if pct is None else float(pct)",
+     "max(float(pct), 0.0)",
+     "test_the_giveback_measure_does_not_reward_over_discounting"),
+
+    ("the attribution CONTROL arm becomes droppable", _BASE,
+     '    if "incumbent" not in arms or "mvp1_null" not in arms:',
+     "    if False:",
+     '"mvp1_null" not in arms:',
+     "test_the_attribution_control_arm_cannot_be_dropped_from_a_run"),
+
+    ("the margin rule drops its ban on a band derived from an observed gap", _RULE,
+     "no\nband may be derived from an observed arm-vs-incumbent gap",
+     "a band may be derived however is convenient",
+     "band may be derived from an observed arm-vs-incumbent gap",
+     "test_the_rule_forbids_a_band_derived_from_an_observed_gap"),
+
+    ("the margin rule loses the PM's NULL branch", _RULE,
+     "that is a NULL, not a margin to adjust",
+     "that is a margin to revisit",
+     "that is a NULL, not a margin to adjust",
+     "test_the_rule_carries_the_pms_null_branch_verbatim"),
+
+    ("the fold finding stops refusing to pick the declared field", _FOLD,
+     "no per-candidate-family DSR has been computed",
+     "the narrowest clearing family was selected",
+     "no per-candidate-family DSR has been computed",
+     "test_the_finding_refuses_to_pick_the_declared_field"),
+
+    # ⚠️ `1.6418` appears TWICE (the table and the precision caveat), so a single-occurrence break
+    # on it does not move the guard's predicate — the harness caught that and refused (#815). The
+    # Sharpe DELTA is unique AND is the statistic the finding turns on.
+    ("the fold finding drops the measurement showing the 8th fold hurts", _FOLD,
+     "**−0.3682**",
+     "**(not computed)**",
+     "−0.3682",
+     "test_the_finding_records_that_the_eighth_fold_moves_the_gate_the_WRONG_way"),
+
     ("the fresh-worktree cache landmine is removed", _CLAUDE,
      "SILENTLY REBUILDS THE GITIGNORED FEATURE CACHES FROM A LIVE UPSTREAM",
      "rebuilds caches",
@@ -119,13 +191,26 @@ def _restore_stale() -> None:
 
 
 def _run(node_id: str) -> bool:
-    r = subprocess.run([sys.executable, "-m", "pytest", f"{_SUITE}::{node_id}", "-q",
+    suite = _SUITE_BY_NODE.get(node_id, _SUITE)
+    r = subprocess.run([sys.executable, "-m", "pytest", f"{suite}::{node_id}", "-q",
                         "--no-header", "-p", "no:cacheprovider"],
                        cwd=_REPO, capture_output=True, text=True)
     return r.returncode == 0
 
 
+_NODE3_SUITE = "betting_ml/tests/test_nf_inj2c_dominance_baseline.py"
+for _b in ():
+    pass
+
+
 def main() -> int:
+    # route every node-3 break to the suite that owns it (the shared-guard/owning-shard rule)
+    import subprocess as _sp
+    names = _sp.run([sys.executable, "-m", "pytest", _NODE3_SUITE, "--collect-only", "-q",
+                     "-p", "no:cacheprovider"], cwd=_REPO, capture_output=True, text=True).stdout
+    for _label, _p, _a, _r, _g, _node in BREAKS:
+        if f"::{_node}" in names:
+            _SUITE_BY_NODE[_node] = _NODE3_SUITE
     _restore_stale()
     reds, greens = 0, []
     for label, path, anchor, repl, gone, node in BREAKS:
