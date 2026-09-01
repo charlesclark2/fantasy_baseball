@@ -10,7 +10,7 @@ metadata:
   name: nf-inj2c
   vertical: nfl_fantasy
   card: https://trello.com/c/Dsz8CROW
-  status: ACCEPTED
+  status: IN_PROGRESS(HELD — nodes 0/1/2/3a/3b-code/3c landed; the DSR FIELD declaration is with the PM, and node 3's prereg does not start until it is ruled)
 spec:
   description: >
     Fresh forward registration of the ASSIGNMENT-RULE fix — the mechanism
@@ -247,6 +247,32 @@ spec:
       (6) A fresh worktree silently REBUILDS the gitignored NFL feature caches from a live
       upstream, so a reproduction there is measured on a different feature vintage (51/56
       bare vs 55/56 after rsyncing the main checkout's caches). Landed in CLAUDE.md.
+
+      ⛔ HELD FOR A PM RULING — THE DSR FIELD DECLARATION (raised 2026-08-31, node 3c).
+      Ruling 4 registered the +1 fold forward and node 3c measured it UNREACHABLE, so the
+      registration runs at 7 folds — where NF-INJ2b's DSR was 0.9325 against 0.95. WHICH
+      FIELD the 7-fold deflation gates are computed over was not ruled, because ruling 4
+      assumed the 8th fold would settle it. That is a PRE-REGISTRATION act: a field chosen
+      by which one clears is the exact selection bias DSR exists to deflate (MH2.2), so a
+      worker session must not settle it. ⛔ No per-candidate-family DSR has been computed
+      and none will be before the ruling. The two options, with their constraints:
+        (A) INHERIT NF-INJ2b's declared 10-arm field unchanged. Most likely returns
+            DEFLATION_REFUSED and closes the thread at a specification nobody can argue
+            with (the PM's own honesty framing). Zero laundering risk — nothing about the
+            field is chosen by this story.
+        (B) DECLARE NF-INJ2c's OWN coherent family on MECHANISM, as the fourth
+            fix-the-spec successor is entitled to (the MARGIN2->3 / W7->W7b / VAL3->VAL3b
+            / NF-INJ3->NF-INJ3b pattern): point-space assignment rules ONLY — `incumbent`
+            (reference) + `stratified` + `feasibility_clamp` + the two degenerates —
+            excluding the four rate-space arms as a DIFFERENT mechanism already refused on
+            ordering. This changes `V` and `n_trials`, so DSR changes; the direction is
+            NOT computed and must not be, before the family is declared.
+            ⚠️ STATED SO THE PM CAN WEIGH IT: this session can SEE 2b's field composition,
+            so a reader could reasonably suspect the narrowing is result-aware. The defence
+            is provenance and it is checkable — the narrowing follows from the PM's OWN
+            ruling 2 ("stratified vs the SERVED incumbent"), which is a point-space
+            question and was written before any of this. That is the PM's to accept or
+            reject, ⛔ not a session's.
 
       REMAINING FINDINGS from nodes 3-7 land here. PM triages into: checklist item on the
       parent card | merge into an existing card (name it) | a new spec. Worker sessions

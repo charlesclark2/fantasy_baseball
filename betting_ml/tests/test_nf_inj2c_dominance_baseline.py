@@ -207,8 +207,20 @@ def test_the_finding_refuses_to_pick_the_declared_field():
     assert "no per-candidate-family DSR has been computed" in txt
 
 
-def test_the_spec_carries_the_pm_rescope_and_is_back_in_progress():
+def test_the_spec_carries_the_pm_rescope():
     txt = _flat(_SPEC)
     assert "PM RE-SCOPE RULING 2026-08-31" in txt
     assert "STRICT-DOMINANCE disposition, alone" in txt
-    assert "status: ACCEPTED" in txt
+
+
+def test_the_spec_records_the_field_declaration_as_HELD_for_the_pm():
+    """⭐ The hold must live in the SPEC, not only in a handoff message. A blocking question that
+    exists only in prose somewhere is one a later session answers by not noticing it — and the
+    thing it would answer by accident (which field the deflation gates run over) is precisely the
+    selection bias DSR exists to deflate (MH2.2)."""
+    txt = _flat(_SPEC)
+    assert "HELD FOR A PM RULING — THE DSR FIELD DECLARATION" in txt
+    assert "no per-candidate-family DSR has been computed" in txt.lower() or \
+           "No per-candidate-family DSR has been computed" in txt
+    assert "HELD" in _flat(_SPEC).split("status:")[1][:120], (
+        "the spec's STATUS must carry the hold too — a followUp nobody reads is not a gate")
