@@ -63,10 +63,31 @@ BASELINE_ARMS: tuple[str, ...] = (
     "points_rate_permute", "rate_refit", "points_rate_stratified", "rate_refit_stratified",
 )
 
+#: the served board's MANIFEST, staged beside `projections.json`. It carries `adp_as_of` /
+#: `ecr_as_of` — the board's OWN statement of which market vintage produced it, at DAY
+#: granularity, which is the only granularity it publishes.
+_MANIFEST_JSON = _BASELINE_DIR / "manifest.json"
+
+#: ⭐ THE MARKET PRECONDITION (PM ruling 2026-09-01 (a)). One entry per market input the ordering
+#: reads, with the command that refreshes THAT input — a refusal that does not name its own remedy
+#: is the reason this exists at all.
+_MARKET_INPUTS: tuple[tuple[str, str, str], ...] = (
+    ("adp", "adp_as_of",
+     "uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_adp_ingest "
+     "--from 2026 --to 2026 --refresh"),
+    ("ecr", "ecr_as_of",
+     "uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_ecr_ingest "
+     "--from 2026 --to 2026 --refresh"),
+)
+
 #: the STAGING command, quoted in every refusal so an operator never has to go and find it.
 _STAGE_CMD = (
     "aws s3 cp s3://credence-prod-s3-api-cache/fantasy/nfl/2026/projections.json "
     f"{_SERVED_JSON} --region us-east-1")
+#: the manifest is staged BESIDE the board and carries the vintage the precondition checks against.
+_MANIFEST_CMD = (
+    "aws s3 cp s3://credence-prod-s3-api-cache/fantasy/nfl/2026/manifest.json "
+    f"{_MANIFEST_JSON} --region us-east-1")
 
 # ── the margin rule's TIE BANDS, READ not defined (node 3a owns them) ──────────────────────────
 #: M3 — `times_over` is recorded at 2 decimals, so its band is that precision (rule R2).
@@ -79,6 +100,86 @@ def _sha256(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def market_vintage(season: int = 2026) -> dict:
+    """The SERVED board's market vintage beside the LOCAL caches', per input, at day granularity.
+
+    ⭐ WHY THIS EXISTS — NF-INJ2c node 3b run 1, and NF-INJ2b before it. `apply_2026` builds every
+    arm with `market_refresh=False` (correct: that is how an archived run reproduces byte-for-byte),
+    so the ordering reads whatever ADP/ECR caches are ON DISK. `nf1_3_model` builds its ordering
+    feature as `market_rank = ecr.where(ecr.notna(), adp)` — ECR-PRIMARY — and `market_rank` is a
+    feature at ALL FOUR positions. So a local cache from a different day than the served board
+    produces a DIFFERENT WITHIN-POSITION ORDERING, and the pin fails for a reason that is a property
+    of the chain rather than of any arm.
+
+    Measured on run 1: ADP matched exactly (same window, same 8,161 drafts) while ECR was SIX DAYS
+    stale (8/25 against the board's 8/31); the largest ECR mover in that gap (Josh Jacobs, rank
+    43 -> 145 over final cuts) was the largest point mover, at exactly the 84.72 that failed the pin.
+
+    ⚠️ DAY GRANULARITY is not a simplification, it is the bar the manifest actually publishes
+    (`adp_as_of` / `ecr_as_of` are dates). ⛔ Do not invent a finer-grained field that does not
+    exist."""
+    from quant_sports_intel_models.football.nfl.fantasy import market_freshness as MF
+
+    if not _MANIFEST_JSON.exists():
+        raise SystemExit(
+            f"the served MANIFEST is not staged at {_MANIFEST_JSON} — it carries the board's own "
+            "`adp_as_of`/`ecr_as_of`, which is what the market precondition checks against. "
+            f"Stage it:\n  {_MANIFEST_CMD}")
+    served = json.loads(_MANIFEST_JSON.read_text())
+    local = MF.market_as_of(season)
+    out = {}
+    for name, manifest_key, _cmd in _MARKET_INPUTS:
+        out[name] = {
+            "served_as_of": served.get(manifest_key),
+            "local_as_of": (local.get(name) or {}).get("as_of"),
+            "local_label": (local.get(name) or {}).get("label"),
+        }
+    return out
+
+
+def assert_market_vintage_matches(season: int = 2026) -> dict:
+    """REFUSE unless every market input's LOCAL cache is the same DAY as the SERVED board's.
+
+    ⛔ Refuses rather than warns, and refuses on an UNREADABLE vintage too — a check that cannot be
+    evaluated is never scored as a pass (NF1.7 (a)). The message names the mismatched input, BOTH
+    vintages, and the command that fixes it: converting an expensive VOID into a cheap up-front
+    refusal is the entire point, and a refusal that does not carry its own remedy has not converted
+    anything."""
+    v = market_vintage(season)
+    problems = []
+    for name, _key, cmd in _MARKET_INPUTS:
+        got = v[name]
+        served, mine = got["served_as_of"], got["local_as_of"]
+        if served is None:
+            problems.append(
+                f"  · {name.upper()}: the served manifest carries no vintage for it, so the "
+                f"precondition CANNOT be evaluated — and an unevaluable check is never a pass. "
+                f"Re-stage the manifest:\n      {_MANIFEST_CMD}")
+        elif mine is None:
+            problems.append(
+                f"  · {name.upper()}: served {served}, LOCAL CACHE UNREADABLE OR ABSENT. Refresh "
+                f"it, then re-capture:\n      {cmd}")
+        elif str(mine) != str(served):
+            problems.append(
+                f"  · {name.upper()}: served {served}, local {mine}"
+                f"{' (label ' + str(got['local_label']) + ')' if got.get('local_label') else ''}"
+                f" — MISMATCHED. Refresh it, then re-capture:\n      {cmd}")
+    if problems:
+        raise SystemExit(
+            "⛔ MARKET VINTAGE MISMATCH — refusing before the arms are built.\n\n"
+            + "\n".join(problems)
+            + "\n\nWHY: `apply_2026` builds every arm with `market_refresh=False`, so the ordering "
+              "reads the ON-DISK caches. `market_rank` is ECR-primary and is a feature at all four "
+              "positions, so a cache from a different day than the served board produces a "
+              "different within-position ordering and the pin cannot hold. On NF-INJ2c run 1 that "
+              "cost a full VOID run at a worst difference of 84.72.\n"
+              "⚠️ A vendor snapshot is NOT recoverable once its day rolls — FantasyPros serves only "
+              "the current one and the lake's ecr_benchmark asset is season-partitioned and "
+              "overwritten. If the served board's vintage has already passed, ⛔ do NOT chase it: "
+              "wait for the next publish, refresh the caches promptly after it, and capture then.")
+    return v
+
+
 def capture(force: bool = False) -> dict:
     """Stamp the staged published board ONCE, at study start (the D3 convention)."""
     if not _SERVED_JSON.exists():
@@ -88,6 +189,10 @@ def capture(force: bool = False) -> dict:
             f"a capture already exists at {_CAPTURE_STAMP}. ⛔ Re-capturing MID-STUDY is exactly "
             "what the D3 convention forbids — the pin would then bind a board captured AFTER the "
             "arms were measured. Pass --recapture ONLY to start the study over.")
+    # ⭐ THE MARKET PRECONDITION, enforced HERE — before anything is stamped and long before the
+    # >2-min arm build. A capture taken against caches of the wrong vintage is a capture that
+    # cannot be pinned, so refusing at capture time is what converts a VOID run into a cheap no.
+    vintage = assert_market_vintage_matches()
     doc = json.loads(_SERVED_JSON.read_text())
     stamp = {
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -95,9 +200,13 @@ def capture(force: bool = False) -> dict:
         "served_generated_at": doc.get("generated_at"),
         "n_players": len(doc.get("players") or []),
         "source": str(_SERVED_JSON),
+        "market_vintage": vintage,
         "convention": ("D3 — a reproduction pin over a live-snapshot-fed surface binds a CAPTURED "
                        "artifact, never a re-pull; --market-refresh moves the ADP/ECR consensus "
-                       "that feeds the ordering, so a later pull is a different board"),
+                       "that feeds the ordering, so a later pull is a different board. The MARKET "
+                       "VINTAGE is recorded here and re-checked on every run, because the board's "
+                       "bytes matching is not sufficient — the ORDERING is built from the on-disk "
+                       "ADP/ECR caches, which move independently of it."),
     }
     _CAPTURE_STAMP.write_text(json.dumps(stamp, indent=2))
     log.info("captured the published board: generated_at=%s sha256=%s...",
@@ -125,6 +234,17 @@ def assert_capture_intact() -> dict:
             "is the exact failure D3 names — NF-INJ2b's freshness bar PASSED at 7.30h while its pin "
             "FAILED at 40.58 over 797 rows, because the ADP/ECR snapshot feeding the ordering moves "
             "intraday. Either restore the captured bytes or start the study over with --recapture.")
+    # ⭐ RE-CHECKED AT RUN TIME, not only at capture: the caches are ordinary files that a later
+    # refresh can move underneath a valid capture. The board's bytes matching does not constrain
+    # them, so an unchanged sha256 is NOT evidence the ordering inputs are unchanged.
+    now_vintage = assert_market_vintage_matches()
+    captured_vintage = stamp.get("market_vintage")
+    if captured_vintage and captured_vintage != now_vintage:
+        raise SystemExit(
+            "⛔ THE MARKET CACHES MOVED SINCE THE CAPTURE — the arms would be built from inputs the "
+            f"capture did not stamp.\n  at capture: {json.dumps(captured_vintage)}\n  now:        "
+            f"{json.dumps(now_vintage)}\nRestore the captured vintage, or start the study over "
+            "with --recapture (which re-checks the precondition).")
     return stamp
 
 

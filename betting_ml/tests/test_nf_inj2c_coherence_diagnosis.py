@@ -13,6 +13,7 @@ asserted non-empty before anything is compared.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -292,9 +293,30 @@ def test_the_d4_annotation_records_the_measurement_that_settles_the_baseline_que
 
 
 def test_the_d3_pin_against_capture_landmine_is_in_claude_md():
+    """RE-ANCHORED 2026-09-01 onto the CORRECTED entry (PM ruling on decision request #3 (c)).
+
+    The first cut pinned the headline "MUST BIND A *CAPTURED* ARTIFACT, NEVER A RE-PULL" and the
+    40.58 measurement. Both were real, and the entry's MECHANISM around them was measured WRONG:
+    NF-INJ2b's failure was a 4-day-stale ECR cache, not intraday drift over its 7.30h lag. CLAUDE.md
+    is operational GUIDANCE, so it was corrected in place rather than annotated — guidance stating a
+    refuted mechanism manufactures the next failure, as it did.
+
+    ⛔ Re-anchored onto the new wording, NOT weakened: the guard now pins the CORRECTED mechanism,
+    which is a stronger claim than the one it replaced (MH2.7 — a guard suite can encode a retired
+    world; re-anchor it, never delete it).
+    """
     txt = (_REPO / "CLAUDE.md").read_text()
-    assert "MUST BIND A *CAPTURED* ARTIFACT, NEVER A RE-PULL" in txt
-    assert "40.58 over 797 rows" in txt
+    flat = re.sub(r"\s+", " ", txt)
+    assert "BINDS ON THE *MARKET-INPUT CACHES* MATCHING THE SERVED BOARD'S VINTAGE" in flat, (
+        "the D3 landmine no longer states the measured binding condition")
+    assert "SAME-DAY REBUILD IS NECESSARY BUT **NOT SUFFICIENT**" in flat, (
+        "the counterexample is the whole correction — same-day was the prescription that failed")
+    # both measurements that license the correction, and the misattribution it replaced
+    assert "40.58" in flat and "84.72" in flat
+    assert "MECHANISM CORRECTED IN PLACE 2026-09-01" in flat, (
+        "a corrected entry must SAY it was corrected and where the evidence is — a silent rewrite "
+        "leaves the next reader unable to tell guidance from a claim nobody re-measured")
+    assert "nf_inj2c_node3b_void_diagnosis.md" in flat
 
 
 def test_the_fresh_worktree_cache_rebuild_landmine_is_in_claude_md():
