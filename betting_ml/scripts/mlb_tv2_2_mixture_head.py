@@ -865,8 +865,11 @@ def run_controls(mu, sigma, dates, *, reps=N_CONTROL_REPS, seed=SEED):
     out = {"n_reps": reps, "n_rows": int(len(mu))}
 
     # ── §6.3 the MH2.8 positive control: the fitter must FIND a planted skew ───────────────────
+    _log(f"  §6.3 positive control — can the fitter FIND a planted skew? ({reps} reps)")
     found, coll = 0, 0
     for r in range(reps):
+        if r and r % 5 == 0:
+            _log(f"      rep {r}/{reps} (found {found})")
         y = plant(mu, sigma, skew_alpha=CONTROL_SKEW_ALPHA, seed=seed + 1000 + r)
         block = date_blocks(dates, k=N_BLOCKS)
         _, collapse, detail = build_arms(y, mu, sigma, block, seed=seed)
@@ -875,6 +878,8 @@ def run_controls(mu, sigma, dates, *, reps=N_CONTROL_REPS, seed=SEED):
               and float(np.median(sk)) > 0)          # the PLANTED sign
         found += bool(ok)
         coll += sum(collapse["mix2_full"])
+    _log(f"    -> positive control: detection_rate={found / reps:.2f} vs bar "
+         f"{POSITIVE_CONTROL_BAR}")
     out["positive_control_fitter_finds_skew"] = {
         "planted_skew_alpha": CONTROL_SKEW_ALPHA, "detection_rate": found / reps,
         "bar": POSITIVE_CONTROL_BAR, "pass": bool(found / reps >= POSITIVE_CONTROL_BAR),
@@ -897,8 +902,11 @@ def run_controls(mu, sigma, dates, *, reps=N_CONTROL_REPS, seed=SEED):
             ("negative_control_clean_data", 0.0, NEGATIVE_CONTROL_BAR, "le", "ship"),
             ("gross_defect_detection", CONTROL_SKEW_ALPHA, GROSS_DEFECT_DETECTION_BAR, "ge",
              "metric")):
+        _log(f"  {leg} ({reps} reps, ~8s each) …")
         hits, ship_hits, clause_hits = 0, 0, {c: 0 for c in SHIP_CLAUSES}
         for r in range(reps):
+            if r and r % 5 == 0:
+                _log(f"      rep {r}/{reps} (rate so far {hits / r:.2f})")
             y = plant(mu, sigma, skew_alpha=alpha, seed=seed + 2000 + r)
             _, _, verd, _ = _run_full_rule(y, mu, sigma, dates, seed=seed)
             ships = any(v["SHIPS"] for v in verd.values())
@@ -908,6 +916,8 @@ def run_controls(mu, sigma, dates, *, reps=N_CONTROL_REPS, seed=SEED):
             for c in SHIP_CLAUSES:
                 clause_hits[c] += any(v.get(c) for v in verd.values())
         rate = hits / reps
+        _log(f"    -> {leg}: rate={rate:.2f} vs bar {bar} "
+             f"({'PASS' if (rate <= bar if cmp == 'le' else rate >= bar) else 'FAIL'})")
         out[leg] = {"planted_skew_alpha": alpha, "rate": rate, "rate_is": mode, "bar": bar,
                     "full_ship_rate": ship_hits / reps,
                     "per_clause_detection": {c: v / reps for c, v in clause_hits.items()},
@@ -1056,6 +1066,25 @@ def lockstep(defl):
 # THE RUN
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
+_T0 = None
+
+
+def _log(msg: str) -> None:
+    """Progress to STDERR, flushed, with elapsed time.
+
+    ⭐ The decisive run takes ~8 minutes and previously printed NOTHING until it finished, so a
+    HANG and normal progress were indistinguishable at the terminal — the same class of defect this
+    repo keeps recording elsewhere (a state whose failure looks exactly like its healthy state has
+    not been verified). Logging changes no statistic; stdout stays reserved for the two result
+    lines so `... | tail -2` still works.
+    """
+    global _T0
+    import time
+    if _T0 is None:
+        _T0 = time.time()
+    print(f"[{time.time() - _T0:7.1f}s] {msg}", file=sys.stderr, flush=True)
+
+
 def _tier(df, tier):
     d = df[df["tier"] == tier]
     return (d["y_total"].to_numpy(float), d["mu"].to_numpy(float),
@@ -1063,7 +1092,10 @@ def _tier(df, tier):
 
 
 def run(*, reps=N_NULL, tier=PRIMARY_TIER, controls=True, seed=SEED):
+    _log(f"{STORY} — decisive run (reps={reps}, controls={controls}, seed={seed})")
     df = pull()
+    _log(f"served rows pulled: {len(df)} (median insert lag "
+         f"{float(df['insert_lag_days'].median()):.1f}d — served-ness by LAG, prereg §2.1)")
     out = {"story": STORY, "seed": seed, "best_alpha": BEST_ALPHA, "bet_paused": True,
            "deploy_held": True, "market_blind": True, "tier": tier,
            "champion": {"model_versions": list(ERA_MODEL_VERSIONS), "fit_date": CHAMPION_FIT_DATE},
@@ -1071,8 +1103,14 @@ def run(*, reps=N_NULL, tier=PRIMARY_TIER, controls=True, seed=SEED):
            "prereg": "ablation_results/mlb_tv2_2_prereg.md"}
 
     # ── NODE 2 — the REPLICATION leg. The STOP gate. ───────────────────────────────────────────
+    _log("node 2 — REPLICATION (the STOP gate) …")
     out["replication"] = replication(df, tier=tier, reps=reps, seed=seed)
+    _r = out["replication"]["reads"]["FULL_ERA"]
+    _log(f"  {tier}: FULL_ERA n={_r['n']} gap={_r['p_over_gap']:+.4f} "
+         f"outside_band={_r['outside_band']} -> REPLICATED={out['replication']['replicated']}")
     out["replication_secondary"] = replication(df, tier=SECONDARY_TIER, reps=reps, seed=seed)
+    _log(f"  {SECONDARY_TIER} (reported, never swaps the primary): "
+         f"REPLICATED={out['replication_secondary']['replicated']}")
     if not out["replication"]["replicated"]:
         out["verdict"] = "STOP_PREMISE_FAILED"
         out["route"] = ("The shape gap does not replicate on the widest served window this "
@@ -1085,8 +1123,13 @@ def run(*, reps=N_NULL, tier=PRIMARY_TIER, controls=True, seed=SEED):
 
     # ── the vacuity floor + the positive controls, BEFORE the real-data verdict is read ────────
     if controls:
+        _log(f"controls — the VACUITY FLOOR (this is the long leg: ~6 min at "
+             f"{N_CONTROL_REPS} reps) …")
         out["controls"] = run_controls(mu, sigma, dates, seed=seed)
+        _log("PLAT-CVP1 injected-effect positive control …")
         out["cvp1"] = cvp1_control(mu, sigma, dates, seed=seed)
+        _log(f"  CVP1 verdict={out['cvp1']['verdict']} "
+             f"field_statistic={out['cvp1']['field_statistic_reading']}")
         if not out["controls"]["_all_passed"]:
             out["verdict"] = "HARNESS_NOT_TRUSTWORTHY"
             out["route"] = ("A control failed. A harness that cannot separate a PLANTED cause "
@@ -1095,9 +1138,13 @@ def run(*, reps=N_NULL, tier=PRIMARY_TIER, controls=True, seed=SEED):
             return out
 
     # ── the decisive run ──────────────────────────────────────────────────────────────────────
+    _log(f"decisive battery on {out['n']} served rows, {N_BLOCKS} blocks …")
     res = score_arms(y, mu, sigma, dates, seed=seed, reps=reps)
     winner = max(TRIAL_ARMS, key=lambda a: res["lift"][a][PRIMARY_STAT]["point"])
     defl = deflation(res["rows"], res["block"], dates, winner=winner)
+    _log(f"  winner={winner} dsr={defl['dsr']:.4f} pbo({defl['pbo_binding_reading']})"
+         f"={defl['pbo']:.4f}")
+    _log("sensitivity — leave-one-DATE-BLOCK-out (8 refits) …")
     verd = ship_verdict(res, defl)
     verd[winner]["C0_replication"] = True
     out.update({
@@ -1471,6 +1518,7 @@ def main() -> None:
         sys.exit(0 if out["_all_passed"] else 1)
 
     r = run(reps=a.reps, controls=not a.no_controls)
+    _log("writing artifacts …")
     _REPORT_JSON.parent.mkdir(parents=True, exist_ok=True)
     _REPORT_JSON.write_text(json.dumps(_strip(r), indent=1))
     print(f"report → {write_report(r)}")
