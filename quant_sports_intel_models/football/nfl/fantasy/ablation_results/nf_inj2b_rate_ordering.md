@@ -181,6 +181,22 @@ Built off `generated_at` **2026-08-29T21:36:59.38158**. Injury-capped cohort n=*
 
 **Reproduction pin:** the incumbent arm rebuilt through this story's code matches the SERVED artifact to **40.6** over 797 rows (tolerance 0.05) ⇒ **False**. the incumbent arm rebuilt through this story's code vs the PUBLISHED 2026 artifact. If this does not hold, every arm delta is measured against a board nobody is served (the CLV / NF-INJ1 stale-vintage trap).
 
+> ⚠️ **MARKED ANNOTATION, added 2026-09-01 (PM ruling on decision request #3). Nothing above is
+> edited — a study record is annotated beside, never rewritten.** This story attributed the 40.6
+> failure to intraday market drift over the 7.30h lag recorded just above. **That mechanism is
+> measured WRONG.** NF-INJ2c established that the local **ECR cache carried an mtime of 2026-08-25
+> and was never rewritten**, so this run's ordering was built from **4-day-stale ECR** against a
+> board built on 8/29 — the rebuild being on the SAME UTC DAY is precisely why a drift reading
+> cannot explain it. `nf1_3_model` builds `market_rank = ecr.where(ecr.notna(), adp)` — ECR-primary,
+> a feature at all four positions — so a stale ECR cache re-orders the board within position.
+> NF-INJ2c reproduced the same failure at **84.72** with ADP matching EXACTLY (same window, same
+> 8,161 drafts) while ECR was six days stale, and the largest ECR mover in that gap (Josh Jacobs,
+> rank 43 → 145 over final cuts) was the largest point mover, at exactly the failing number.
+> ⇒ evidence in `nf_inj2c_node3b_void_diagnosis.md`; the cure is
+> `run_nf_inj2c_dominance_baseline.assert_market_vintage_matches`, which refuses BEFORE the arms are
+> built. **This annotation corrects an explanation, ⛔ not a verdict:** every figure, gate and
+> disposition in this record stands exactly as recorded.
+
 | arm | target | impossible rows | …attributable | give-back % | median ratio | ρ(games, ratio) | clamp hi/lo |
 |---|---|---|---|---|---|---|---|
 | incumbent | points | 10 | 9 | 82.70 | 1.9848 | -0.2598 | 15/26 |
