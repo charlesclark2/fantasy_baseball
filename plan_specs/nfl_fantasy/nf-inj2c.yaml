@@ -7,7 +7,7 @@ metadata:
   name: nf-inj2c
   vertical: nfl_fantasy
   card: https://trello.com/c/Dsz8CROW
-  status: ACCEPTED
+  status: BLOCKED(NODE1_REFUTED — returned to the PM; nodes 0+2 landed)
 spec:
   description: >
     Fresh forward registration of the ASSIGNMENT-RULE fix — the mechanism
@@ -142,8 +142,70 @@ spec:
       - id: 7-closeout
         desc: "Verdict + findings into closeout.followUps; operator summary."
   closeout:
-    verdict: null
+    verdict: >
+      NODE 1 REFUTED — STOPPED AT THE HARD GATE, RETURNED TO THE PM. The games-floor
+      hypothesis is dead by a two-sided measurement: `gsafe == proj_games` identically on
+      every row of every fold (min proj_games 0.814-1.215, i.e. 3.3-4.9x the 0.25 floor;
+      zero non-finite rows; zero rows at or below it; zero rows the kernel floored), by
+      BOTH the recorded `games_floor_binding()` definition and the wider one the kernel
+      applies. The mechanism could not act, so it produced nothing (NF1.9 / NF-D20). Per
+      the spec's node-1 clause no pre-registration was written, no arm was scored against
+      a realized outcome and no gate was computed. Nodes 2 (D4 + D3) executed as carried.
+      `best_alpha = 0`; DEPLOY-HELD; SERVED_ARM untouched; no `--publish`.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      FOR THE PM — the re-scope this node exists to inform.
+
+      (1) ⭐ THE COHERENCE CLAUSE HAS TWO RESIDUAL POPULATIONS TO SPEAK TO, NOT ONE, AND
+      THEY LICENSE DIFFERENT CLAUSES. The rate-assignment arms leave at worst 1.06-1.10x
+      the all-time envelope, every violating row on >= 8.0 expected games, ZERO rows under
+      2 games, <= 0.29 players/fold on 1-2 of 7 folds — an envelope-EDGE effect with a
+      named mechanism (the multiset a rate arm preserves is the FANTASY-POINT rate
+      multiset, not each counting stat's own rate, so a full-season dual-threat QB
+      promoted to another QB's points rate carries his own stat MIX up and grazes one
+      counting ceiling). That is the shape a declared tolerance could be designed around.
+      `stratified` — the intended PRIMARY — is not that: 8.57 players/fold on 7/7 folds,
+      worst 1.85x, on a row with 0.815 expected games, 35/95 violating rows (36.8%) under
+      2 expected games, against an incumbent residual of 19.14/fold, 2.51x, 34.2% under 2
+      games. ⇒ `stratified` is the incumbent's defect at ~45% of the VOLUME, not a
+      different defect; NF-INJ1's founding row (Easton Stick, 1.9 games, 82.7 pass
+      attempts/game) is still served under it, Easton Stick included. The spec's honesty
+      clause is now MEASURED rather than anticipated.
+
+      (2) THE SPEC'S PRIMARY IS THE THING THE CLAUSE CANNOT ADMIT. A forward coherence
+      clause tight enough to be a clause refuses `stratified`; one loose enough to admit it
+      is the guard switched off. So the PM's choice is a genuine fork, not a wording
+      problem: (a) re-scope the PRIMARY away from `stratified` toward a rate-assignment arm
+      and register a tolerance for the measured edge effect; (b) keep `stratified` and
+      register the clause as a strict-DOMINANCE improvement on the coherence measures
+      (violations/fold 19.14 -> 8.57, worst 2.51x -> 1.85x) with the residual disclosed
+      on-surface — which is the spec's own SECONDARY disposition, and the numbers for it are
+      in the node-1 record; or (c) attack the stat-mix mechanism directly, since it is now
+      named and is what BOTH populations reduce to.
+
+      (3) A MECHANISM NOBODY HAS COSTED: the envelope is a per-STAT ceiling while every
+      assignment rule permutes a per-PLAYER aggregate (points or points-rate). No rule that
+      permutes an aggregate can be coherent by construction against a per-stat envelope —
+      `points_rate_permute`'s own 2019 residual proves it at 1.09x. Worth a card in its own
+      right; it bounds what any successor in this family can achieve.
+
+      (4) NF-INJ2's record is annotated (D4) and the record SETTLES the open question rather
+      than flagging it: the self-referential-baseline defect is real in the code but
+      MEASURABLY did not fire on that run (`reproduction_pin` present; `served_giveback_pct`
+      = 33.96 on all seven arms, which the fallback cannot produce). Its give-back figures
+      stand as recorded.
+
+      (5) NEW LANDMINE, worth a checklist item on any story that reproduces a cached-feature
+      §0.5 run: a fresh worktree silently REBUILDS the gitignored NFL feature caches from a
+      live upstream, so a reproduction there is measured on a different feature vintage
+      (51/56 bare vs 55/56 after rsyncing the main checkout's caches). Landed in CLAUDE.md
+      beside D3.
+
+      (6) OPEN, not fixed here: `nf_inj2_rate_permutation.games_floor_binding()` counts
+      `isfinite(g) & (g < FLOOR)` while the kernel floors `~(isfinite(g) & (g > FLOOR))`, so
+      the recorded self-check cannot see a non-finite row the kernel does floor. Inert on
+      every population measured (zero non-finite rows anywhere), so it is a latent
+      instrument gap, not a live defect — flagged rather than edited, since it is another
+      story's module.
+
+      PM triages into: checklist item on the parent card | merge into an existing card (name
+      it) | a new spec. Worker sessions never create Trello cards.
