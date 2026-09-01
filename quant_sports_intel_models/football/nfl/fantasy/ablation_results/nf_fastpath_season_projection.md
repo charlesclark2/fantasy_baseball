@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-29T21:37:01.978501+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-09-01T05:01:28.202727+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -166,7 +166,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | DAK PRESCOTT        | QB         | DAL       | veteran  |         16.5 |         274.5 |        134.3 |        433.2 |
 | AMON-RA ST. BROWN   | WR         | DET       | veteran  |         15.8 |         272.5 |         99.8 |        341.3 |
 | JUSTIN HERBERT      | QB         | LAC       | veteran  |         16.5 |         269.0 |        130.7 |        433.2 |
-| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |         47.4 |        472.9 |
+| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |         47.3 |        473.1 |
 | MATTHEW STAFFORD    | QB         | LAR       | veteran  |         16.5 |         264.9 |        129.3 |        430.7 |
 | PUKA NACUA          | WR         | LAR       | veteran  |         15.1 |         263.1 |        102.3 |        342.2 |
 | TREVOR LAWRENCE     | QB         | JAX       | veteran  |         16.5 |         262.5 |        130.4 |        427.1 |
@@ -189,7 +189,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | LAMAR JACKSON    | QB         | BAL       | veteran  |         14.5 |         274.6 |        134.3 |        436.9 |
 | DAK PRESCOTT     | QB         | DAL       | veteran  |         16.5 |         274.5 |        134.3 |        433.2 |
 | JUSTIN HERBERT   | QB         | LAC       | veteran  |         16.5 |         269.0 |        130.7 |        433.2 |
-| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |         47.4 |        472.9 |
+| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |         47.3 |        473.1 |
 | MATTHEW STAFFORD | QB         | LAR       | veteran  |         16.5 |         264.9 |        129.3 |        430.7 |
 | TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         262.5 |        130.4 |        427.1 |
 | BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         257.9 |        124.7 |        424.3 |
@@ -276,7 +276,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 
 | player_name        | position   |   draft_overall |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:-------------------|:-----------|----------------:|-------------:|--------------:|-------------:|-------------:|
-| Fernando Mendoza   | QB         |             1.0 |         12.4 |         268.3 |         47.4 |        472.9 |
+| Fernando Mendoza   | QB         |             1.0 |         12.4 |         268.3 |         47.3 |        473.1 |
 | Jeremiyah Love     | RB         |             3.0 |         16.0 |         250.0 |         31.6 |        398.2 |
 | Jordyn Tyson       | WR         |             8.0 |         13.6 |         200.8 |         18.7 |        326.3 |
 | Carnell Tate       | WR         |             4.0 |         13.6 |         180.7 |         26.5 |        356.9 |
@@ -285,11 +285,11 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | Jadarian Price     | RB         |            32.0 |         13.8 |         107.3 |          6.4 |        218.3 |
 | KC Concepcion      | WR         |            24.0 |         14.1 |          83.6 |          7.7 |        216.7 |
 | De'Zhaun Stribling | WR         |            33.0 |         14.1 |          72.7 |          5.5 |        195.3 |
-| Omar Cooper Jr.    | WR         |            30.0 |         14.1 |          72.1 |          6.1 |        198.8 |
+| Omar Cooper Jr.    | WR         |            30.0 |         14.1 |          72.1 |          6.1 |        198.9 |
 | Denzel Boston      | WR         |            39.0 |         14.1 |          71.7 |          4.6 |        187.7 |
 | Eli Stowers        | TE         |            54.0 |         13.9 |          61.1 |          2.9 |        166.5 |
 | Germie Bernard     | WR         |            47.0 |         14.1 |          60.0 |          3.5 |        171.0 |
-| Ty Simpson         | QB         |            13.0 |         12.4 |          58.1 |         11.1 |        223.6 |
+| Ty Simpson         | QB         |            13.0 |         12.4 |          58.1 |         11.0 |        223.7 |
 | Antonio Williams   | WR         |            71.0 |         14.1 |          52.5 |          1.8 |        148.9 |
 
 ## 6. NF-D11 — projection UNIVERSE (injured-all-year rescue) + the ADP coverage audit
@@ -344,8 +344,8 @@ Every ADP name is normalized and diffed against the projection's own (name, posi
   "by_sample": {
     "ppr/12": {
       "n_adp_rows": 271,
-      "n_adp_covered_positions": 221,
-      "n_matched": 220,
+      "n_adp_covered_positions": 220,
+      "n_matched": 219,
       "pct_matched": 99.5,
       "n_alias_candidates": 0,
       "n_true_absences": 1,
@@ -353,62 +353,62 @@ Every ADP name is normalized and diffed against the projection's own (name, posi
     },
     "ppr/10": {
       "n_adp_rows": 271,
-      "n_adp_covered_positions": 221,
-      "n_matched": 220,
+      "n_adp_covered_positions": 220,
+      "n_matched": 219,
       "pct_matched": 99.5,
       "n_alias_candidates": 0,
       "n_true_absences": 1,
       "n_actionable_true_absences": 1
     },
     "half-ppr/12": {
-      "n_adp_rows": 232,
-      "n_adp_covered_positions": 192,
-      "n_matched": 192,
+      "n_adp_rows": 233,
+      "n_adp_covered_positions": 193,
+      "n_matched": 193,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "half-ppr/10": {
-      "n_adp_rows": 232,
-      "n_adp_covered_positions": 192,
-      "n_matched": 192,
+      "n_adp_rows": 233,
+      "n_adp_covered_positions": 193,
+      "n_matched": 193,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "standard/12": {
-      "n_adp_rows": 223,
-      "n_adp_covered_positions": 184,
-      "n_matched": 184,
+      "n_adp_rows": 220,
+      "n_adp_covered_positions": 180,
+      "n_matched": 180,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "standard/10": {
-      "n_adp_rows": 223,
-      "n_adp_covered_positions": 184,
-      "n_matched": 184,
+      "n_adp_rows": 220,
+      "n_adp_covered_positions": 180,
+      "n_matched": 180,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "2qb/12": {
-      "n_adp_rows": 247,
-      "n_adp_covered_positions": 204,
-      "n_matched": 204,
+      "n_adp_rows": 250,
+      "n_adp_covered_positions": 207,
+      "n_matched": 207,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,
       "n_actionable_true_absences": 0
     },
     "2qb/10": {
-      "n_adp_rows": 247,
-      "n_adp_covered_positions": 204,
-      "n_matched": 204,
+      "n_adp_rows": 250,
+      "n_adp_covered_positions": 207,
+      "n_matched": 207,
       "pct_matched": 100.0,
       "n_alias_candidates": 0,
       "n_true_absences": 0,

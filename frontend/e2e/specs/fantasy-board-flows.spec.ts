@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test"
-import { FIXTURES, collectPageErrors, mockApi } from "../support/api-mock"
+import { FIXTURES, collectPageErrors, mockApi, type MockOptions } from "../support/api-mock"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../support/assertions"
+import { noteCell, readExportedCsv } from "../support/exported-csv"
+import { CSV_WITHHELD_NOTE, csvWithheldNote } from "@/lib/fantasy-claim-copy"
 
 /**
  * E9.64 — THE FREE BOARD, ACTUALLY USED.
@@ -74,9 +76,9 @@ async function boardTotal(page: Page): Promise<number> {
 }
 
 /** Wait for the board to have rows, so nothing below reads a loading state. */
-async function openBoard(page: Page, path: string) {
+async function openBoard(page: Page, path: string, extra?: Partial<MockOptions>) {
   const errors = collectPageErrors(page)
-  const mock = await mockApi(page, { entitlement: "free" })
+  const mock = await mockApi(page, { entitlement: "free", ...extra })
   await page.goto(path)
   await expect(page.locator("table tbody tr").first()).toBeVisible()
   return { errors, mock }
@@ -241,18 +243,108 @@ test.describe("exporting the board", () => {
     for await (const chunk of stream) chunks.push(Buffer.from(chunk))
     const csv = Buffer.concat(chunks).toString("utf8")
 
-    const lines = csv.trim().split("\n")
-    const header = lines[0].split(",")
+    const { header, dataLines, noteLines } = readExportedCsv(csv)
     expect(header, "the exported file has no header row").toContain("player")
 
     // ⭐ THE WHOLE FILTERED BOARD, NOT THE VISIBLE PAGE. `downloadCsv`'s own comment says a
     // paginated export "would silently hand back 50 of 700 rows" — and 50 rows of a 858-row board
     // is a perfectly well-formed CSV, which is exactly why only a row count can catch it.
     expect(
-      lines.length - 1,
-      `the export contains ${lines.length - 1} rows for a board of ${total} — a paginated export ` +
+      dataLines.length,
+      `the export contains ${dataLines.length} rows for a board of ${total} — a paginated export ` +
         `hands back a well-formed file with most of the board missing`,
     ).toBe(total)
+
+    // ⭐ NF-CSV1 — AND NO NOTE ROW, because this board withholds nothing.
+    //
+    // ⛔⛔ THIS IS THE HALF THAT IS EASY TO GET WRONG, AND THE SERVED FIXTURE IS WHY IT BITES. The
+    // board already carries THREE rows whose `full_season_rate` cell is EMPTY — players with no
+    // expected-games figure to divide by — and zero rows that are WITHHELD. A trigger keyed on "is
+    // the cell empty" therefore produces a note on this very file, claiming a withholding it does
+    // not contain. `toBe(0)` here is the clause that catches that, and it can only catch it
+    // because the fixture happens to separate the two states. A `>=` or a tolerance anywhere in
+    // this block would let the note appear on a file with nothing to disclose.
+    expect(
+      noteLines,
+      `the export appended a withheld-value note to a file that withholds nothing — a note is a ` +
+        `claim about the file it rides on, and this one would be false`,
+    ).toEqual([])
+    expect(
+      csv,
+      "the note's wording leaked into an export that withholds nothing",
+    ).not.toContain(CSV_WITHHELD_NOTE.trailer)
+
+    expectNoPageErrors(errors)
+  })
+
+  test("a withheld cell adds EXACTLY ONE note row, after the data and off the data columns", async ({
+    page,
+  }) => {
+    // ⭐⭐ THE OTHER DIRECTION OF THE SAME CONTRACT, IN THE SAME PLACE. The test above proves a note
+    // cannot appear on a file with nothing withheld; this one proves it cannot be MISSING from a
+    // file that withholds something. Split across two specs the pair would be two independent
+    // assertions that could drift; here they are one contract read from both sides, over the same
+    // `readExportedCsv` split, and the row-count arithmetic is exact in both.
+    //
+    // ⛔ THE PLANT IS REQUIRED AND IT IS NOT AN ARBITRARY ONE. The committed 858-row board contains
+    // NOT ONE row above the realized envelope (measured — the same finding NF-RATE1 recorded), so
+    // this clause asserted against the board as served would assert nothing at all. The plant
+    // reproduces the real defect's SHAPE: the point total is left exactly where the fixture has it
+    // and only the games figure is cut, which is how NF1.5's re-order produces these rows.
+    const CAPPED = { id: "00-0038543", pts: 138.3, g: 3.7 }
+    const { errors } = await openBoard(page, "/fantasy/rankings", {
+      transform: (pathname, body) =>
+        pathname === "/fantasy/nfl/board" && Array.isArray(body)
+          ? body.map((p: any) => (p?.id === CAPPED.id ? { ...p, ...CAPPED } : p))
+          : body,
+    })
+    const total = await boardTotal(page)
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Export CSV" }).click(),
+    ])
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+    const { header, dataLines, noteLines, raw } = readExportedCsv(
+      Buffer.concat(chunks).toString("utf8"),
+    )
+
+    // The header is still row 1 and the data columns are still every column — the note must not
+    // have cost the file a row, a column, or its first line.
+    expect(header, "the note displaced the header row").toContain("player")
+    expect(
+      dataLines.length,
+      `the export carries ${dataLines.length} data rows for a board of ${total} — the note row ` +
+        `must be ADDITIONAL to the data, never one of it`,
+    ).toBe(total)
+    expect(
+      noteLines.length,
+      "a row is withheld in this file and the export states nothing about it",
+    ).toBe(1)
+
+    // AFTER the data, not before it and not interleaved.
+    const lines = raw.replace(/\n+$/, "").split("\n")
+    expect(
+      lines[lines.length - 1],
+      "the note row is not the last line — a reader slicing data rows by index would take it as one",
+    ).toBe(noteLines[0])
+
+    // ...and OFF the data columns: the text sits in the first cell and every other cell is empty,
+    // so the row keeps the header's arity and column tooling reads it as a row of blanks.
+    expect(noteCell(noteLines[0]), "the note row does not carry the note's own wording").toBe(
+      csvWithheldNote(["full-season-rate"]),
+    )
+    // ⚠️ Read the remainder by matching the QUOTED first field rather than by slicing the decoded
+    // text's length: the two differ the moment the copy contains a `"` (which `esc` doubles), and a
+    // length-based slice would then fail with an arity complaint about a perfectly correct row.
+    const after = noteLines[0].match(/^"(?:[^"]|"")*"(.*)$/)?.[1] ?? noteLines[0]
+    expect(
+      after,
+      `the note row carries content outside its first cell ("${after}") — the arity or the ` +
+        `placement is wrong, and a column reader would see the note as data`,
+    ).toBe(",".repeat(header.length - 1))
 
     expectNoPageErrors(errors)
   })

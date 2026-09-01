@@ -54,3 +54,15 @@ frontend consumes a landed contract, never a moving one, and absorbs any
 client-side change the backend story flagged. Kickoff prompts for the
 frontend half state the dependency explicitly. Genuinely disjoint stories
 (different surfaces, no shared contract) may still run in parallel.
+
+## Spec-premise verification (PM ruling 2026-09-01, from NF-RATE1 follow-up 1)
+A spec's factual premises about the codebase (which files own a surface, whether
+a deploy path exists, where a column is computed) must be either QUOTED VERBATIM
+from the parent record (which carries file:line evidence) or verified against
+the running system before the spec is written — never paraphrased from memory.
+NF-RATE1's spec asserted a box-image "exporter half" that does not exist; the
+parent follow-up had already named rankings-board.tsx:296 as the CSV's owner.
+The defect entered at spec-writing time (a PM paraphrase), and the same shape
+would send a future session hunting a Python artifact that isn't there. Same
+family as the repo's "pre-flight a card's premise against the running system"
+rule — applied one step earlier, to the spec itself.

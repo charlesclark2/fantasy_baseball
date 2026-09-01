@@ -1,0 +1,8 @@
+{
+  "captured_at": "2026-09-01T05:02:16.419623+00:00",
+  "sha256": "3c05eeb2e3dcfc9c08f64299e19b13ebd99c17925d526f4c10d19a59b0e65f07",
+  "served_generated_at": "2026-08-31T14:18:54.351500+00:00",
+  "n_players": 871,
+  "source": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_2026.json",
+  "convention": "D3 \u2014 a reproduction pin over a live-snapshot-fed surface binds a CAPTURED artifact, never a re-pull; --market-refresh moves the ADP/ECR consensus that feeds the ordering, so a later pull is a different board"
+}

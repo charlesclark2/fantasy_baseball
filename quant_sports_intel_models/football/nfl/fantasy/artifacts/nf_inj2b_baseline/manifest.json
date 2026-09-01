@@ -1,106 +1,106 @@
 {
   "season": 2026,
   "reportedAbsenceCount": 0,
-  "generated_at": "2026-08-27T14:18:54.071999+00:00",
+  "generated_at": "2026-08-31T14:18:54.376615+00:00",
   "source": "local-artifacts",
-  "adp_as_of": "2026-08-27",
-  "ecr_as_of": "2026-08-27",
+  "adp_as_of": "2026-08-31",
+  "ecr_as_of": "2026-08-31",
   "freshness": {
     "adp": {
       "source": "ffc",
       "format": "ppr",
       "teams": 12,
-      "as_of": "2026-08-27",
-      "window_start": "2026-08-20",
-      "window_end": "2026-08-27",
-      "drafts": 7986
+      "as_of": "2026-08-31",
+      "window_start": "2026-08-24",
+      "window_end": "2026-08-31",
+      "drafts": 8161
     },
     "ecr": {
       "source": "fantasypros",
       "scoring": "PPR",
-      "as_of": "2026-08-27",
-      "label": "8/27",
-      "experts": 108
+      "as_of": "2026-08-31",
+      "label": "8/31",
+      "experts": 104
     },
     "adp_by_sample": {
       "2qb/10": {
         "source": "ffc",
         "format": "2qb",
         "teams": 10,
-        "as_of": "2026-08-27",
-        "window_start": "2026-07-28",
-        "window_end": "2026-08-27",
-        "drafts": 5911
+        "as_of": "2026-08-31",
+        "window_start": "2026-08-01",
+        "window_end": "2026-08-31",
+        "drafts": 6613
       },
       "2qb/12": {
         "source": "ffc",
         "format": "2qb",
         "teams": 12,
-        "as_of": "2026-08-27",
-        "window_start": "2026-07-28",
-        "window_end": "2026-08-27",
-        "drafts": 5911
+        "as_of": "2026-08-31",
+        "window_start": "2026-08-01",
+        "window_end": "2026-08-31",
+        "drafts": 6613
       },
       "half-ppr/10": {
         "source": "ffc",
         "format": "half-ppr",
         "teams": 10,
-        "as_of": "2026-08-27",
-        "window_start": "2026-08-22",
-        "window_end": "2026-08-27",
-        "drafts": 3144
+        "as_of": "2026-08-31",
+        "window_start": "2026-08-26",
+        "window_end": "2026-08-31",
+        "drafts": 3208
       },
       "half-ppr/12": {
         "source": "ffc",
         "format": "half-ppr",
         "teams": 12,
-        "as_of": "2026-08-27",
-        "window_start": "2026-08-22",
-        "window_end": "2026-08-27",
-        "drafts": 3144
+        "as_of": "2026-08-31",
+        "window_start": "2026-08-26",
+        "window_end": "2026-08-31",
+        "drafts": 3208
       },
       "ppr/10": {
         "source": "ffc",
         "format": "ppr",
         "teams": 10,
-        "as_of": "2026-08-27",
-        "window_start": "2026-08-20",
-        "window_end": "2026-08-27",
-        "drafts": 7986
+        "as_of": "2026-08-31",
+        "window_start": "2026-08-24",
+        "window_end": "2026-08-31",
+        "drafts": 8161
       },
       "ppr/12": {
         "source": "ffc",
         "format": "ppr",
         "teams": 12,
-        "as_of": "2026-08-27",
-        "window_start": "2026-08-20",
-        "window_end": "2026-08-27",
-        "drafts": 7986
+        "as_of": "2026-08-31",
+        "window_start": "2026-08-24",
+        "window_end": "2026-08-31",
+        "drafts": 8161
       },
       "standard/10": {
         "source": "ffc",
         "format": "standard",
         "teams": 10,
-        "as_of": "2026-08-27",
-        "window_start": "2026-08-20",
-        "window_end": "2026-08-27",
-        "drafts": 1905
+        "as_of": "2026-08-31",
+        "window_start": "2026-08-24",
+        "window_end": "2026-08-31",
+        "drafts": 1884
       },
       "standard/12": {
         "source": "ffc",
         "format": "standard",
         "teams": 12,
-        "as_of": "2026-08-27",
-        "window_start": "2026-08-20",
-        "window_end": "2026-08-27",
-        "drafts": 1905
+        "as_of": "2026-08-31",
+        "window_start": "2026-08-24",
+        "window_end": "2026-08-31",
+        "drafts": 1884
       }
     },
     "input_vintage": {
-      "depth_chart_as_of": "2026-08-26 07:41:22",
-      "sleeper_status_as_of": "2026-08-27T13:30:14.908041+00:00"
+      "depth_chart_as_of": "2026-08-30 12:30:54",
+      "sleeper_status_as_of": "2026-08-31T13:30:16.880706+00:00"
     },
-    "projection_built_at": "2026-08-27T14:18:33.631330+00:00",
+    "projection_built_at": "2026-08-31T14:18:33.832919+00:00",
     "market_refresh": true
   },
   "positions": [
@@ -702,104 +702,104 @@
     "players": 871,
     "adp_format": "ppr",
     "adp_teams": 12,
-    "adp_as_of": "2026-08-27",
-    "ecr_as_of": "2026-08-27",
+    "adp_as_of": "2026-08-31",
+    "ecr_as_of": "2026-08-31",
     "freshness": {
       "adp": {
         "source": "ffc",
         "format": "ppr",
         "teams": 12,
-        "as_of": "2026-08-27",
-        "window_start": "2026-08-20",
-        "window_end": "2026-08-27",
-        "drafts": 7986
+        "as_of": "2026-08-31",
+        "window_start": "2026-08-24",
+        "window_end": "2026-08-31",
+        "drafts": 8161
       },
       "ecr": {
         "source": "fantasypros",
         "scoring": "PPR",
-        "as_of": "2026-08-27",
-        "label": "8/27",
-        "experts": 108
+        "as_of": "2026-08-31",
+        "label": "8/31",
+        "experts": 104
       },
       "adp_by_sample": {
         "2qb/10": {
           "source": "ffc",
           "format": "2qb",
           "teams": 10,
-          "as_of": "2026-08-27",
-          "window_start": "2026-07-28",
-          "window_end": "2026-08-27",
-          "drafts": 5911
+          "as_of": "2026-08-31",
+          "window_start": "2026-08-01",
+          "window_end": "2026-08-31",
+          "drafts": 6613
         },
         "2qb/12": {
           "source": "ffc",
           "format": "2qb",
           "teams": 12,
-          "as_of": "2026-08-27",
-          "window_start": "2026-07-28",
-          "window_end": "2026-08-27",
-          "drafts": 5911
+          "as_of": "2026-08-31",
+          "window_start": "2026-08-01",
+          "window_end": "2026-08-31",
+          "drafts": 6613
         },
         "half-ppr/10": {
           "source": "ffc",
           "format": "half-ppr",
           "teams": 10,
-          "as_of": "2026-08-27",
-          "window_start": "2026-08-22",
-          "window_end": "2026-08-27",
-          "drafts": 3144
+          "as_of": "2026-08-31",
+          "window_start": "2026-08-26",
+          "window_end": "2026-08-31",
+          "drafts": 3208
         },
         "half-ppr/12": {
           "source": "ffc",
           "format": "half-ppr",
           "teams": 12,
-          "as_of": "2026-08-27",
-          "window_start": "2026-08-22",
-          "window_end": "2026-08-27",
-          "drafts": 3144
+          "as_of": "2026-08-31",
+          "window_start": "2026-08-26",
+          "window_end": "2026-08-31",
+          "drafts": 3208
         },
         "ppr/10": {
           "source": "ffc",
           "format": "ppr",
           "teams": 10,
-          "as_of": "2026-08-27",
-          "window_start": "2026-08-20",
-          "window_end": "2026-08-27",
-          "drafts": 7986
+          "as_of": "2026-08-31",
+          "window_start": "2026-08-24",
+          "window_end": "2026-08-31",
+          "drafts": 8161
         },
         "ppr/12": {
           "source": "ffc",
           "format": "ppr",
           "teams": 12,
-          "as_of": "2026-08-27",
-          "window_start": "2026-08-20",
-          "window_end": "2026-08-27",
-          "drafts": 7986
+          "as_of": "2026-08-31",
+          "window_start": "2026-08-24",
+          "window_end": "2026-08-31",
+          "drafts": 8161
         },
         "standard/10": {
           "source": "ffc",
           "format": "standard",
           "teams": 10,
-          "as_of": "2026-08-27",
-          "window_start": "2026-08-20",
-          "window_end": "2026-08-27",
-          "drafts": 1905
+          "as_of": "2026-08-31",
+          "window_start": "2026-08-24",
+          "window_end": "2026-08-31",
+          "drafts": 1884
         },
         "standard/12": {
           "source": "ffc",
           "format": "standard",
           "teams": 12,
-          "as_of": "2026-08-27",
-          "window_start": "2026-08-20",
-          "window_end": "2026-08-27",
-          "drafts": 1905
+          "as_of": "2026-08-31",
+          "window_start": "2026-08-24",
+          "window_end": "2026-08-31",
+          "drafts": 1884
         }
       },
       "input_vintage": {
-        "depth_chart_as_of": "2026-08-26 07:41:22",
-        "sleeper_status_as_of": "2026-08-27T13:30:14.908041+00:00"
+        "depth_chart_as_of": "2026-08-30 12:30:54",
+        "sleeper_status_as_of": "2026-08-31T13:30:16.880706+00:00"
       },
-      "projection_built_at": "2026-08-27T14:18:33.631330+00:00",
+      "projection_built_at": "2026-08-31T14:18:33.832919+00:00",
       "market_refresh": true
     },
     "projection_source": "nf1_5",
@@ -826,8 +826,8 @@
       "params": {
         "QB": 0.9287565281164292,
         "RB": 1.2479904415110172,
-        "TE": 1.1115566369997747,
-        "WR": 1.1003068768907542
+        "TE": 1.111556636999775,
+        "WR": 1.0992976324412493
       },
       "window_seasons": 5.0,
       "source_model": "NF-TR2b",
@@ -904,14 +904,14 @@
     "n_players": 703
   },
   "coherence": {
-    "violating_players": 11,
+    "violating_players": 12,
     "by_file": {
-      "projections.json": 11
+      "projections.json": 12
     },
     "injury_input": {
       "verdict": "OK",
       "lag_hours": 0.8,
-      "as_of": "2026-08-27T13:30:14.908041+00:00",
+      "as_of": "2026-08-31T13:30:16.880706+00:00",
       "max_lag_hours": 72.0,
       "detail": "injury status 0.8h old, within the 72h bar"
     }
@@ -923,11 +923,11 @@
     "claims_fitted": true,
     "fitted_model_version": "nfl_fantasy_nf_inj3b_injury_games_v1",
     "incumbent_model_version": "nfl_fantasy_injury_cap_incumbent_v1",
-    "n_certified": 25,
-    "n_fitted": 25,
-    "n_moved": 25,
+    "n_certified": 36,
+    "n_fitted": 36,
+    "n_moved": 36,
     "max_abs_move": 3.9997523670390134,
     "material_atol": 1e-09,
-    "detail": "25 of 25 fitted row(s) differ materially from the incumbent cap (largest move 4 games) under the fitted stamp nfl_fantasy_nf_inj3b_injury_games_v1."
+    "detail": "36 of 36 fitted row(s) differ materially from the incumbent cap (largest move 4 games) under the fitted stamp nfl_fantasy_nf_inj3b_injury_games_v1."
   }
 }

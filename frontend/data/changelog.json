@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-08-31",
+    "items": [
+      {
+        "tag": "improved",
+        "text": "The rankings CSV export now explains what it is leaving out. When we decline to publish a full-season rate for a player \u2014 because stretching their projection back out to seventeen games implies a season above any a real player has posted at that position \u2014 the column on the site shows a dash you can tap for the reason. The exported file showed a blank and said nothing, which in a spreadsheet reads as \u201cwe have nothing for this player\u201d rather than \u201cwe have this number and are not printing it\u201d. Any export that withholds something now carries a short note at the end of the file saying what was withheld and why, and pointing back at the column on the site that marks the individual rows. It is one row, appended after the data, with the text in the first cell \u2014 the header is still the first line and every data column is untouched, so anything that reads the file keeps working. An export with nothing withheld is unchanged, down to the byte. The note is careful about one thing in particular: that column is also blank where we publish no expected-games figure to divide by, which is an absence rather than a withholding, and the file has no way to tell the two apart \u2014 so it says that, instead of implying every blank is a refusal."
+      }
+    ]
+  },
+  {
     "week": "2026-08-24",
     "items": [
       {

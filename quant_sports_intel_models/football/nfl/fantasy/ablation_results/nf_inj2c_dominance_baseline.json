@@ -1,0 +1,1036 @@
+{
+  "story": "NF-INJ2c node 3b \u2014 capture-pinned dominance baseline (PM re-scope ruling 3)",
+  "generated_at": "2026-09-01T05:02:43.584847+00:00",
+  "best_alpha": 0,
+  "capture": {
+    "captured_at": "2026-09-01T05:02:16.419623+00:00",
+    "sha256": "3c05eeb2e3dcfc9c08f64299e19b13ebd99c17925d526f4c10d19a59b0e65f07",
+    "served_generated_at": "2026-08-31T14:18:54.351500+00:00",
+    "n_players": 871,
+    "source": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_2026.json",
+    "convention": "D3 \u2014 a reproduction pin over a live-snapshot-fed surface binds a CAPTURED artifact, never a re-pull; --market-refresh moves the ADP/ECR consensus that feeds the ordering, so a later pull is a different board"
+  },
+  "arms": [
+    "mvp1_null",
+    "incumbent",
+    "stratified",
+    "feasibility_clamp",
+    "points_rate_permute",
+    "rate_refit",
+    "points_rate_stratified",
+    "rate_refit_stratified"
+  ],
+  "application_2026": {
+    "cohort_source": "load_forward_roster_status(2026).proj_status \u2208 ['NFI', 'PUP', 'RES', 'SUS'] \u2014 the cap's own input",
+    "n_capped": 29,
+    "board_generated_at": "2026-09-01T05:01:25.03574",
+    "served_vintage": {
+      "projections_generated_at": "2026-08-31T14:18:54.351500+00:00",
+      "n_rows": 871,
+      "source": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_2026.json",
+      "manifest_generated_at": "2026-08-31T14:18:54.376615+00:00",
+      "input_vintage": {
+        "depth_chart_as_of": "2026-08-30 12:30:54",
+        "sleeper_status_as_of": "2026-08-31T13:30:16.880706+00:00"
+      },
+      "injury_input": {
+        "verdict": "OK",
+        "lag_hours": 0.8,
+        "as_of": "2026-08-31T13:30:16.880706+00:00",
+        "max_lag_hours": 72.0,
+        "detail": "injury status 0.8h old, within the 72h bar"
+      },
+      "coherence_violating_players": 12,
+      "injury_games_stamp": {
+        "verdict": "FLIPPED_AND_MOVED",
+        "passed": true,
+        "stamp": "nfl_fantasy_nf_inj3b_injury_games_v1",
+        "claims_fitted": true,
+        "fitted_model_version": "nfl_fantasy_nf_inj3b_injury_games_v1",
+        "incumbent_model_version": "nfl_fantasy_injury_cap_incumbent_v1",
+        "n_certified": 36,
+        "n_fitted": 36,
+        "n_moved": 36,
+        "max_abs_move": 3.9997523670390134,
+        "material_atol": 1e-09,
+        "detail": "36 of 36 fitted row(s) differ materially from the incumbent cap (largest move 4 games) under the fitted stamp nfl_fantasy_nf_inj3b_injury_games_v1."
+      },
+      "reported_absence_count": 0
+    },
+    "baseline_freshness": {
+      "max_lag_hours": 48.0,
+      "local_mvp1_generated_at": "2026-09-01 05:01:25.035740+00:00",
+      "served_generated_at": "2026-08-31T14:18:54.351500+00:00",
+      "lag_hours": 14.71,
+      "served_injury_input": {
+        "verdict": "OK",
+        "lag_hours": 0.8,
+        "as_of": "2026-08-31T13:30:16.880706+00:00",
+        "max_lag_hours": 72.0,
+        "detail": "injury status 0.8h old, within the 72h bar"
+      }
+    },
+    "arms": {
+      "mvp1_null": {
+        "score_target": "points",
+        "coherence_violating_players": 1,
+        "coherence_violations": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "coherence_applicable": true,
+        "coherence_unevaluable": 0,
+        "worst_violations": [
+          {
+            "name": "Fernando Mendoza",
+            "stat": "passAtt",
+            "implied_per_game": 49.64,
+            "max_ever_per_game": 45.44,
+            "expected_games": 12.38
+          }
+        ],
+        "injury_giveback": {
+          "n": 29,
+          "mvp1_total": 296.7,
+          "arm_total": 296.7,
+          "giveback_pct": 0.0,
+          "median_point_ratio": 1.0,
+          "n_scaled_up": 0,
+          "n_scaled_down": 0,
+          "served_giveback_pct": 75.46
+        },
+        "availability_gradient": {
+          "n": 716,
+          "rho": null,
+          "p": null,
+          "evaluable": false,
+          "max_abs_ratio_move": 4.440892098500626e-16,
+          "why": "the arm moves no point \u2014 the ratio is constant, so a rank correlation over it would be computed on floating-point noise"
+        },
+        "clamp_saturation_high": 0,
+        "clamp_saturation_low": 0,
+        "n_rows": 797,
+        "placement": {
+          "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
+          "best_rookie_overall_rank": 14,
+          "rookie_cap_breach": false,
+          "rookie_cap_detail": {
+            "best_rookie_overall_rank": 14.0,
+            "cap": 8.8,
+            "q": 0.1,
+            "breach": false,
+            "caps_over_q_band": {
+              "Q05": 7.9,
+              "Q10": 8.8,
+              "Q15": 9.7,
+              "Q20": 10.6,
+              "Q25": 11.5
+            },
+            "observed_minimum": 7.0,
+            "breaches_even_the_observed_minimum": false,
+            "verdict_is_threshold_invariant": true,
+            "reality_breach_rate_top10": 0.286
+          },
+          "cross_position_movement_top100": {
+            "n_board": 797,
+            "median_abs_rank_move": 0.0,
+            "p90_abs_rank_move": 0.0,
+            "max_abs_rank_move": 0.0,
+            "n_moved": 0,
+            "top100_churn": 0,
+            "top100_membership_stable": true,
+            "top10_order_stable": true
+          },
+          "within_position_movement": {
+            "max_rank_move_by_pos": {
+              "QB": 0.0,
+              "RB": 0.0,
+              "WR": 0.0,
+              "TE": 0.0
+            },
+            "worst_rank_move": 0.0,
+            "within_position_rho": {
+              "QB": 1.0,
+              "RB": 1.0,
+              "WR": 1.0,
+              "TE": 0.9999999999999999
+            }
+          }
+        },
+        "coherence_violations_also_present_with_ordering_OFF": [
+          "MEN516487|Fernando Mendoza"
+        ],
+        "coherence_violating_players_attributable": 0
+      },
+      "incumbent": {
+        "score_target": "points",
+        "coherence_violating_players": 10,
+        "coherence_violations": 18,
+        "coherence_by_position": {
+          "QB": 10
+        },
+        "coherence_applicable": true,
+        "coherence_unevaluable": 0,
+        "worst_violations": [
+          {
+            "name": "CASE KEENUM",
+            "stat": "passAtt",
+            "implied_per_game": 90.82,
+            "max_ever_per_game": 45.44,
+            "expected_games": 1.06
+          },
+          {
+            "name": "EASTON STICK",
+            "stat": "passAtt",
+            "implied_per_game": 82.11,
+            "max_ever_per_game": 45.44,
+            "expected_games": 1.86
+          },
+          {
+            "name": "BAILEY ZAPPE",
+            "stat": "passAtt",
+            "implied_per_game": 81.67,
+            "max_ever_per_game": 45.44,
+            "expected_games": 0.8
+          },
+          {
+            "name": "SAM HOWELL",
+            "stat": "passAtt",
+            "implied_per_game": 80.17,
+            "max_ever_per_game": 45.44,
+            "expected_games": 1.06
+          },
+          {
+            "name": "CASE KEENUM",
+            "stat": "passYds",
+            "implied_per_game": 612.75,
+            "max_ever_per_game": 371.2,
+            "expected_games": 1.06
+          }
+        ],
+        "injury_giveback": {
+          "n": 29,
+          "mvp1_total": 296.7,
+          "arm_total": 542.1,
+          "giveback_pct": 82.7,
+          "median_point_ratio": 1.9848,
+          "n_scaled_up": 25,
+          "n_scaled_down": 3,
+          "served_giveback_pct": 75.46
+        },
+        "availability_gradient": {
+          "n": 716,
+          "rho": -0.2602,
+          "p": 1.5125355920644735e-12,
+          "evaluable": true,
+          "max_abs_ratio_move": 2.513129
+        },
+        "clamp_saturation_high": 15,
+        "clamp_saturation_low": 26,
+        "n_rows": 797,
+        "placement": {
+          "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
+          "best_rookie_overall_rank": 14,
+          "rookie_cap_breach": false,
+          "rookie_cap_detail": {
+            "best_rookie_overall_rank": 14.0,
+            "cap": 8.8,
+            "q": 0.1,
+            "breach": false,
+            "caps_over_q_band": {
+              "Q05": 7.9,
+              "Q10": 8.8,
+              "Q15": 9.7,
+              "Q20": 10.6,
+              "Q25": 11.5
+            },
+            "observed_minimum": 7.0,
+            "breaches_even_the_observed_minimum": false,
+            "verdict_is_threshold_invariant": true,
+            "reality_breach_rate_top10": 0.286
+          },
+          "cross_position_movement_top100": {
+            "n_board": 797,
+            "median_abs_rank_move": 38.0,
+            "p90_abs_rank_move": 206.8,
+            "max_abs_rank_move": 355.0,
+            "n_moved": 756,
+            "top100_churn": 11,
+            "top100_membership_stable": false,
+            "top10_order_stable": false
+          },
+          "within_position_movement": {
+            "max_rank_move_by_pos": {
+              "QB": 55.0,
+              "RB": 89.0,
+              "WR": 144.0,
+              "TE": 82.0
+            },
+            "worst_rank_move": 144.0,
+            "within_position_rho": {
+              "QB": 0.7813134493790462,
+              "RB": 0.8450893489567521,
+              "WR": 0.889841971346035,
+              "TE": 0.8490789414725145
+            }
+          }
+        },
+        "coherence_violations_also_present_with_ordering_OFF": [
+          "MEN516487|Fernando Mendoza"
+        ],
+        "coherence_violating_players_attributable": 9
+      },
+      "stratified": {
+        "score_target": "points",
+        "coherence_violating_players": 8,
+        "coherence_violations": 13,
+        "coherence_by_position": {
+          "QB": 8
+        },
+        "coherence_applicable": true,
+        "coherence_unevaluable": 0,
+        "worst_violations": [
+          {
+            "name": "BAILEY ZAPPE",
+            "stat": "passAtt",
+            "implied_per_game": 81.67,
+            "max_ever_per_game": 45.44,
+            "expected_games": 0.8
+          },
+          {
+            "name": "BAILEY ZAPPE",
+            "stat": "passYds",
+            "implied_per_game": 574.64,
+            "max_ever_per_game": 371.2,
+            "expected_games": 0.8
+          },
+          {
+            "name": "CASE KEENUM",
+            "stat": "passAtt",
+            "implied_per_game": 65.84,
+            "max_ever_per_game": 45.44,
+            "expected_games": 1.06
+          },
+          {
+            "name": "SAM EHLINGER",
+            "stat": "passAtt",
+            "implied_per_game": 63.1,
+            "max_ever_per_game": 45.44,
+            "expected_games": 0.8
+          },
+          {
+            "name": "SAM HOWELL",
+            "stat": "passAtt",
+            "implied_per_game": 58.24,
+            "max_ever_per_game": 45.44,
+            "expected_games": 1.06
+          }
+        ],
+        "injury_giveback": {
+          "n": 29,
+          "mvp1_total": 296.7,
+          "arm_total": 379.3,
+          "giveback_pct": 27.85,
+          "median_point_ratio": 1.4197,
+          "n_scaled_up": 18,
+          "n_scaled_down": 7,
+          "served_giveback_pct": 75.46
+        },
+        "availability_gradient": {
+          "n": 716,
+          "rho": -0.0714,
+          "p": 0.05631908402579084,
+          "evaluable": true,
+          "max_abs_ratio_move": 2.512626
+        },
+        "clamp_saturation_high": 4,
+        "clamp_saturation_low": 12,
+        "n_rows": 797,
+        "placement": {
+          "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
+          "best_rookie_overall_rank": 14,
+          "rookie_cap_breach": false,
+          "rookie_cap_detail": {
+            "best_rookie_overall_rank": 14.0,
+            "cap": 8.8,
+            "q": 0.1,
+            "breach": false,
+            "caps_over_q_band": {
+              "Q05": 7.9,
+              "Q10": 8.8,
+              "Q15": 9.7,
+              "Q20": 10.6,
+              "Q25": 11.5
+            },
+            "observed_minimum": 7.0,
+            "breaches_even_the_observed_minimum": false,
+            "verdict_is_threshold_invariant": true,
+            "reality_breach_rate_top10": 0.286
+          },
+          "cross_position_movement_top100": {
+            "n_board": 797,
+            "median_abs_rank_move": 36.0,
+            "p90_abs_rank_move": 162.0,
+            "max_abs_rank_move": 343.0,
+            "n_moved": 692,
+            "top100_churn": 11,
+            "top100_membership_stable": false,
+            "top10_order_stable": false
+          },
+          "within_position_movement": {
+            "max_rank_move_by_pos": {
+              "QB": 38.0,
+              "RB": 82.0,
+              "WR": 143.0,
+              "TE": 74.0
+            },
+            "worst_rank_move": 143.0,
+            "within_position_rho": {
+              "QB": 0.9057460261480718,
+              "RB": 0.8949223888450407,
+              "WR": 0.9168604259357103,
+              "TE": 0.8942415859517053
+            }
+          }
+        },
+        "coherence_violations_also_present_with_ordering_OFF": [
+          "MEN516487|Fernando Mendoza"
+        ],
+        "coherence_violating_players_attributable": 7
+      },
+      "feasibility_clamp": {
+        "score_target": "points",
+        "coherence_violating_players": 4,
+        "coherence_violations": 4,
+        "coherence_by_position": {
+          "QB": 4
+        },
+        "coherence_applicable": true,
+        "coherence_unevaluable": 0,
+        "worst_violations": [
+          {
+            "name": "Fernando Mendoza",
+            "stat": "passAtt",
+            "implied_per_game": 49.64,
+            "max_ever_per_game": 45.44,
+            "expected_games": 12.38
+          },
+          {
+            "name": "SPENCER RATTLER",
+            "stat": "passAtt",
+            "implied_per_game": 45.44,
+            "max_ever_per_game": 45.44,
+            "expected_games": 6.5
+          },
+          {
+            "name": "SAM EHLINGER",
+            "stat": "passAtt",
+            "implied_per_game": 45.44,
+            "max_ever_per_game": 45.44,
+            "expected_games": 0.8
+          },
+          {
+            "name": "BAILEY ZAPPE",
+            "stat": "passAtt",
+            "implied_per_game": 45.44,
+            "max_ever_per_game": 45.44,
+            "expected_games": 0.8
+          }
+        ],
+        "injury_giveback": {
+          "n": 29,
+          "mvp1_total": 296.7,
+          "arm_total": 542.1,
+          "giveback_pct": 82.7,
+          "median_point_ratio": 1.9848,
+          "n_scaled_up": 25,
+          "n_scaled_down": 3,
+          "served_giveback_pct": 75.46
+        },
+        "availability_gradient": {
+          "n": 716,
+          "rho": -0.2577,
+          "p": 2.5458021283672737e-12,
+          "evaluable": true,
+          "max_abs_ratio_move": 2.513129
+        },
+        "clamp_saturation_high": 13,
+        "clamp_saturation_low": 26,
+        "n_rows": 797,
+        "placement": {
+          "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
+          "best_rookie_overall_rank": 14,
+          "rookie_cap_breach": false,
+          "rookie_cap_detail": {
+            "best_rookie_overall_rank": 14.0,
+            "cap": 8.8,
+            "q": 0.1,
+            "breach": false,
+            "caps_over_q_band": {
+              "Q05": 7.9,
+              "Q10": 8.8,
+              "Q15": 9.7,
+              "Q20": 10.6,
+              "Q25": 11.5
+            },
+            "observed_minimum": 7.0,
+            "breaches_even_the_observed_minimum": false,
+            "verdict_is_threshold_invariant": true,
+            "reality_breach_rate_top10": 0.286
+          },
+          "cross_position_movement_top100": {
+            "n_board": 797,
+            "median_abs_rank_move": 38.0,
+            "p90_abs_rank_move": 199.0,
+            "max_abs_rank_move": 357.0,
+            "n_moved": 767,
+            "top100_churn": 11,
+            "top100_membership_stable": false,
+            "top10_order_stable": false
+          },
+          "within_position_movement": {
+            "max_rank_move_by_pos": {
+              "QB": 55.0,
+              "RB": 89.0,
+              "WR": 144.0,
+              "TE": 82.0
+            },
+            "worst_rank_move": 144.0,
+            "within_position_rho": {
+              "QB": 0.8180618182734212,
+              "RB": 0.8450893489567521,
+              "WR": 0.889841971346035,
+              "TE": 0.8490789414725145
+            }
+          }
+        },
+        "coherence_violations_also_present_with_ordering_OFF": [
+          "MEN516487|Fernando Mendoza"
+        ],
+        "coherence_violating_players_attributable": 3
+      },
+      "points_rate_permute": {
+        "score_target": "points",
+        "coherence_violating_players": 1,
+        "coherence_violations": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "coherence_applicable": true,
+        "coherence_unevaluable": 0,
+        "worst_violations": [
+          {
+            "name": "Fernando Mendoza",
+            "stat": "passAtt",
+            "implied_per_game": 49.64,
+            "max_ever_per_game": 45.44,
+            "expected_games": 12.38
+          }
+        ],
+        "injury_giveback": {
+          "n": 29,
+          "mvp1_total": 296.7,
+          "arm_total": 248.3,
+          "giveback_pct": -16.31,
+          "median_point_ratio": 0.9153,
+          "n_scaled_up": 9,
+          "n_scaled_down": 19,
+          "served_giveback_pct": 75.46
+        },
+        "availability_gradient": {
+          "n": 716,
+          "rho": 0.1772,
+          "p": 1.8413787107082743e-06,
+          "evaluable": true,
+          "max_abs_ratio_move": 2.5
+        },
+        "clamp_saturation_high": 1,
+        "clamp_saturation_low": 7,
+        "n_rows": 797,
+        "placement": {
+          "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
+          "best_rookie_overall_rank": 13,
+          "rookie_cap_breach": false,
+          "rookie_cap_detail": {
+            "best_rookie_overall_rank": 13.0,
+            "cap": 8.8,
+            "q": 0.1,
+            "breach": false,
+            "caps_over_q_band": {
+              "Q05": 7.9,
+              "Q10": 8.8,
+              "Q15": 9.7,
+              "Q20": 10.6,
+              "Q25": 11.5
+            },
+            "observed_minimum": 7.0,
+            "breaches_even_the_observed_minimum": false,
+            "verdict_is_threshold_invariant": true,
+            "reality_breach_rate_top10": 0.286
+          },
+          "cross_position_movement_top100": {
+            "n_board": 797,
+            "median_abs_rank_move": 27.0,
+            "p90_abs_rank_move": 140.4,
+            "max_abs_rank_move": 325.0,
+            "n_moved": 773,
+            "top100_churn": 8,
+            "top100_membership_stable": false,
+            "top10_order_stable": false
+          },
+          "within_position_movement": {
+            "max_rank_move_by_pos": {
+              "QB": 27.0,
+              "RB": 73.0,
+              "WR": 132.0,
+              "TE": 69.0
+            },
+            "worst_rank_move": 132.0,
+            "within_position_rho": {
+              "QB": 0.9689447565307202,
+              "RB": 0.9122518365612288,
+              "WR": 0.9339215814856063,
+              "TE": 0.909658202503166
+            }
+          }
+        },
+        "coherence_violations_also_present_with_ordering_OFF": [
+          "MEN516487|Fernando Mendoza"
+        ],
+        "coherence_violating_players_attributable": 0
+      },
+      "rate_refit": {
+        "score_target": "rate",
+        "coherence_violating_players": 1,
+        "coherence_violations": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "coherence_applicable": true,
+        "coherence_unevaluable": 0,
+        "worst_violations": [
+          {
+            "name": "Fernando Mendoza",
+            "stat": "passAtt",
+            "implied_per_game": 49.64,
+            "max_ever_per_game": 45.44,
+            "expected_games": 12.38
+          }
+        ],
+        "injury_giveback": {
+          "n": 29,
+          "mvp1_total": 296.7,
+          "arm_total": 273.4,
+          "giveback_pct": -7.85,
+          "median_point_ratio": 1.0,
+          "n_scaled_up": 13,
+          "n_scaled_down": 14,
+          "served_giveback_pct": 75.46
+        },
+        "availability_gradient": {
+          "n": 716,
+          "rho": 0.1726,
+          "p": 3.3786834526809586e-06,
+          "evaluable": true,
+          "max_abs_ratio_move": 2.272905
+        },
+        "clamp_saturation_high": 0,
+        "clamp_saturation_low": 6,
+        "n_rows": 797,
+        "placement": {
+          "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
+          "best_rookie_overall_rank": 13,
+          "rookie_cap_breach": false,
+          "rookie_cap_detail": {
+            "best_rookie_overall_rank": 13.0,
+            "cap": 8.8,
+            "q": 0.1,
+            "breach": false,
+            "caps_over_q_band": {
+              "Q05": 7.9,
+              "Q10": 8.8,
+              "Q15": 9.7,
+              "Q20": 10.6,
+              "Q25": 11.5
+            },
+            "observed_minimum": 7.0,
+            "breaches_even_the_observed_minimum": false,
+            "verdict_is_threshold_invariant": true,
+            "reality_breach_rate_top10": 0.286
+          },
+          "cross_position_movement_top100": {
+            "n_board": 797,
+            "median_abs_rank_move": 24.0,
+            "p90_abs_rank_move": 131.8,
+            "max_abs_rank_move": 322.0,
+            "n_moved": 773,
+            "top100_churn": 9,
+            "top100_membership_stable": false,
+            "top10_order_stable": false
+          },
+          "within_position_movement": {
+            "max_rank_move_by_pos": {
+              "QB": 20.0,
+              "RB": 73.0,
+              "WR": 129.0,
+              "TE": 69.0
+            },
+            "worst_rank_move": 129.0,
+            "within_position_rho": {
+              "QB": 0.9785777262765448,
+              "RB": 0.9122518365612288,
+              "WR": 0.9439690369740343,
+              "TE": 0.9137711869403311
+            }
+          }
+        },
+        "coherence_violations_also_present_with_ordering_OFF": [
+          "MEN516487|Fernando Mendoza"
+        ],
+        "coherence_violating_players_attributable": 0
+      },
+      "points_rate_stratified": {
+        "score_target": "points",
+        "coherence_violating_players": 1,
+        "coherence_violations": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "coherence_applicable": true,
+        "coherence_unevaluable": 0,
+        "worst_violations": [
+          {
+            "name": "Fernando Mendoza",
+            "stat": "passAtt",
+            "implied_per_game": 49.64,
+            "max_ever_per_game": 45.44,
+            "expected_games": 12.38
+          }
+        ],
+        "injury_giveback": {
+          "n": 29,
+          "mvp1_total": 296.7,
+          "arm_total": 272.9,
+          "giveback_pct": -8.02,
+          "median_point_ratio": 1.0069,
+          "n_scaled_up": 16,
+          "n_scaled_down": 10,
+          "served_giveback_pct": 75.46
+        },
+        "availability_gradient": {
+          "n": 716,
+          "rho": 0.0426,
+          "p": 0.2544033218645911,
+          "evaluable": true,
+          "max_abs_ratio_move": 2.042921
+        },
+        "clamp_saturation_high": 0,
+        "clamp_saturation_low": 5,
+        "n_rows": 797,
+        "placement": {
+          "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
+          "best_rookie_overall_rank": 13,
+          "rookie_cap_breach": false,
+          "rookie_cap_detail": {
+            "best_rookie_overall_rank": 13.0,
+            "cap": 8.8,
+            "q": 0.1,
+            "breach": false,
+            "caps_over_q_band": {
+              "Q05": 7.9,
+              "Q10": 8.8,
+              "Q15": 9.7,
+              "Q20": 10.6,
+              "Q25": 11.5
+            },
+            "observed_minimum": 7.0,
+            "breaches_even_the_observed_minimum": false,
+            "verdict_is_threshold_invariant": true,
+            "reality_breach_rate_top10": 0.286
+          },
+          "cross_position_movement_top100": {
+            "n_board": 797,
+            "median_abs_rank_move": 24.0,
+            "p90_abs_rank_move": 145.2,
+            "max_abs_rank_move": 339.0,
+            "n_moved": 766,
+            "top100_churn": 7,
+            "top100_membership_stable": false,
+            "top10_order_stable": false
+          },
+          "within_position_movement": {
+            "max_rank_move_by_pos": {
+              "QB": 27.0,
+              "RB": 79.0,
+              "WR": 139.0,
+              "TE": 70.0
+            },
+            "worst_rank_move": 139.0,
+            "within_position_rho": {
+              "QB": 0.9672620097236567,
+              "RB": 0.903768239127355,
+              "WR": 0.9349615551679049,
+              "TE": 0.9260016555705703
+            }
+          }
+        },
+        "coherence_violations_also_present_with_ordering_OFF": [
+          "MEN516487|Fernando Mendoza"
+        ],
+        "coherence_violating_players_attributable": 0
+      },
+      "rate_refit_stratified": {
+        "score_target": "rate",
+        "coherence_violating_players": 1,
+        "coherence_violations": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "coherence_applicable": true,
+        "coherence_unevaluable": 0,
+        "worst_violations": [
+          {
+            "name": "Fernando Mendoza",
+            "stat": "passAtt",
+            "implied_per_game": 49.64,
+            "max_ever_per_game": 45.44,
+            "expected_games": 12.38
+          }
+        ],
+        "injury_giveback": {
+          "n": 29,
+          "mvp1_total": 296.7,
+          "arm_total": 297.9,
+          "giveback_pct": 0.41,
+          "median_point_ratio": 1.0432,
+          "n_scaled_up": 17,
+          "n_scaled_down": 9,
+          "served_giveback_pct": 75.46
+        },
+        "availability_gradient": {
+          "n": 716,
+          "rho": 0.0652,
+          "p": 0.08142463921501628,
+          "evaluable": true,
+          "max_abs_ratio_move": 2.042921
+        },
+        "clamp_saturation_high": 0,
+        "clamp_saturation_low": 5,
+        "n_rows": 797,
+        "placement": {
+          "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
+          "best_rookie_overall_rank": 13,
+          "rookie_cap_breach": false,
+          "rookie_cap_detail": {
+            "best_rookie_overall_rank": 13.0,
+            "cap": 8.8,
+            "q": 0.1,
+            "breach": false,
+            "caps_over_q_band": {
+              "Q05": 7.9,
+              "Q10": 8.8,
+              "Q15": 9.7,
+              "Q20": 10.6,
+              "Q25": 11.5
+            },
+            "observed_minimum": 7.0,
+            "breaches_even_the_observed_minimum": false,
+            "verdict_is_threshold_invariant": true,
+            "reality_breach_rate_top10": 0.286
+          },
+          "cross_position_movement_top100": {
+            "n_board": 797,
+            "median_abs_rank_move": 24.0,
+            "p90_abs_rank_move": 132.4,
+            "max_abs_rank_move": 336.0,
+            "n_moved": 770,
+            "top100_churn": 7,
+            "top100_membership_stable": false,
+            "top10_order_stable": false
+          },
+          "within_position_movement": {
+            "max_rank_move_by_pos": {
+              "QB": 28.0,
+              "RB": 79.0,
+              "WR": 139.0,
+              "TE": 69.0
+            },
+            "worst_rank_move": 139.0,
+            "within_position_rho": {
+              "QB": 0.9725218530367534,
+              "RB": 0.903768239127355,
+              "WR": 0.9444956449628208,
+              "TE": 0.9274261066027077
+            }
+          }
+        },
+        "coherence_violations_also_present_with_ordering_OFF": [
+          "MEN516487|Fernando Mendoza"
+        ],
+        "coherence_violating_players_attributable": 0
+      }
+    },
+    "attribution_control": "violations also produced by `mvp1_null` (the ordering step OFF) are subtracted \u2014 a defect present with the mechanism disabled is not caused by the mechanism",
+    "reproduction_pin": {
+      "n": 797,
+      "worst_abs_diff": 84.71890518771035,
+      "tolerance": 0.05,
+      "story_tolerance_for_local_diffs": 1e-09,
+      "reproduces": false,
+      "note": "the incumbent arm rebuilt through this story's code vs the PUBLISHED 2026 artifact. If this does not hold, every arm delta is measured against a board nobody is served (the CLV / NF-INJ1 stale-vintage trap).",
+      "tolerance_note": "the published board is rounded to ONE decimal, so the pin runs at half that rounding unit \u2014 a 1e-9 bar against a 1dp artifact is UNACHIEVABLE, not strict (E9.61)."
+    }
+  },
+  "dominance": {
+    "served_incumbent_baseline": {
+      "M2_violations_attributable": 9,
+      "M3_worst_times_over": 1.9987,
+      "M4_giveback_measure": 82.7,
+      "M4_giveback_signed": 82.7
+    },
+    "bands": {
+      "M2": "SE of the per-fold PAIRED difference \u2014 a FOLD quantity computed by the decisive run, \u26d4 not on a single board; the board figure here is the BASELINE the pre-registration quotes",
+      "M3": 0.01,
+      "M4": 0.01,
+      "source": "nf_inj2c_margin_construction_rule.md (node 3a), committed before this ran"
+    },
+    "arms": {
+      "mvp1_null": {
+        "M2_violations_attributable": 0,
+        "M2_delta_vs_incumbent": -9,
+        "M3_worst_times_over": 1.0924,
+        "M4_giveback_measure": 0.0,
+        "M4_giveback_signed": 0.0,
+        "coherence_violating_players_raw": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "clamp_hi": 0,
+        "clamp_lo": 0,
+        "M3_verdict": "IMPROVES",
+        "M4_verdict": "IMPROVES",
+        "M2_verdict": "IMPROVES",
+        "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
+      },
+      "incumbent": {
+        "M2_violations_attributable": 9,
+        "M2_delta_vs_incumbent": 0,
+        "M3_worst_times_over": 1.9987,
+        "M4_giveback_measure": 82.7,
+        "M4_giveback_signed": 82.7,
+        "coherence_violating_players_raw": 10,
+        "coherence_by_position": {
+          "QB": 10
+        },
+        "clamp_hi": 15,
+        "clamp_lo": 26,
+        "M3_verdict": "TIES",
+        "M4_verdict": "TIES",
+        "M2_verdict": "TIES",
+        "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
+      },
+      "stratified": {
+        "M2_violations_attributable": 7,
+        "M2_delta_vs_incumbent": -2,
+        "M3_worst_times_over": 1.7973,
+        "M4_giveback_measure": 27.85,
+        "M4_giveback_signed": 27.85,
+        "coherence_violating_players_raw": 8,
+        "coherence_by_position": {
+          "QB": 8
+        },
+        "clamp_hi": 4,
+        "clamp_lo": 12,
+        "M3_verdict": "IMPROVES",
+        "M4_verdict": "IMPROVES",
+        "M2_verdict": "IMPROVES",
+        "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
+      },
+      "feasibility_clamp": {
+        "M2_violations_attributable": 3,
+        "M2_delta_vs_incumbent": -6,
+        "M3_worst_times_over": 1.0924,
+        "M4_giveback_measure": 82.7,
+        "M4_giveback_signed": 82.7,
+        "coherence_violating_players_raw": 4,
+        "coherence_by_position": {
+          "QB": 4
+        },
+        "clamp_hi": 13,
+        "clamp_lo": 26,
+        "M3_verdict": "IMPROVES",
+        "M4_verdict": "TIES",
+        "M2_verdict": "IMPROVES",
+        "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
+      },
+      "points_rate_permute": {
+        "M2_violations_attributable": 0,
+        "M2_delta_vs_incumbent": -9,
+        "M3_worst_times_over": 1.0924,
+        "M4_giveback_measure": 0.0,
+        "M4_giveback_signed": -16.31,
+        "coherence_violating_players_raw": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "clamp_hi": 1,
+        "clamp_lo": 7,
+        "M3_verdict": "IMPROVES",
+        "M4_verdict": "IMPROVES",
+        "M2_verdict": "IMPROVES",
+        "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
+      },
+      "rate_refit": {
+        "M2_violations_attributable": 0,
+        "M2_delta_vs_incumbent": -9,
+        "M3_worst_times_over": 1.0924,
+        "M4_giveback_measure": 0.0,
+        "M4_giveback_signed": -7.85,
+        "coherence_violating_players_raw": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "clamp_hi": 0,
+        "clamp_lo": 6,
+        "M3_verdict": "IMPROVES",
+        "M4_verdict": "IMPROVES",
+        "M2_verdict": "IMPROVES",
+        "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
+      },
+      "points_rate_stratified": {
+        "M2_violations_attributable": 0,
+        "M2_delta_vs_incumbent": -9,
+        "M3_worst_times_over": 1.0924,
+        "M4_giveback_measure": 0.0,
+        "M4_giveback_signed": -8.02,
+        "coherence_violating_players_raw": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "clamp_hi": 0,
+        "clamp_lo": 5,
+        "M3_verdict": "IMPROVES",
+        "M4_verdict": "IMPROVES",
+        "M2_verdict": "IMPROVES",
+        "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
+      },
+      "rate_refit_stratified": {
+        "M2_violations_attributable": 0,
+        "M2_delta_vs_incumbent": -9,
+        "M3_worst_times_over": 1.0924,
+        "M4_giveback_measure": 0.41,
+        "M4_giveback_signed": 0.41,
+        "coherence_violating_players_raw": 1,
+        "coherence_by_position": {
+          "QB": 1
+        },
+        "clamp_hi": 0,
+        "clamp_lo": 5,
+        "M3_verdict": "IMPROVES",
+        "M4_verdict": "IMPROVES",
+        "M2_verdict": "IMPROVES",
+        "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
+      }
+    }
+  }
+}

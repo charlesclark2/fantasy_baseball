@@ -3241,6 +3241,37 @@ const CASES = [
     to: "  if (typeof ceiling === \"number\") return { kind: \"withheld\" }",
     grep: "the absurd row is withheld, the ordinary row still prints its rate",
   },
+  // ── NF-CSV1 — the exported file states what it withholds ────────────────────────────────────
+  {
+    id: "csv-withholds-a-value-and-says-nothing",
+    shipped:
+      "NF-CSV1 — the export withheld a rate and explained it NOWHERE IN THE FILE (the state " +
+      "NF-RATE1 shipped, by design, and this story closes)",
+    detail:
+      "The on-page cell is a tappable em-dash with a disclosure behind it; the exported cell is a " +
+      "blank, and a blank in a spreadsheet reads as \"we have nothing for this player\". Every " +
+      "on-page assertion passes — the popover is right there — because the defect is in the one " +
+      "surface that leaves the popover behind.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "      csvWithheldNote(withheldClasses),\n",
+    to: "",
+    grep: "a withheld cell adds EXACTLY ONE note row",
+  },
+  {
+    id: "csv-note-fires-on-a-file-that-withholds-nothing",
+    shipped: "NF-CSV1 — a note claiming a withholding the file does not contain",
+    // ⭐ THE NATURAL WAY TO WRITE THE TRIGGER, AND IT IS WRONG. `fullSeasonRateCsv` returns `null`
+    // for the `unavailable` state as well as for `withheld`, so "did any cell come out empty?"
+    // fires on the THREE rows in the served board that simply have no games figure to divide by —
+    // and the export then carries a note asserting a withholding on a file with zero withheld rows.
+    // A dishonesty introduced by the feature added for honesty, and invisible to every on-page
+    // assertion.
+    detail: "Keys the note on an empty cell rather than on the owner's withheld state.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: 'fullSeasonRateDisplay(p.pts, p.g, p.pos).kind === "withheld"',
+    to: "fullSeasonRateCsv(p.pts, p.g, p.pos) == null",
+    grep: "Export CSV produces a file whose contents match the board on screen",
+  },
 ]
 
 /**
@@ -3343,7 +3374,12 @@ const CASES = [
 // ⛔ NOT FIXED HERE ON PURPOSE: hardening this shared harness (e.g. asserting anchor uniqueness)
 // would turn a pre-existing case red for a reason unrelated to any story in flight, on a deadline
 // day. Carried to NCAAF-P3.9's closeout as a follow-up instead.
-const RECORDED_BOARD = { total: 199, red: 193, notObservable: 6 }
+// NF-CSV1 adds TWO cases — the export withholding a value and saying nothing (the state NF-RATE1
+// shipped by design), and a note firing on a file that withholds nothing. Each RED-proven
+// INDIVIDUALLY (`node e2e/red-proof.mjs csv-`) rather than by a full board run, for the reason
+// every entry above records: 201 cases × a production build each does not belong in a session. So
+// 199/193/6 → 201/195/6, and the next full run CONFIRMS it. ⛔ A projection is not a measurement.
+const RECORDED_BOARD = { total: 201, red: 195, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
