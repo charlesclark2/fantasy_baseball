@@ -339,8 +339,19 @@ def test_the_prereg_quotes_no_number_from_the_node_3b_remeasure(prereg: str) -> 
         elif isinstance(node, int) and abs(node) >= 1000:
             figures.add(str(node))
 
-    _collect(rep.get("dominance"))
+    dominance = dict(rep.get("dominance") or {})
+    # ⛔ `bands` holds node 3a's TIE BANDS, echoed back by the runner. Those are DESIGN constants
+    # committed BEFORE the re-measure, so their presence in the prereg is correct, not contamination.
+    dominance.pop("bands", None)
+    _collect(dominance)
     _collect(rep.get("application_2026", {}).get("reproduction_pin"))
+
+    # ⭐ THE PRINCIPLED EXCLUSION, and it is what makes this guard sound: a figure that also appears
+    # in a document committed BEFORE the re-measure cannot be evidence the prereg saw the
+    # re-measure. The margin rule (node 3a) is exactly such a document — it fixed every band before
+    # node 3b ran — so anything it already contains is provably pre-existing.
+    pre_existing = _MARGIN_RULE.read_text()
+    figures = {f for f in figures if f not in pre_existing}
     assert figures, "no distinctive figure could be extracted — the guard would pass on nothing"
 
     hits = sorted(f for f in figures if f in prereg)
