@@ -8,7 +8,7 @@ metadata:
   name: nf-csv1
   vertical: nfl_fantasy
   card: https://trello.com/c/s8nBTYFB
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Close the export-honesty gap NF-RATE1 left open by design: a
