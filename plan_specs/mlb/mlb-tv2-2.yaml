@@ -1,0 +1,181 @@
+# Plan spec — MLB-TV2-2 (FULL tier: §0.5 — mixture-density head for the total_runs predictive SHAPE)
+# Authored by PM 2026-09-01 per the TV2-0 SHAPE-BOUND routing (epic pa4ii3tQ, PR #1043).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: mlb-tv2-2
+  vertical: mlb
+  card: https://trello.com/c/J9G2VHu8
+  status: ACCEPTED
+spec:
+  description: >
+    The funded shape fix. TV2-0 measured (served rows, post_lineup n=758,
+    2026-06-23→08-23) that the marginal-shape oracle closes 100.3% of the
+    printed P(over) error (gap +0.0726 → −0.0002) while ALSO improving
+    CRPS + pit_ks — and that the FEATURE lever is inactive (scale-mixture
+    oracle K=1 on 5/5 blocks; A2 per-game σ made CRPS worse; σ-scale
+    channel 0.029). The served total_runs predictive is a symmetric
+    Normal against a right-skewed target — the MH2.6/MH2.8/NCAAF-P2.5
+    program-level finding, now confirmed in two sports. This story builds
+    and registers a MIXTURE-DENSITY head (a K-component predictive whose
+    likelihood is NOT flat at the symmetric start — the exact trap that
+    collapsed MH2.8's skew-normal onto its own foil 5/5) to close the
+    shape gap the oracle proved is there. best_alpha=0; bet_paused; a
+    CALIBRATED honest totals distribution, never an edge play.
+    DEPLOY-HELD: per MH2.1, a model-registry merge IS the deploy (no
+    promotion gate exists) — nothing merges to main and no registry entry
+    changes without the gated ship path AND explicit operator approval.
+  acceptanceCriteria:
+    - description: >
+        FORWARD PRE-REGISTRATION (committed before any scoring) carries
+        the FOUR epic obligations VERBATIM: (1) a LONGER-WINDOW
+        REPLICATION leg of the shape gap — TV2-0's 2-month/1-champion
+        read licenses FUNDING, not serving; the prereg names the wider
+        served window (and its champion boundaries — the population is
+        defined by the CHAMPION, not the calendar, per MH2.10) on which
+        the gap must replicate before any ship clause can fire. (2) a
+        TIE-WITH-FOIL guard: any arm that nests its foil (a K-component
+        mixture nests K=1 Normal exactly as NB nests Poisson) must
+        declare the collapse detector — a near-zero margin is a TIE that
+        refuses to count, and the fit must NOT start from the symmetric
+        point a flat likelihood can't leave (staggered/asymmetric
+        initialization, with the MH2.8 positive control proving the
+        fitter FINDS a planted skew). (3) the std_pred DISAMBIGUATION:
+        two statistics share the name (validate_v2_gates.py:34
+        mean-spread vs train_totals.py:121 predictive SD) — the prereg
+        states which one every gate reads, by file:line. (4) the SCOPE
+        statement: DISCRIMINATION (Var(mu)/Var(y)=0.0142 vs the >=2.0
+        gate) is untouched by any shape fix; its attainability stays a
+        named OPEN question on the epic — this story makes no claim on
+        it and no gate reads it.
+    - description: >
+        FIELD DESIGN, declared coherent FORWARD (the MH2.8 lesson — its
+        real skew arm cleared 9/10 clauses and died on a DSR bar one
+        heterogeneous arm inflated; the sanctioned successor is a
+        NARROWER coherent family, diagnostic ~0.79, NOT a foregone
+        pass): mixture-density arms on ONE mechanism axis (K, and
+        component-parameterization within the mixture family), the
+        incumbent Normal as reference, the required degenerates, and a
+        matched foil that keeps everything except the shape channel.
+        Declare V-membership (incumbent reference arm and degenerates
+        excluded from V per DSR-CONV/MH2.1(a) — named in the prereg, not
+        adopted after), the BH family and which reading binds,
+        pbo_application, and declared_field_size to classify_null.
+        PLAT-CVP1 has LANDED: use the injected-effect positive-control
+        HELPER (executed, not narrated), expect DEFLATION_REFUSED as a
+        reachable state, and trust the lockstep computation over any
+        "lower-variance design" instinct. Uniform-injection caveat
+        (NF-INJ2b): report a field-level statistic as INERT when the
+        injection cannot move the split winners.
+    - description: >
+        CALIBRATION INSTRUMENTATION per the MH2 lineage: any VARIANCE
+        statistic sits in a SHAPE-MATCHED null, never a Normal-drawn one
+        (MH2.10); PIT/coverage statistics keep the standard nulls; the
+        leave-one-anomalous-season sensitivity (the 2.7% COVID season
+        moved MH2.8's per-fold SNR ~5x) is registered and reported; and
+        the negative control mirrors the SHIP RULE's margin, never a
+        bare "closest arm" (MH2.8's second defect). The harness proves
+        it CAN fail: clean-data false-positive rate + detection on a
+        planted gross defect, both reported (the MH2.6 vacuity-floor
+        discipline). Seed the GLOBAL RNG for any NGBoost/stochastic
+        component (the pred-sigma reproducibility lesson); reproduction
+        pins 1e-9.
+    - description: >
+        SERVED-ROWS DISCIPLINE (MH2.6: a backtest cannot see a
+        serving-path defect): the decisive calibration read is over
+        SERVED rows joined to realized finals, deduplicated to the
+        served row, per tier — with the backtest window used only where
+        the served population is underpowered, and each read labeled as
+        which it is. Split any same-season backtest at the incumbent's
+        fit date (MH2.1: the incumbent's held-out window is the only
+        reading a same-season backtest supports).
+    - description: >
+        IF IT CLEARS — the gated ship path, ALL deploy-held, inheriting
+        every MH2.1 promotion landmine by name: (a) audit every
+        bundle-assuming consumer before a one-target swap
+        (daily_model_predictions.model_version stamped from
+        registry["home_win"]; the backfill idempotency key; any
+        hardcoded model_version in marts); (b) SERVE THE OBJECT THAT WAS
+        VALIDATED — persist exactly the mixture predictive the bake-off
+        scored; the serving path calls pred_dist-style params, so a head
+        without that surface needs its own serialized predictive object,
+        never a re-derivation; (c) a registry change ships with the box
+        image ON MERGE TO MAIN — so the merge itself is the promotion
+        and happens only on operator instruction, with the operator
+        packet carrying the served-impact read (P(over) at the posted
+        line, before/after, per tier). Runtime gate: CI mocks IO — the
+        real box run is an operator step, paste-ready.
+    - description: >
+        Standing disciplines: >2-min commands to the operator
+        paste-ready with runtime/artifact/success criteria (the decisive
+        fit almost certainly qualifies — time a smoke slice first,
+        MH2.2's over-applied-tag caveat noted); RED-proofs with unique
+        mutation anchors; no post-hoc trims (MH2.2); no gate re-reads
+        (E2.1-r); E13.6b-B stays HELD and untouched — if this story has
+        not cleared in ~6 weeks from kickoff, the epic tripwire fires
+        and a SHAPE-AWARE isotonic serve-time calibrator gets its own
+        registered interim read (a separate story, not a scope creep
+        here); run the owning CI shard for any shared guard touched
+        (cv_power pins live in cross-vertical shards).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: mlb-tv2-2
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "TV2" / "mixture" / "total_runs" (board Credence Sports, 2026-09-01)'
+    duplicates: []
+    adjacent:
+      - "EPIC TV2 (pa4ii3tQ, Backlog) — the routing authority; the four prereg obligations and the 6-week isotonic tripwire live there."
+      - "TV2-1 — PREMISE-CONFIRMED, CLOSED (nothing to build on this population); not re-opened."
+      - "E13.6b-B (HELD) — the serve-time calibrator; stays held; the tripwire is the only path that touches it, as its own story."
+      - "MH2.8 (Done, INCUMBENT_STANDS) — the refused skew-normal recal; its record stands and is never re-read; this is its sanctioned narrower-family successor at the mechanism level."
+      - "PLAT-CVP1 (Done) — the instrument this story's classification runs on; consume the helper, hand-record nothing."
+      - "NF-INJ2c / NF-RATE1 (IN FLIGHT) — disjoint vertical and files; changelog week-block is the only shared surface if a user-facing change ever lands (it should not — deploy-held)."
+  triedLedger:
+    files:
+      - "ablation_results/mlb_tv2_0_ceiling_diagnosis.md (the SHAPE-BOUND verdict + the oracle decomposition + the inactive feature lever)"
+      - "MH2.6 / MH2.8 / MH2.10 records (the skew finding; the flat-likelihood collapse; the shape-matched null; the COVID-season sensitivity)"
+      - "betting_ml train_totals.py + validate_v2_gates.py (the two std_pred statistics, by line)"
+      - "cv_power post-PLAT-CVP1 (DEFLATION_REFUSED, lockstep compute, injected-effect helper)"
+    recordedNulls:
+      - "MH2.8 INCUMBENT_STANDS — stands as recorded; the E2.1-r line is absolute: this story registers a NEW coherent family forward, it does not re-cut or re-read MH2.8's field."
+      - "TV2-0 feature-lever INACTIVE — not re-approached; no feature work anywhere in this story."
+      - "MH2.10 morning-sigma partition ANTI-informative (rho<0) — inherited constraint: no per-game sigma partition work; the shape head is the lever."
+  supersedes: []
+  dependsOn:
+    - "PLAT-CVP1 merged (landed — verify at kickoff with a one-line import check rather than assuming)"
+  feedsInto:
+    - "The served P(over) at the posted line becoming honest (the ~5.6pt over-statement retired); E13.6b-B's disposition; the epic's open discrimination question"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: mlb-tv2-2-plan
+spec:
+  goalRef: { name: mlb-tv2-2 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-prereg
+        desc: "Full registration: the four epic obligations verbatim, the coherent field, V/BH/pbo declarations, controls incl. the CVP1 helper — committed BEFORE any scoring."
+      - id: 2-replication-leg
+        desc: "Longer-window shape-gap replication on served rows. If the gap does NOT replicate, STOP after recording — the funding premise fails and the PM re-scopes."
+      - id: 3-bake-off
+        desc: "Decisive run (smoke-slice timing first; operator handoff if >2 min; capture-pinned inputs)."
+      - id: 4-classify
+        desc: "Gates + classify_null (declared_field_size) in registered order; shape-matched nulls for variance stats; the COVID sensitivity; decisive record."
+      - id: 5-ship-path
+        desc: "ONLY IF CLEARED: the MH2.1-landmine-audited promotion packet; merge = deploy = operator's call."
+      - id: 6-closeout
+        desc: "Verdict + findings into closeout.followUps; operator summary; epic card updated by PM (tripwire clock noted)."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
