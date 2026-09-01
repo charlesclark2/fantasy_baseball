@@ -1,5 +1,8 @@
 # Plan spec — NF-INJ2c (FULL tier: fresh registration of the assignment-rule fix)
 # Authored by PM 2026-08-29 per NF-INJ2b rulings D1/D3/D4 + the §9#2 disposition ruling.
+# RE-SCOPED by PM 2026-08-31 on the node-1 refutation — see `pmRescope` below, transcribed
+# VERBATIM. The dispositions it resolves were declared BEFORE any scoring, so the re-scope is
+# a choice between pre-declared branches, ⛔ not a post-hoc relaxation (E2.1-r).
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -7,7 +10,7 @@ metadata:
   name: nf-inj2c
   vertical: nfl_fantasy
   card: https://trello.com/c/Dsz8CROW
-  status: BLOCKED(NODE1_REFUTED — returned to the PM; nodes 0+2 landed)
+  status: ACCEPTED
 spec:
   description: >
     Fresh forward registration of the ASSIGNMENT-RULE fix — the mechanism
@@ -49,6 +52,62 @@ spec:
         2b conventions (note PLAT-CVP2's CONSTRAINT_BLOCKED fix may not
         have landed — if BLIND fires on injection-invariant gates, carry
         the 2b annotation pattern).
+    - description: >
+        ⚖️ PM RE-SCOPE RULING 2026-08-31 (node-1 refutation) — TRANSCRIBED VERBATIM,
+        PM-AUTHORED. It SUPERSEDES the disposition ordering in the clause below,
+        which is left in place unedited because the branches it declares are what
+        the ruling chooses between (E2.1-r: a pre-registration is not rewritten,
+        it is resolved).
+
+        "1. THE PRIMARY DISPOSITION (full coherence restoration) is RETIRED FOR THIS
+        STORY, on the §4 bound as the licensing evidence: the envelope is a per-stat
+        ceiling and every aggregate-permuting rule is structurally incapable of zero
+        against it — points_rate_permute's own 1.09x residual proves it. Demanding =0
+        of this family is the decision-in-a-gate's-clothing the program refuses. The
+        full-coherence question moves to NF-COH2 (PM-carded: the per-stat mechanism +
+        the new ordering mechanism it requires — options (a) and (c) merged,
+        post-Week-1, bounded by §4).
+
+        2. THE REGISTERED SHIP ROUTE is the STRICT-DOMINANCE disposition, alone:
+        stratified vs the SERVED incumbent, forward margins on EVERY measure —
+        violations/fold, worst-x, give-back %, CRPS, per-position ordering, interval
+        floors — improve-or-tie everywhere, regress nowhere. Coherence is MEASURED AND
+        REPORTED (both residual populations, per your §2 table), never gated at zero.
+
+        3. THE GIVE-BACK RE-MEASURE IS A PREREQUISITE, exactly as you flagged: the
+        82.70% -> 27.85% figures rode a board whose pin failed at 40.58/797 rows.
+        Capture-pin a fresh board + market snapshot (the D3 convention) and re-measure
+        the give-back and the coherence table on it BEFORE the prereg quotes any
+        number. If the re-measured dominance no longer holds on any dimension, that is
+        a NULL, not a margin to adjust.
+
+        4. THE +1 FOLD is registered forward on the data-fidelity ruling already given
+        (2018 admitted only if data-honest; state the finding either way). DSR at 8
+        folds is then a real gate, not a formality — 0.9325 at 7 does not guarantee
+        0.95 at 8.
+
+        5. DISCLOSURE IS PART OF THE SHIP: the residual impossible lines (8.57/fold,
+        incl. Easton Stick) remain covered by NF-INJ1-C's suppression and NF-RATE1's
+        rate-line fix (in flight — coordinate only at the level of confirming its
+        guards stay green on your counterfactual; no shared files). The operator packet
+        states plainly: this HALVES the incoherence and the give-back, it does not end
+        them, and NF-COH2 is the recorded successor for the rest."
+
+        HONESTY FRAMING for the record (PM, verbatim): "if this clears, Week 1 ships a
+        board that is strictly better on every measured dimension with its remaining
+        defects disclosed — which is what the identity actually demands; if it nulls on
+        the re-measure, the question closes at a specification nobody can argue with.
+        Either way the thread ends honestly."
+
+        ⛔ SEQUENCING THE SESSION ADDS, so ruling 3 cannot re-import the inversion it
+        exists to prevent: the re-measure shows the ARM's numbers, and margins written
+        after seeing them would be reverse-engineered from the result (E2.1-r). So the
+        margin CONSTRUCTION RULE — how every forward margin is derived, from DESIGN
+        quantities only (a measurement's own precision, a per-fold SE), never from an
+        observed gap — is committed BEFORE the re-measure runs; the re-measure then
+        fills in the SERVED INCUMBENT's baseline through that already-committed rule.
+        Ruling 3's pre-committed NULL branch is what makes this safe either way.
+
     - description: >
         REGISTERED DISPOSITIONS, in order (PM ruling on 2b §9#2, declared
         HERE forward — 2b's record is never re-read on this):
@@ -131,81 +190,64 @@ spec:
         desc: "Games-floor hypothesis: establish or refute. ⛔ REFUTED -> STOP, return to PM for re-scoping."
       - id: 2-carried-executions
         desc: "D4 annotation on NF-INJ2's record + the D3/2b CLAUDE.md landmines (separate commits)."
+      - id: 3a-margin-rule
+        desc: "PM re-scope seq: commit the margin CONSTRUCTION RULE + the pre-committed outcome branches BEFORE the re-measure, so no margin can be reverse-engineered from it (E2.1-r)."
+      - id: 3b-remeasure
+        desc: "PM ruling 3: capture-pin a fresh board + market snapshot (D3), re-measure the give-back + coherence table on it. Dominance failing on ANY dimension = NULL, ⛔ never a margin to adjust."
+      - id: 3c-fold-fidelity
+        desc: "PM ruling 4: the +1 fold on DATA-FIDELITY grounds — 2018 admitted only if data-honest; state the finding EITHER WAY."
       - id: 3-prereg
-        desc: "The full registration incl. both ship dispositions with forward margins; committed BEFORE scoring."
+        desc: "The full registration — STRICT-DOMINANCE route alone (PM ruling 2); coherence measured + reported, ⛔ never gated at zero; committed BEFORE scoring."
       - id: 4-run
         desc: "Decisive run (operator handoff if >2 min; capture-pinned board)."
       - id: 5-classify
         desc: "Gates + dispositions in registered order; decisive record."
       - id: 6-ship-path
-        desc: "Only if a ship disposition fires: the level-adjacent path + operator packet."
+        desc: "Only if the dominance disposition fires: the level-adjacent path + operator packet. PM ruling 5 — the packet states plainly that this HALVES the incoherence and the give-back and does not end them, names NF-COH2 as the recorded successor, and confirms NF-INJ1-C's suppression + NF-RATE1's guards stay green on the counterfactual (guard level only; ⛔ no shared files)."
       - id: 7-closeout
         desc: "Verdict + findings into closeout.followUps; operator summary."
   closeout:
     verdict: >
-      NODE 1 REFUTED — STOPPED AT THE HARD GATE, RETURNED TO THE PM. The games-floor
-      hypothesis is dead by a two-sided measurement: `gsafe == proj_games` identically on
-      every row of every fold (min proj_games 0.814-1.215, i.e. 3.3-4.9x the 0.25 floor;
-      zero non-finite rows; zero rows at or below it; zero rows the kernel floored), by
-      BOTH the recorded `games_floor_binding()` definition and the wider one the kernel
-      applies. The mechanism could not act, so it produced nothing (NF1.9 / NF-D20). Per
-      the spec's node-1 clause no pre-registration was written, no arm was scored against
-      a realized outcome and no gate was computed. Nodes 2 (D4 + D3) executed as carried.
-      `best_alpha = 0`; DEPLOY-HELD; SERVED_ARM untouched; no `--publish`.
+      NODE 1 REFUTED (2026-08-29) — the games-floor hypothesis is dead by a two-sided
+      measurement, and the story STOPPED at its hard gate and returned to the PM as the
+      spec requires. PM re-scope ruling 2026-08-31 resolved the fork to the STRICT-
+      DOMINANCE route (see `pmRescope`, transcribed verbatim in the acceptance criteria):
+      the PRIMARY full-coherence disposition is RETIRED on the §4 per-stat bound and moves
+      to NF-COH2; nodes 3-7 proceed re-scoped. `best_alpha = 0`; DEPLOY-HELD; SERVED_ARM
+      stays incumbent until the gated ship path + operator approval.
     followUps: >
-      FOR THE PM — the re-scope this node exists to inform.
+      NODE-1 FINDINGS, retained (they are the re-scope's licensing evidence).
 
-      (1) ⭐ THE COHERENCE CLAUSE HAS TWO RESIDUAL POPULATIONS TO SPEAK TO, NOT ONE, AND
-      THEY LICENSE DIFFERENT CLAUSES. The rate-assignment arms leave at worst 1.06-1.10x
-      the all-time envelope, every violating row on >= 8.0 expected games, ZERO rows under
-      2 games, <= 0.29 players/fold on 1-2 of 7 folds — an envelope-EDGE effect with a
-      named mechanism (the multiset a rate arm preserves is the FANTASY-POINT rate
-      multiset, not each counting stat's own rate, so a full-season dual-threat QB
-      promoted to another QB's points rate carries his own stat MIX up and grazes one
-      counting ceiling). That is the shape a declared tolerance could be designed around.
-      `stratified` — the intended PRIMARY — is not that: 8.57 players/fold on 7/7 folds,
-      worst 1.85x, on a row with 0.815 expected games, 35/95 violating rows (36.8%) under
-      2 expected games, against an incumbent residual of 19.14/fold, 2.51x, 34.2% under 2
-      games. ⇒ `stratified` is the incumbent's defect at ~45% of the VOLUME, not a
-      different defect; NF-INJ1's founding row (Easton Stick, 1.9 games, 82.7 pass
-      attempts/game) is still served under it, Easton Stick included. The spec's honesty
-      clause is now MEASURED rather than anticipated.
+      (1) The games floor is INERT on every fold: min proj_games 0.814-1.215 (3.3-4.9x the
+      0.25 floor), zero non-finite rows, zero rows at or below it, zero rows the kernel
+      floored — by BOTH the recorded `games_floor_binding()` definition and the wider one
+      the kernel applies. The mechanism could not act (NF1.9 / NF-D20).
 
-      (2) THE SPEC'S PRIMARY IS THE THING THE CLAUSE CANNOT ADMIT. A forward coherence
-      clause tight enough to be a clause refuses `stratified`; one loose enough to admit it
-      is the guard switched off. So the PM's choice is a genuine fork, not a wording
-      problem: (a) re-scope the PRIMARY away from `stratified` toward a rate-assignment arm
-      and register a tolerance for the measured edge effect; (b) keep `stratified` and
-      register the clause as a strict-DOMINANCE improvement on the coherence measures
-      (violations/fold 19.14 -> 8.57, worst 2.51x -> 1.85x) with the residual disclosed
-      on-surface — which is the spec's own SECONDARY disposition, and the numbers for it are
-      in the node-1 record; or (c) attack the stat-mix mechanism directly, since it is now
-      named and is what BOTH populations reduce to.
+      (2) All 349 violating stat-rows, every arm and fold, are STAT MIX: the multiset a
+      rate arm preserves is the FANTASY-POINT rate multiset, not each counting stat's own
+      rate. Zero floor, zero clamp-lo, zero pre-existing. `rate_refit` 2019 = LAMAR
+      JACKSON, rushAtt 12.44/g vs an all-time 11.73 (1.06x), on 16.5 expected games.
 
-      (3) A MECHANISM NOBODY HAS COSTED: the envelope is a per-STAT ceiling while every
-      assignment rule permutes a per-PLAYER aggregate (points or points-rate). No rule that
-      permutes an aggregate can be coherent by construction against a per-stat envelope —
-      `points_rate_permute`'s own 2019 residual proves it at 1.09x. Worth a card in its own
-      right; it bounds what any successor in this family can achieve.
+      (3) ⭐ THE §4 BOUND, now the licensing evidence for retiring the primary: the
+      envelope is a per-STAT ceiling while every assignment rule permutes a per-PLAYER
+      aggregate, so NO aggregate-permuting rule can be coherent BY CONSTRUCTION against
+      it. Routed by the PM to NF-COH2 (Backlog), which also owns writing it into
+      prod-state.
 
-      (4) NF-INJ2's record is annotated (D4) and the record SETTLES the open question rather
-      than flagging it: the self-referential-baseline defect is real in the code but
-      MEASURABLY did not fire on that run (`reproduction_pin` present; `served_giveback_pct`
-      = 33.96 on all seven arms, which the fallback cannot produce). Its give-back figures
-      stand as recorded.
+      (4) The two residual populations, which the ship route MEASURES AND REPORTS rather
+      than gates: rate arms at worst 1.06-1.10x with zero rows under 2 expected games;
+      `stratified` at 8.57 players/fold on 7/7 folds, worst 1.85x, 36.8% of violating rows
+      under 2 expected games, against an incumbent residual of 19.14/fold, 2.51x, 34.2%.
 
-      (5) NEW LANDMINE, worth a checklist item on any story that reproduces a cached-feature
-      §0.5 run: a fresh worktree silently REBUILDS the gitignored NFL feature caches from a
-      live upstream, so a reproduction there is measured on a different feature vintage
-      (51/56 bare vs 55/56 after rsyncing the main checkout's caches). Landed in CLAUDE.md
-      beside D3.
+      (5) `nf_inj2_rate_permutation.games_floor_binding()` counts `isfinite(g) & (g <
+      FLOOR)` while the kernel floors `~(isfinite(g) & (g > FLOOR))`, so the recorded
+      self-check cannot see a non-finite row the kernel does floor. Inert on every
+      population measured. Routed by the PM into PLAT-CVP2 (item 2).
 
-      (6) OPEN, not fixed here: `nf_inj2_rate_permutation.games_floor_binding()` counts
-      `isfinite(g) & (g < FLOOR)` while the kernel floors `~(isfinite(g) & (g > FLOOR))`, so
-      the recorded self-check cannot see a non-finite row the kernel does floor. Inert on
-      every population measured (zero non-finite rows anywhere), so it is a latent
-      instrument gap, not a live defect — flagged rather than edited, since it is another
-      story's module.
+      (6) A fresh worktree silently REBUILDS the gitignored NFL feature caches from a live
+      upstream, so a reproduction there is measured on a different feature vintage (51/56
+      bare vs 55/56 after rsyncing the main checkout's caches). Landed in CLAUDE.md.
 
-      PM triages into: checklist item on the parent card | merge into an existing card (name
-      it) | a new spec. Worker sessions never create Trello cards.
+      REMAINING FINDINGS from nodes 3-7 land here. PM triages into: checklist item on the
+      parent card | merge into an existing card (name it) | a new spec. Worker sessions
+      never create Trello cards.
