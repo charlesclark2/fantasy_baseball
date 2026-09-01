@@ -135,12 +135,24 @@ FUTURES_CACHE_KEY = f"{NAMESPACE}/futures/board"
 MANIFEST_CACHE_KEY = f"{NAMESPACE}/manifest"
 
 
+#: NCAAF-P3.3 — one FBS team's stats page, addressed by CFBD team id. LATEST-WINS, exactly like
+#: the futures board: the payload declares the `season` it describes, so nothing has to guess a
+#: season from a key. ⛔ NOT keyed on a week — the page carries the whole week SERIES and names its
+#: own `as_of_week`, and a week in a key would inherit the `season_order_week` alias landmine.
+def team_cache_key(team_id: int | str) -> str:
+    return f"{NAMESPACE}/team/{team_id}"
+
+
 def slate_s3_key(game_day: str) -> str:
     return f"{S3_PREFIX}/slate/{game_day}.json"
 
 
 def game_s3_key(game_id: int | str) -> str:
     return f"{S3_PREFIX}/game/{game_id}.json"
+
+
+def team_s3_key(team_id: int | str) -> str:
+    return f"{S3_PREFIX}/team/{team_id}.json"
 
 
 FUTURES_S3_KEY = f"{S3_PREFIX}/futures/board.json"
@@ -364,6 +376,289 @@ class NcaafFuturesBoard(BaseModel):
     framing: NcaafHonestFraming = NcaafHonestFraming()
 
 
+# ── NCAAF-P3.3: the team stats page ──────────────────────────────────────────────────────────
+#
+# ⚖️ EVERY BLOCK CARRIES ITS OWN `status` + `reason`, and that is not ceremony.
+#
+# A team page assembles from FOUR independent sources with genuinely different availability: the
+# P1.2 strength posterior comes from the LAKE and exists from week 1 (a zero-game row is a real
+# PRE-SEASON posterior, not a gap); the P1.1 efficiency / trench / pace blocks come from the dbt
+# marts and DO NOT EXIST until games have been played; the schedule exists as soon as the season
+# rolls forward. So on the Saturday of week 1 a correct page has a strength rating, a schedule, and
+# three blocks that are honestly, structurally empty — and rendering that identically to "the mart
+# build failed" would cost an investigation every time week 1 comes round (NF-C6b / NF-K1).
+#
+# ⛔ NULLS STAY NULL. Nothing here is defaulted to 0.0 to make a column render: a fabricated zero is
+# a wrong number that looks like a measurement.
+
+
+#: `status`/`reason` values a team-page block can carry. Machine-readable so a surface BRANCHES
+#: rather than pattern-matching a sentence.
+TEAM_BLOCK_REASON_NO_GAMES = "no_games_played_yet"
+TEAM_BLOCK_REASON_NOT_BUILT = "source_marts_unavailable"
+TEAM_BLOCK_REASON_NO_ROW = "no_row_for_this_team_and_season"
+
+
+class NcaafTeamBlockStatus(BaseModel):
+    """Why a block of the team page is empty, when it is.
+
+    ⭐ THE THREE CAUSES ARE KEPT APART BECAUSE THEY POINT AT DIFFERENT THINGS: `no_games_played_yet`
+    is the correct state of week 1 and needs no action; `source_marts_unavailable` means OUR build
+    did not run and is a defect; `no_row_for_this_team_and_season` means the team exists but this
+    particular rollup has nothing for it. A single blank renders all three the same.
+    """
+
+    status: Literal["available", "unavailable"] = "unavailable"
+    reason: str | None = None
+
+
+class NcaafTeamIdentity(BaseModel):
+    """Who the team is, AS OF THE SEASON BEING DESCRIBED.
+
+    ⭐ REALIGNMENT IS THE POINT. `conference` is resolved through `dim_ncaaf_team`'s SCD-2 versions
+    at the payload's own season, never off a "current" row — a type-1 read would report 2026's
+    Pac-12 Boise State as Mountain West for every prior season, or (worse, and the direction that
+    actually bites a live page) report a 2026 mover under its 2025 conference. Eleven FBS programs
+    changed conference for 2026 and two of them are brand new to FBS, which is why this is a
+    declared field with a stated source rather than a value copied along from whatever row was
+    handy.
+
+    `conference_source` says WHICH resolution produced it, so a reader (and a guard) can tell a
+    dim-resolved conference from a fallback. `conference_matches_model_input` records whether the
+    P1.2 strength row agreed: they are independently derived, and a disagreement is a real finding
+    about the model's inputs rather than something to silently paper over.
+    """
+
+    team_id: int
+    team: str | None = None
+    season: int
+    conference: str | None = None
+    conference_division: str | None = None
+    classification: str | None = None
+    #: "scd2_dim" when resolved point-in-time through `dim_ncaaf_team`; "model_input" when only the
+    #: strength row carried one; None when neither did.
+    conference_source: str | None = None
+    #: None when either side had no conference to compare.
+    conference_matches_model_input: bool | None = None
+    abbreviation: str | None = None
+    mascot: str | None = None
+    venue_name: str | None = None
+    venue_city: str | None = None
+    venue_state: str | None = None
+    #: True only when the team has NO prior-season FBS row — a first-year FBS program, whose
+    #: pre-season covariates are absent by construction rather than missing by accident.
+    is_new_to_fbs: bool | None = None
+
+
+class NcaafTeamStrengthWeek(BaseModel):
+    """One (team, as_of_week) row of the P1.2 posterior — the rating AND its band.
+
+    ⚠️ `strength_margin_sd` IS NOT OPTIONAL DECORATION. At as_of_week 1 no game has been played and
+    the posterior is the prior: the rating is real and the band is WIDE (~7 points of sd on the
+    2026 opener). A surface that showed the number without the band would be publishing a precision
+    the model does not claim, which on this vertical is the whole difference between context and a
+    pick.
+
+    🚨 SIGN CONVENTION: `strength_offense` and `strength_defense` are BOTH higher-is-better
+    (defense = points PREVENTED). Net strength is their SUM. `offense - defense` returns ~0 for
+    every team; `strength_margin` is the number to read.
+    """
+
+    as_of_week: int
+    games_in_window: int | None = None
+    has_sufficient_sample: bool | None = None
+    strength_margin: float | None = None
+    strength_margin_sd: float | None = None
+    #: the three additive pieces of `strength_margin` — they sum to it exactly, which is what makes
+    #: the rating auditable instead of a black box.
+    strength_conference_component: float | None = None
+    strength_covariate_component: float | None = None
+    strength_team_component: float | None = None
+    strength_offense: float | None = None
+    strength_offense_sd: float | None = None
+    strength_defense: float | None = None
+    strength_defense_sd: float | None = None
+
+
+class NcaafTeamStrength(BaseModel):
+    """The strength block: the CURRENT week's posterior plus the season's week-by-week series."""
+
+    status: Literal["available", "unavailable"] = "unavailable"
+    reason: str | None = None
+    #: the newest `as_of_week` in `weeks`, restated so a client need not scan for it.
+    as_of_week: int | None = None
+    current: NcaafTeamStrengthWeek | None = None
+    weeks: list[NcaafTeamStrengthWeek] = []
+    #: fit-level context, identical for every team in a season — carried so a rating can be read
+    #: against the league it is measured in rather than in the abstract.
+    league_base_points: float | None = None
+    home_field_advantage: float | None = None
+    residual_sigma: float | None = None
+    model_version: str | None = None
+    #: how many prior seasons the shrinkage was calibrated on. The first emitted season has only
+    #: one and is measurably weaker; disclosed rather than buried.
+    hyper_n_prior_seasons: int | None = None
+
+
+class NcaafTeamEfficiency(BaseModel):
+    """Opponent-adjusted efficiency (P1.1), at the newest as-of week with games behind it.
+
+    ⭐ ADJUSTED AND RAW ARE BOTH SERVED. Raw efficiency is close to meaningless in this sport —
+    136 teams, ~12 games, almost no schedule overlap — so the adjusted number is the one to read;
+    serving the raw beside it is what lets a reader see how much of a team's profile is schedule.
+    ⛔ There is deliberately no ranking field: an ordering over 136 teams computed here would be a
+    claim this page does not make.
+    """
+
+    status: Literal["available", "unavailable"] = "unavailable"
+    reason: str | None = None
+    as_of_week: int | None = None
+    games_played: int | None = None
+    adj_off_ppa: float | None = None
+    adj_def_ppa: float | None = None
+    adj_net_ppa: float | None = None
+    adj_off_success_rate: float | None = None
+    adj_def_success_rate: float | None = None
+    adj_points_for_per_game: float | None = None
+    adj_points_against_per_game: float | None = None
+    raw_off_ppa: float | None = None
+    raw_def_ppa: float | None = None
+    raw_off_success_rate: float | None = None
+    raw_def_success_rate: float | None = None
+    raw_points_for_per_game: float | None = None
+    raw_points_against_per_game: float | None = None
+    #: strength of schedule, as the adjustment itself measures it.
+    sos_opponent_net_ppa: float | None = None
+    opponents_counted: int | None = None
+    #: False when no opponent rating existed and the adjusted value FELL BACK to the raw one — the
+    #: number is then honest but unadjusted, and a surface that did not say so would be presenting
+    #: a raw figure under an adjusted label.
+    adjustment_applied: bool | None = None
+    #: False in the first weeks, when opponents have 0-1 games and the adjustment is mostly noise.
+    has_reliable_adjustment: bool | None = None
+
+
+class NcaafTeamSplits(BaseModel):
+    """Trench and pace splits (P1.1), at the same as-of week as the efficiency block.
+
+    TRENCH = line yards + stuff rate, both sides. PACE = plays, drives, possession time, points per
+    drive. They are one model because they come from one rollup row and share one availability.
+    """
+
+    status: Literal["available", "unavailable"] = "unavailable"
+    reason: str | None = None
+    as_of_week: int | None = None
+    games_played: int | None = None
+    # ── trenches ──
+    off_line_yards: float | None = None
+    def_line_yards: float | None = None
+    off_stuff_rate: float | None = None
+    def_stuff_rate: float | None = None
+    # ── pace / drive economy ──
+    off_plays_per_game: float | None = None
+    possession_seconds_per_game: float | None = None
+    drives: int | None = None
+    points_per_drive: float | None = None
+    scoring_opportunity_rate: float | None = None
+    three_and_out_rate: float | None = None
+    explosive_drive_rate: float | None = None
+    avg_start_yards_to_goal: float | None = None
+    off_explosiveness: float | None = None
+    def_explosiveness: float | None = None
+
+
+class NcaafTeamGame(BaseModel):
+    """One game on the team's season schedule — played or upcoming.
+
+    ⭐ `is_completed` IS THE ONLY THING THAT SEPARATES A RESULT FROM A FIXTURE, and every scoring
+    field is null on an upcoming game rather than zero. A 0-0 on next week's opponent would read as
+    a played scoreless game; the honest render of "not yet" is nothing at all.
+
+    ⛔ NO PROJECTION HERE. This block is the schedule and what happened; the model's view of an
+    upcoming game lives on `/ncaaf/games/{game_id}`, which is what `game_id` is for.
+    """
+
+    game_id: int
+    # ⛔ NO WEEK LABEL, DELIBERATELY, AND THE REASON IS A NAME COLLISION RATHER THAN A LIMITATION.
+    #
+    # TWO different columns in this repo are called `season_order_week`. `dim_ncaaf_game`'s is a
+    # genuinely derived, postseason-safe ordering (monotone in the kickoff date). But
+    # `game_prediction_snapshot.py`'s is a VERBATIM ALIAS of CFBD's raw `week`, which restarts at 1
+    # in the postseason — the recorded alias landmine, and the reason
+    # `test_ncaaf_p3_1_serving.py::test_nothing_in_the_serving_layer_keys_on_season_order_week`
+    # bans the token from this layer outright. Serving the safe one under the unsafe one's name is
+    # how the next reader conflates them.
+    #
+    # Nothing is lost: the schedule is ordered by `game_day`, each row carries `is_postseason`, and
+    # `game_id` links to the game board. A properly-named week label is a deliberate follow-up, not
+    # an omission — recorded in the story's closeout rather than smuggled in under a banned name.
+    #: ⭐ THE AMERICA/LOS_ANGELES KICKOFF DAY, derived from the kickoff INSTANT — the SAME field
+    #: name, semantics and format as `NcaafGamePrediction.game_day`, so the two payloads agree and
+    #: a client can cross-link without a conversion.
+    #:
+    #: ⚠️ IT IS NOT `dim_ncaaf_game.game_date`, AND THE DIFFERENCE IS THE INC-22 BUG. That mart
+    #: column is `start_date::date` — the UTC date — so a 03:30-UTC kickoff (a Saturday NIGHT game
+    #: everywhere in the US, i.e. the marquee window on a college slate) files under SUNDAY. A team
+    #: page that dated a night game a day late would disagree with the game board about the same
+    #: game, which is the two-renderers class on a value a reader checks first.
+    game_day: str | None = None
+    #: the kickoff instant, UTC ISO-8601 — the same instant `NcaafGamePrediction.commence_time`
+    #: carries, under the same name (one word, one instant — the P3.1b `snapshot_ts` lesson).
+    commence_time: str | None = None
+    season_type: str | None = None
+    is_postseason: bool | None = None
+    is_home: bool | None = None
+    is_neutral_site: bool | None = None
+    is_conference_game: bool | None = None
+    #: False when the opponent is not FBS — a real and common case in September, and one a reader
+    #: needs in order to read a result correctly.
+    is_fbs_matchup: bool | None = None
+    opponent_team_id: int | None = None
+    opponent: str | None = None
+    opponent_conference: str | None = None
+    venue_name: str | None = None
+    is_completed: bool | None = None
+    team_points: int | None = None
+    opponent_points: int | None = None
+    #: this team's margin (team points − opponent points), null until the game is played.
+    margin: int | None = None
+    #: "W" / "L" / "T", null until the game is played.
+    result: str | None = None
+
+
+class NcaafTeamSchedule(BaseModel):
+    """The season's games, in date order, with the played/upcoming split stated as counts."""
+
+    status: Literal["available", "unavailable"] = "unavailable"
+    reason: str | None = None
+    n_games: int = 0
+    n_completed: int = 0
+    n_upcoming: int = 0
+    wins: int | None = None
+    losses: int | None = None
+    ties: int | None = None
+    games: list[NcaafTeamGame] = []
+
+
+class NcaafTeamPage(BaseModel):
+    """One FBS team's stats page, as served.
+
+    Assembled from four independently-available sources; see `NcaafTeamBlockStatus` for why each
+    block states its own availability rather than sharing one.
+    """
+
+    sport: Literal["ncaaf"] = "ncaaf"
+    season: int
+    generated_at: str
+    team: NcaafTeamIdentity
+    strength: NcaafTeamStrength = NcaafTeamStrength()
+    efficiency: NcaafTeamEfficiency = NcaafTeamEfficiency()
+    splits: NcaafTeamSplits = NcaafTeamSplits()
+    schedule: NcaafTeamSchedule = NcaafTeamSchedule()
+    provenance: NcaafModelProvenance = NcaafModelProvenance()
+    framing: NcaafHonestFraming = NcaafHonestFraming()
+
+
 #: Every model this contract declares — the walk targets for the schema guards below, and the
 #: registry `test_ncaaf_serving_contract.py` asserts is EXHAUSTIVE (a model added to this file but
 #: not to this tuple would escape every guard, which is the vacuity this list exists to prevent).
@@ -371,6 +666,9 @@ CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     NcaafHonestFraming, NcaafModelProvenance, NcaafTeamSide, NcaafWinProbability,
     NcaafDistribution, NcaafMarketLine, NcaafGamePrediction, NcaafSlate, NcaafGameDayRef,
     NcaafManifest, NcaafFuturesTeam, NcaafFuturesBoard,
+    # NCAAF-P3.3 — the team stats page
+    NcaafTeamBlockStatus, NcaafTeamIdentity, NcaafTeamStrengthWeek, NcaafTeamStrength,
+    NcaafTeamEfficiency, NcaafTeamSplits, NcaafTeamGame, NcaafTeamSchedule, NcaafTeamPage,
 )
 
 
