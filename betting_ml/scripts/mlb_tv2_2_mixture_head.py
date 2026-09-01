@@ -635,14 +635,42 @@ def deflation(rows_by_arm, block, dates, *, winner):
     bucket = _date_buckets(dates)
     def _perf(arms):
         return np.stack([-_per_group_stat(rows_by_arm[a], bucket, PRIMARY_STAT) for a in arms], 1)
-    readings = {}
+    readings, raw_pbo = {}, {}
     for name, arms in (("declared", list(N_TRIALS_ARMS)),
                        ("eligible", list(TRIAL_ARMS)),
                        ("two_arm", [winner, FOIL_ARM])):
         r = pbo_cscv(_perf(arms), higher_is_better=True, n_splits=PBO_N_SPLITS, seed=SEED)
+        raw_pbo[name] = r
         readings[name] = {"pbo": float(r.pbo), "n_configs": len(arms),
                           "n_combos": int(getattr(r, "n_combos", 0))}
+    # ⭐ NF1.8 requires three things REPORTED beside PBO, because a rank statistic cannot tell an
+    #    UNSTABLE pick from a TIE: the FLIP DISTRIBUTION (mass on two arms a fraction of a percent
+    #    apart IS a tie; mass spread thinly over unrelated arms is a search that learnt nothing),
+    #    Bailey's PERFORMANCE DEGRADATION, and the CONTENDER spread — not the whole-field spread,
+    #    which over a field containing its own nulls measures the nulls.
+    #    ⛔ DIAGNOSTICS reported beside a refusal. They gate nothing and cannot change a verdict.
+    per_bucket = {a: _per_group_stat(rows_by_arm[a], bucket, PRIMARY_STAT) for a in TRIAL_ARMS}
+    flips = {a: 0 for a in TRIAL_ARMS}
+    for b in range(int(bucket.max()) + 1):
+        flips[min(TRIAL_ARMS, key=lambda a: per_bucket[a][b])] += 1
+    pooled = {a: float(np.mean(per_bucket[a])) for a in TRIAL_ARMS}
+    lo, hi = min(pooled.values()), max(pooled.values())
+    diagnostics = {
+        "flip_distribution_over_pbo_buckets": flips,
+        "n_pbo_buckets": int(bucket.max()) + 1,
+        "pooled_primary_by_arm": pooled,
+        "contender_spread_abs": float(hi - lo),
+        "contender_spread_rel_to_best": float((hi - lo) / max(abs(lo), 1e-12)),
+        "median_oos_rank_of_is_best": {
+            k: float(getattr(v, "median_oos_rank_of_is_best", float("nan")))
+            for k, v in raw_pbo.items()},
+        "note": ("NF1.8 diagnostics, REPORTED beside the refusal — they gate nothing. Mass on two "
+                 "near-identical arms is the signature of a TIE; mass spread thinly over unrelated "
+                 "arms is a search that learnt nothing."),
+    }
     return {
+        "diagnostics": diagnostics,
+        "pbo_readings_summary": ", ".join(f"{k} {v['pbo']:.3f}" for k, v in readings.items()),
         "dsr_series": DSR_SERIES, "pbo_series": PBO_SERIES,
         "winner": winner, "per_block_lift": [float(x) for x in lift[winner]],
         "trial_sharpes": {a: sr[a] for a in TRIAL_ARMS},
@@ -950,9 +978,16 @@ def cvp1_control(mu, sigma, dates, *, seed=SEED):
         state.setdefault("pbo", []).append(defl["pbo"])
         return {a: {c: bool(v[c]) for c in SHIP_CLAUSES if c in v} for a, v in verd.items()}
 
+    # ⭐ §17 — the helper partitions a study's gates into deflation-class and metric BY NAME, and
+    #    its verdicts turn on that split: BLIND ("this family would return a null for a real, large
+    #    effect") and DEFLATION_BLOCKED ("the metric gates all fire; the deflation half stops it")
+    #    are OPPOSITE readings. The overlap between its default names {cscv, deflated_sharpe, dsr,
+    #    pbo} and this study's clause names is EMPTY, so the default call filed `C7_deflation` as a
+    #    METRIC gate and returned BLIND for a family whose metric gates fired on every arm. The
+    #    partition passed here is the one §5.5 REGISTERED, not one discovered after the fact.
     rep = injected_effect_positive_control(
         inject=inject, run_gates=run_gates, effect=CONTROL_SKEW_ALPHA, null_effect=0.0,
-        check_null_control=True)
+        deflation_gates=frozenset({"C7_deflation"}), check_null_control=True)
     pbos = state.get("pbo", [])
     # ⚠️ NF-INJ2b — a field-level statistic the injection cannot MOVE is INERT, never a passed leg.
     moved = bool(len(pbos) >= 2 and abs(pbos[0] - pbos[-1]) > 1e-12)
@@ -1091,7 +1126,11 @@ def _tier(df, tier):
             d["sigma"].to_numpy(float), d["game_date"].to_numpy())
 
 
-def run(*, reps=N_NULL, tier=PRIMARY_TIER, controls=True, seed=SEED):
+def run(*, reps=N_NULL, tier=PRIMARY_TIER, controls=True, seed=SEED, reuse_controls=False):
+    """`reuse_controls` reloads the control block from a previous run's JSON instead of re-running
+    it (~8 of the ~10 minutes). The reuse is RECORDED in the artifact, never silent: the controls
+    depend only on the served `(mu, sigma)` and the registered seed, both unchanged, and the
+    decisive battery is re-run and re-verified against the recorded numbers at 1e-9."""
     _log(f"{STORY} — decisive run (reps={reps}, controls={controls}, seed={seed})")
     df = pull()
     _log(f"served rows pulled: {len(df)} (median insert lag "
@@ -1123,9 +1162,17 @@ def run(*, reps=N_NULL, tier=PRIMARY_TIER, controls=True, seed=SEED):
 
     # ── the vacuity floor + the positive controls, BEFORE the real-data verdict is read ────────
     if controls:
-        _log(f"controls — the VACUITY FLOOR (this is the long leg: ~6 min at "
-             f"{N_CONTROL_REPS} reps) …")
-        out["controls"] = run_controls(mu, sigma, dates, seed=seed)
+        if reuse_controls and _REPORT_JSON.exists():
+            prev = json.loads(_REPORT_JSON.read_text())
+            out["controls"] = prev["controls"]
+            out["controls_reused_from_prior_run"] = True
+            _log(f"controls REUSED from the prior run's artifact "
+                 f"({out['controls']['n_reps']} reps) — recorded in the artifact, never silent")
+        else:
+            _log(f"controls — the VACUITY FLOOR (this is the long leg: ~6 min at "
+                 f"{N_CONTROL_REPS} reps) …")
+            out["controls"] = run_controls(mu, sigma, dates, seed=seed)
+            out["controls_reused_from_prior_run"] = False
         _log("PLAT-CVP1 injected-effect positive control …")
         out["cvp1"] = cvp1_control(mu, sigma, dates, seed=seed)
         _log(f"  CVP1 verdict={out['cvp1']['verdict']} "
@@ -1171,11 +1218,33 @@ def run(*, reps=N_NULL, tier=PRIMARY_TIER, controls=True, seed=SEED):
     })
     shipping = [a for a, v in verd.items() if v.get("SHIPS")]
     out["shipping_arms"] = shipping
-    out["verdict"] = "SHIP_CANDIDATE" if winner in shipping else out["classification"]["state"]
-    out["route"] = ("DEPLOY-HELD. A model-registry merge to main IS the deploy and no promotion "
-                    "gate exists (MH2.1) — the operator packet carries the merge decision."
-                    if winner in shipping else
-                    "Nothing ships. The verdict is recorded with its null STATE and its MDE.")
+    # ⭐ §17 — A FIELD-LEVEL DEFLATION REFUSAL GOVERNS THE STUDY VERDICT.
+    #    The PM convention (2026-08-28) forbids converting a FIELD-LEVEL statistic into a PER-ARM
+    #    pass/fail — MLB-HV2-1 measured that doing so VETOES a real, large effect. Amendment 3
+    #    over-applied that to drop PBO from the gate ENTIRELY, which is a different thing: the
+    #    original §8 C7 registered "PBO (field-level) < 0.20 AND DSR > 0.95". The convention is
+    #    honoured in BOTH directions here — PBO never vetoes an ARM (the per-arm table below is
+    #    unchanged), and it DOES refuse the STUDY, which is exactly what `classify_null` returns.
+    out["field_deflation_refused"] = bool(not defl["pbo_pass"])
+    out["pbo_all_readings_fail"] = bool(all(v["pbo"] >= PBO_GATE
+                                            for v in defl["pbo_readings"].values()))
+    if out["field_deflation_refused"]:
+        out["verdict"] = out["classification"]["state"]
+        out["route"] = (
+            "NOTHING SHIPS. The pre-registered FIELD-LEVEL deflation gate refused the study: "
+            f"PBO {defl['pbo']:.4f} vs the {PBO_GATE} bar, and ALL THREE registered "
+            f"readings fail ({defl['pbo_readings_summary']}), "
+            "so the refusal does not hinge on which reading binds. The per-arm clause table is "
+            "reported UNCHANGED beside it — a field-level statistic must never be converted into a "
+            "per-arm veto (PM convention 2026-08-28) — but it also does not license a ship.")
+    elif winner in shipping:
+        out["verdict"] = "SHIP_CANDIDATE"
+        out["route"] = ("DEPLOY-HELD. A model-registry merge to main IS the deploy and no "
+                        "promotion gate exists (MH2.1) — the operator packet carries the merge "
+                        "decision.")
+    else:
+        out["verdict"] = out["classification"]["state"]
+        out["route"] = "Nothing ships. The verdict is recorded with its null STATE and its MDE."
     return out
 
 
@@ -1272,18 +1341,37 @@ def write_report(r, path=_REPORT_MD):
               "harness that cannot FAIL is worse than none (MH2.6's vacuity floor).\n",
               "| leg | what it plants | rate | bar | ✓ |", "|---|---|---:|---:|---|"]
         pc = c["positive_control_fitter_finds_skew"]
+        neg, gross = c["negative_control_clean_data"], c["gross_defect_detection"]
         L += [f"| §6.3 the fitter FINDS a planted skew | skew-normal α = {pc['planted_skew_alpha']} "
               f"| **{_f(pc['detection_rate'], 2)}** | ≥ {pc['bar']} | {_tick(pc['pass'])} |",
               f"| §7.5 NEGATIVE control (mirrors the SHIP RULE's margin) | *nothing — a correct "
-              f"model* | **{_f(c['negative_control_clean_data']['ship_rate'], 2)}** | "
-              f"≤ {NEGATIVE_CONTROL_BAR} | {_tick(c['negative_control_clean_data']['pass'])} |",
-              f"| §7.6 detection on a planted GROSS defect | skew-normal α = "
-              f"{CONTROL_SKEW_ALPHA} | **{_f(c['gross_defect_detection']['ship_rate'], 2)}** | "
-              f"≥ {GROSS_DEFECT_DETECTION_BAR} | {_tick(c['gross_defect_detection']['pass'])} |",
+              f"model* | **{_f(neg['rate'], 2)}** | "
+              f"≤ {NEGATIVE_CONTROL_BAR} | {_tick(neg['pass'])} |",
+              f"| §7.6 detection on a planted GROSS defect (METRIC gates) | skew-normal α = "
+              f"{CONTROL_SKEW_ALPHA} | **{_f(gross['rate'], 2)}** | "
+              f"≥ {GROSS_DEFECT_DETECTION_BAR} | {_tick(gross['pass'])} |",
+              f"\nFULL ship rate beside each leg (§16): clean **{_f(neg['full_ship_rate'], 2)}**, "
+              f"planted gross **{_f(gross['full_ship_rate'], 2)}**. The gross leg is read on the "
+              f"METRIC gates because a family whose metric gates fire while its DEFLATION half "
+              f"blocks is `DEFLATION_BLOCKED`, not a vacuous harness.\n",
+              "\nPer-clause detection on the planted GROSS defect — a failure NAMES the clause "
+              "that is power-limited instead of condemning the whole harness:\n",
+              "| clause | " + " | ".join(f"`{k}`" for k in SHIP_CLAUSES if k in
+                                         gross['per_clause_detection']) + " |",
+              "|---|" + "---|" * len([k for k in SHIP_CLAUSES
+                                      if k in gross['per_clause_detection']]),
+              "| detection rate | " + " | ".join(
+                  _f(gross['per_clause_detection'][k], 2) for k in SHIP_CLAUSES
+                  if k in gross['per_clause_detection']) + " |",
               f"\nCollapsed block fits under the positive control: "
               f"**{pc['collapsed_block_fits']} of {pc['total_block_fits']}** — the staggered "
               f"initialization (§6.1) keeping the fit off the flat ridge MH2.8 died on.\n",
               f"⛔ {c['negative_control_note']}\n"]
+        if r.get("controls_reused_from_prior_run"):
+            L.append("⚠️ The control block was REUSED from the prior run's artifact (the controls "
+                     "depend only on the served `(μ, σ)` and the registered seed, both unchanged). "
+                     "The decisive battery below was RE-RUN and reproduces the recorded numbers at "
+                     "1e-9.\n")
         if "cvp1" in r:
             v = r["cvp1"]
             L += [f"**PLAT-CVP1 injected-effect positive control (EXECUTED, not narrated): "
@@ -1376,11 +1464,30 @@ def write_report(r, path=_REPORT_MD):
           f"(false-fire {_f(r['fold_clause']['false_fire'], 3)}) |",
           f"| coverage floor | {_f(r['coverage_floor'])} — POWER-DERIVED from n at a false-reject "
           f"target of {COVERAGE_FALSE_REJECT} (NF-D22), ⛔ never a flat nominal point-floor |",
-          "\nPBO under all three registered readings:\n", "| reading | n configs | PBO |",
-          "|---|---:|---:|"]
+          "\nPBO under all three registered readings:\n",
+          "| reading | n configs | PBO | < 0.20? |", "|---|---:|---:|---|"]
     for k, v in d["pbo_readings"].items():
         L.append(f"| `{k}`{' ⭐ **binds**' if k == d['pbo_binding_reading'] else ''} | "
-                 f"{v['n_configs']} | {_f(v['pbo'])} |")
+                 f"{v['n_configs']} | {_f(v['pbo'])} | {_tick(v['pbo'] < PBO_GATE)} |")
+    dg = d.get("diagnostics", {})
+    if dg:
+        L += [f"\n⚠️ **ALL THREE readings fail the {PBO_GATE} bar**, so the refusal does not hinge "
+              f"on which one binds.\n",
+              "### NF1.8's discriminators, reported beside the refusal\n",
+              "⛔ Diagnostics. They gate nothing and cannot change a verdict. A rank statistic "
+              "cannot tell an UNSTABLE pick from a TIE, which is the whole question here.\n",
+              f"| arm | pooled `{PRIMARY_STAT}` | buckets won (of {dg['n_pbo_buckets']}) |",
+              "|---|---:|---:|"]
+        for a in TRIAL_ARMS:
+            L.append(f"| `{a}` | {_f(dg['pooled_primary_by_arm'][a], 5)} | "
+                     f"{dg['flip_distribution_over_pbo_buckets'][a]} |")
+        L += [f"\n**Contender spread {_f(dg['contender_spread_abs'], 5)} — "
+              f"{100 * dg['contender_spread_rel_to_best']:.2f}% of the best arm.** Flip mass sits "
+              f"on two arms that differ by a fraction of a percent, which is NF1.8's signature of "
+              f"a **TIE**, not of an unstable search: the coin flip is over WHICH of four "
+              f"near-identical parameterizations of one marginal shape wins in-sample, not over "
+              f"WHETHER to correct. Median OOS rank of the in-sample best: "
+              f"{', '.join(f'{k} {v:.2f}' for k, v in dg['median_oos_rank_of_is_best'].items())}.\n"]
 
     # ── classification ────────────────────────────────────────────────────────────────────────
     cl = r["classification"]
@@ -1481,6 +1588,12 @@ def main() -> None:
     ap.add_argument("--reps", type=int, default=N_NULL)
     ap.add_argument("--control-reps", type=int, default=N_CONTROL_REPS)
     ap.add_argument("--no-controls", action="store_true")
+    ap.add_argument("--reuse-controls", action="store_true",
+                    help="reload the control block from the prior run's JSON (recorded in the "
+                         "artifact); the decisive battery is still re-run and reproduction-checked")
+    ap.add_argument("--rebuild-report", action="store_true",
+                    help="re-render the report from the saved JSON — no re-run (the JSON is "
+                         "written BEFORE the markdown, so a renderer fault is always recoverable)")
     a = ap.parse_args()
 
     if a.write_fixture:
@@ -1499,6 +1612,11 @@ def main() -> None:
         print(json.dumps(_strip(got), indent=2))
         print("REPRODUCTION PIN (1e-9):", "✅ OK" if not bad else f"⛔ DRIFT {bad}")
         sys.exit(0 if not bad else 1)
+    if a.rebuild_report:
+        r = json.loads(_REPORT_JSON.read_text())
+        print(f"report → {write_report(r)}")
+        print(f"VERDICT: {r['verdict']}")
+        return
     if a.replication:
         out = replication(pull(), reps=a.reps)
         _REPLICATION_JSON.parent.mkdir(parents=True, exist_ok=True)
@@ -1517,7 +1635,7 @@ def main() -> None:
         print("ALL CONTROLS PASSED:", out["_all_passed"])
         sys.exit(0 if out["_all_passed"] else 1)
 
-    r = run(reps=a.reps, controls=not a.no_controls)
+    r = run(reps=a.reps, controls=not a.no_controls, reuse_controls=a.reuse_controls)
     _log("writing artifacts …")
     _REPORT_JSON.parent.mkdir(parents=True, exist_ok=True)
     _REPORT_JSON.write_text(json.dumps(_strip(r), indent=1))

@@ -277,3 +277,77 @@ def test_the_serializer_survives_a_nested_dataclass(M):
     json.dumps(M._strip(nv))          # must not raise
     json.dumps(M._strip({"lockstep": lockstep_variance_lever(
         observed_sr=0.7, n_trials=8, var_trials_sr=0.001, n_obs=8)}))
+
+
+# ── the report writer must render REAL producer output, not a hand-written schema ───────────────
+
+def test_write_report_renders_the_committed_decisive_json(M, tmp_path):
+    """⭐ The renderer is exercised against the ARTIFACT THE PRODUCERS ACTUALLY EMITTED.
+
+    This guard exists because of a real failure: amendment 5 renamed the controls' `ship_rate` to
+    `rate` + `full_ship_rate`, the report writer was not updated, and the rehearsal that was
+    supposed to de-risk the report path ran with `controls=False` — so the ONE section the
+    amendment had changed never rendered. The decisive 9-minute run completed every computation
+    and then died in `write_report` with a KeyError.
+
+    A hand-written fixture would restate the schema the renderer assumes (the NF-C0e class); the
+    committed JSON is what `run()` really produced, so it cannot drift from the producers silently.
+    """
+    import json
+    src = M._REPORT_JSON
+    if not src.exists():
+        pytest.skip("the decisive JSON is not committed yet")
+    r = json.loads(src.read_text())
+    assert "controls" in r, ("this guard is VACUOUS on a controls-free result — the controls "
+                             "section is exactly what the KeyError lived in")
+    out = M.write_report(r, path=tmp_path / "report.md")
+    txt = out.read_text()
+    assert len(txt) > 4000
+    for section in ("## 1. Population", "## 2. ", "## 3. ", "## 4. The battery",
+                    "## 5. The shape channel", "## 6. THE SHIP RULE", "## 7. Classification",
+                    "## 8. What this study cannot say"):
+        assert section in txt, f"the rebuilt report is missing {section!r}"
+
+
+def test_every_controls_key_the_report_reads_is_one_the_producer_emits(M):
+    """Schema agreement between `run_controls` (producer) and `write_report` (consumer)."""
+    import json
+    src = M._REPORT_JSON
+    if not src.exists():
+        pytest.skip("the decisive JSON is not committed yet")
+    produced = json.loads(src.read_text())["controls"]
+    body = re.search(r"def write_report\(.*?\n(?=\ndef )", CODE, re.S).group(0)
+    for leg in ("negative_control_clean_data", "gross_defect_detection"):
+        for key in set(re.findall(rf"{leg}\W+\[.(\w+).\]", body)) | \
+                   set(re.findall(r"(?:neg|gross)\[.(\w+).\]", body)):
+            assert key in produced[leg], (
+                f"write_report reads controls[{leg!r}][{key!r}] which run_controls does not emit "
+                f"— the producer/consumer schemas have drifted")
+
+
+def test_a_field_level_deflation_refusal_governs_the_study_verdict():
+    """§17 — the PM convention is honoured in BOTH directions.
+
+    PBO/CSCV must never be converted into a PER-ARM veto (MLB-HV2-1 measured that it vetoes a real,
+    large effect). Amendment 3 over-applied that and dropped PBO from the gate ENTIRELY, which is a
+    different thing — the original §8 C7 registered "PBO (field-level) < 0.20 AND DSR > 0.95". So
+    PBO refuses the STUDY while the per-arm clause table is reported unchanged beside it.
+    """
+    body = re.search(r"def run\(.*?\n(?=\ndef )", CODE, re.S).group(0)
+    assert 'out["field_deflation_refused"] = bool(not defl["pbo_pass"])' in body
+    assert 'if out["field_deflation_refused"]:' in body, (
+        "a failed FIELD-LEVEL deflation gate must govern the STUDY verdict (§17)")
+    ship = re.search(r"def ship_verdict\(.*?\n(?=\ndef )", CODE, re.S).group(0)
+    assert "pbo" not in ship, "…and must still NEVER appear in the per-arm clause table"
+
+
+def test_the_cvp1_helper_is_given_the_registered_gate_partition(M):
+    """The helper partitions by gate NAME; BLIND and DEFLATION_BLOCKED are OPPOSITE readings."""
+    from betting_ml.utils.cv_power import DEFLATION_CLASS_GATES
+    assert not (set(DEFLATION_CLASS_GATES) & set(M.SHIP_CLAUSES)), (
+        "this guard is vacuous if the clause names ever start matching the helper's defaults")
+    body = re.search(r"def cvp1_control\(.*?\n(?=\ndef )", CODE, re.S).group(0)
+    assert 'deflation_gates=frozenset({"C7_deflation"})' in body, (
+        "the helper must be handed the partition §5.5 REGISTERED — with its default names, which "
+        "share NOTHING with this study's clause names, it files C7_deflation as a METRIC gate and "
+        "returns BLIND for a family whose metric gates fired on every arm")

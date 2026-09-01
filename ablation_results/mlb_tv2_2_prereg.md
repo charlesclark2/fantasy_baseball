@@ -698,3 +698,54 @@ bar.** The deflation half is therefore expected to be the binding clause, and a 
 outcome on the real data would be a statement about the DESIGN's power at 8 folds, ⛔ not evidence
 against the mechanism. The DSR bar is **NOT** moved: 0.95 is the program standard, and lowering a
 registered threshold because it blocks is the E2.1-r inversion.
+
+---
+
+## 17. AMENDMENT 6 — two wiring corrections, filed AFTER the decisive run (and why that is admissible)
+
+⚠️ Unlike §12–§16, this amendment is filed **after** the decisive run. Both changes make the
+verdict **STRICTER** and both restore what was already registered; neither relaxes a bar, moves a
+threshold, re-cuts a field or re-reads a gate. **The direction is the test** — refusing to make a
+correction that turns a `SHIP_CANDIDATE` into a refusal would itself be the E2.1-r inversion, in
+the direction that favours the result.
+
+### 17.1 A FIELD-LEVEL deflation refusal governs the STUDY verdict
+
+**§8 C7 as originally registered:** *"PBO (field-level) < 0.20 **and** DSR > 0.95."*
+
+Amendment 3 removed PBO from C7, citing the PM convention that PBO/CSCV must never be carried as a
+per-arm pass/fail (MLB-HV2-1 measured that a per-arm reading VETOES a real, large planted effect).
+**That over-applied the convention.** "Not a PER-ARM veto" is not "not a gate": a field-level
+statistic refuses the **FIELD**, and `classify_null` implements exactly that — it returned
+`DEFLATION_REFUSED` with `pbo_application_admissible = True` and `pbo_refusal_admitted = True`
+while the per-arm table showed arms clearing their own clauses.
+
+**Corrected:** PBO never touches an arm's clause table (unchanged), and a field-level refusal
+governs the STUDY verdict. Measured: **all three registered readings fail** — `declared` 0.221,
+`eligible` 0.771, `two_arm` 0.250 — so the refusal does not hinge on which reading binds.
+
+### 17.2 The PLAT-CVP1 helper partitions gates BY NAME, and this study's names shared none
+
+The helper splits a study's registered gates into deflation-class and metric, and **`BLIND` and
+`DEFLATION_BLOCKED` are OPPOSITE readings** — `BLIND` says a null from this family is free;
+`DEFLATION_BLOCKED` says every metric gate fired and only deflation stopped it. The intersection of
+its default names `{cscv, deflated_sharpe, dsr, pbo}` with this study's clause names
+(`C0_replication` … `C10_own_form_oracle_floor`) is **EMPTY**, so the default call filed
+`C7_deflation` as a METRIC gate and returned **`BLIND`** — for a family whose own `blocking_gates`
+showed every arm clearing every metric clause.
+
+**Corrected** by passing `deflation_gates={"C7_deflation"}` — the partition §5.5 already REGISTERED,
+not one discovered afterwards. Verdict moves **`BLIND` → `DEFLATION_BLOCKED`**, with all four arms
+in `metric_survivors`. This is the state the spec named in advance.
+
+⭐ Carried to closeout as an instrument finding: the helper's verdict silently inverts for any study
+whose gate names do not use its vocabulary, and nothing warns.
+
+### 17.3 What did NOT change
+
+The population, the arms, every bar, the primary statistic, `V`-membership, the BH family, the
+per-arm clause table and every recorded number are untouched. The decisive battery was re-run and
+reproduces the recorded figures at **1e-9** (`winner`, `dsr`, `observed_sr`, `pbo`,
+`incumbent_gap`). The control block was REUSED from the completed run and that reuse is RECORDED in
+the artifact — the controls depend only on the served `(μ, σ)` and the registered seed, both
+unchanged.
