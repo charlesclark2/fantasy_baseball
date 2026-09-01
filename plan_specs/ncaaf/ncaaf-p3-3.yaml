@@ -11,7 +11,7 @@ metadata:
   name: ncaaf-p3-3
   vertical: ncaaf
   card: https://trello.com/c/H5o3c7jc   # fixture-ADD card; P3.3 card linked at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The Team Stats page (ncaaf_story_prompts.md P3.3): per team, the
