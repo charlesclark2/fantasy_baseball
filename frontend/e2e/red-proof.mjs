@@ -3200,6 +3200,47 @@ const CASES = [
     to: "          `h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-[3px] border border-dashed ` +",
     grep: "failed logo moves nothing",
   },
+  // ── NF-RATE1 — the full-season rate above any full season on record ─────────────────────────
+  {
+    id: "rate-fix-misses-the-csv",
+    shipped:
+      "NF-RATE1 — `full_season_rate` printed 633 for WILL LEVIS in the EXPORTED file (measured on " +
+      "the staged 2026 board; Kittle 580 and Pierce 545 beside him)",
+    detail:
+      "The rankings board renders the rate TWICE — the on-page column and the CSV export — and a " +
+      "suppression aimed at the table leaves the downloaded file carrying the absurd number. No " +
+      "DOM assertion can see it: the page looks fixed.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "fullSeasonRateCsv(p.pts, p.g, p.pos),",
+    to: "fullSeasonRate(p.pts, p.g),",
+    grep: "full_season_rate is EMPTY on the withheld row",
+  },
+  {
+    id: "withheld-rate-renders-as-a-bare-em-dash",
+    shipped:
+      "NF-RATE1 — the E9.56c inversion: a refusal rendered identically to an absence",
+    detail:
+      "The pre-existing `unavailable` state ALREADY renders a bare em-dash, so a build that " +
+      "computes `withheld` correctly and then renders it the same way turns \"we are not printing " +
+      "this\" into \"we have nothing for this player\" — with tsc, next build and every source scan " +
+      "green either way.",
+    file: "components/fantasy/shared.tsx",
+    from: '  if (d.kind === "withheld") return <WithheldFullSeasonRate />',
+    to: "  if (d.kind === \"withheld\") return <>{num(null)}</>",
+    grep: "the absurd row is withheld, the ordinary row still prints its rate",
+  },
+  {
+    id: "rate-suppressed-on-every-in-scope-row",
+    shipped: "NF-RATE1 — a suppression applied too widely",
+    detail:
+      "A treatment that fires on every row is decoration, and it costs a reader a column of real " +
+      "numbers. Presence-only assertions pass it, which is why every case in the spec names an " +
+      "untouched control beside its planted row.",
+    file: "lib/fantasy.ts",
+    from: '  if (typeof ceiling === "number" && rate > ceiling) return { kind: "withheld" }',
+    to: "  if (typeof ceiling === \"number\") return { kind: \"withheld\" }",
+    grep: "the absurd row is withheld, the ordinary row still prints its rate",
+  },
 ]
 
 /**

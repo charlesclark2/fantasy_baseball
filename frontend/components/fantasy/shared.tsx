@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Picker } from "@/components/ui/picker"
 import type { FreshnessBlock, LeagueConfigMeta, Manifest, VeteranLevelPolicy } from "@/lib/draft-optimizer"
 import { freeSelection, isFreeConfig } from "@/lib/draft-optimizer"
-import { availabilityTier, marketLeaningPositions } from "@/lib/fantasy"
+import { availabilityTier, fullSeasonRateDisplay, marketLeaningPositions } from "@/lib/fantasy"
 import type { AvailabilityTier, ProjectedPlayer } from "@/lib/fantasy"
 import { useTrackRecordManifest } from "@/lib/fantasy-track-record"
 import {
@@ -32,6 +32,10 @@ import {
   FORMAT_LOCK_SUFFIX,
   FREE_TIER_SUMMARY,
   FULL_SEASON_RATE_DEFINITION,
+  FULL_SEASON_RATE_LABEL,
+  FULL_SEASON_RATE_WITHHELD_DETAIL,
+  FULL_SEASON_RATE_WITHHELD_LABEL,
+  FULL_SEASON_RATE_WITHHELD_SR_LABEL,
   MEMBERSHIP_CTA_LABEL,
   PAID_TIER_HEADING,
   PAID_TIER_SUMMARY,
@@ -259,6 +263,97 @@ export function WithheldStat() {
     >
       <p className="font-medium text-gray-300">{STAT_LINE_WITHHELD_LABEL}</p>
       <p className="mt-1.5">{STAT_LINE_WITHHELD_DETAIL}</p>
+    </InfoTip>
+  )
+}
+
+// ── NF-RATE1 — the full-season rate's THREE render states, in one place ──────────────────────────
+//
+// ⚠️ ADJACENT TO `WithheldStat` ABOVE, DELIBERATELY NOT SHARED WITH IT. That one suppresses SERVED
+// COUNTING STATS the server marked; this one suppresses a DERIVED DISPLAY LINE the client computes,
+// off a rule the client owns (`fullSeasonRateDisplay`). Same Option-C pattern, different predicate,
+// different inputs, different failure modes — folding them together would make one component answer
+// to two stories and give a future edit to either one a blast radius it should not have.
+//
+// The rule itself lives in `lib/fantasy.ts` and is NOT restated here; these components render the
+// three states it returns and nothing else.
+
+/** The em-dash standing in for a rate we refuse to print, with the disclosure behind it.
+ *
+ *  ⭐ A POPOVER (`InfoTip`), NOT a `title=` — unreachable on a phone, and a refusal a reader cannot
+ *  ask about is indistinguishable from a missing number, which is the one thing this must never
+ *  look like. Same call, same reason, as `WithheldStat` and NF-C9. */
+export function WithheldFullSeasonRate() {
+  return (
+    <InfoTip
+      bare
+      srLabel={FULL_SEASON_RATE_WITHHELD_SR_LABEL}
+      label={
+        <span data-testid="withheld-full-season-rate" className="cursor-help text-gray-500 underline decoration-dotted decoration-gray-700 underline-offset-4">
+          —
+        </span>
+      }
+    >
+      <p className="font-medium text-gray-300">{FULL_SEASON_RATE_WITHHELD_LABEL}</p>
+      <p className="mt-1.5">{FULL_SEASON_RATE_WITHHELD_DETAIL}</p>
+    </InfoTip>
+  )
+}
+
+/** The whole TABLE CELL for the full-season rate — the rankings board's column and the projections
+ *  table's column render this and nothing else, so the two cannot disagree about any of the three
+ *  states (the #681 "two renderers of one field are two rule sets" lesson).
+ *
+ *  ⚠️ `unavailable` renders `num(null)` — the plain em-dash, with no disclosure and no dotted
+ *  underline. That is the PRE-EXISTING rendering of the `MIN_GAMES_FOR_FULL_SEASON_RATE` floor and
+ *  of an absent games figure, and it is left byte-identical on purpose: this story adds a state, it
+ *  does not restyle the one that was already there. The two are visually distinguishable precisely
+ *  because only one of them is something a reader can ask about. */
+export function FullSeasonRateCell({
+  pts,
+  games,
+  pos,
+}: {
+  pts: number | null | undefined
+  games: number | null | undefined
+  pos: string | null | undefined
+}) {
+  const d = fullSeasonRateDisplay(pts, games, pos)
+  if (d.kind === "withheld") return <WithheldFullSeasonRate />
+  return <>{num(d.kind === "rate" ? d.value : null)}</>
+}
+
+/** The same three states as a TILE SUB-LINE, for the player page's format tiles.
+ *
+ *  Returns `false` (not an em-dash) for `unavailable`, because `combineSub` DROPS a false entry and
+ *  the pre-story behaviour there was for the line to be simply absent — a tile sub-line is a list of
+ *  present facts, not a fixed grid of cells, so an em-dash of its own would read as a new kind of
+ *  emptiness rather than as the same one. `withheld` DOES render, because "we have this number and
+ *  are not printing it" is a fact, and an omitted line cannot say it. */
+export function FullSeasonRateSubLine({
+  pts,
+  games,
+  pos,
+}: {
+  pts: number | null | undefined
+  games: number | null | undefined
+  pos: string | null | undefined
+}): React.ReactNode | false {
+  const d = fullSeasonRateDisplay(pts, games, pos)
+  if (d.kind === "unavailable") return false
+  if (d.kind === "rate") return `${FULL_SEASON_RATE_LABEL}: ${num(d.value)}`
+  return (
+    <InfoTip
+      bare
+      srLabel={FULL_SEASON_RATE_WITHHELD_SR_LABEL}
+      label={
+        <span data-testid="withheld-full-season-rate-subline" className="cursor-help underline decoration-dotted decoration-gray-700 underline-offset-4">
+          {FULL_SEASON_RATE_LABEL}: —
+        </span>
+      }
+    >
+      <p className="font-medium text-gray-300">{FULL_SEASON_RATE_WITHHELD_LABEL}</p>
+      <p className="mt-1.5">{FULL_SEASON_RATE_WITHHELD_DETAIL}</p>
     </InfoTip>
   )
 }

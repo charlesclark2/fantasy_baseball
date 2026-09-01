@@ -7,7 +7,7 @@ metadata:
   name: nf-rate1
   vertical: nfl_fantasy
   card: https://trello.com/c/BHBiqGVz
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Fix the full-season-rate line rendering absurd numbers on low-games
@@ -97,8 +97,106 @@ spec:
   graph:
     nodes: []   # MINI tier — one owner, four sites, guards; sequence in acceptanceCriteria
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED. The full-season rate is withheld on any row whose implied 17-game pace exceeds
+      the highest full-season pace a real 2006-2025 player-season posted at that position under
+      the most generous scoring we publish (QB 471.1 / RB 512.3 / WR 435.2 / TE 414.0), derived
+      from `main_nfl_marts.fct_player_week` over the same 11,190 player-seasons as NF-INJ1's
+      `REALIZED_MAX_PER_GAME`; the DERIVATION (query, population, statistic, stability check at
+      >=4 games) is pinned in `frontend/lib/fantasy.ts`, not the value. The existing
+      MIN_GAMES_FOR_FULL_SEASON_RATE floor is unchanged and inherited byte-for-byte: the new
+      owner delegates every pre-existing refusal to `fullSeasonRate` rather than restating it.
+      ONE OWNER (`fullSeasonRateDisplay`) reaches all four sites - the rankings column, that
+      board's CSV export, the projections column, and the player page's TWO tiles. Suppressed
+      rendering is Option-C (an em-dash carrying an InfoTip disclosure through
+      fantasy-claim-copy.ts, no forecast and no injury verb); the CSV renders an EMPTY cell.
+      MEASURED on the staged 2026 board across all 14 served configs: 34 suppressed cells of
+      12,152 (0.28%) - WILL LEVIS on all 14, GEORGE KITTLE and ALEC PIERCE on the 10
+      reception-scored ones. `pts` and `g` stay served and still render (ruling D3), so the
+      quotient stays reconstructible; nothing touches projection value, ordering or bands, and
+      `best_alpha = 0`.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) 🔴 A PREMISE CORRECTION, AND IT CHANGES THE OPERATOR HANDOFF: THERE IS NO EXPORTER HALF
+      AND NO BOX IMAGE IN THIS STORY. AC4 says "the exporter half rides the box image - verify the
+      PUBLISHED board's CSV post-deploy, not just local output". Measured: `full_season_rate`
+      appears in NO Python file in the repo. The CSV is built entirely CLIENT-SIDE - the header
+      list and row builder live in `rankings-board.tsx:exportCsv`, and `downloadCsv` in
+      `shared.tsx` turns it into a Blob in the browser. Nothing is published, nothing rides
+      `deploy.sh`, and nothing rides the box image; all four sites deploy TOGETHER with
+      `frontend/` on push to main. ⭐ The post-deploy verification is still owed and is still the
+      right instinct - it is just a BROWSER download from the live site rather than a check of a
+      published artifact, and the operator step below says so. (The NF-INJ3b follow-up that
+      scoped this was correct: it named `rankings-board.tsx:296` as the CSV site. The "exporter"
+      framing entered at spec-writing time.)
+
+      (2) ⚠️ THE EXPORT HAS NO HEADER NOTE AND NO DATA DICTIONARY, so AC2's "if one exists"
+      resolved to NEITHER. The empty-cell semantics are therefore recorded in CODE, at the header
+      list where every other decision about that file's columns already lives, and pinned by
+      `test_the_empty_cell_semantics_are_written_down_where_the_export_is_built`. A spreadsheet
+      reader still gets an unexplained empty cell. ⛔ I did NOT invent a surface for it: a
+      comment-row would break the row-count contract `fantasy-board-flows.spec.ts` asserts
+      (lines - 1 == board total), and a `title=` on the Export button is unreachable on a phone
+      and never travels with the file. A real fix is a one-line note row plus updating that
+      contract, or a companion README in a zip - both are product decisions, not this story's.
+      CANDIDATE: a checklist item on the parent card.
+
+      (3) ℹ️ JAYDEN HIGGINS IS NOT SUPPRESSED, AND THAT IS THE ANCHOR WORKING. He was named beside
+      Kittle and Pierce in the same measurement and renders 413; the WR ceiling is 435.2, because
+      a real WR season has run at that pace. A rule written from the three-name incident list
+      would have caught him; the anchor does not. Recorded so a future reader does not read it as
+      a miss. The converse is the AC's own test and it passes: WILL LEVIS (633, pre-existing,
+      untouched by NF-INJ3b's flip) is caught, on every scoring preset including standard.
+
+      (4) ⚠️ ONE STATED BOUNDARY. The ceiling is the max over the scorings we PUBLISH (standard /
+      half / full PPR / superflex / TE-premium - the TE bonus is the only one above full PPR,
+      hence the `+0.5*rec` term on TE alone). A genuinely CUSTOM league scored more generously
+      than TE-premium (a 2-PPR house rule) could in principle push a real row above the ceiling
+      and see it withheld. The 14 served preset boards cannot. Making the rule scoring-aware
+      would mean threading the league's own multiplier to the render site; not worth it for a
+      display column, but it is the honest limit and it is written into the source.
+
+      (5) ✅ AN INHERITED RED, MET AND THEN RESOLVED DURING THIS SESSION - RECORDED BECAUSE THE
+      MECHANISM IS WORTH KEEPING, NOT BECAUSE ANYTHING IS OWED.
+      `betting_ml/tests/test_nf_inj2b_rate_ordering.py::test_the_recorded_gate_status_matches_the_committed_report`
+      FAILED at my branch's base commit (3f899c7d): `nf_inj2b_rate_ordering.GATE_STATUS` read
+      "UNRUN" while the committed `nf_inj2b_rate_ordering.json` verdict read "NULL". I verified it
+      against the BASE TREE with `git show` rather than assuming, since it sat outside my 13-file
+      change set (the CLAUDE.md rule that an unfamiliar failure is usually another session's work,
+      not yours). PR #1051 (nf-inj2b-closeout) merged to `dev` mid-session and the rebase onto it
+      cleared it - GREEN post-rebase, nothing owed. ⭐ Worth noting only that the clause caught
+      exactly what it was written for ("a policy module claiming the study had never run") in the
+      live window between the study's decision and its closeout landing.
+
+      (6) 🧪 THREE METHOD FINDINGS FROM MY OWN GUARDS, all caught by breaking the source rather
+      than by reading the tests, and all in the vacuous-guard family this repo keeps re-meeting.
+      (a) MY CSV CLAUSE SHIPPED VACUOUS ON FIRST CUT: it asserted `"null" in body` over
+      `fullSeasonRateCsv`, and the function's own `number | null` SIGNATURE satisfies that - so a
+      body returning the sentinel `0` (the exact defect it guards) stayed GREEN. Fixed to read the
+      RETURN EXPRESSION. (b) MY RED PROOF PRODUCED THREE FALSE REDs: a mistyped/stale pytest id
+      selects nothing and exits NON-ZERO, which a naive `returncode == 0` reads as "the clause
+      went red" - the harness reporting its STRONGEST result for a clause it never ran. The
+      harness now distinguishes NOT-SELECTED and, more importantly, runs a BASELINE PASS over
+      every named clause on unbroken source first; that control is what caught two of the three.
+      (c) ONE BREAK LANDED ON DISK WITHOUT MOVING THE ASSERTED TOKEN (it edited a neighbouring
+      line of the pinned SQL rather than the table name the clause reads) and came back GREEN -
+      the E11.24 #815 shape. ⭐ SUGGESTION: the BASELINE-PASS control and the UNIQUE-ANCHOR
+      assertion are both cheap and both caught real problems here; `freemium_tier_red_proof.py`
+      and the other Python red proofs in the repo have neither. Worth porting.
+
+      (7) ℹ️ ONE PRE-EXISTING GUARD WAS RE-ANCHORED, NOT WEAKENED.
+      `test_freemium_tier.py::test_the_rate_renders_beside_the_expected_total` asserted
+      `"fullSeasonRate(" in code`, which the fix necessarily breaks. It now requires
+      `<FullSeasonRateCell`, which is STRICTER: a site reverting to the raw helper would be a
+      second owner of the rule and fails there as well as in the new suite. Proven by a red-proof
+      case that names that clause specifically.
+
+      (8) ℹ️ THE DERIVATION WAS RUN AGAINST THE MAIN CHECKOUT'S `sports.duckdb`, which is
+      gitignored and therefore ABSENT from this worktree (NF-INFRA1, 4th instance). Read-only, no
+      writes. The query, the population counts and the >=4-game stability figures are pinned in
+      `frontend/lib/fantasy.ts` so the derivation is re-runnable without re-deriving it, and the
+      Python guard PARSES the shipped constant rather than re-declaring it - a Python copy would
+      be a second owner of the very thing this story single-owns.

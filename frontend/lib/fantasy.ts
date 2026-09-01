@@ -385,6 +385,149 @@ export function fullSeasonRate(
   return (pts * FULL_SEASON_GAMES) / games
 }
 
+// ══ NF-RATE1 — THE REALIZED-PACE CEILING ════════════════════════════════════════════════════════
+//
+// ⭐ THE RULE, IN ONE SENTENCE, BECAUSE THIS IS WHERE THE NEXT EDITOR MEETS IT:
+//    we do not print a full-season rate no NFL player has ever achieved — a row whose implied
+//    17-game pace exceeds the highest full-season pace any real player-season has posted at that
+//    position is WITHHELD, exactly as a row below `MIN_GAMES_FOR_FULL_SEASON_RATE` already is.
+//
+// THE DEFECT (measured on the staged 2026 board, `board_full_ppr_12.json`, 868 rows — not
+// hypothetical). `pts × 17 ÷ g` on a heavily availability-capped row prints a rate above every real
+// player on the board: GEORGE KITTLE 580, ALEC PIERCE 545 and WILL LEVIS 633, against a #1 overall
+// (Jahmyr Gibbs, 350.8 pts) at 414. `MIN_GAMES_FOR_FULL_SEASON_RATE` does not catch them — all three
+// sit at 3.3–3.7 expected games, comfortably above the floor — because the floor guards the
+// DENOMINATOR'S RESOLUTION and this is a defect in the RATIO.
+//
+// ⭐ AND IT IS NOT NEW, WHICH IS WHY THE RULE IS ANCHORED RATHER THAN LISTED. Levis renders 633 on
+// every scoring preset including standard and predates NF-INJ3b's flip entirely; Kittle and Pierce
+// were widened onto the list by it. A rule tuned to catch "the two new rows" would have been tuned
+// to the incident and would have left the worst row on the board. (NF-INJ1 §3: NF1.5 hands a
+// promoted player a different player's point level and rescales his stat line to reach it while
+// `_RAW_SCALE_COLS` leaves `proj_games` where it was — so this column is the NF-INJ1 give-back
+// re-expressed as a rate, on a surface NF-INJ1-C's stat-line suppression does not cover.)
+//
+// ⛔ A RENDER RULE, NOT A WITHHOLDING. `pts` and `g` are both still served on the row and still
+// rendered beside this column (NF-INJ3b-SHIP ruling D3), so the quantity stays arithmetically
+// reconstructible by any reader who wants it — the freemium arithmetic-derivability lesson. What
+// stops is US printing it as though it were a comparability figure. Nothing here reaches VOR,
+// ordering, tiering or the optimizer; see the `⛔⛔ DISPLAY ONLY` note above, which this inherits.
+//
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+// THE ENVELOPE IS DERIVED FROM REALIZED HISTORY, NOT CHOSEN — AND THE DERIVATION IS WHAT IS PINNED
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+// Same anchor family, same source table and same twenty seasons as NF-INJ1's
+// `projection_coherence.REALIZED_MAX_PER_GAME` (which bounds the per-game COUNTING line); this is
+// its season-POINTS analog, because the quantity this column prints is points, not carries.
+//
+//     with s as (select season, player_id, max(position) pos,
+//                       count_if(played_flag and not is_bye) g,
+//                       sum(fantasy_points_std) std, sum(fantasy_points_ppr) ppr,
+//                       sum(receptions) rec
+//                from main_nfl_marts.fct_player_week
+//                where week > 0 and player_id is not null and season between 2006 and 2025
+//                group by 1, 2)
+//     select pos, round(max((ppr + case when pos = 'TE' then 0.5 * rec else 0 end) / g) * 17, 1)
+//     from s where g >= 1 and pos in ('QB','RB','WR','TE') group by 1
+//
+// over the same 11,190 player-seasons (QB 1,539 / RB 2,815 / TE 2,464 / WR 4,372).
+//
+// ⭐ IT IS A **MAX**, AND ACROSS THE MOST GENEROUS SCORING WE PUBLISH, both on purpose. A max makes
+// a firing a statement about what has actually happened rather than about what is likely, so the
+// rule cannot false-fire the way a percentile or a hand-picked "plausible" ceiling could; and
+// taking the maximum over every published preset (`league_presets`: standard / half / full PPR /
+// superflex / TE-premium — the TE bonus is the only one that exceeds full PPR, hence the `+0.5·rec`
+// term on TE alone) means the same ceiling is safe on every board we serve. Both choices err
+// toward PRINTING a rate, which is the direction to err in: the cost of a missed absurd row is one
+// bad-looking cell, the cost of a false suppression is hiding a real number from a paying reader.
+//
+// Stability check, part of the derivation rather than a post-hoc defence: restricting the
+// population to seasons with ≥4 games played moves QB 471.1 → 471.1, WR 435.2 → 435.2, TE
+// 414.0 → 414.0 and RB 512.3 → 511.2 (0.2%) — i.e. the envelope is not an artifact of one-game
+// cameos, so it does not depend on where the population floor is put.
+//
+// ⛔ E2.1-r: these numbers are a property of twenty seasons of realized football, fixed before any
+// board row was scored. They must never be re-derived from, or widened to accommodate, a board that
+// failed them. Measured firing population on the staged 2026 board: 34 cells across all 14 served
+// configs (0.28%) — Levis on all 14, Kittle and Pierce on the 10 reception-scored ones. JAYDEN
+// HIGGINS, the third row NF-INJ3b's follow-up named, renders 413 and is NOT suppressed: a WR has
+// posted a 435-point pace, so 413 is inside what football has done, and the anchor says so rather
+// than the incident list saying otherwise.
+//
+// ⚠️ SCOPE, STATED SO IT IS NOT MISREAD AS COVERAGE. Positions outside the envelope (K, DST) are
+// OUT OF SCOPE, not passed — `row_violations`' own convention. There is no realized per-game
+// counting analog for them here, they are projected at a near-full slate so the ratio defect cannot
+// arise, and the rule therefore never fires on them. A genuinely custom league scored more
+// generously than TE-premium (a 2-PPR house rule) could in principle push a real row above the
+// ceiling; the served preset boards cannot.
+
+/** The highest full-season pace (`points × 17 ÷ games played`) any real 2006–2025 player-season has
+ *  posted at this position, under the most generous scoring we publish. Derived, never chosen — see
+ *  the block above for the query, the population and the stability check. Positions absent from
+ *  this map are OUT OF SCOPE for the rule, which is not the same as passing it. */
+export const REALIZED_MAX_SEASON_PACE: Readonly<Record<string, number>> = {
+  QB: 471.1,
+  RB: 512.3,
+  WR: 435.2,
+  TE: 414.0,
+}
+
+/** What a surface should render for the full-season rate on one row.
+ *
+ *  THREE STATES, and collapsing any two of them loses a distinction a reader needs:
+ *    • `rate`        — print the number.
+ *    • `withheld`    — we have a number and it is above what football has done, so we refuse to
+ *                      print it. A STATED absence with a disclosure behind it (Option-C), never a
+ *                      blank and never the number.
+ *    • `unavailable` — there is nothing to divide, or too little to divide by. Every branch
+ *                      `fullSeasonRate` already returned `null` on, byte-for-byte, so the
+ *                      pre-existing MIN_GAMES behaviour on all four surfaces is untouched. */
+export type FullSeasonRateDisplay =
+  | { kind: "rate"; value: number }
+  | { kind: "withheld" }
+  | { kind: "unavailable" }
+
+/**
+ * THE ONE OWNER of the full-season-rate render decision. All four render sites go through it —
+ * the rankings board's column, the same board's CSV export, the projections table's column, and
+ * the player page's two format tiles — because four inline copies of one rule is the
+ * "one logical thing, many owners" defect (INC-30 / INC-36 / INC-38) on day one, and the CSV is
+ * precisely the site a table-only fix silently misses.
+ *
+ * `pos` is read tolerantly (missing / unknown ⇒ out of scope ⇒ the rate prints as before), because
+ * this crosses a payload boundary the frontend deploys independently of (NF-C0) and a row with no
+ * position must degrade to the pre-story rendering rather than to a withheld cell.
+ */
+export function fullSeasonRateDisplay(
+  pts: number | null | undefined,
+  games: number | null | undefined,
+  pos: string | null | undefined,
+): FullSeasonRateDisplay {
+  const rate = fullSeasonRate(pts, games)
+  if (rate == null) return { kind: "unavailable" }
+  const ceiling = REALIZED_MAX_SEASON_PACE[String(pos ?? "").toUpperCase()]
+  if (typeof ceiling === "number" && rate > ceiling) return { kind: "withheld" }
+  return { kind: "rate", value: rate }
+}
+
+/** The CSV cell for one row: the number, or `null` — which `downloadCsv` writes as an EMPTY cell.
+ *
+ *  ⭐ EMPTY, NOT A SENTINEL AND NOT THE NUMBER. A spreadsheet reader has no tooltip, so the only
+ *  honest renderings are a value or nothing; a `withheld` string would break the column's type for
+ *  every reader who sorts or averages it, and "0" or "-1" would be a wrong number rather than an
+ *  absent one. The header note the export carries documents what an empty cell in this column
+ *  means, so the withholding is STATED rather than inferable (NF-FRESH2's absent-vs-null rule).
+ *  ⚠️ A withheld row and an unavailable row deliberately produce the SAME empty cell: both are "we
+ *  are not publishing this number for this player", and a spreadsheet has nowhere to say which. */
+export function fullSeasonRateCsv(
+  pts: number | null | undefined,
+  games: number | null | undefined,
+  pos: string | null | undefined,
+): number | null {
+  const d = fullSeasonRateDisplay(pts, games, pos)
+  return d.kind === "rate" ? d.value : null
+}
+
 // ══ NF-C8 — THE AVAILABILITY FLAG ═══════════════════════════════════════════════════════════════
 //
 // THE PROBLEM. The projection already multiplies the chance a player misses games through his point

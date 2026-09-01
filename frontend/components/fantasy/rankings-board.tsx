@@ -25,7 +25,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { canUse } from "@/lib/entitlements"
 import { assignTiers, freeSelection, type Player } from "@/lib/draft-optimizer"
-import { fullSeasonRate, rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
+import { fullSeasonRateCsv, rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
 import { computeLeagueDelta, draftablePoolSize } from "@/lib/league-delta"
 import {
   GenericDeltaBand,
@@ -77,6 +77,7 @@ import {
   teamLabel,
   WeeklyDesignation,
   ReportedAbsence,
+  FullSeasonRateCell,
 } from "@/components/fantasy/shared"
 import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
@@ -283,6 +284,15 @@ export function RankingsBoard() {
       // `full_season_rate` carries the same disclosure the on-page column pair does. A spreadsheet
       // reader has neither tooltip, so the two columns have to arrive TOGETHER or the exported file
       // reintroduces exactly the "why is this number low?" misread the labelling closed.
+      // ⭐ NF-RATE1 — AND `full_season_rate` IS EMPTY ON A WITHHELD ROW. This is the fourth render
+      // site of one rule and the one a table-only fix silently misses, so it goes through the SAME
+      // owner as the three on-page ones (`fullSeasonRateCsv` → `fullSeasonRateDisplay`). ⚠️ THE
+      // SEMANTICS OF THE EMPTY CELL, stated here because this export has no header note and no data
+      // dictionary to state them in: a column that carries a number on other rows and nothing on
+      // this one is a WITHHOLDING, not a missing field — we have the number and are declining to
+      // publish it, because it is above any full season on record at that position. `expected_pts`
+      // and `expected_games` are in the same file two columns left, so a reader who wants the
+      // quotient can still take it; what is withheld is our publication of it, not the quantity.
       // E9.61 — `vs_generic_board` only exists on a personalized export, for the same reason the
       // on-screen column does: on a preset it would be a column of zeroes. The name is spelled out
       // rather than "delta" because a spreadsheet reader has no tooltip to tell them it is not ADP.
@@ -293,7 +303,7 @@ export function RankingsBoard() {
         const rank = rankOf(p, pos)
         return [
           rank, tierOf.get(p.id) ?? "", p.name, p.pos, teamLabel(p), p.bye ?? null, p.g, p.pts,
-          fullSeasonRate(p.pts, p.g),
+          fullSeasonRateCsv(p.pts, p.g, p.pos),
           p.ptsP10 ?? null, p.ptsP90 ?? null, p.vor, p.posRank, p.adp ?? null,
           // same scale as the rendered column — see adpRefOf
           adpRefOf(p) != null ? Math.round((adpRefOf(p) as number) - rank) : null,
@@ -565,10 +575,15 @@ export function RankingsBoard() {
                             <ReportedAbsence reported={p.reportedAbsence} />
                           </td>
                           <td className="px-3 py-2 text-right font-semibold text-gray-100">{numOrLock(p.pts, p.locked)}</td>
-                          {/* ⚠️ `fullSeasonRate` returns null on a zero/absent games figure, and the
-                              em-dash is the rendering of that null — never a blank cell (reads as a
-                              rendering fault) and never `Infinity` (which is a `number`, so it would
-                              pass a caller's `!= null` guard and print "∞" beside a points column).
+                          {/* ⚠️ THREE STATES, ONE OWNER (`fullSeasonRateDisplay`): the number; a
+                              plain em-dash where there is nothing to divide or too little to divide
+                              by (never a blank cell, which reads as a rendering fault, and never
+                              `Infinity` — a `number`, so it would pass a caller's `!= null` guard
+                              and print "∞" beside a points column); and NF-RATE1's WITHHELD cell,
+                              where the rate is above any full season on record and we refuse to
+                              print it. ⭐ The CSV export at the top of this file renders the same
+                              three states through `fullSeasonRateCsv` — a suppression that fixed
+                              only this cell would leave the exported column absurd.
                               Deliberately UNEMPHASISED next to the bold expected total: the
                               availability-weighted number is the one our rankings are built on, and
                               the type weight is what says so without a sentence. */}
@@ -576,7 +591,7 @@ export function RankingsBoard() {
                             {p.locked ? (
                               <LockChip title="Subscribe to unlock the full-season rate" />
                             ) : (
-                              num(fullSeasonRate(p.pts, p.g))
+                              <FullSeasonRateCell pts={p.pts} games={p.g} pos={p.pos} />
                             )}
                           </td>
                           <td className="w-40 px-3 py-2">
