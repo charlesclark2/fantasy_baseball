@@ -99,10 +99,25 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "33.96 on all seven arms",
      "test_the_d4_annotation_records_the_measurement_that_settles_the_baseline_question"),
 
+    ("the D3 landmine loses its dated CORRECTION marker, so a reader cannot tell it was re-measured",
+     _CLAUDE,
+     "⚠️ MECHANISM CORRECTED IN PLACE 2026-09-01 from a misattribution",
+     "(mechanism as originally recorded)",
+     "MECHANISM CORRECTED IN PLACE 2026-09-01",
+     "test_the_d3_pin_against_capture_landmine_is_in_claude_md"),
+
+    ("the D3 landmine reverts to prescribing a same-day rebuild as sufficient", _CLAUDE,
+     "A SAME-DAY REBUILD IS NECESSARY BUT **NOT SUFFICIENT**",
+     "A SAME-DAY REBUILD IS WHAT IT NEEDS",
+     "SAME-DAY REBUILD IS NECESSARY BUT **NOT SUFFICIENT**",
+     "test_the_d3_pin_against_capture_landmine_is_in_claude_md"),
+
+    # RE-AIMED 2026-09-01 with the entry's correction: the measurement now lives in the
+    # corrected mechanism sentence, and the guard pins BOTH failures (40.58 and 84.72).
     ("the D3 landmine loses the measurement that makes it actionable", _CLAUDE,
-     "**FAILED at a worst absolute difference of 40.58 over 797 rows**",
-     "**FAILED**",
-     "40.58 over 797 rows",
+     "pin failed at **40.58** with its rebuild on the **SAME UTC DAY**",
+     "pin failed with its rebuild on the **SAME UTC DAY**",
+     "40.58",
      "test_the_d3_pin_against_capture_landmine_is_in_claude_md"),
 
     # ── nodes 3a / 3b / 3c ────────────────────────────────────────────────────────────────────
