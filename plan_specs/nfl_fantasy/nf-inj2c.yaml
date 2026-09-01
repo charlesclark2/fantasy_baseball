@@ -10,7 +10,7 @@ metadata:
   name: nf-inj2c
   vertical: nfl_fantasy
   card: https://trello.com/c/Dsz8CROW
-  status: IN_PROGRESS(HELD — nodes 0/1/2/3a/3b-code/3c landed; the DSR FIELD declaration is with the PM, and node 3's prereg does not start until it is ruled)
+  status: IN_PROGRESS(the DSR field is RULED — PM 2026-09-01 declared the binding family; node 3's prereg is written on that basis; the decisive run is downstream of the operator's node-3b re-measure)
 spec:
   description: >
     Fresh forward registration of the ASSIGNMENT-RULE fix — the mechanism
@@ -108,6 +108,80 @@ spec:
         fills in the SERVED INCUMBENT's baseline through that already-committed rule.
         Ruling 3's pre-committed NULL branch is what makes this safe either way.
 
+        ⚠️ MARKED ANNOTATION ON RULING 4 (added 2026-09-01 by PM ruling; the ruling's text
+        above is VERBATIM and STAYS STANDING, UNEDITED). Ruling 4's premise — that the +1
+        fold would settle the gate, so "DSR at 8 folds is then a real gate, not a
+        formality" — is MEASURED FALSE: node 3c established on three independent legs that
+        2018 is not data-honest (structurally empty pool at the shipped `base_from`;
+        already run there and INACTIVE at three of four positions; and appending it moves
+        the winner's per-fold Sharpe 2.0101 -> 1.6418, DILUTING the statistic it was
+        prescribed to strengthen). The settlement is the PM ruling of 2026-09-01 below.
+        PM, verbatim on the shape: "a PM ruling whose premise a measurement later refuted
+        is itself part of the record; correcting it in place would be the tidying-away
+        this program forbids."
+
+    - description: >
+        ⚖️ PM RULING 2026-09-01 (decision request #2: the fold, the field, the record) —
+        TRANSCRIBED VERBATIM, PM-AUTHORED. It SETTLES the fold question at 7 folds and
+        DECLARES the binding deflation field. ⛔ Nothing above is edited; ruling 4 stays
+        standing with node 3c as the correction beside it (see the marked annotation).
+
+        THE FOLD (PM, verbatim): "The fold question is settled: the registration runs at 7
+        folds. Your three-leg finding is accepted as the data-fidelity determination ruling
+        4 asked for — stated either way, and it came out '2018 is not data-honest': the
+        fold is structurally empty at the shipped base_from, its one prior run shows it
+        inactive at three of four positions (an inactive fold is uninformative, never a
+        pass — NF-D20), and appending it would dilute the very statistic it was prescribed
+        to strengthen. Lowering base_from is refused for exactly the reason you gave: the
+        window's authority is that it was inherited, not chosen, and re-cutting it after a
+        gate missed is what the inheritance exists to prevent. Record the sole remaining
+        8th fold as calendar-bound: the realized 2026 season — that is a genuinely
+        reachable trigger and may be published as one (it is not an NF-D18 violation; the
+        trigger names a date, not a purchase no design can make)."
+
+        THE FIELD — the declaration, transcribed verbatim as the PM directed:
+
+        "PM ruling (2026-09-01, NF-INJ2c prereg): the deflation gates' BINDING field is
+        NF-INJ2c's own coherent family, declared on mechanism before any deflation
+        statistic is computed: point-space assignment rules only — incumbent (reference),
+        stratified, feasibility_clamp, and the two registered degenerates. The four
+        rate-space arms are excluded as a DIFFERENT MECHANISM already refused on the
+        ordering gate (NF-INJ2's CONSTRAINT_REFUSED — that refusal stands and is not
+        re-read; carrying a refused mechanism's arms in V would tax this contest for a
+        search it is not running: the MH2.5/NF-W6b-C V-inflation class). Provenance of the
+        narrowing: PM ruling 2 on the 2b closeout framed this story's contest as
+        stratified-vs-the-SERVED-incumbent — a point-space question — before any deflation
+        figure at any field width existed; the family follows from that ruling, not from
+        2b's 0.9325. V-membership per standing conventions: the incumbent reference arm
+        ∉ V (MH2.1(a)); degenerates ∈ n_trials, ∉ V (DSR-CONV, opted into here, forward).
+        Per NF-D14's two-sided rule, the INHERITED 10-arm field's DSR is ALSO computed and
+        reported beside the binding figure, labelled NON-BINDING DIAGNOSTIC, declared as
+        such here in advance — both numbers publish regardless of which looks better, and
+        no third field is ever computed. If the binding family's DSR refuses, that is
+        DEFLATION_REFUSED and the thread closes at that specification; the diagnostic does
+        not rescue it."
+
+        ON THE RESULT-AWARENESS CAVEAT (PM, verbatim): "Your result-awareness caveat is
+        accepted and answered on its own terms: the defence is provenance, the provenance
+        is mine and checkable, and the two-field-both-published structure removes the
+        remaining degree of freedom — a reader can verify nothing was chosen by outcome
+        because both outcomes are on the record and the binding one was named first."
+
+        THE RECORD (PM, verbatim): "Ruling 4 stays standing, unedited, with node 3c as the
+        correction beside it. That is the right shape — a PM ruling whose premise a
+        measurement later refuted is itself part of the record; correcting it in place
+        would be the tidying-away this program forbids. The annotation should say the
+        premise ('the 8th fold settles the field question') is measured false and point at
+        this ruling as the settlement."
+
+        NODE 3a ENDORSED (PM, verbatim): "Node 3a is endorsed as written, including the
+        margin-construction clause (R1/R2/R3, never an observed arm-vs-incumbent gap —
+        correct, and it closes the inversion ruling 3 was exposed to). Both flagged measure
+        definitions are APPROVED as declared: give-back as max(pct, 0) (a signed value
+        banking credit for over-discounting would be a defect, not a virtue) and the
+        attribution-controlled violation count carried despite measured inertness (an inert
+        declared measure is a finding; an undeclared one is a hole)."
+
     - description: >
         REGISTERED DISPOSITIONS, in order (PM ruling on 2b §9#2, declared
         HERE forward — 2b's record is never re-read on this):
@@ -195,9 +269,9 @@ spec:
       - id: 3b-remeasure
         desc: "PM ruling 3: capture-pin a fresh board + market snapshot (D3), re-measure the give-back + coherence table on it. Dominance failing on ANY dimension = NULL, ⛔ never a margin to adjust."
       - id: 3c-fold-fidelity
-        desc: "PM ruling 4: the +1 fold on DATA-FIDELITY grounds — 2018 admitted only if data-honest; state the finding EITHER WAY."
+        desc: "PM ruling 4: the +1 fold on DATA-FIDELITY grounds — 2018 admitted only if data-honest; state the finding EITHER WAY. FINDING: NOT admitted (3 legs); SETTLED at seven folds by the PM ruling of 2026-09-01, which also records 2026 as the calendar-bound 8th."
       - id: 3-prereg
-        desc: "The full registration — STRICT-DOMINANCE route alone (PM ruling 2); coherence measured + reported, ⛔ never gated at zero; committed BEFORE scoring."
+        desc: "The full registration — STRICT-DOMINANCE route alone (PM ruling 2); coherence measured + reported, ⛔ never gated at zero; SEVEN folds and the BINDING point-space field per the PM ruling of 2026-09-01, with the inherited 10-arm field published beside it as a NON-BINDING diagnostic; committed BEFORE scoring."
       - id: 4-run
         desc: "Decisive run (operator handoff if >2 min; capture-pinned board)."
       - id: 5-classify
@@ -214,7 +288,11 @@ spec:
       DOMINANCE route (see `pmRescope`, transcribed verbatim in the acceptance criteria):
       the PRIMARY full-coherence disposition is RETIRED on the §4 per-stat bound and moves
       to NF-COH2; nodes 3-7 proceed re-scoped. `best_alpha = 0`; DEPLOY-HELD; SERVED_ARM
-      stays incumbent until the gated ship path + operator approval.
+      stays incumbent until the gated ship path + operator approval. PM RULING 2026-09-01
+      then settled the two questions node 3c surfaced: SEVEN folds (2018 not data-honest;
+      2026 recorded as the calendar-bound 8th) and the BINDING deflation field (NF-INJ2c's
+      own coherent point-space family, with the inherited 10-arm field published beside it
+      as a declared NON-BINDING diagnostic). Node 3's prereg is written on that basis.
     followUps: >
       NODE-1 FINDINGS, retained (they are the re-scope's licensing evidence).
 
@@ -248,31 +326,29 @@ spec:
       upstream, so a reproduction there is measured on a different feature vintage (51/56
       bare vs 55/56 after rsyncing the main checkout's caches). Landed in CLAUDE.md.
 
-      ⛔ HELD FOR A PM RULING — THE DSR FIELD DECLARATION (raised 2026-08-31, node 3c).
-      Ruling 4 registered the +1 fold forward and node 3c measured it UNREACHABLE, so the
-      registration runs at 7 folds — where NF-INJ2b's DSR was 0.9325 against 0.95. WHICH
-      FIELD the 7-fold deflation gates are computed over was not ruled, because ruling 4
-      assumed the 8th fold would settle it. That is a PRE-REGISTRATION act: a field chosen
-      by which one clears is the exact selection bias DSR exists to deflate (MH2.2), so a
-      worker session must not settle it. ⛔ No per-candidate-family DSR has been computed
-      and none will be before the ruling. The two options, with their constraints:
-        (A) INHERIT NF-INJ2b's declared 10-arm field unchanged. Most likely returns
-            DEFLATION_REFUSED and closes the thread at a specification nobody can argue
-            with (the PM's own honesty framing). Zero laundering risk — nothing about the
-            field is chosen by this story.
-        (B) DECLARE NF-INJ2c's OWN coherent family on MECHANISM, as the fourth
-            fix-the-spec successor is entitled to (the MARGIN2->3 / W7->W7b / VAL3->VAL3b
-            / NF-INJ3->NF-INJ3b pattern): point-space assignment rules ONLY — `incumbent`
-            (reference) + `stratified` + `feasibility_clamp` + the two degenerates —
-            excluding the four rate-space arms as a DIFFERENT mechanism already refused on
-            ordering. This changes `V` and `n_trials`, so DSR changes; the direction is
-            NOT computed and must not be, before the family is declared.
-            ⚠️ STATED SO THE PM CAN WEIGH IT: this session can SEE 2b's field composition,
-            so a reader could reasonably suspect the narrowing is result-aware. The defence
-            is provenance and it is checkable — the narrowing follows from the PM's OWN
-            ruling 2 ("stratified vs the SERVED incumbent"), which is a point-space
-            question and was written before any of this. That is the PM's to accept or
-            reject, ⛔ not a session's.
+      ✅ RESOLVED BY PM RULING 2026-09-01 — THE FOLD AND THE FIELD (raised at node 3c,
+      held, ruled). The block that stood here set out the two options and was answered:
+        * THE FOLD: settled at SEVEN. Node 3c's three-leg finding is accepted as the
+          data-fidelity determination ruling 4 asked for; lowering `base_from` is refused
+          because the window's authority is that it was INHERITED, not chosen. The sole
+          remaining 8th fold is recorded as CALENDAR-BOUND — the realized 2026 season —
+          and the PM has ruled it publishable as a re-test trigger: "it is not an NF-D18
+          violation; the trigger names a date, not a purchase no design can make."
+        * THE FIELD: option (B), with structure. The BINDING field is NF-INJ2c's own
+          coherent point-space family (`incumbent` reference + `stratified` +
+          `feasibility_clamp` + the two degenerates); the four rate-space arms are excluded
+          as a DIFFERENT mechanism already refused on ordering. The INHERITED 10-arm field's
+          DSR is computed and published BESIDE it as a NON-BINDING DIAGNOSTIC, declared in
+          advance per NF-D14's two-sided rule — both numbers publish whichever looks better,
+          and no third field is ever computed. A binding-family refusal is
+          DEFLATION_REFUSED and the diagnostic does not rescue it.
+        * The session's result-awareness caveat was ACCEPTED and answered on provenance
+          (the narrowing follows from the PM's own ruling 2, written before any deflation
+          figure at any width existed) plus the two-field-both-published structure, which
+          removes the remaining degree of freedom. No per-candidate-family DSR was computed
+          before the declaration, per the NF-INJ3b-M rule.
+        * RULING 4 STAYS STANDING, UNEDITED, with node 3c as the correction beside it —
+          the PM's ruling on the shape of the record, not an oversight.
 
       REMAINING FINDINGS from nodes 3-7 land here. PM triages into: checklist item on the
       parent card | merge into an existing card (name it) | a new spec. Worker sessions
