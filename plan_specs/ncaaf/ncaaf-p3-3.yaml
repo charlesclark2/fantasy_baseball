@@ -140,8 +140,73 @@ spec:
       - id: 5-closeout
         desc: "Verdict + findings into closeout.followUps; operator summary with LAPTOP-vs-BOX steps."
   closeout:
-    verdict: null
+    verdict: >
+      TASK 0 + PHASE A COMPLETE AND MERGED-READY (PR #1067). PHASE B NOT STARTED —
+      HELD AT THE SPEC'S OWN PHASE GATE, which is the correct outcome rather than an
+      unfinished one: `GET /ncaaf/teams/68` measured 401 on 2026-09-01 (the NF3.2
+      gateway authorizer, behaving exactly as documented), so the contract is not yet
+      SERVED and no page code may be written against it. The gate is operator-run by
+      construction — CI mocks all IO, and the box serving-write + `deploy.sh` +
+      `create-route` are steps a session cannot take. Phase B is a fresh session
+      starting from the confirmed curls.
+
+      Task 0 replaced the GENERATED market fixture with a CAPTURED mixed Saturday and
+      froze the all-absent one so its arm cannot be re-captured away; both market arms
+      now run parametrised. Phase A landed the team-page contract, pure builders, the
+      writer half at ALERT tier, and the free route. Verified against the LIVE lake and
+      the real P1.1 marts: 138 teams for 2026, realignment-correct through the SCD-2
+      dim (Boise State reads Pac-12), Sacramento State + North Dakota State flagged
+      new-to-FBS, zero conference mismatches on 2026 or 2025. 22/22 red proofs RED.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      ① ⭐ THE MARKET-REASON COPY NAMES ONLY TWO OF FOUR REASONS, and the captured
+      fixture is what surfaced it. `frontend/lib/ncaaf-copy.ts::MARKET_REASON_COPY`
+      has sentences for `no_line_captured_for_this_kickoff` and `market_read_failed`;
+      the contract also declares `market_snapshot_not_pre_kickoff` and
+      `market_snapshot_instant_unprovable`, which fall through to the generic
+      fallback. So a REFUSAL — the leakage guard declining a line it could not prove
+      was pre-kickoff, i.e. a possible defect in our odds join — renders identically to
+      "nobody has priced this yet", which is the NF-C6b collapse that module's own
+      docstring says it exists to prevent. NOT fixed here: the boundary held market
+      serving and every `market.status` call site out of scope, and whether to show a
+      reader "we refused this line" is a product call. One real game on the live wire is
+      in that state today (401858201, Hawai'i @ Stanford). PM: copy change, or leave
+      the fallback deliberately?
+
+      ② A REAL REFUSAL IS LIVE ON THE 2026-08-29 SLATE. Game 401858201 serves
+      `market_snapshot_not_pre_kickoff`, meaning every captured line for it is at or
+      after kickoff. Benign if the live capture simply never reached that kickoff before
+      it started (a late-added board); a DEFECT if the odds→game join attached another
+      game's line by prefix collision, which is the failure `_market`'s guard was written
+      for. Worth one look at the raw `odds_ncaaf_live` rows for that game id — it is the
+      first time this branch has fired on real data.
+
+      ③ NO WEEK LABEL ON THE TEAM SCHEDULE, and it is a deliberate omission. Two
+      different columns in this repo are called `season_order_week`: `dim_ncaaf_game`'s
+      is a genuinely derived postseason-safe ordering, `game_prediction_snapshot.py`'s
+      is a verbatim alias of CFBD's restarting raw week, and the P3.1 suite bans the
+      token from the serving layer outright. Serving the safe one under the unsafe one's
+      name is how the next reader conflates them. The schedule orders by `game_day` and
+      carries `is_postseason`. If the page wants "Week 3", it needs a properly-named
+      field derived from the mart's column — a small, reviewable addition, not a rename.
+
+      ④ THE P1.1 MARTS ARE REBUILT BY A DIFFERENT JOB ON A DIFFERENT CADENCE, so a team
+      page can legitimately be one mart-build behind. Every block states its own
+      `as_of_week` and the run log reports per-block availability, so staleness is
+      VISIBLE — but nothing yet re-publishes the team pages when a mart build lands. The
+      INC-25-correct finish is a serving-write leaf downstream of
+      `sports_ncaaf_dbt_build_job`, the same shape
+      `ncaaf_serving_write_after_snapshot_op` already gives the snapshot tables. Not
+      wired here because it changes another job's graph, which is outside this story's
+      boundary. Until it is, the efficiency/trench/pace blocks refresh on the serving
+      write's own tier, not on the build's.
+
+      ⑤ THE LAPTOP `sports.duckdb` HELD NO 2026 STRENGTH ROWS while the LAKE did (138 at
+      as_of_week 1). Harmless here — the strength block reads the lake by design — but it
+      means `ncaaf_team_strength_week` (a dbt VIEW over that parquet) had not been
+      rebuilt in the main checkout since the 2026 P1.2 refit. Anything reading that mart
+      rather than the lake would silently see 2025 as the newest season.
+
+      ⑥ `infrastructure/aws_resources.md` CLAIMED THE FOUR P3.1 ROUTES WERE "NOT YET
+      APPLIED" while all four were live. Corrected from an anonymous measurement rather
+      than from memory. The documented-≠-actual class, facing the harmless direction this
+      time; the fifth route's ⛔ is now a measured 401, not an assumption.
