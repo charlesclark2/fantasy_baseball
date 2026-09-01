@@ -515,10 +515,17 @@ export function fullSeasonRateDisplay(
  *  ⭐ EMPTY, NOT A SENTINEL AND NOT THE NUMBER. A spreadsheet reader has no tooltip, so the only
  *  honest renderings are a value or nothing; a `withheld` string would break the column's type for
  *  every reader who sorts or averages it, and "0" or "-1" would be a wrong number rather than an
- *  absent one. The header note the export carries documents what an empty cell in this column
- *  means, so the withholding is STATED rather than inferable (NF-FRESH2's absent-vs-null rule).
+ *  absent one.
  *  ⚠️ A withheld row and an unavailable row deliberately produce the SAME empty cell: both are "we
- *  are not publishing this number for this player", and a spreadsheet has nowhere to say which. */
+ *  are not publishing this number for this player", and a spreadsheet has nowhere to say which.
+ *  ⚠️⚠️ AND UNTIL NF-CSV1 THIS DOCSTRING CLAIMED OTHERWISE — it read "the header note the export
+ *  carries documents what an empty cell in this column means, so the withholding is STATED rather
+ *  than inferable". There was no header note and no data dictionary; `rankings-board.tsx` said so
+ *  in the same breath, two files away. The correction is recorded rather than quietly applied,
+ *  because a false premise in a COMMENT is worse than in a doc — the next reader takes the design
+ *  off it. What the export carries NOW is a TRAILING note row (`csvWithheldNote` → `downloadCsv`),
+ *  emitted only on a file that actually withholds something, and it explicitly does NOT claim that
+ *  every empty cell in the column is a withholding, because the line above says it cannot be. */
 export function fullSeasonRateCsv(
   pts: number | null | undefined,
   games: number | null | undefined,

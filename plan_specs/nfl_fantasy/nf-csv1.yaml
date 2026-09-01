@@ -8,7 +8,7 @@ metadata:
   name: nf-csv1
   vertical: nfl_fantasy
   card: https://trello.com/c/s8nBTYFB
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Close the export-honesty gap NF-RATE1 left open by design: a
@@ -117,8 +117,98 @@ spec:
   graph:
     nodes: []   # MINI tier — sequence in acceptanceCriteria
   closeout:
-    verdict: null
-    followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+    verdict: SHIPPED
+    followUps: |
+      VERDICT — SHIPPED. All five acceptance criteria met. The export now carries a
+      conditional note row; the row-count contract is exact and two-sided; the copy is
+      governed and pinned on the rendered bytes; guards RED-proven 21/21 (Python) + 2/2
+      (frontend board). Frontend-only, no backend file touched, nothing rides deploy.sh.
+
+      ── ① THE NF-INJ1-C REACH CHECK, WHICH THE AC ASKED TO BE RECORDED EITHER WAY ────────
+      MEASURED: NF-INJ1-C's stat-line withholding does NOT reach any exported column, so
+      the note names ONE class. Three independent facts, and each is now pinned
+      mechanically rather than asserted in prose (test_the_registry_holds_only_classes_
+      that_can_reach_this_export):
+        (a) `rankings-board.tsx` is the ONLY `downloadCsv` caller in the app — so this is
+            the only exported file that could carry a stat-line column at all;
+        (b) it never reads `statLineWithheld`, the per-row marker NF-INJ1-C renders from
+            (that marker is read only by `projections-table.tsx` and `player-page.tsx`,
+            NEITHER of which has an export);
+        (c) its header list carries no stat-line column for the marker to apply to.
+      A stat column added to this export later fails (c) here rather than letting the note
+      quietly stop enumerating everything — which is the property that makes the one-member
+      registry a measurement instead of a simplification.
+
+      ── ② FINDING: A CODE COMMENT CLAIMED A NOTE THE EXPORT NEVER CARRIED ────────────────
+      `fullSeasonRateCsv`'s docstring in `lib/fantasy.ts` read "The header note the export
+      carries documents what an empty cell in this column means, so the withholding is
+      STATED rather than inferable". There was no header note and no data dictionary —
+      `rankings-board.tsx` said exactly that, two files away, in the same breath. A false
+      premise in a COMMENT is worse than in a doc because the next reader takes the design
+      off it; NF-CSV1 is arguably the story that WAS taken off it. Corrected in place, with
+      the retired wording quoted rather than silently replaced. ⚠️ Note the correction is
+      not "the claim is now true": what ships is a TRAILING note, and it deliberately does
+      NOT claim every empty cell is a withholding (see ③).
+      PM: no card needed — fixed here. Recorded because the class recurs.
+
+      ── ③ THE HONESTY TRAP THIS STORY HAD TO AVOID, and the measurement that proves it ───
+      `fullSeasonRateCsv` returns `null` for the `unavailable` state as well as `withheld`,
+      so ONE empty cell has TWO meanings and the file cannot separate them. Two consequences,
+      both live rather than hypothetical, measured on the served board fixture
+      (`fantasy-nfl-board-full_ppr-12-2026-free.json`, 858 rows): **0 withheld, 3
+      unavailable** (Ja'Marr Chase g=0; McCaffrey and Smith-Njigba g=null).
+        · THE TRIGGER cannot be keyed on emptiness. The obvious spelling
+          (`fullSeasonRateCsv(...) == null`) fires on those three rows and ships a note
+          claiming a withholding the file does not contain — a dishonesty introduced by the
+          feature added for honesty. Keyed instead on `fullSeasonRateDisplay(...).kind ===
+          "withheld"`, which also keeps the rule single-owned (NF-RATE1). Both the frontend
+          red-proof case and a Python clause exist for exactly this break.
+        · THE COPY cannot say "a blank here is a withholding". It says the column is also
+          blank where there is no expected-games figure to divide by, that this is an absence
+          rather than a withholding, and that the file cannot tell the two apart — then points
+          at the page, which CAN (a withheld cell is a tappable dotted em-dash, an unavailable
+          one is a plain one). Pinned by test_the_note_does_not_claim_that_every_blank_cell_
+          is_a_withholding.
+      ⭐ The 0-withheld/3-unavailable split is also what makes the untouched-board clause
+      non-vacuous: `noteLines == []` there is a real assertion precisely because the file
+      DOES contain blank rate cells.
+
+      ── ④ THE RED PROOF FOUND TWO VACUOUS CLAUSES ON FIRST CUT ───────────────────────────
+      Both were green on deliberately-broken source and neither was visible by reading the
+      test — the standing lesson, reconfirmed:
+        · a 60-character copy probe ran ONE CHARACTER past the lead's opening sentence, so an
+          inline copy of exactly that sentence — the likeliest way the defect actually arrives
+          — did not contain the probe. A prefix short enough to sit inside one sentence is
+          what makes the clause bite; longer is not stricter.
+        · `"transform:" in contract` is satisfied by `_transform:`, i.e. by a plant renamed out
+          of the mock's option shape and therefore doing nothing. Word-boundaried now.
+      The harness carries the two NF-RATE1 controls (baseline-pass + NOT-SELECTED) and the
+      NF-INJ2b unique-anchor assert from day one, as the AC required.
+
+      ── ⑤ PRE-EXISTING RED-PROOF BOARD DRIFT — NOT CAUSED HERE, flagged so it is not ─────
+      `frontend/e2e/red-proof.mjs` holds **221** cases against `RECORDED_BOARD.total` of 201
+      (199 before this story's 2). The gap is the accumulation of per-story PROJECTIONS that
+      NCAAF-P3.9 already recorded (it measured 216 vs 192 and left it, correctly, per the file's
+      own ⛔ "never edit RECORDED_BOARD to match a drift you did not cause"). NF-CSV1 followed
+      the convention exactly — +2 cases, +2 total, +2 red, each RED-proven individually — so
+      when the next FULL run reports drift, ~20 of it predates this story. NCAAF-P3.9 also
+      recorded 5 STALE anchors and 1 ambiguous anchor still outstanding.
+      PM: this belongs on the existing NCAAF-P3.9 follow-up about hardening that harness, not
+      on a new card.
+
+      ── ⑥ OPERATOR STEP AFTER MERGE (frontend auto-deploys; nothing else to run) ─────────
+      LAPTOP / browser, on the published board:
+        1. Confirm the Vercel build ACTUALLY RAN for the `dev→main` merge commit. This PR
+           touches `frontend/`, so the `ignoreCommand` path filter should let it through —
+           but the merge commit is what is diffed, and a later docs-only commit on `main`
+           would be skipped. If a redeploy is needed, untick "Use project's Ignore Build Step".
+        2. Open https://<prod>/fantasy/rankings, Export CSV, and open the file. The served
+           2026 board is EXPECTED TO PRODUCE NO NOTE ROW — NF-RATE1 measured 34 withheld cells
+           across the 14 served configs (Levis on all 14; Kittle and Pierce on the 10
+           reception-scored ones), so the note appears on a config/position slice that
+           actually contains one. Overall on full-PPR-12 should carry it (Levis); a position
+           tab with no withheld row correctly carries none. VERIFY BOTH: a file with the note
+           (last line, quoted text in the first cell, every other cell empty, header still
+           line 1) and a file without it.
+        3. If the note appears on a slice with no withheld row, that is the ③ defect and is
+           a rollback signal, not a copy tweak.

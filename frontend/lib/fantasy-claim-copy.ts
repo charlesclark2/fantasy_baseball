@@ -443,6 +443,86 @@ export const FULL_SEASON_RATE_WITHHELD_SR_LABEL = "Full-season rate withheld"
 export const FULL_SEASON_RATE_WITHHELD_DETAIL =
   "Stretching this player's projection back out to seventeen games implies a season higher than any real player has posted at his position since 2006, so we don't print it here — a number that far outside what football has done tells a drafter nothing. His projected points and projected games are unchanged and still shown beside it."
 
+// ── NF-CSV1 — the same refusal, carried into the file the reader takes away ──────────────────────
+//
+// THE GAP THIS CLOSES, AND WHY IT IS A SEPARATE ONE. Everything above is a POPOVER: a withheld cell
+// on the page is an em-dash a reader can tap, and the tap is where the refusal explains itself. The
+// exported CSV keeps the withholding (`fullSeasonRateCsv` → an empty cell) and leaves the
+// explanation behind on the page — so the one surface a paying reader actually works from was the
+// one that stated nothing. A blank in a spreadsheet reads as "we have nothing", which is the E9.56c
+// inversion this family exists to prevent, arriving by a different door.
+//
+// ⭐ WHY A NOTE **ROW** AND NOT A SENTINEL IN THE CELL. The cell has to stay empty — a `withheld`
+// string breaks the column's type for anyone who sorts or averages it, and `0`/`-1` is a wrong
+// number rather than an absent one (`fullSeasonRateCsv`'s own note). So the explanation cannot live
+// in the column; it lives in one row APPENDED AFTER the data, first cell only, leaving the header
+// on row 1 and every data column untouched.
+//
+// ⭐⭐ THE NOTE IS ASSEMBLED FROM A REGISTRY, ONE CLAUSE PER WITHHELD **CLASS**, and only the
+// classes actually present in the exported file contribute. Two reasons, and the second is the one
+// that bites: a note listing a class the file does not contain is a false statement about that
+// file, and a note hard-coded to today's single class silently stops being complete the moment a
+// second withheld class reaches an exported column. `CSV_WITHHELD_CLASSES` is where a second class
+// gets added, and the guard suite fails if a registered class has no clause.
+//
+// 🔎 MEASURED FOR THIS STORY, and recorded rather than assumed (the acceptance criterion asks for
+// the check either way): NF-INJ1-C's stat-line withholding does NOT reach this export. It is
+// carried per row on `statLineWithheld` and rendered only by `projections-table.tsx` and
+// `player-page.tsx`, NEITHER of which has an export; the rankings board is the only `downloadCsv`
+// caller in the app, and its column list carries no stat-line column for the marker to apply to.
+// So the registry has exactly one member today, and that is a fact about the exported columns
+// rather than a simplification. Re-check it if a stat column is ever added to this file.
+//
+// ⛔ NO FORECAST LANGUAGE AND NO INJURY VERB, exactly as above — this says nothing about a player,
+// his health or his season. And ⚠️ IT MUST NOT CLAIM EVERY BLANK IS A WITHHOLDING: the same column
+// is blank where there is no expected-games figure to divide by, which is a genuine absence, and a
+// note that collapsed the two would make the file dishonest in the other direction. The page
+// separates them (a withheld cell is a tappable dotted em-dash, an unavailable one is a plain one);
+// the file cannot, and says so.
+
+/** A class of value this export can withhold. One clause per member, below. */
+export type CsvWithheldClass = "full-season-rate"
+
+/** The note row's text, in three parts: an invariant lead, one clause per withheld class present,
+ *  and a trailer pointing at the surface that carries the full per-row disclosure.
+ *
+ *  ⚠️ EVERY PART IS A SINGLE LINE. A newline anywhere here would be quoted into a multi-line CSV
+ *  field, which is legal CSV and breaks every line-counting reader of this file — including the
+ *  row-count contract in `fantasy-board-flows.spec.ts`. Pinned by the guard suite. */
+export const CSV_WITHHELD_NOTE = {
+  lead:
+    "Note — one or more rows in this file have a value withheld. A withheld value is a number we hold and are declining to publish; the columns it is derived from are unchanged and still in this file.",
+  clause: {
+    "full-season-rate":
+      "full_season_rate is blank on a row whose expected_pts and expected_games imply a full-season pace above any season a real player has posted at that position since 2006. That column is also blank where there is no expected-games figure to divide by, which is an absence rather than a withholding, and this file cannot tell the two apart.",
+  },
+  trailer:
+    "The Full-season rate column on the site marks the withheld rows and states why.",
+} as const
+
+/** Every withheld class this export knows how to describe, in the order the note lists them.
+ *
+ *  ⭐ THE NOTE'S ORDER COMES FROM HERE, NOT FROM THE CALLER — so the rendered bytes are a function
+ *  of which classes are present and nothing else, which is what makes pinning them meaningful. */
+export const CSV_WITHHELD_CLASSES: readonly CsvWithheldClass[] = ["full-season-rate"]
+
+/**
+ * The note row's text for a file containing exactly `present`, or `null` when it contains none —
+ * in which case the export appends no row at all and the file is what it was before this story.
+ *
+ * ⛔ `null`, NOT AN EMPTY STRING. An empty string appended as a row would add a line to every
+ * export, which is precisely the "no withheld cells ⇒ byte-identical" property this must keep.
+ */
+export function csvWithheldNote(present: readonly CsvWithheldClass[]): string | null {
+  const listed = CSV_WITHHELD_CLASSES.filter((c) => present.includes(c))
+  if (listed.length === 0) return null
+  return [
+    CSV_WITHHELD_NOTE.lead,
+    ...listed.map((c) => CSV_WITHHELD_NOTE.clause[c]),
+    CSV_WITHHELD_NOTE.trailer,
+  ].join(" ")
+}
+
 // ══ THE FREE / PAID BOUNDARY — stated as a division of labour, never as a withheld feature ══════
 //
 // ⭐ THE PRODUCT POINT THIS COPY HAS TO CARRY (GROWTH-100 §1): the paid aha is "what changed
