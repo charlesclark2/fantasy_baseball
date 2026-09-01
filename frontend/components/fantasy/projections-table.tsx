@@ -14,7 +14,7 @@ import { Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { canUse } from "@/lib/entitlements"
 import { useFantasyProjections, useFullProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
-import { fullSeasonRate, trimLockedTail } from "@/lib/fantasy"
+import { trimLockedTail } from "@/lib/fantasy"
 import {
   EXPECTED_POINTS_LABEL,
   FORMAT_LOCK_SUFFIX,
@@ -55,6 +55,7 @@ import {
   WeeklyDesignation,
   ReportedAbsence,
   WithheldStat,
+  FullSeasonRateCell,
 } from "@/components/fantasy/shared"
 import { Picker } from "@/components/ui/picker"
 
@@ -374,12 +375,15 @@ export function ProjectionsTable() {
                     </td>
                     {/* ⚠️ Scaled from the SELECTED reference scoring, so it tracks the picker rather
                         than silently quoting PPR while the column beside it shows standard. Null
-                        (no/zero expected games) renders as an em-dash — never a blank, never ∞. */}
+                        (no/zero expected games) renders as an em-dash — never a blank, never ∞; and
+                        NF-RATE1's withheld state renders where the implied pace is above any full
+                        season on record. Both come from `fullSeasonRateDisplay`, the one owner all
+                        four render sites share. */}
                     <td className="px-3 py-2 text-right text-gray-400">
                       {p.locked ? (
                         <LockChip title="Subscribe to unlock the full-season rate" />
                       ) : (
-                        num(fullSeasonRate(p[effScoring], p.g))
+                        <FullSeasonRateCell pts={p[effScoring]} games={p.g} pos={p.pos} />
                       )}
                     </td>
                     {/* E9.56 — the interval is model output too. A locked row has no p10/p90, so

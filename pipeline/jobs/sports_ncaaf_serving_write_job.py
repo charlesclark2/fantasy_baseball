@@ -78,9 +78,49 @@ def _run_serving_write(context) -> None:
             "unaffected (the market line is transparency beside the model line, never an input).")
 
 
+def _tier_decision(context):
+    """`(re-serve?, why)` for THIS tick — the NCAAF-ODDS-LIVE followUp ⑦ tier.
+
+    ⭐ FAILS OPEN, and that direction is the whole design. The gate exists to SKIP cheap redundant
+    writes, so an unevaluable gate must never withhold the serving write itself: a check that could
+    not run is not a reason to stop publishing (NF1.7 (a) says an unevaluable check is never scored
+    healthy — here "healthy" would be "skip", so the safe verdict is to serve). A gate that failed
+    closed would turn a transient lake read into a silently frozen board, which is precisely the
+    NF-FRESH1 outage this tier is meant to make less likely, not more.
+    """
+    from quant_sports_intel_models.football.ncaaf.ingest.sources import current_season
+    from scripts.write_ncaaf_serving_store import should_reserve, upcoming_kickoffs
+
+    try:
+        kickoffs = upcoming_kickoffs(current_season())
+    except Exception as exc:  # noqa: BLE001 — see the fail-open note above
+        context.log.warning(
+            "ALERT NCAAF serving write: the re-serve TIER could not be evaluated (%s) — serving "
+            "anyway. The tier only ever suppresses a redundant refresh, so an unevaluable gate "
+            "must fall through to the write, never withhold it.", exc)
+        return True, f"tier unevaluable ({exc}) — failing open to a write"
+    return should_reserve(kickoffs)
+
+
 @op(out=Out(Nothing))
 def ncaaf_serving_write_op(context):
-    """Lake → serving store, standalone. HALT tier: raises on a failed write."""
+    """Lake → serving store, standalone, TIER-GATED. HALT tier: raises on a failed write.
+
+    ⏱️ The schedule now ticks HOURLY and this op decides whether the tick publishes — one logical
+    job with ONE execution owner, the same shape the live odds capture uses. Two crons for one job
+    is this repo's most-repeated operational defect (INC-30, INC-36, INC-38), so the alternative —
+    a second "dense" schedule beside the daily one — was deliberately not built.
+
+    ⭐ A SKIPPED TICK IS A NO-OP, NOT A FAILURE, AND IT SAYS WHY. This op is cheap and almost
+    always succeeds, which is exactly the shape that produces 19 green runs over a frozen store
+    (NF-FRESH1); the reason is logged on BOTH branches so "skipped on purpose" can never be read
+    off the same silence as "stopped firing".
+    """
+    serve, why = _tier_decision(context)
+    if not serve:
+        context.log.info("NCAAF serving write: no re-serve this tick — %s", why)
+        return
+    context.log.info("NCAAF serving write: publishing — %s", why)
     _run_serving_write(context)
 
 
