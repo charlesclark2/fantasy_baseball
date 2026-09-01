@@ -351,6 +351,19 @@ def test_a_game_the_team_is_not_in_is_dropped_rather_than_mis_oriented():
 # 6. The universe, and the writer's tiering
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
+def test_an_empty_schedule_never_claims_that_nobody_has_played_yet():
+    """⭐ THE SAME VOCABULARY, THE WRONG FACT. `no_games_played_yet` is correct for a ROLLUP — a
+    rollup of nothing is unknown — and wrong for a SCHEDULE, which exists from the moment the
+    season rolls forward, months before anyone plays. An empty schedule means we have no fixture
+    list for this team, or we could not read the mart. Naming the wrong absence is exactly the
+    defect the reasons exist to prevent, so the two must not share a helper by reflex."""
+    unreadable = tp.build_schedule([], team_id=BOISE, marts_available=False)
+    no_fixtures = tp.build_schedule([], team_id=BOISE, marts_available=True)
+    assert unreadable["reason"] == tp.REASON_NOT_BUILT
+    assert no_fixtures["reason"] == tp.REASON_NO_ROW
+    assert tp.REASON_NO_GAMES not in {unreadable["reason"], no_fixtures["reason"]}
+
+
 def test_the_team_universe_is_the_union_of_the_strength_fit_and_the_season_dim():
     """⭐ NOT THE INTERSECTION. Both sources are legitimate on their own, so intersecting would drop
     a team from the site the moment one lagged the other — which a page promising "any FBS team"

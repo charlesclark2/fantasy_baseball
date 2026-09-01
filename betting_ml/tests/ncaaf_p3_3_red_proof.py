@@ -149,6 +149,12 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "                        with_teams: bool = False,",
      "test_the_team_pages_are_published_by_DEFAULT"),
 
+    ("an empty schedule claims nobody has played yet",
+     BUILDER,
+     "        reason = REASON_NOT_BUILT if not marts_available else REASON_NO_ROW",
+     "        status, reason = _block_absence(marts_available=marts_available, has_any_row=False)",
+     "test_an_empty_schedule_never_claims_that_nobody_has_played_yet"),
+
     # ── the universe + the tier ──────────────────────────────────────────────────────────────
     ("the team universe becomes the INTERSECTION of the fit and the dim",
      BUILDER,

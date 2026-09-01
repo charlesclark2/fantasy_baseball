@@ -394,8 +394,15 @@ def build_schedule(rows: Sequence[Mapping[str, Any]], *, team_id: int,
     """
     games = [g for g in (_schedule_game(r, team_id=team_id) for r in rows) if g is not None]
     if not games:
-        status, reason = _block_absence(marts_available=marts_available, has_any_row=False)
-        return {"status": status, "reason": reason, "n_games": 0, "n_completed": 0,
+        # ⛔ NOT `_block_absence`, and the difference is a real one rather than tidiness.
+        # `no_games_played_yet` is the CORRECT reason for a rollup — a rollup of nothing is
+        # unknown — but it is a WRONG statement about a SCHEDULE: a schedule exists from the
+        # moment the season rolls forward, months before anyone plays. An empty one means the
+        # mart has no rows for this team and season (a team we do not have a fixture list for),
+        # or the mart could not be read at all. Saying "no games played yet" here would name the
+        # wrong fact, which is precisely what these reasons exist to prevent.
+        reason = REASON_NOT_BUILT if not marts_available else REASON_NO_ROW
+        return {"status": "unavailable", "reason": reason, "n_games": 0, "n_completed": 0,
                 "n_upcoming": 0, "wins": None, "losses": None, "ties": None, "games": []}
     # Date order, with the game id as a stable tie-break for a double-header-shaped date collision.
     games.sort(key=lambda g: (g.get("commence_time") or g.get("game_day") or "", g["game_id"]))
