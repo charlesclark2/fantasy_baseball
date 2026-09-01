@@ -94,19 +94,29 @@ def _latest_by_week(rows: Sequence[Mapping[str, Any]]) -> dict | None:
     return best
 
 
-def _block_absence(*, marts_available: bool, has_any_row: bool) -> tuple[str, str]:
-    """`(status, reason)` for an empty P1.1 block — the three causes, kept apart.
+def _rollup_absence(*, marts_available: bool, has_any_row: bool) -> tuple[str, str]:
+    """`(status, reason)` for an empty P1.1 ROLLUP block — the three causes, kept apart.
 
     ⭐ THE DISTINCTION IS THE WHOLE POINT OF THE FIELD. `source_marts_unavailable` is a DEFECT (our
     build did not run); `no_games_played_yet` is the CORRECT state of week 1 and needs no action;
-    `no_row_for_this_team_and_season` means the team exists but this rollup has nothing for it. A
-    surface handed one blank for all three re-investigates the same symptom every September.
+    `no_row_for_this_team_and_season` means the rollup was readable and simply has nothing for this
+    (team, season). A surface handed one blank for all three re-investigates the same symptom
+    every September.
+
+    ⚠️ `has_any_row` MAPS THE WAY IT READS, and the first cut had it BACKWARDS. Rows PRESENT but
+    none with a game behind them is the literal statement "no games played yet" — the rollup
+    emitted this team's weeks and each is a rollup of nothing. Rows ABSENT is the other fact
+    entirely: the mart was readable and holds no week for this team and season at all, which on an
+    in-progress season means it has not been rebuilt that far. Inverting them names the wrong cause
+    with total confidence, which is worse than a bare null because it reads as a considered answer.
+
+    ⛔ ROLLUPS ONLY. A SCHEDULE cannot be absent for "no games played yet" — it exists from the
+    moment the season rolls forward — so `build_schedule` deliberately does not call this. The
+    vocabulary is shared; its APPLICABILITY is not.
     """
     if not marts_available:
         return "unavailable", REASON_NOT_BUILT
-    if not has_any_row:
-        return "unavailable", REASON_NO_GAMES
-    return "unavailable", REASON_NO_ROW
+    return "unavailable", (REASON_NO_GAMES if has_any_row else REASON_NO_ROW)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════
@@ -254,7 +264,7 @@ def build_efficiency(rows: Sequence[Mapping[str, Any]], *, marts_available: bool
     played = [r for r in rows if (_i(r.get("games_played")) or 0) > 0]
     row = _latest_by_week(played)
     if row is None:
-        status, reason = _block_absence(marts_available=marts_available, has_any_row=bool(rows))
+        status, reason = _rollup_absence(marts_available=marts_available, has_any_row=bool(rows))
         return {"status": status, "reason": reason, "as_of_week": None, "games_played": None,
                 **{k: None for k in (
                     "adj_off_ppa", "adj_def_ppa", "adj_net_ppa", "adj_off_success_rate",
@@ -305,7 +315,7 @@ def build_splits(rows: Sequence[Mapping[str, Any]], *, marts_available: bool) ->
     played = [r for r in rows if (_i(r.get("games_played")) or 0) > 0]
     row = _latest_by_week(played)
     if row is None:
-        status, reason = _block_absence(marts_available=marts_available, has_any_row=bool(rows))
+        status, reason = _rollup_absence(marts_available=marts_available, has_any_row=bool(rows))
         return {"status": status, "reason": reason, "as_of_week": None, "games_played": None,
                 "drives": None, **{k: None for k in _SPLIT_FIELDS}}
     return {
@@ -394,7 +404,7 @@ def build_schedule(rows: Sequence[Mapping[str, Any]], *, team_id: int,
     """
     games = [g for g in (_schedule_game(r, team_id=team_id) for r in rows) if g is not None]
     if not games:
-        # ⛔ NOT `_block_absence`, and the difference is a real one rather than tidiness.
+        # ⛔ NOT `_rollup_absence`, and the difference is a real one rather than tidiness.
         # `no_games_played_yet` is the CORRECT reason for a rollup — a rollup of nothing is
         # unknown — but it is a WRONG statement about a SCHEDULE: a schedule exists from the
         # moment the season rolls forward, months before anyone plays. An empty one means the

@@ -214,14 +214,18 @@ def test_the_three_causes_of_an_empty_block_are_distinguishable(builder):
     for this team" is a third thing. A surface handed one blank for all three re-investigates the
     same symptom every September."""
     not_built = builder([], marts_available=False)
-    week_one = builder([], marts_available=True)
+    no_row = builder([], marts_available=True)
     zero_game = builder([{"as_of_week": 1, "games_played": 0}], marts_available=True)
 
     assert not_built["reason"] == tp.REASON_NOT_BUILT
-    assert week_one["reason"] == tp.REASON_NO_GAMES
-    assert zero_game["reason"] == tp.REASON_NO_ROW
-    assert len({not_built["reason"], week_one["reason"], zero_game["reason"]}) == 3
-    for block in (not_built, week_one, zero_game):
+    # ⚠️ THE MAPPING IS THE ASSERTION, and the first cut had it BACKWARDS. Rows PRESENT with no
+    # game behind them is the literal "no games played yet"; rows ABSENT is "the rollup holds
+    # nothing for this team and season". Naming the wrong cause with confidence is worse than a
+    # bare null, because it reads as a considered answer.
+    assert no_row["reason"] == tp.REASON_NO_ROW
+    assert zero_game["reason"] == tp.REASON_NO_GAMES
+    assert len({not_built["reason"], no_row["reason"], zero_game["reason"]}) == 3
+    for block in (not_built, no_row, zero_game):
         assert block["status"] == "unavailable"
 
 

@@ -94,8 +94,14 @@ CASES: list[tuple[str, Path, str, str, str]] = [
     # ── the three absences ───────────────────────────────────────────────────────────────────
     ("every empty P1.1 block collapses onto one reason",
      BUILDER,
-     "    if not marts_available:\n        return \"unavailable\", REASON_NOT_BUILT\n    if not has_any_row:\n        return \"unavailable\", REASON_NO_GAMES\n    return \"unavailable\", REASON_NO_ROW",
+     "    if not marts_available:\n        return \"unavailable\", REASON_NOT_BUILT\n    return \"unavailable\", (REASON_NO_GAMES if has_any_row else REASON_NO_ROW)",
      "    return \"unavailable\", REASON_NO_ROW",
+     "test_the_three_causes_of_an_empty_block_are_distinguishable[build_efficiency]"),
+
+    ("the two rollup absences are mapped the wrong way round",
+     BUILDER,
+     "    return \"unavailable\", (REASON_NO_GAMES if has_any_row else REASON_NO_ROW)",
+     "    return \"unavailable\", (REASON_NO_ROW if has_any_row else REASON_NO_GAMES)",
      "test_the_three_causes_of_an_empty_block_are_distinguishable[build_efficiency]"),
 
     ("an unreadable strength lake reads as a team the fit did not model",
@@ -104,11 +110,14 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      '            "reason": REASON_NO_ROW,',
      "test_the_strength_block_distinguishes_an_unreadable_lake_from_an_absent_team"),
 
+    # ⚠️ ANCHORED ON THE SPLITS BUILDER, not efficiency: the two share a byte-identical three-line
+    # head, so an efficiency-shaped anchor is AMBIGUOUS (NF-INJ2b). The trailing `"drives"` line is
+    # unique to splits, which makes the anchor land on exactly one function.
     ("a zero-game rollup row is served as an available block of nulls",
      BUILDER,
-     '    played = [r for r in rows if (_i(r.get("games_played")) or 0) > 0]\n    row = _latest_by_week(played)\n    if row is None:\n        status, reason = _block_absence(marts_available=marts_available, has_any_row=bool(rows))\n        return {"status": status, "reason": reason, "as_of_week": None, "games_played": None,\n                **{k: None for k in (\n                    "adj_off_ppa",',
-     '    row = _latest_by_week(rows)\n    if row is None:\n        status, reason = _block_absence(marts_available=marts_available, has_any_row=bool(rows))\n        return {"status": status, "reason": reason, "as_of_week": None, "games_played": None,\n                **{k: None for k in (\n                    "adj_off_ppa",',
-     "test_a_zero_game_rollup_row_is_never_served_as_available[build_efficiency]"),
+     '    played = [r for r in rows if (_i(r.get("games_played")) or 0) > 0]\n    row = _latest_by_week(played)\n    if row is None:\n        status, reason = _rollup_absence(marts_available=marts_available, has_any_row=bool(rows))\n        return {"status": status, "reason": reason, "as_of_week": None, "games_played": None,\n                "drives": None,',
+     '    row = _latest_by_week(rows)\n    if row is None:\n        status, reason = _rollup_absence(marts_available=marts_available, has_any_row=bool(rows))\n        return {"status": status, "reason": reason, "as_of_week": None, "games_played": None,\n                "drives": None,',
+     "test_a_zero_game_rollup_row_is_never_served_as_available[build_splits]"),
 
     # ── schedule / results ───────────────────────────────────────────────────────────────────
     ("an upcoming game is given a 0-0 score instead of nulls",
