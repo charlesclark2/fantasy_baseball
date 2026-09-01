@@ -174,8 +174,47 @@ spec:
       - id: 6-closeout
         desc: "Verdict + findings into closeout.followUps; operator summary; epic card updated by PM (tripwire clock noted)."
   closeout:
-    verdict: null
+    verdict: "NODES 0-2 COMPLETE; node 3-4 (the decisive run) is an OPERATOR step (~8 min, timed).
+      Node 2 REPLICATION PASSED: the shape gap survives on the widest served window this champion
+      has produced (FULL_ERA n=851, gap +0.0734, outside its null band [0.0006,0.0382], MC p=0.0010,
+      power 0.989), so the funding premise HOLDS and the study proceeds. Registered forward: at this
+      design a planted GROSS defect yields DSR ~0.92-0.95 against the 0.95 bar, so DEFLATION_BLOCKED
+      is the expected binding state and is NOT evidence against the mechanism."
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) REUSE DEFECT, carried from the census -- `is_backfill = FALSE` DOES NOT
+      ESTABLISH "SERVED". ~40,000 v0/v1/v2 rows carry that flag while sitting a
+      MEDIAN 981-1009 DAYS after their own game date: a backtest wearing a served
+      table's clothing, which MH2.6 forbids as a decisive population. TV2-0's pull
+      (`mlb_tv2_0_ceiling_diagnosis.py`) filters on the flag and was safe only by
+      ACCIDENT of its champion filter; it is under-specified for reuse by any story
+      whose champion filter is wider. TV2-2 establishes served-ness by the INSERTION
+      LAG and RAISES otherwise. Candidate: a shared served-row helper.
+
+      (2) INSTRUMENT GAP -- the E7.14 sign-floor trap is not checked anywhere by
+      default. At 5 folds the fold-SIGN floor 2^-5 = 0.031 sits ABOVE a 4-arm BH
+      cutoff of 0.0125, so the multiplicity clause was STRUCTURALLY UNPASSABLE by an
+      effect of ANY size, and nothing surfaced it -- `cv_power` HAS
+      `folds_for_sign_certifiability` but no caller is obliged to consult it.
+      Candidate: have `classify_null` (or a prereg-time helper) refuse a gate set
+      whose sign floor exceeds its own BH cutoff, the way MH2.7 made the field-size
+      remedy self-safe.
+
+      (3) A PER-FOLD SERIES ON A CALIBRATION-IN-THE-LARGE STATISTIC CARRIES ~ONE
+      EFFECTIVE OBSERVATION PER FOLD. The printed probability is a property of the
+      block's LAW, so it is CONSTANT within a block; a Brier/|gap| fold series is
+      then dominated by that block's realized-rate sampling noise. Measured: 4/6 vs
+      6/6 gross-defect detection against a per-row CRPS series, both 0/6 on clean
+      data. Generalises to any §0.5 leg whose primary is a pooled calibration
+      quantity (NCAAF and prospect totals legs included).
+
+      (4) DESIGN-POWER NOTE for the epic, stated in the unit that grows -- no
+      materially LONGER served window exists for this champion: the era is bounded
+      below by the fit date (2026-06-23) and above by today, so the widest window is
+      +93 rows / +12.3% over TV2-0's, and it grows at ~93 rows per game-week. A
+      genuinely INDEPENDENT replication is calendar-bound, not obtainable now.
+
+      (5) E13.6b-B tripwire clock: kickoff 2026-08-31.
