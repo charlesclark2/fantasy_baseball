@@ -292,18 +292,72 @@ def test_the_deflation_gate_partition_takes_the_shipped_defaults(prereg: str) ->
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Provenance — the claim that makes the document trustworthy
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def test_the_prereg_was_written_before_the_remeasure_and_says_so_checkably(prereg: str) -> None:
-    """⭐ The strongest provenance available: it cannot have been shaped by numbers nobody has seen.
+def test_the_prereg_quotes_no_number_from_the_node_3b_remeasure(prereg: str) -> None:
+    """⭐ The prereg claims it was written BLIND to node 3b. This checks the substance of that claim.
 
-    A prose claim is worth nothing on its own, so the guard checks the world: the node-3b report
-    must not exist alongside a document asserting it did not.
+    RE-FORMED 2026-09-01. The first cut asserted the node-3b report DID NOT EXIST — which was true
+    when written and is a claim that must go red the moment node 3b legitimately runs. It did
+    exactly that on the VOID run, correctly by its own terms and uselessly by ours: a provenance
+    claim about the state AT A COMMIT cannot be enforced by a check on the state FOREVER.
+
+    So the assertion now reads the thing that actually matters and stays checkable for good: the
+    pre-registration must quote NONE of the re-measure's distinctive figures. "Written blind" means
+    "contains none of its numbers", and that is true at every later commit, whatever node 3b does.
+
+    ⛔ Deliberately NOT weakened to a prose check. If the report exists, its numbers are extracted
+    and searched for; when it does not exist yet, the file-absence form is asserted instead, so the
+    guard is never vacuous in either world (NF1.7 (a)).
     """
     flat = _flat(prereg)
     assert _flat("BEFORE the node-3b re-measure has been run") in flat
-    assert not (_REPORTS / "nf_inj2c_dominance_baseline.json").exists(), (
-        "the node-3b report EXISTS — the prereg's provenance claim is no longer true and must be "
-        "corrected rather than left standing")
-    assert not (_REPORTS / "nf_inj2c_dominance_baseline.md").exists()
+
+    report = _REPORTS / "nf_inj2c_dominance_baseline.json"
+    if not report.exists():
+        # the pre-run world: absence is the strongest available statement, so assert it
+        assert not (_REPORTS / "nf_inj2c_dominance_baseline.md").exists()
+        return
+
+    import json
+
+    rep = json.loads(report.read_text())
+    # DISTINCTIVE figures only — a bare "5" or "10" collides with ordinary prose (fold counts, arm
+    # counts) and would make this fire on nothing. A decimal with >=2 fractional digits, or a large
+    # integer, is a number that could only have come from the re-measure.
+    figures: set[str] = set()
+
+    def _collect(node) -> None:
+        if isinstance(node, dict):
+            for v in node.values():
+                _collect(v)
+        elif isinstance(node, list):
+            for v in node:
+                _collect(v)
+        elif isinstance(node, float):
+            for text in (f"{node:.2f}", f"{node:.3f}", f"{node:.4f}", repr(node)):
+                if len(text.split(".")[-1]) >= 2 and abs(node) >= 0.01:
+                    figures.add(text)
+        elif isinstance(node, int) and abs(node) >= 1000:
+            figures.add(str(node))
+
+    dominance = dict(rep.get("dominance") or {})
+    # ⛔ `bands` holds node 3a's TIE BANDS, echoed back by the runner. Those are DESIGN constants
+    # committed BEFORE the re-measure, so their presence in the prereg is correct, not contamination.
+    dominance.pop("bands", None)
+    _collect(dominance)
+    _collect(rep.get("application_2026", {}).get("reproduction_pin"))
+
+    # ⭐ THE PRINCIPLED EXCLUSION, and it is what makes this guard sound: a figure that also appears
+    # in a document committed BEFORE the re-measure cannot be evidence the prereg saw the
+    # re-measure. The margin rule (node 3a) is exactly such a document — it fixed every band before
+    # node 3b ran — so anything it already contains is provably pre-existing.
+    pre_existing = _MARGIN_RULE.read_text()
+    figures = {f for f in figures if f not in pre_existing}
+    assert figures, "no distinctive figure could be extracted — the guard would pass on nothing"
+
+    hits = sorted(f for f in figures if f in prereg)
+    assert not hits, (
+        "the pre-registration quotes figures that only exist in the node-3b re-measure "
+        f"({hits[:5]}) — it was NOT written blind to it, and the provenance claim in §12 is false")
 
 
 def test_the_prereg_does_not_quote_the_incumbent_baseline(prereg: str) -> None:

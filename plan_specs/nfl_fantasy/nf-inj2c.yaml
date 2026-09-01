@@ -359,6 +359,34 @@ spec:
       would be the actively-misleading NF-D18 direction. Read as a standing-rule application of a
       PERMISSIVE ruling, ⛔ not a departure from it — flagged here so the PM can overrule it.
 
+      🔴 NODE 3b RUN 1 = VOID (2026-09-01), and the cause is UNRECOVERABLE — full record in
+      `ablation_results/nf_inj2c_node3b_void_diagnosis.md`. The pin failed at 84.72 over 797 rows
+      against 0.05. Diagnosis, measured on both sides: ADP is IDENTICAL (same window, same 8161
+      drafts) while the ECR cache is SIX DAYS stale (label 8/25 vs the served board's 8/31), and
+      `market_rank = ecr.where(ecr.notna(), adp)` is ECR-PRIMARY and a feature at all four
+      positions. Independent confirmation: the largest ECR mover (Josh Jacobs, rank 43 -> 145 over
+      final cuts) IS the largest point mover, at exactly the 84.72 that failed the pin.
+        * CAUSE OF THE STALENESS: `--market-refresh` names DIFFERENT SCOPES in two entrypoints —
+          `run_nf1_5.py` re-fetches ADP/ECR, `run_season_projection.py` re-fetches the ADP census
+          only (its own comment: "MVP-1 is market-blind by design"). The operator handoff
+          prescribed the latter; the served board is the market-AWARE `nf1_5` board.
+        * ⛔ BUT A CORRECTED COMMAND WOULD NOT HAVE SAVED THIS RUN: `apply_2026` hardcodes
+          `market_refresh=False` at both call sites (correct — that is how an archived run is
+          reproduced byte-for-byte), so the pin holds only if the ON-DISK ECR cache matches the
+          served board's vintage, and nothing enforces that.
+        * ⭐ STRUCTURALLY UNACHIEVABLE NOW: FantasyPros serves only the CURRENT snapshot (no as-of
+          query) and the lake's ecr_benchmark asset is season-partitioned and overwritten, so
+          2026-08-31's ECR exists nowhere reachable. A refresh today puts the local build on 9/01
+          against a board built on 8/31 — differently wrong, not fixed. No timing and no re-run
+          recovers it.
+        * ⇒ FOR THE NEXT RUN both sides must sit on the SAME ECR day (FP rolls ~03-05Z; the board
+          publishes ~14:18Z), with the cache refreshed to that day BEFORE the arms are built. The
+          DURABLE fix, and the one worth building, is to extend the D3 capture to PIN THE MARKET
+          CACHES BESIDE THE BOARD at capture time — capture-pinning the artifact is not sufficient
+          when its INPUTS are unrecoverable daily vendor snapshots.
+        * ⛔ No arm figure from the VOID run is quoted, compared or carried anywhere. VOID is a
+          statement about the measurement, never about the arm.
+
       REMAINING FINDINGS from nodes 3-7 land here. PM triages into: checklist item on the
       parent card | merge into an existing card (name it) | a new spec. Worker sessions
       never create Trello cards.
