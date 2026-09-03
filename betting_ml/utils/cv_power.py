@@ -27,7 +27,10 @@ So this module answers, mechanically and without re-fitting anything:
   * **Is "get a lower-variance design" a lever at all?** `lockstep_variance_lever` — computed, not
     prescribed (PLAT-CVP1 defect 3 / NF-W8-0d R2).
   * **Would these gates pass a REAL effect?** `injected_effect_positive_control` — the standing
-    recipe, executable (PLAT-CVP1 defect 4 / MLB-HV2-1).
+    recipe, executable (PLAT-CVP1 defect 4 / MLB-HV2-1), and it distinguishes a family that is BLIND
+    from one stopped by its DEFLATION half or by a DETERMINISTIC CONSTRAINT (PLAT-CVP2 defects 1-2).
+  * **Could this gate set be passed at all?** `validate_sign_certifiability` — a sign floor above its
+    own BH cutoff is unpassable by an effect of any size (PLAT-CVP2 defect 3 / E7.14).
 
 ⭐⭐ **PLAT-CVP1 (2026-08-25) — FOUR MEASURED DEFECTS FIXED AT THE SOURCE, AND THE INTERIM
 HAND-RECORD RULE RETIRES FOR FUTURE CALLERS.** Four studies each found a defect in this instrument,
@@ -62,6 +65,34 @@ those studies followed — hand-record the corrected state beside the instrument
 instrument, and a caller that does not is unchanged, by construction (every new input defaults to
 `None` and every existing branch is byte-identical without them).
 
+⭐⭐ **PLAT-CVP2 (2026-09-03) — FOUR MORE, AND TWO OF THEM ARE VERDICT INVERSIONS.** The same MH2.7
+rule, a second pass. An inversion outranks a merely wrong verdict, because a wrong verdict is argued
+with and an inverted one is believed:
+
+  1. **NF-INJ2b D2** (PR #1051) — arms blocked SOLELY by a gate the injection structurally CANNOT
+     move were reported `BLIND` ("a null from this family is free"), the opposite of the truth; the
+     record had to carry a render-time "⛔ do not read that badge at face value". ⇒ a FORWARD-DECLARED
+     `invariant_gates=` set and a `CONSTRAINT_BLOCKED` verdict; `BLIND` keeps its meaning for MOVABLE
+     gates only.
+  2. **MLB-TV2-2 finding 7** (`mlb_tv2_2_mixture_head.md` §17) — the control partitions gates into
+     deflation-class and metric BY NAME, so a caller whose clause names share ZERO overlap with the
+     default vocabulary had its deflation gate filed as a METRIC gate and got `BLIND` when the truth
+     was `DEFLATION_BLOCKED`. Found by hand. ⇒ a zero-overlap partition reports `UNVERIFIED` and
+     names the input that fixes it; `gate_classes=` is the durable half, and the name heuristic
+     survives only as a fallback that ANNOUNCES ITSELF.
+  3. **MLB-TV2-2 finding 2 / E7.14** (prereg §14.1) — at 5 folds a sign floor of `2⁻⁵ = 0.03125` sat
+     ABOVE a 4-arm BH cutoff of 0.0125, so the multiplicity clause was structurally unpassable by an
+     effect of ANY size. `sign_test_floor` and `folds_for_sign_certifiability` had said so since MH2
+     and nothing had to ask them. ⇒ `validate_sign_certifiability` REFUSES such a gate set at
+     registration time, with the arithmetic in the message.
+  4. **NF-INJ2c §6.3** — a floor census and the kernel that applies the floor read DIFFERENT
+     predicates, so a non-finite row the kernel floors was invisible to the census. ⇒ fixed at its
+     own owner, `nf_inj2_rate_permutation.games_floored_mask`: one predicate, both readers.
+
+The retirement note, with all four citations, lives on `injected_effect_positive_control` — the
+callable a future study meets. ⛔ Same contract as PLAT-CVP1: those four records are the FIXTURES,
+they are not edited, and no recorded verdict is recomputed or upgraded.
+
 ⭐ **THE ORGANISING FINDING (MH2): A GATE'S STRINGENCY MUST BE A DESIGN CONSTANT, NOT A SIDE-EFFECT
 OF n.** The `fold_win_rate ≥ 0.60` clause fires on a TRUE lift of zero **49.7% of the time at 3
 folds** and **27.4% at 11** — i.e. its meaning drifts by a factor of two across the fold counts this
@@ -79,7 +110,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -295,6 +326,78 @@ def folds_for_sign_certifiability(bh_cutoff: float, two_sided: bool = False) -> 
     while sign_test_floor(n, two_sided) > c and n < 200:
         n += 1
     return n
+
+
+@dataclass(frozen=True)
+class SignCertifiability:
+    n_folds: int
+    bh_cutoff: float
+    sign_floor: float
+    certifiable: bool
+    folds_needed: int
+    headroom: float          #: floor / cutoff — < 1 is certifiable, <= 0.5 leaves real margin
+    reason: str
+
+
+def validate_sign_certifiability(
+        *, n_folds: int, bh_cutoff: float | None = None, n_arms: int | None = None,
+        alpha: float = BH_ALPHA, two_sided: bool = False,
+        strict: bool = True) -> SignCertifiability:
+    """⭐ **PLAT-CVP2 DEFECT 3 — REFUSE A GATE SET NO EFFECT OF ANY SIZE COULD PASS, AT REGISTRATION
+    TIME.**
+
+    A fold-sign test over `n` folds has a minimum attainable one-sided p of `2⁻ⁿ`. If that floor sits
+    ABOVE the BH cutoff the family must clear, the multiplicity clause is **structurally unpassable**
+    — a unanimous sweep of a gigantic effect still misses the bar — and the resulting null is a
+    statement about the DESIGN, not about the mechanism (E7.14 verbatim).
+
+    `sign_test_floor` and `folds_for_sign_certifiability` have existed since MH2 and **nothing had
+    to consult them**, which is the defect: MLB-TV2-2 registered `N_BLOCKS = 5` against a 4-arm BH
+    cutoff of 0.0125 — floor `2⁻⁵ = 0.03125`, **2.5× the cutoff** — and its C8 clause was unpassable.
+    It was caught by a vacuity control, by hand, after registration (prereg §14.1). This is the same
+    self-safe move MH2.7 made for `declared_field_size`: the instrument REFUSES, with the arithmetic
+    in the message, rather than letting a caller compute a null it could never have avoided.
+
+    Pass the cutoff you registered, or `n_arms` to derive the rank-1 BH cutoff `alpha / n_arms`.
+    `strict=False` returns the report instead of raising — for a caller INSPECTING a design (e.g.
+    choosing `n_folds`), never for one about to score with it.
+    """
+    n = int(n_folds)
+    if bh_cutoff is None and n_arms is None:
+        raise ValueError(
+            "`validate_sign_certifiability` needs the bar it is checking against: pass "
+            "`bh_cutoff=` (the cutoff you registered) or `n_arms=` (⇒ rank-1 cutoff alpha/n_arms). "
+            "Defaulting one would be the instrument choosing a caller's registration for it.")
+    cut = float(alpha) / max(int(n_arms), 1) if bh_cutoff is None else float(bh_cutoff)
+    floor = sign_test_floor(n, two_sided=two_sided)
+    need = folds_for_sign_certifiability(cut, two_sided=two_sided)
+    ok = bool(floor <= cut)
+    side = "two-sided" if two_sided else "one-sided"
+    arith = (f"at {n} folds the {side} fold-sign floor is 2^-{n}"
+             + (" x 2" if two_sided else "") + f" = {floor:.5f}, against a BH cutoff of "
+             f"{cut:.5f}" + (f" (alpha {alpha:g} / {int(n_arms)} arms)" if bh_cutoff is None else "")
+             + f" — a ratio of {floor / cut:.2f}x")
+    if ok:
+        why = (f"CERTIFIABLE: {arith}. A unanimous sweep clears the cutoff"
+               + ("" if floor <= 0.5 * cut else
+                  f" — but with NO MARGIN (the floor is {floor / cut:.2f} of the cutoff, so a "
+                  f"borderline p cannot clear); {folds_for_sign_certifiability(0.5 * cut, two_sided)}"
+                  f" folds would put it at or below half (MLB-TV2-2's forward-stated rule)."))
+    else:
+        why = (f"REFUSED: {arith}, so NO EFFECT OF ANY SIZE could pass this multiplicity clause — "
+               f"a unanimous {n}-of-{n} sweep still misses the bar. This is a statement about the "
+               f"DESIGN, not about the mechanism (E7.14; MLB-TV2-2 prereg §14.1 hit it at exactly "
+               f"{n} folds / cutoff {cut:g}). {need} folds is the smallest certifiable design "
+               f"(floor {sign_test_floor(need, two_sided):.5f}); "
+               f"{folds_for_sign_certifiability(0.5 * cut, two_sided)} puts the floor at or below "
+               f"HALF the cutoff, which is the margin rule MLB-TV2-2 stated forward. Fix the "
+               f"DESIGN before scoring — a null computed here would be unavoidable, not evidence.")
+    rep = SignCertifiability(n_folds=n, bh_cutoff=cut, sign_floor=floor, certifiable=ok,
+                             folds_needed=need, headroom=(floor / cut if cut > 0 else float("inf")),
+                             reason=why)
+    if strict and not ok:
+        raise ValueError(why)
+    return rep
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════════
@@ -694,9 +797,32 @@ def lockstep_variance_lever(*, observed_sr: float | None, n_trials: int,
 # 4c. ⭐ PLAT-CVP1 defect 4b — THE INJECTED-EFFECT POSITIVE CONTROL, AS A CALLABLE
 # ══════════════════════════════════════════════════════════════════════════════════════════════════
 
-#: The four verdicts an injected-effect control can return. `VACUOUS` is first in importance: a gate
-#: family that certifies arms on a NO-EFFECT payload cannot certify anything on a real one.
-POSITIVE_CONTROL_VERDICTS = ("VACUOUS", "DETECTED", "DEFLATION_BLOCKED", "BLIND")
+#: The verdicts an injected-effect control can return, IN PRECEDENCE ORDER. `VACUOUS` is first in
+#: importance: a gate family that certifies arms on a NO-EFFECT payload cannot certify anything on a
+#: real one. ⭐ PLAT-CVP2 added two: `UNVERIFIED` (the partition could not be established, so no
+#: partition-dependent verdict is admissible — MH2.7's self-safe move) and `CONSTRAINT_BLOCKED` (an
+#: arm cleared everything the injection could move and was stopped by a gate it structurally cannot
+#: — NF-D18's `CONSTRAINT_REFUSED`, one level up, inside a positive control).
+POSITIVE_CONTROL_VERDICTS = ("VACUOUS", "UNVERIFIED", "DETECTED", "CONSTRAINT_BLOCKED",
+                             "DEFLATION_BLOCKED", "BLIND")
+
+#: ⭐ PLAT-CVP2 defects 1 + 2 — the THREE classes a registered gate can be in, because two do not
+#: cover the cases. `metric` reads the ARM's own evidence and MUST fire on a planted effect;
+#: `deflation` deflates the SEARCH and may legitimately block a correlated field (MH2.5 / NF1.8);
+#: `invariant` is a gate the injection structurally CANNOT move — a deterministic constraint, whose
+#: failure is a fact about the constraint and never about the family's sensitivity. Filing an
+#: invariant gate as a metric gate is what made NF-INJ2b read `BLIND` ("a null from this family is
+#: free") for a family whose every movable gate fired.
+GATE_CLASSES = ("metric", "deflation", "invariant")
+
+#: How the gate partition was established, recorded on every report so a reader never has to guess.
+#: `name_heuristic` is the LEGACY fallback and it ANNOUNCES ITSELF (PLAT-CVP2 defect 2): it is the
+#: mode in which a zero-overlap partition silently inverted TV2-2's verdict.
+GATE_PARTITION_SOURCES = ("gate_classes", "declared_vocabulary", "name_heuristic")
+#: unpacked rather than re-typed at each site, so the constant and the strings the report carries
+#: CANNOT drift apart — a `*_SOURCES` constant nothing reads is the E11.29 dead-config shape, and
+#: two copies of the same vocabulary is the E9.61 two-renderers shape. This is neither.
+_SRC_GATE_CLASSES, _SRC_DECLARED_VOCAB, _SRC_NAME_HEURISTIC = GATE_PARTITION_SOURCES
 
 
 @dataclass(frozen=True)
@@ -714,12 +840,76 @@ class PositiveControlReport:
     field_level_gates_applied_per_arm: tuple[str, ...] = ()
     null_control_checked: bool = False
     null_control_survivors: tuple[str, ...] | None = None
+    #: ⭐ PLAT-CVP2 defect 1 — gates DECLARED FORWARD as ones the injection structurally cannot move,
+    #: and the arms stopped by those ALONE. An arm here cleared every movable gate, metric AND
+    #: deflation; reading it as `BLIND` is the inversion NF-INJ2b had to annotate around by hand.
+    invariant_gates: tuple[str, ...] = ()
+    constraint_blocked: tuple[str, ...] = ()
+    #: ⭐ PLAT-CVP2 defect 2 — HOW the partition was established, and whether it could be
+    #: established at all. `partition_verified is False` means no partition-dependent verdict was
+    #: admissible; the verdict is then `UNVERIFIED` unless a partition-FREE one applied.
+    partition_source: str = "name_heuristic"
+    partition_verified: bool = True
+    gate_classes_resolved: dict = field(default_factory=dict)
     reason: str = ""
+
+
+def _partition_gates(
+        gate_names: Sequence[str], *,
+        gate_classes: Mapping[str, str] | None,
+        deflation_gates: Iterable[str],
+        invariant_gates: Iterable[str] | None,
+        vocabulary_declared: bool) -> tuple[dict[str, str], str, bool]:
+    """Resolve every observed gate name to one of `GATE_CLASSES`. Returns `(classes, source, ok)`.
+
+    ⭐ **PLAT-CVP2 DEFECT 2 — THE ZERO-INTERSECTION INVERSION, REFUSED RATHER THAN GUESSED.**
+    The legacy partition is BY NAME against `DEFLATION_CLASS_GATES`. That vocabulary is a fact about
+    what *this repo's harnesses happen to call things*, not about what a caller's clauses measure —
+    so a study whose deflation clause is named `C7_deflation` gets ZERO overlap, its deflation gate
+    filed as a METRIC gate, and the verdict INVERTED: `DEFLATION_BLOCKED` ("the metric half fires;
+    the deflation half stops it") silently becomes `BLIND` ("a null from this family is free").
+    MLB-TV2-2 was told exactly that, and the inversion was found by hand.
+
+    ⛔ The two states a zero-overlap partition cannot tell apart are "this family has no deflation
+    gate" and "this family's deflation gate is named something else" — so it must not pick one
+    (NF1.7 (a); MH2.7's `declared_field_size` refusal, one instrument over). `ok=False` is returned
+    and the caller withholds every partition-DEPENDENT verdict.
+
+    The DURABLE half of the fix is `gate_classes`: an explicit per-gate declaration, which is the
+    only input that can affirm "there is no deflation gate here". It must cover EVERY observed gate
+    — a partially-declared partition reintroduces exactly the ambiguity being refused."""
+    names = [str(g) for g in gate_names]
+    if gate_classes is not None:
+        declared = {str(k): str(v) for k, v in dict(gate_classes).items()}
+        bad = sorted({v for v in declared.values()} - set(GATE_CLASSES))
+        if bad:
+            raise ValueError(
+                f"`gate_classes` assigned unknown class(es) {bad} — every gate must be one of "
+                f"{list(GATE_CLASSES)}.")
+        missing = sorted(set(names) - set(declared))
+        if missing:
+            raise ValueError(
+                f"`gate_classes` does not classify {missing} — a PARTIALLY declared partition "
+                f"reintroduces the ambiguity it exists to remove (PLAT-CVP2 defect 2). Classify "
+                f"every gate the study scores, or omit `gate_classes` entirely.")
+        return {g: declared[g] for g in names}, _SRC_GATE_CLASSES, True
+
+    defl = frozenset(str(g) for g in deflation_gates)
+    inv = frozenset(str(g) for g in (invariant_gates or ()))
+    overlap = bool(defl & set(names))
+    source = _SRC_DECLARED_VOCAB if vocabulary_declared else _SRC_NAME_HEURISTIC
+    classes = {g: ("invariant" if g in inv else "deflation" if g in defl else "metric")
+               for g in names}
+    # a vocabulary that names NOTHING in this study cannot have partitioned it. `gate_classes` is
+    # the only affirmative way to say "no deflation gate exists here".
+    return classes, source, overlap
 
 
 def injected_effect_positive_control(
         *, inject, run_gates, effect: float,
-        deflation_gates: Iterable[str] = DEFLATION_CLASS_GATES,
+        deflation_gates: Iterable[str] | None = None,
+        gate_classes: Mapping[str, str] | None = None,
+        invariant_gates: Iterable[str] | None = None,
         check_null_control: bool = True,
         null_effect: float = 0.0) -> PositiveControlReport:
     """⭐⭐ **"WHICH GATES SHOULD PASS A PLANTED EFFECT?" — EXECUTED, NOT NARRATED.**
@@ -746,19 +936,57 @@ def injected_effect_positive_control(
       be the gate function the study actually scores with; re-implementing it here would restate the
       harness's assumptions instead of testing them (the NF-C0e "a test that reads a value back
       under the key the code wrote" class).
+    `gate_classes={gate: "metric"|"deflation"|"invariant"}` — ⭐ the DECLARED partition, and the
+      durable half of PLAT-CVP2's defect-2 fix. It must classify EVERY gate the study scores. It is
+      the ONLY input that can affirm "this family has no deflation gate"; without it a vocabulary
+      that names nothing in the study is reported UNVERIFIED rather than guessed.
+    `deflation_gates=` / `invariant_gates=` — the vocabulary form, for a caller that only needs to
+      rename one class. `invariant_gates` is DECLARED FORWARD by the registration, which is what
+      keeps it from laundering: a gate cannot be reclassified as injection-invariant after seeing
+      that it blocked (E2.1-r).
 
-    Verdicts
-    --------
-    `VACUOUS`           an arm survives on the NO-EFFECT payload ⇒ the family certifies noise; no
-                        reading of the injected run means anything.
-    `DETECTED`          at least one arm clears EVERY gate ⇒ the family can certify an effect of
-                        this size over this field.
-    `DEFLATION_BLOCKED` no arm clears everything, but at least one clears every METRIC gate and is
-                        stopped ONLY by deflation-class gates ⇒ the family is NOT blind; its
-                        deflation half cannot certify an effect of this size over THIS field.
-    `BLIND`             not even the metric gates fire ⇒ a null from this family is free (it would
-                        have returned one for a real, large effect), so it is evidence about
-                        nothing.
+    Verdicts (in precedence order)
+    ------------------------------
+    `VACUOUS`            an arm survives on the NO-EFFECT payload ⇒ the family certifies noise; no
+                         reading of the injected run means anything. PARTITION-FREE.
+    `UNVERIFIED`         the gate partition could not be established, so no partition-DEPENDENT
+                         verdict is admissible. Declare `gate_classes=`.
+    `DETECTED`           at least one arm clears EVERY gate ⇒ the family can certify an effect of
+                         this size over this field. PARTITION-FREE.
+    `CONSTRAINT_BLOCKED` at least one arm is stopped ONLY by DECLARED injection-invariant gates ⇒ it
+                         cleared every gate the injection could move, metric AND deflation. The
+                         blockage is a deterministic CONSTRAINT, not insensitivity.
+    `DEFLATION_BLOCKED`  no arm clears everything, but at least one clears every movable METRIC gate
+                         and is stopped by deflation-class gates ⇒ the family is NOT blind; its
+                         deflation half cannot certify an effect of this size over THIS field.
+    `BLIND`              not even the movable metric gates fire ⇒ a null from this family is free
+                         (it would have returned one for a real, large effect), so it is evidence
+                         about nothing.
+
+    ⚠️ `VACUOUS` and `DETECTED` are returned even when the partition is UNVERIFIED, and that is a
+    deliberate, MEASURED exemption rather than a hole: both are computed from EMPTY blocking sets
+    alone and are provably invariant to every partition (pinned two-sided — see
+    `test_the_partition_free_verdicts_are_invariant_to_any_partition`). Withholding "this family
+    certifies noise" behind "I could not classify your gates" would suppress the control's single
+    most important finding to protect against an inversion that cannot reach it.
+
+    ⛔ **THE ANNOTATE-AROUND RULE RETIRES HERE, FOR FUTURE CALLERS ONLY.** Four incidents were each
+    corrected by hand at the point of reading, which is a defect in the INSTRUMENT (MH2.7):
+      1. **NF-INJ2b D2** (PR #1051) — `stratified` and `feasibility_clamp` blocked under injection by
+         `coherence_restored` ALONE, every metric gate and `dsr` firing; the badge said `BLIND` and
+         the report had to carry a render-time "⛔ do not read that badge at face value". Now
+         `CONSTRAINT_BLOCKED` with `invariant_gates=("coherence_restored",)`.
+      2. **MLB-TV2-2 finding 7** (`ablation_results/mlb_tv2_2_mixture_head.md` §17) — clause names
+         with ZERO overlap against the default vocabulary filed `C7_deflation` as a METRIC gate and
+         returned `BLIND` for a family whose metric gates fired on every arm. Now `UNVERIFIED`
+         unless the partition is declared; TV2-2's own corrected call is byte-identical.
+      3. **MLB-TV2-2 finding 2 / E7.14** (prereg §14.1) — a sign floor ABOVE its own BH cutoff makes
+         a multiplicity clause structurally unpassable. Now refused at registration time by
+         `validate_sign_certifiability`.
+      4. **NF-INJ2c §6.3** — a floor census and the kernel that applies the floor read different
+         predicates. Fixed at its own owner (`nf_inj2_rate_permutation.games_floored_mask`).
+    ⛔ Their RECORDS are the fixtures that prove this behaviour and are NOT edited: every recorded
+    verdict stands as the instrument returned it (E2.1-r — a result is annotated, never re-labelled).
 
     ⛔ This is a DIAGNOSTIC about a gate family. It certifies nothing, re-scores nothing, and it does
     not rescue or damage a study whose null rests on a gate the control leaves untouched — HV2-1's
@@ -770,7 +998,8 @@ def injected_effect_positive_control(
             "an injected-effect control with a ZERO effect plants nothing — it is the null control, "
             "not the positive one. Pass a real effect size (and use `check_null_control` for the "
             "no-effect leg).")
-    defl = frozenset(str(g) for g in deflation_gates)
+    vocabulary_declared = deflation_gates is not None or invariant_gates is not None
+    defl_vocab = DEFLATION_CLASS_GATES if deflation_gates is None else deflation_gates
 
     def _score(payload) -> dict[str, dict[str, bool]]:
         got = run_gates(payload)
@@ -790,8 +1019,14 @@ def injected_effect_positive_control(
 
     scored = _score(inject(float(effect)))
     gate_names = sorted({g for gates in scored.values() for g in gates})
-    metric_names = tuple(g for g in gate_names if g not in defl)
-    defl_names = tuple(g for g in gate_names if g in defl)
+    classes, partition_source, partition_ok = _partition_gates(
+        gate_names, gate_classes=gate_classes, deflation_gates=defl_vocab,
+        invariant_gates=invariant_gates, vocabulary_declared=vocabulary_declared)
+    defl = frozenset(g for g, c in classes.items() if c == "deflation")
+    inv = frozenset(g for g, c in classes.items() if c == "invariant")
+    metric_names = tuple(g for g in gate_names if classes[g] == "metric")
+    defl_names = tuple(g for g in gate_names if classes[g] == "deflation")
+    inv_names = tuple(g for g in gate_names if classes[g] == "invariant")
     # defect 4(a), MEASURED: a field-level statistic carried as a per-arm pass/fail on every arm.
     per_arm_field_level = tuple(
         g for g in defl_names
@@ -799,8 +1034,14 @@ def injected_effect_positive_control(
 
     blocking = {arm: tuple(g for g, ok in gates.items() if not ok) for arm, gates in scored.items()}
     survivors = tuple(a for a, b in blocking.items() if not b)
-    metric_survivors = tuple(a for a, b in blocking.items() if not any(g not in defl for g in b))
-    deflation_blocked = tuple(a for a in metric_survivors if blocking[a])
+    # ⭐ PLAT-CVP2 defect 1: an INVARIANT gate is neither a metric detector nor a deflation
+    # statistic. "Cleared every metric gate" must mean every gate the injection could have MOVED, or
+    # a constraint failure is charged to the family's sensitivity.
+    metric_survivors = tuple(a for a, b in blocking.items() if not any(classes[g] == "metric"
+                                                                      for g in b))
+    constraint_blocked = tuple(a for a in metric_survivors
+                               if blocking[a] and set(blocking[a]) <= inv)
+    deflation_blocked = tuple(a for a in metric_survivors if any(g in defl for g in blocking[a]))
 
     null_survivors: tuple[str, ...] | None = None
     if check_null_control:
@@ -817,6 +1058,33 @@ def injected_effect_positive_control(
         verdict, why = "DETECTED", (
             f"{len(survivors)} arm(s) clear every registered gate at an injected effect of "
             f"{effect:g} — the family can certify an effect of this size over this field.")
+    elif not partition_ok:
+        # ⭐ PLAT-CVP2 defect 2 — the self-safe refusal. Everything below this line reads the
+        # partition, and the partition could not be established, so NONE of it is admissible.
+        verdict, why = "UNVERIFIED", (
+            f"the gate partition could NOT be established: the deflation vocabulary "
+            f"({', '.join(sorted(str(g) for g in defl_vocab)) or '—'}) names NOTHING among this "
+            f"study's gates ({', '.join(gate_names)}). \"this family has no deflation gate\" and "
+            f"\"its deflation gate is called something else\" are indistinguishable from here, and "
+            f"they lead to OPPOSITE verdicts — BLIND (\"a null from this family is free\") versus "
+            f"DEFLATION_BLOCKED (\"the metric gates all fire; the deflation half stops it\"). "
+            f"MLB-TV2-2 was told BLIND on exactly this shape and the truth was DEFLATION_BLOCKED "
+            f"(§17). ⇒ DECLARE the partition: pass "
+            f"`gate_classes={{gate: \"metric\"|\"deflation\"|\"invariant\"}}` covering every gate "
+            f"above. No partition-dependent verdict is returned here (NF1.7 (a): a check that "
+            f"cannot discriminate has not passed).")
+    elif constraint_blocked:
+        _blockers = sorted({g for a in constraint_blocked for g in blocking[a]})
+        verdict, why = "CONSTRAINT_BLOCKED", (
+            f"no arm clears every gate, but {len(constraint_blocked)} "
+            f"({', '.join(constraint_blocked)}) are stopped ONLY by gates DECLARED "
+            f"injection-invariant (`{'`, `'.join(_blockers)}`) — they cleared every gate the "
+            f"injection could move, METRIC and DEFLATION alike. The blockage is a DETERMINISTIC "
+            f"CONSTRAINT, not statistical insensitivity: no injection of any size could clear it, "
+            f"so this says nothing about the family's sensitivity in either direction. "
+            f"⛔ NOT `BLIND` — that reads \"a null from this family is free\", and NF-INJ2b had to "
+            f"annotate exactly this misreading out by hand (PR #1051 D2). NF-D18's "
+            f"`CONSTRAINT_REFUSED`, one level up, inside a positive control.")
     elif deflation_blocked:
         verdict, why = "DEFLATION_BLOCKED", (
             f"no arm clears every gate, but {len(deflation_blocked)} clear every METRIC gate and "
@@ -829,9 +1097,19 @@ def injected_effect_positive_control(
             f"would have meant; it does not by itself refuse any recorded null.")
     else:
         verdict, why = "BLIND", (
-            f"not one arm clears even the METRIC gates at an injected effect of {effect:g} — this "
-            f"family would return a null for a real, large effect, so a null from it is free "
-            f"(NF1.7 (a): a check that cannot fire is not a check that passed).")
+            f"not one arm clears even the MOVABLE METRIC gates at an injected effect of {effect:g} "
+            f"— this family would return a null for a real, large effect, so a null from it is "
+            f"free (NF1.7 (a): a check that cannot fire is not a check that passed)."
+            + (f" ⚠️ {len(inv_names)} gate(s) are DECLARED injection-invariant "
+               f"(`{'`, `'.join(inv_names)}`) and were excluded from that reading, so BLIND here "
+               f"means the MOVABLE half genuinely failed to fire." if inv_names else ""))
+    if partition_source == _SRC_NAME_HEURISTIC and partition_ok and verdict != "VACUOUS":
+        # ⭐ PLAT-CVP2 defect 2 — the heuristic survives only as a fallback that ANNOUNCES ITSELF.
+        why += (f" ⚠️ PARTITION BY NAME HEURISTIC: the deflation half was inferred from the default "
+                f"vocabulary {sorted(DEFLATION_CLASS_GATES)} matching "
+                f"`{'`, `'.join(defl_names)}`, NOT declared by this caller. That vocabulary is a "
+                f"fact about this repo's harness names, not about what your clauses measure — "
+                f"declare `gate_classes=` to make the partition part of the registration.")
     if per_arm_field_level:
         why += (f" ⚠️ AND: {', '.join(per_arm_field_level)} is a FIELD-LEVEL statistic carried as a "
                 f"per-ARM pass/fail on every arm — see `classify_null(pbo_application=...)`.")
@@ -843,6 +1121,9 @@ def injected_effect_positive_control(
         deflation_gates=defl_names, metric_gates=metric_names,
         field_level_gates_applied_per_arm=per_arm_field_level,
         null_control_checked=bool(check_null_control), null_control_survivors=null_survivors,
+        invariant_gates=inv_names, constraint_blocked=constraint_blocked,
+        partition_source=partition_source, partition_verified=bool(partition_ok),
+        gate_classes_resolved=dict(classes),
         reason=why)
 
 
@@ -1451,6 +1732,8 @@ __all__ = [
     "achievable_folds", "seasons_for_folds", "pbo_evaluable",
     "fold_gate_false_fire", "FoldConsistencyClause", "fold_consistency_clause",
     "sign_test_floor", "folds_for_sign_certifiability",
+    "SignCertifiability", "validate_sign_certifiability",
+    "GATE_CLASSES", "GATE_PARTITION_SOURCES",
     "dsr_benchmark_sr0", "dsr_from_sr", "dsr_required_sr", "dsr_ceiling", "folds_to_clear_dsr",
     "dsr_max_field_size", "field_size_curve", "decompose_field_size",
     "composite_gate_power", "mde_in_sd_units", "NullVerdict", "classify_null",

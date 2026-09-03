@@ -25,11 +25,16 @@ A non-zero count is not by itself a confirmation either: the run then re-derives
 with the floor REMOVED and reports whether the violating rows survive, which is the matched
 counterfactual rather than an inference from a count.
 
-⚠️ `nf_inj2_rate_permutation.games_floor_binding` counts `isfinite(g) & (g < GAMES_FLOOR)` while
-`gsafe` replaces `~(isfinite(g) & (g > GAMES_FLOOR))` — the recorded measurement therefore MISSES the
-non-finite rows and the exact-boundary row that the kernel does floor. Both counts are reported
-separately here rather than one being silently preferred, because "the floor is inert" is the claim
-under test and it must not be read off the narrower of two definitions (NF1.7 (a)).
+⚠️ AT THE TIME OF THE RECORDED RUN `nf_inj2_rate_permutation.games_floor_binding` counted
+`isfinite(g) & (g < GAMES_FLOOR)` while `gsafe` replaced `~(isfinite(g) & (g > GAMES_FLOOR))` — the
+recorded measurement therefore MISSED a non-finite row the kernel does floor, so both counts were
+reported separately rather than one being silently preferred, because "the floor is inert" is the
+claim under test and must not be read off the narrower of two definitions (NF1.7 (a)). ⭐ PLAT-CVP2
+defect 4 fixed that at its owner: both columns now read `games_floored_mask()`, the SAME predicate
+the kernel applies, so they agree BY CONSTRUCTION. They are still printed side by side — an
+agreement that is asserted every run is stronger evidence than one column ever was, and the recorded
+values (0 on every fold) are unchanged, since the divergence was only ever on a row shape this
+population does not contain.
 
 THE FOUR CANDIDATE MECHANISMS, all measured per violating row (never inferred):
   M1 GAMES_FLOOR   — `gsafe != g` on the violating row or on the row whose rate it received.
@@ -87,10 +92,9 @@ def games_audit(cap: dict) -> dict:
     """Can the `GAMES_FLOOR` act at all on this fold? Counted, never assumed (NF-D20)."""
     g = pd.to_numeric(cap["vets"].get("proj_games"), errors="coerce").to_numpy(dtype=float)
     elig = np.asarray(cap["eligible"], dtype=bool)
-    gsafe = np.where(np.isfinite(g) & (g > RP.GAMES_FLOOR), g, RP.GAMES_FLOOR)
-    # a row the KERNEL floored: `gsafe` differs from `g`, which for a non-finite `g` is always true
-    # (NaN != NaN would read False, so the non-finite case is named explicitly rather than relied on)
-    moved = np.where(np.isfinite(g), gsafe != g, True)
+    # ⭐ PLAT-CVP2 defect 4 — this used to re-implement the kernel's predicate here, which is how a
+    # census and its own mechanism drifted apart. Both now read ONE owner.
+    moved = RP.games_floored_mask(g)
     finite = np.isfinite(g)
     return {
         "n_rows": int(len(g)),
@@ -100,7 +104,9 @@ def games_audit(cap: dict) -> dict:
         "p01_games": (None if not finite.any() else round(float(np.nanpercentile(g[finite], 1)), 6)),
         "n_non_finite": int((~finite).sum()),
         "n_at_or_below_floor": int(np.sum(finite & (g <= RP.GAMES_FLOOR))),
-        # the two definitions, side by side — the recorded one is the NARROWER
+        # ⭐ PLAT-CVP2 defect 4 — both columns are kept and both now read ONE predicate, so their
+        # AGREEMENT is an assertion rather than a coincidence. Before the fix the recorded one was
+        # the NARROWER (it could not see a non-finite row the kernel floors).
         "recorded_games_floor_binding": int(RP.games_floor_binding(cap["vets"].get("proj_games"))),
         "kernel_rows_actually_floored": int(moved.sum()),
         "kernel_rows_actually_floored_eligible": int((moved & elig).sum()),
@@ -289,14 +295,16 @@ def write_md(rep: dict, path: Path) -> None:
          f"**{v['why']}**", ""]
     L += ["## 1. Could the floor act? (counted per fold, never assumed)", "",
           "| fold | rows | eligible | min `proj_games` | non-finite | `g <= 0.25` | "
-          "`games_floor_binding()` (recorded defn) | rows the KERNEL actually floored |",
+          "`games_floor_binding()` | rows the KERNEL actually floored |",
           "|---|---|---|---|---|---|---|---|"]
     for y, f in rep["folds_detail"].items():
         a = f["games_audit"]
         L.append(f"| {y} | {a['n_rows']} | {a['n_eligible']} | {a['min_games']} | "
                  f"{a['n_non_finite']} | {a['n_at_or_below_floor']} | "
                  f"{a['recorded_games_floor_binding']} | {a['kernel_rows_actually_floored']} |")
-    L += ["", "⚠️ the two right-hand columns are DIFFERENT definitions — `games_floor_binding()` "
+    L += ["", "⭐ PLAT-CVP2 d4: the two right-hand columns now read ONE predicate "
+          "(`games_floored_mask`), so they agree BY CONSTRUCTION; at the time of the recorded run "
+          "they were DIFFERENT definitions — `games_floor_binding()` "
               "counts `isfinite(g) & (g < 0.25)`, the kernel floors "
               "`~(isfinite(g) & (g > 0.25))`. Both are shown because \"the floor is inert\" is the "
               "claim under test and must not be read off the narrower one (NF1.7 (a)).", ""]
@@ -353,8 +361,9 @@ def write_md(rep: dict, path: Path) -> None:
     rate_arms = [a for a in ("points_rate_permute", "rate_refit", "points_rate_stratified",
                              "rate_refit_stratified") if a in prof]
     L += ["", "## 5. Reading — what this licenses, and what it does not", "",
-          f"**The hypothesis is {rep['verdict']['state']}.** {rep['verdict']['why']} The floor's own "
-          f"recorded self-check (`games_floor_binding()`) agrees, and so does the WIDER definition "
+          f"**The hypothesis is {rep['verdict']['state']}.** {rep['verdict']['why']} The floor's "
+          f"own self-check (`games_floor_binding()`) agrees — and at the time of the recorded run "
+          f"so did the then-WIDER definition "
           f"the kernel actually applies, so the refutation does not rest on the narrower count.", "",
           "⭐ **THE RESIDUALS ARE TWO DIFFERENT POPULATIONS, and only one of them is the kind of "
           "thing a tolerance is for.**", ""]
