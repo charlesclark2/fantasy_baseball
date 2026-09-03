@@ -9,7 +9,7 @@ metadata:
   name: plat-cvp2
   vertical: platform
   card: https://trello.com/c/YAxmU2Cv
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     Second hardening pass on the shared null-classification / positive-
@@ -145,8 +145,102 @@ spec:
       - id: 5-closeout
         desc: "Verdict + findings into closeout.followUps; docstring retirement note with the four citations; operator summary."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED. All four measured defects fixed at the source, each proven against
+      its own incident record LOADED from the committed artifact (never retyped,
+      never edited).
+      D1 — NF-INJ2b's recorded blocking table, replayed, returns CONSTRAINT_BLOCKED
+      under a forward-declared `invariant_gates=("coherence_restored",)` and names
+      the same two arms its hand annotation named (`stratified`,
+      `feasibility_clamp`); the SAME table with no declaration still returns its
+      recorded BLIND. Gates now partition into THREE classes, because two do not
+      cover the cases: an invariant gate is neither a metric detector nor a
+      deflation statistic, so `metric_survivors` means "cleared every gate the
+      injection could MOVE".
+      D2 — TV2-2's recorded clause names, which share ZERO overlap with the default
+      vocabulary, now return UNVERIFIED naming `gate_classes=`; TV2-2's own
+      corrected call (`deflation_gates={"C7_deflation"}`) returns its recorded
+      DEFLATION_BLOCKED with the same deflation_blocked and metric_survivors sets,
+      and a full `gate_classes` declaration reaches the same reading.
+      D3 — `validate_sign_certifiability(n_folds=5, n_arms=4, alpha=0.05)` refuses
+      with the prereg §14.1 arithmetic (floor 0.03125 vs cutoff 0.0125, 2.50x, 7
+      folds needed); n=7 clears at headroom 0.625 and is reported NO MARGIN, which
+      is what the prereg records; n=8 clears at 0.00390625. E7.14's own two-sided
+      design (cutoff 0.010 -> 8 seasons) reproduces.
+      D4 — the floor census now counts the SAME predicate the kernel applies
+      (`games_floored_mask`), so a non-finite row the kernel floors is counted; the
+      kernel divisor is proven BIT-IDENTICAL on every input incl. NaN, +/-inf, the
+      exact boundary, negatives and zero; NF-INJ2c's by-VALUE choice for the
+      boundary row is kept with its reason.
+      Back-compat is by construction — every new input defaults to None and every
+      pre-existing branch is byte-identical without them — which is why the whole
+      cross-vertical sweep moved exactly THREE pins, all inside the defects.
+      Gates: all six fast-gate shards green (core 6169, football 2132, serving-ops
+      1680, prospect-milb 811, guards 734, baseball-models 677) plus the slow gate
+      (59). 29 new guards; `betting_ml/tests/plat_cvp2_red_proof.py` 28/28 RED with
+      21/21 baseline-pass, sweeping the OWNING suites (NF-INJ2c prereg + coherence
+      diagnosis, NF-INJ2 rate-permutation, PLAT-CVP1) rather than only this story's
+      file. best_alpha=0; no model, board, publish, serving or deploy change; no
+      recorded verdict recomputed, restated or upgraded; no Trello card touched.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      Findings for PM triage (worker sessions never create Trello cards):
+
+      (1) ⭐ NF-INJ2c'S PLAT-CVP2 TRIPWIRE FIRED AS DESIGNED, AND THE HANDOFF IS
+      NOW OPEN. `test_the_plat_cvp2_claim_is_true_of_the_installed_instrument`
+      asserted the fix was ABSENT and recorded that landing it "turns red, which is
+      the correct outcome: the annotation-around would then be stale and the
+      registration should consume the real verdict instead." It landed and it did.
+      This story did NOT coordinate mid-study and did NOT edit the prereg (E2.1-r):
+      its "PLAT-CVP2 has not landed — verified at this commit" is a PROVENANCE claim
+      scoped to the commit it names, true when written and still true of that
+      commit, and now HISTORICAL. The clause was re-anchored onto the property that
+      remains falsifiable in the world it detected — NF-INJ2c's §7 forward-declared
+      partition must be CONSUMABLE by the installed instrument — and it is proven by
+      DRIVING the control (an arm blocked by an invariant gate alone must come back
+      CONSTRAINT_BLOCKED), not by an existence check, so a parameter that is accepted
+      and ignored still goes red. DECISION FOR NF-INJ2c/PM: whether its classify step
+      consumes `invariant_gates=` + `CONSTRAINT_BLOCKED` or keeps carrying the 2b
+      annotation. Both are now legitimate; only the first removes the hand-reading.
+
+      (2) THE POSITIVE CONTROL'S DEFAULT PARTITION IS STILL THE NAME HEURISTIC, AND
+      EVERY EXISTING CALLER USES IT. Making `gate_classes=` mandatory would be the
+      right end state and would break every recorded caller at once, so the heuristic
+      remains the default and now ANNOUNCES itself in `reason` plus a machine field
+      (`partition_source`). Two callers exist today (NF-INJ2b, MLB-TV2-2) and both are
+      fine — INJ2b overlaps on `dsr`, TV2-2 declares its vocabulary. PM decision
+      available: whether a future story flips the default to "declaration required"
+      once TV2-3 and NF-INJ2c have registered theirs, which would close the class
+      rather than announce it.
+
+      (3) A ZERO-OVERLAP PARTITION IS REFUSED; A **WRONG** ONE IS NOT. `gate_classes`
+      and `deflation_gates` are both taken on trust — exactly as MH2.7's
+      `declared_field_size` is (it "forces an AUDITABLE CLAIM, it does not adjudicate
+      the pre-registration"). A caller that declares a gate invariant which the
+      injection CAN in fact move gets CONSTRAINT_BLOCKED for a family that is merely
+      insensitive, which is the inversion facing the other way. The declaration is
+      recorded on `gate_classes_resolved` for a reviewer to check against the prereg,
+      and `invariant_gates` is specified as FORWARD-declared for the same reason the
+      field size is. A mechanical check is possible in principle — an invariant gate
+      should be one whose per-arm booleans are IDENTICAL on the injected and
+      null payloads — but the null leg is optional (`check_null_control=False`) and
+      a gate can be invariant-and-identical by coincidence at one effect size, so it
+      would be a heuristic guarding a declaration, and this story did not ship one.
+      PM decision available: whether that measured invariance check is worth a story.
+
+      (4) A CONSTANT THIS STORY ADDED WAS CAUGHT BY A GUARD IT DID NOT KNOW ABOUT,
+      WHICH IS THE SYSTEM WORKING. `GATE_PARTITION_SOURCES` shipped in the first cut
+      as a declared-but-unread constant and `test_refresh_config_orphan_guard`
+      (E11.29's dead-`*_SOURCES` guard) failed it in the `core` shard — a shard this
+      story would have run anyway only because the census named `core` as the OWNER
+      of 12 of its 13 pinning suites. It is now unpacked into the three names the
+      module actually uses, so the constant and the strings a report carries cannot
+      drift apart, and the tuple's ORDER is pinned (the unpack is positional). GENERAL:
+      the re-anchor rule "run the shard that OWNS each guard" also catches guards you
+      did not know owned anything of yours.
+
+      (5) A SHARED-TREE OBSERVATION, recorded rather than acted on: another session's
+      live RED-proof mutation (`fp_rb_marginal_calibration.py`, an `and True` break)
+      was present and unstaged in this worktree throughout. It was correctly excluded
+      by staging explicit paths, and no shard failure was attributable to it — but it
+      is a live instance of the CLAUDE.md shared-checkout hazard, and the reason the
+      `git add <path>` rule is load-bearing rather than stylistic.
