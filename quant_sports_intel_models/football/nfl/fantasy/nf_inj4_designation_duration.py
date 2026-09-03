@@ -249,3 +249,318 @@ def attach_spells(designations: pd.DataFrame, grid: pd.DataFrame) -> pd.DataFram
                      "total_missed_rest": float(missed.sum())})
     return pd.concat([designations.reset_index(drop=True),
                       pd.DataFrame(rows)], axis=1)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# THE PRE-REGISTERED FIELD — declared FORWARD, committed before any arm was scored.
+# The narrative registration is `ablation_results/nf_inj4_preregistration.md`; everything
+# decidable in advance is a CONSTANT here and the runner RESTATES NOTHING (the NF-D16 discipline).
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+PRIMARY_ARM = "desig_empirical"
+#: the SERVED model's implicit predictive: a weekly designation applies a discount of EXACTLY zero.
+INCUMBENT_ARM = "always_zero"
+#: the matched foil (NF-D10 / NF-D15): the identical machinery with the DESIGNATION content
+#: stripped and nothing else changed. The paired delta IS the designation attribution — "my arm
+#: won" is not "it won for the reason I said".
+MATCHED_FOIL = "status_blind_foil"
+
+#: DEGENERATES — pre-registered to LOSE, at BOTH ends of the support (NF1.8: a constraint a
+#: degenerate satisfies is fine because the metric eliminates it; a CRITERION a degenerate wins is
+#: fatal, so both the maximally-optimistic and the maximally-pessimistic point mass are scored).
+#: ⭐ `always_zero` is ALSO the incumbent reference for the lift series, so its trial Sharpe is
+#: identically 0 and MH2.1 (a) is satisfied BY CONSTRUCTION rather than by a second rule.
+DEGENERATE_ARMS: tuple[str, ...] = ("always_zero", "always_max")
+
+ARMS: tuple[str, ...] = (
+    "desig_empirical",     # PRIMARY — in-fold empirical spell pmf per designation level
+    "desig_x_posgroup",    # + position, with the declared min-cell backoff
+    "desig_x_practice",    # + practice participation, with the declared min-cell backoff
+    "fixed_penalty",       # the naive constant the gap record refuses — scored, NOT shippable
+    "status_blind_foil",   # the MATCHED FOIL — designation content stripped
+    "always_zero",         # DEGENERATE + the incumbent
+    "always_max",          # DEGENERATE
+)
+DECLARED_FIELD_SIZE = len(ARMS)
+
+#: ⛔ NOT SHIPPABLE BY REGISTRATION, declared before scoring (the NF-D20 discipline). `fixed_penalty`
+#: is the "Out → some fixed games penalty" guess `nf_c8_injury_designation_gap.md` names as the
+#: thing this story exists to replace, and `sleeper_injuries_source.WEEKLY_DESIGNATIONS` carries a
+#: standing prohibition against exactly it. It is SCORED so the empirical forms have to beat it.
+#: ⭐ If it beats every real arm, that is a REFUTED-MAGNITUDE finding to be reported plainly as a
+#: null resting on a REGISTRATION CHOICE rather than on a gate level — ⛔ never re-labelled shippable
+#: after the fact (E2.1-r in its most literal form). The foil and the degenerates are likewise
+#: unshippable: a foil is a measuring instrument and a degenerate is an anchor.
+SHIPPABLE_ARMS: tuple[str, ...] = ("desig_empirical", "desig_x_posgroup", "desig_x_practice")
+NON_SHIPPABLE_BY_REGISTRATION: tuple[str, ...] = (
+    ("fixed_penalty", MATCHED_FOIL) + DEGENERATE_ARMS)
+
+#: ANCHORS — scored, never shippable. A missing or unfittable anchor RAISES; it is NEVER a pass
+#: (NF1.7 (a): an anchor that fails to fit makes its check vacuously true).
+ANCHORS: tuple[str, ...] = ("own_form_oracle", "matched_n_control", "permutation")
+
+# ── Design ─────────────────────────────────────────────────────────────────────────────────────
+#: PRIMARY design: GROUPED K-fold by player. A player contributes up to 14 designation rows whose
+#: spells overlap, so grouping keeps them together; and at ONE season it is the only design giving
+#: both an admissible fold count and usable training depth. 10 is the smallest count clearing the
+#: MLB-TV2-2 margin rule (`sign_floor <= 0.5 x bh_cutoff`) under BOTH declared BH readings — the
+#: census computes it with `validate_sign_certifiability` BEFORE this file declared it.
+N_FOLDS = 10
+FOLD_UNIT = "gsis_id"
+FOLD_SEED = 20260903
+#: ⚠️ THE LIMITATION, STATED FORWARD: grouped-by-player folds share WEEKS between train and test,
+#: so week-level shocks are not held out; and at `n_seasons = 1` season-transfer is structurally
+#: unmeasurable. Neither is fixable at this depth — they are what makes 2026 the named re-test.
+
+#: SECONDARY design, declared FORWARD and REPORTED, never a gate: forward-chained week blocks with
+#: purging (a training row is admissible only if its own outcome window closes before the test
+#: block opens). It carries a SIGN-CONSISTENCY reading only, because at 6 folds its sign floor
+#: (0.0156) REFUSES the conservative BH cutoff — measured by `validate_sign_certifiability`, which
+#: is why it is not the primary.
+SECONDARY_TEST_BLOCKS: tuple[tuple[int, int], ...] = (
+    (7, 8), (9, 10), (11, 12), (13, 14), (15, 16), (17, 18))
+
+#: The support the pmfs are carried on before per-row truncation. 17 = the most team games any row
+#: can have remaining in an 18-week season with one bye.
+SUPPORT_MAX = 17
+
+#: A conditioning cell with fewer than this many in-fold training rows BACKS OFF to its parent
+#: (designation-only) cell. A conventional floor for an empirical distribution over a count
+#: support, fixed a-priori; ⛔ no variant is scored and nothing selects on it.
+MIN_CELL_N = 30
+
+#: The position axis is the program's OWN modelled set — not a grouping invented for this story.
+POSITION_GROUPS: tuple[str, ...] = ("QB", "RB", "WR", "TE")
+
+#: The naive constant `fixed_penalty` embodies: "Out means out for ONE game". Read off the domain,
+#: a-priori, never fitted.
+FIXED_PENALTY_GAMES: dict[str, float] = {
+    "out": 1.0, "doubtful": 1.0, "questionable": 0.0, DESIGNATION_NONE: 0.0}
+
+# ── Gates ──────────────────────────────────────────────────────────────────────────────────────
+MAX_PBO, MIN_DSR = 0.20, 0.95
+
+#: ⭐ THE BH FAMILY, NAMED BEFORE SCORING (the NF-INJ3b PM ruling; CLAUDE.md's "say which reading
+#: binds, and why"). This study tests ONE mechanism on ONE population with NO position axis in the
+#: hypothesis: does the weekly-designation channel improve the games-missed predictive over its
+#: matched status-blind foil? That is a SINGLE hypothesis, so `BH_CUTOFF_BINDING` binds. Correcting
+#: across ARMS would deflate a second time for the search `dsr` already deflates.
+BH_FAMILY_SIZE = 1
+BH_CUTOFF_BINDING = 0.05
+#: REPORTED beside it so the choice is auditable rather than assumed. Both are sign-certifiable at
+#: `N_FOLDS` with margin (headroom 0.020 and 0.137 against the 0.5 rule) — measured in the census.
+BH_CUTOFF_CONSERVATIVE = 0.05 / DECLARED_FIELD_SIZE
+
+#: ⭐ THE EXPLICIT GATE PARTITION (PLAT-CVP2 defect 2). `gate_classes` is the ONLY input that can
+#: affirm "there is no deflation gate here", and it must classify EVERY gate the study scores — a
+#: partially declared partition reintroduces the ambiguity it exists to remove. ⛔ This registration
+#: DECLARES the partition; it does not fall back on the instrument's name heuristic.
+#: The PM convention (CLAUDE.md): deflation-class = {pbo, cscv, dsr, deflated_sharpe};
+#: `bh_ok` and `fold_consistency` are MULTIPLICITY / STABILITY gates, not deflation-class.
+GATE_CLASSES: dict[str, str] = {
+    "beats_incumbent": "metric",
+    "beats_foil": "metric",
+    "fold_consistency": "metric",
+    "bh_ok": "metric",
+    "oracle_respected": "metric",
+    "beats_permutation": "metric",
+    "dsr_ok": "deflation",
+    "degenerates_lose": "invariant",
+}
+#: ⭐ DECLARED FORWARD as gates the injection structurally CANNOT move (PLAT-CVP2 defect 1).
+#: Planting a stronger designation → duration relationship cannot make a point mass at 0 or a point
+#: mass at `games_remaining` win, so an arm stopped by this clause ALONE cleared every movable gate
+#: and is `CONSTRAINT_BLOCKED`, not `BLIND`. Declaring it here, before the control runs, is what
+#: keeps it from laundering: a gate cannot be reclassified as injection-invariant after seeing that
+#: it blocked (E2.1-r).
+INVARIANT_GATES: tuple[str, ...] = ("degenerates_lose",)
+DEFLATION_GATES: tuple[str, ...] = tuple(
+    g for g, c in GATE_CLASSES.items() if c == "deflation")
+
+#: ⛔ `pbo` is a FIELD-LEVEL statistic and is NOT in the per-arm gate table. Carrying it per-arm
+#: converts "the search was unstable" into "this arm failed", which is not a statement PBO makes
+#: (the PM convention; `cv_power.classify_null(pbo_application=...)` refuses that reading).
+PBO_APPLICATION = "field"
+
+#: The positive control's planted effect: ONE extra missed game on the rows the mechanism claims to
+#: price. The smallest unit the target can express and the magnitude the product cares about.
+INJECTION_EFFECT_GAMES = 1.0
+INJECTED_DESIGNATIONS: tuple[str, ...] = ("out", "doubtful")
+
+#: DSR-CONV: degenerates count toward `n_trials` for multiplicity and are EXCLUDED from `V`. This
+#: registration OPTS IN explicitly and forward (the convention is forward-only and inert otherwise).
+DEGENERATES_EXCLUDED_FROM_V = True
+
+# ── Application (registered forward; see the pre-registration §7) ──────────────────────────────
+#: The full regular season, the denominator of the remaining-season RATE the shipped news cap
+#: already uses. Imported meaning, not a new constant: `season_projection.reported_absence_games`.
+SEASON_GAMES = 17.0
+#: ⛔ SCOPE: the discount applies ONLY to REGULAR-SEASON weekly designations. The fitted population
+#: is 2025 REG weeks 1–18; a PRESEASON tag is a different animal (the live 2026 snapshot of
+#: 2026-08-21 carried 116 `Questionable` and ZERO `Out`/`Doubtful`, because the game-status report
+#: only publishes those once the season starts). Applying an in-season fit to a preseason tag would
+#: be an out-of-population read, so it is refused rather than quietly extended.
+APPLY_FROM_REGULAR_SEASON_ONLY = True
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The metric — EXACT discrete CRPS on the count support
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def crps_discrete(pmf: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """`Σ_k (F(k) − 1{y ≤ k})²` on the integer support {0..SUPPORT_MAX}.
+
+    ⛔ Not a quantile grid: a coarse grid silently TIES arms whose predictives differ by less than
+    its step, on exactly the zero-heavy discrete target this study has (NF-W4). ⛔ And never a point
+    MAE: 65.6% of this target is zero and its conditional median is 0, so MAE is minimised by the
+    all-zero nihilist — the NF-D11 inversion, measurably present here. MAE is DISCLOSED as a
+    diagnostic precisely so the inversion is on the record.
+    """
+    f = np.cumsum(np.asarray(pmf, dtype=float), axis=1)
+    k = np.arange(pmf.shape[1])[None, :]
+    return ((f - (np.asarray(y, dtype=float)[:, None] <= k).astype(float)) ** 2).sum(axis=1)
+
+
+def truncate_to_support(pmf: np.ndarray, games_remaining: np.ndarray) -> np.ndarray:
+    """Truncate each row's pmf to {0..games_remaining} and renormalise.
+
+    A prediction of five missed games where two remain is impossible, so the support bound is a
+    property of the ROW. Applied IDENTICALLY to every arm and every anchor — a transformation one
+    arm gets and another does not is not a comparison. A pmf left with zero admissible mass falls
+    back to a point mass at 0 rather than producing NaN (unreachable for the declared field, whose
+    arms all carry mass at 0 or inside the bound; kept so a future arm cannot fail silently).
+    """
+    p = np.array(pmf, dtype=float, copy=True)
+    k = np.arange(p.shape[1])[None, :]
+    p[k > np.asarray(games_remaining, dtype=float)[:, None]] = 0.0
+    tot = p.sum(axis=1, keepdims=True)
+    dead = (tot[:, 0] <= 0.0)
+    if bool(dead.any()):
+        p[dead] = 0.0
+        p[dead, 0] = 1.0
+        tot = p.sum(axis=1, keepdims=True)
+    return p / tot
+
+
+def empirical_pmf(spells: np.ndarray) -> np.ndarray:
+    """The raw empirical pmf of a set of observed spells over {0..SUPPORT_MAX}.
+
+    ⛔ NO SMOOTHING, and that is a decision rather than an omission: CRPS is finite for any
+    predictive (unlike a log score), so a smoothing constant would buy nothing and cost a free
+    parameter. Thin cells are handled by the declared `MIN_CELL_N` backoff instead.
+    """
+    counts = np.bincount(np.clip(np.asarray(spells, dtype=int), 0, SUPPORT_MAX),
+                         minlength=SUPPORT_MAX + 1).astype(float)
+    tot = counts.sum()
+    if tot <= 0:
+        raise ValueError("empirical_pmf received ZERO observations — an empty cell must raise, "
+                         "never yield a silently uniform or degenerate predictive (NF1.7 (a))")
+    return counts / tot
+
+
+def point_mass(k: np.ndarray | float) -> np.ndarray:
+    k = np.atleast_1d(np.asarray(k, dtype=float))
+    out = np.zeros((len(k), SUPPORT_MAX + 1), dtype=float)
+    out[np.arange(len(k)), np.clip(np.rint(k), 0, SUPPORT_MAX).astype(int)] = 1.0
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The arms — every one fitted IN-FOLD on `train` and applied to `test`
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def _cell_pmfs(train: pd.DataFrame, keys: list[str]) -> tuple[dict, np.ndarray]:
+    """(cell → pmf) for every cell with ≥ `MIN_CELL_N` training rows, plus the pooled parent pmf."""
+    parent = empirical_pmf(train["spell"].to_numpy())
+    cells: dict[tuple, np.ndarray] = {}
+    for key, grp in train.groupby(keys):
+        if len(grp) >= MIN_CELL_N:
+            cells[key if isinstance(key, tuple) else (key,)] = empirical_pmf(
+                grp["spell"].to_numpy())
+    return cells, parent
+
+
+def _apply_cells(test: pd.DataFrame, keys: list[str], cells: dict,
+                 parent_by_designation: dict, pooled: np.ndarray) -> np.ndarray:
+    """Look each test row up in its own cell; BACK OFF to the designation-only cell, then to the
+    pooled distribution. The backoff order is declared and identical for every conditioned arm."""
+    out = np.empty((len(test), SUPPORT_MAX + 1), dtype=float)
+    tuples = list(zip(*[test[k].to_numpy() for k in keys]))
+    desigs = test["designation"].to_numpy()
+    for i, (cell, des) in enumerate(zip(tuples, desigs)):
+        out[i] = cells.get(cell, parent_by_designation.get(des, pooled))
+    return out
+
+
+def fit_predict(arm: str, train: pd.DataFrame, test: pd.DataFrame) -> np.ndarray:
+    """One arm's per-row predictive on `test`, fitted only on `train`. Returns the UNTRUNCATED pmf;
+    the caller truncates every arm identically via `truncate_to_support`."""
+    if arm not in ARMS:
+        raise ValueError(f"{arm!r} is not a declared arm — the field is {list(ARMS)} and it was "
+                         f"registered before scoring (E2.1-r)")
+    pooled = empirical_pmf(train["spell"].to_numpy())
+
+    if arm == "status_blind_foil":
+        return np.repeat(pooled[None, :], len(test), axis=0)
+    if arm == "always_zero":
+        return point_mass(np.zeros(len(test)))
+    if arm == "always_max":
+        return point_mass(test["games_remaining"].to_numpy())
+    if arm == "fixed_penalty":
+        return point_mass(test["designation"].map(FIXED_PENALTY_GAMES).to_numpy(dtype=float))
+
+    by_desig, _ = _cell_pmfs(train, ["designation"])
+    by_desig = {k[0]: v for k, v in by_desig.items()}
+    if arm == "desig_empirical":
+        return np.stack([by_desig.get(d, pooled) for d in test["designation"].to_numpy()])
+    if arm == "desig_x_posgroup":
+        cells, _ = _cell_pmfs(train, ["designation", "position"])
+        return _apply_cells(test, ["designation", "position"], cells, by_desig, pooled)
+    if arm == "desig_x_practice":
+        cells, _ = _cell_pmfs(train, ["designation", "practice_level"])
+        return _apply_cells(test, ["designation", "practice_level"], cells, by_desig, pooled)
+    raise AssertionError(f"unreachable: {arm}")   # pragma: no cover
+
+
+def expected_games_missed(pmf: np.ndarray) -> np.ndarray:
+    """`E[spell]` under a (already truncated) predictive — the quantity the board consumes."""
+    return (np.asarray(pmf, dtype=float) * np.arange(pmf.shape[1])[None, :]).sum(axis=1)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Folds
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def grouped_player_folds(frame: pd.DataFrame, *, n_folds: int = N_FOLDS,
+                         seed: int = FOLD_SEED) -> list[np.ndarray]:
+    """PRIMARY design: `n_folds` disjoint TEST index sets, grouped so a player is wholly in one."""
+    players = np.array(sorted(frame[FOLD_UNIT].unique()))
+    rng = np.random.default_rng(seed)
+    assign = dict(zip(players, rng.permutation(len(players)) % n_folds))
+    fold_of = frame[FOLD_UNIT].map(assign).to_numpy()
+    folds = [np.flatnonzero(fold_of == k) for k in range(n_folds)]
+    empty = [k for k, f in enumerate(folds) if len(f) == 0]
+    if empty:
+        raise ValueError(f"fold(s) {empty} are EMPTY — a fold with no test rows scores every arm "
+                         f"on nothing and would enter the fold-consistency count as a free pass "
+                         f"(NF1.7 (a))")
+    return folds
+
+
+def purged_week_folds(frame: pd.DataFrame,
+                      blocks: tuple[tuple[int, int], ...] = SECONDARY_TEST_BLOCKS
+                      ) -> list[tuple[np.ndarray, np.ndarray]]:
+    """SECONDARY design, reported never gated: forward-chained (train_idx, test_idx) week blocks.
+
+    PURGING is on the training row's OWN outcome window: a row designated in week `w` whose spell
+    runs to `w + spell` is admissible for a test block opening at `t` only if `w + spell < t`. That
+    is standard purged CV — using a TRAINING row's own label to decide its admissibility is allowed;
+    using a TEST row's would not be.
+    """
+    week = frame["week"].to_numpy()
+    end = week + frame["spell"].to_numpy()
+    out = []
+    for lo, hi in blocks:
+        test = np.flatnonzero((week >= lo) & (week <= hi))
+        train = np.flatnonzero((week < lo) & (end < lo))
+        if len(test) == 0 or len(train) == 0:
+            raise ValueError(f"week block {(lo, hi)} yields {len(train)} train / {len(test)} test "
+                             f"rows — an empty side is a vacuous fold, never a free pass")
+        out.append((train, test))
+    return out
