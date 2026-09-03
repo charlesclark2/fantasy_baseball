@@ -202,7 +202,26 @@ spec:
       consumes `invariant_gates=` + `CONSTRAINT_BLOCKED` or keeps carrying the 2b
       annotation. Both are now legitimate; only the first removes the hand-reading.
 
-      (2) THE POSITIVE CONTROL'S DEFAULT PARTITION IS STILL THE NAME HEURISTIC, AND
+      (2) ⚠️ ONE DELIBERATE DEVIATION FROM A LITERAL READING OF AC-2, FLAGGED RATHER
+      THAN BURIED. The criterion says a zero-intersection partition "raises or
+      reports UNVERIFIED — never a substantive verdict". Implemented as written for
+      every PARTITION-DEPENDENT verdict (CONSTRAINT_BLOCKED / DEFLATION_BLOCKED /
+      BLIND), and there is a guard asserting none of those three can escape an
+      unverified partition. But VACUOUS and DETECTED are still returned, because
+      both are computed from EMPTY blocking sets and are therefore provably
+      partition-FREE — proven, not asserted: a guard scores each over EVERY
+      assignment of the gate names to the three classes and requires the verdict to
+      be invariant. The reasoning: the inversion AC-2 exists to prevent operates on
+      the BLIND/DEFLATION_BLOCKED axis and cannot reach a verdict that never reads
+      the partition, while suppressing VACUOUS ("this family certifies noise — no
+      reading of the injected run means anything") behind "I could not classify your
+      gates" would hide the control's single most important finding to guard against
+      a risk that structurally cannot occur — a NEW defect of exactly the kind this
+      story exists to remove. PM may overrule: making the refusal total is a
+      one-line change and the guard that proves the exemption safe is the same guard
+      that would then have to be deleted, so the decision is visible either way.
+
+      (3) THE POSITIVE CONTROL'S DEFAULT PARTITION IS STILL THE NAME HEURISTIC, AND
       EVERY EXISTING CALLER USES IT. Making `gate_classes=` mandatory would be the
       right end state and would break every recorded caller at once, so the heuristic
       remains the default and now ANNOUNCES itself in `reason` plus a machine field
@@ -212,7 +231,7 @@ spec:
       once TV2-3 and NF-INJ2c have registered theirs, which would close the class
       rather than announce it.
 
-      (3) A ZERO-OVERLAP PARTITION IS REFUSED; A **WRONG** ONE IS NOT. `gate_classes`
+      (4) A ZERO-OVERLAP PARTITION IS REFUSED; A **WRONG** ONE IS NOT. `gate_classes`
       and `deflation_gates` are both taken on trust — exactly as MH2.7's
       `declared_field_size` is (it "forces an AUDITABLE CLAIM, it does not adjudicate
       the pre-registration"). A caller that declares a gate invariant which the
@@ -227,7 +246,7 @@ spec:
       would be a heuristic guarding a declaration, and this story did not ship one.
       PM decision available: whether that measured invariance check is worth a story.
 
-      (4) A CONSTANT THIS STORY ADDED WAS CAUGHT BY A GUARD IT DID NOT KNOW ABOUT,
+      (5) A CONSTANT THIS STORY ADDED WAS CAUGHT BY A GUARD IT DID NOT KNOW ABOUT,
       WHICH IS THE SYSTEM WORKING. `GATE_PARTITION_SOURCES` shipped in the first cut
       as a declared-but-unread constant and `test_refresh_config_orphan_guard`
       (E11.29's dead-`*_SOURCES` guard) failed it in the `core` shard — a shard this
@@ -238,7 +257,7 @@ spec:
       the re-anchor rule "run the shard that OWNS each guard" also catches guards you
       did not know owned anything of yours.
 
-      (5) A SHARED-TREE OBSERVATION, recorded rather than acted on: another session's
+      (6) A SHARED-TREE OBSERVATION, recorded rather than acted on: another session's
       live RED-proof mutation (`fp_rb_marginal_calibration.py`, an `and True` break)
       was present and unstaged in this worktree throughout. It was correctly excluded
       by staging explicit paths, and no shard failure was attributable to it — but it
