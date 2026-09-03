@@ -1,0 +1,152 @@
+# Plan spec — PLAT-CVP2 (FULL tier: second cv_power/positive-control instrument hardening; cross-vertical)
+# Authored by PM 2026-09-03. Four measured defects, each with its incident record as the fixture.
+# Premise sources verbatim: NF-INJ2b D2 (PR #1051), NF-INJ2c coherence diagnosis §6,
+# MLB-TV2-2 closeout findings (2) and (7) (ablation_results/mlb_tv2_2_mixture_head.md §15/§17).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: plat-cvp2
+  vertical: platform
+  card: https://trello.com/c/YAxmU2Cv
+  status: ACCEPTED
+spec:
+  description: >
+    Second hardening pass on the shared null-classification / positive-
+    control instrument (cv_power + injected_effect_positive_control),
+    fixing FOUR accumulated, measured defects at the source per MH2.7's
+    rule. Two are verdict-INVERSION defects — the instrument returning
+    the opposite of the truth with no warning — which outranks a merely
+    wrong verdict. Cross-vertical: MLB, NCAAF, and fantasy all call it,
+    and suites PIN it, so every guard re-anchors onto the new
+    implementation in the SAME PR, never weakened or deleted.
+    best_alpha=0; no model, board, or serving change anywhere; the
+    instrument's consumers' recorded verdicts are history and are not
+    recomputed, restated, or upgraded by this story.
+  acceptanceCriteria:
+    - description: >
+        DEFECT 1 (NF-INJ2b D2, measured): with the effect injected,
+        every metric gate + DSR fired correctly and two arms were
+        blocked SOLELY by a gate the injection structurally cannot move
+        (coherence_restored) — and the instrument said BLIND ("a null
+        from this family is free"), the opposite of the truth. FIX:
+        accept a DECLARED set of injection-invariant gates (declared
+        FORWARD by the registration, so the set cannot launder) and
+        report CONSTRAINT_BLOCKED with the invariant gates named;
+        BLIND keeps its meaning for movable gates only.
+    - description: >
+        DEFECT 2 (MLB-TV2-2 finding 7, ⭐ measured inversion): the
+        control partitions gates into deflation-class vs metric BY
+        NAME; a caller whose clause names share ZERO overlap with the
+        default vocabulary {cscv, deflated_sharpe, dsr, pbo} gets its
+        deflation gate filed as a metric gate and a silently INVERTED
+        verdict (TV2-2 was told BLIND; the truth was DEFLATION_BLOCKED).
+        FIX (the MH2.7 self-safe pattern; NF1.7(a) one level up): a
+        zero-intersection partition raises or reports UNVERIFIED —
+        never a substantive verdict — and the caller is told how to
+        declare its gate classes explicitly. An explicit gate-class
+        declaration input is the durable half of the fix; the
+        name-heuristic survives only as a fallback that must announce
+        itself.
+    - description: >
+        DEFECT 3 (MLB-TV2-2 finding 2 / E7.14, measured): at 5 folds a
+        sign floor of 2^-5 = 0.031 sat ABOVE a 4-arm BH cutoff of
+        0.0125 — the multiplicity clause was structurally unpassable by
+        an effect of ANY size, and nothing checks this by default
+        (folds_for_sign_certifiability exists; no caller must consult
+        it). FIX: the instrument REFUSES a gate set whose sign floor
+        exceeds its own BH cutoff, at registration-validation time, with
+        the arithmetic in the message (the same self-safe move MH2.7
+        made for declared_field_size).
+    - description: >
+        DEFECT 4 (NF-INJ2c §6.3, latent, inert-everywhere-measured):
+        games_floor_binding() cannot see a non-finite row the kernel
+        DOES floor — the instrument's floor census and the kernel's
+        floor application read different predicates. FIX: one predicate,
+        one owner, both readers; RED-prove with a non-finite row that
+        the kernel floors.
+    - description: >
+        RE-ANCHOR, NEVER WEAKEN (MH2.7): grep every importer + every
+        pinning suite BEFORE the first edit (node 1 fixes the list);
+        run the CI shard that OWNS each guard, not just the shard of
+        touched files. New states (CONSTRAINT_BLOCKED, UNVERIFIED) get
+        their own pins. RED-prove every fix TWO-SIDED: each defect's
+        historical case must now classify correctly (NF-INJ2b's
+        injection run -> CONSTRAINT_BLOCKED with coherence_restored
+        named; TV2-2's clause names -> UNVERIFIED, and with a proper
+        declaration -> DEFLATION_BLOCKED; the 5-fold/4-arm gate set ->
+        refused with the arithmetic; the non-finite floored row ->
+        counted) AND a deliberate regression to the old behavior must
+        go red. Python harnesses carry baseline-pass + NOT-SELECTED
+        from day one (reference: betting_ml/tests/nf_rate1_red_proof.py).
+    - description: >
+        HISTORY IS UNTOUCHED: NF-INJ2b's annotated BLIND, NF-INJ2c's
+        carried annotation pattern, and TV2-2's §17-corrected
+        DEFLATION_BLOCKED hand-reading are cited as the fixture cases
+        proving the new behavior — their records are not edited. The
+        interim annotate-around rule retires only for FUTURE callers;
+        note the retirement in the control's docstring with the four
+        incident citations. NF-INJ2c (IN FLIGHT) consumes this if
+        landed before its classify step, else keeps annotating — do not
+        coordinate mid-study. TV2-3's registration cites this story's
+        declared-gate-class input.
+    - description: >
+        Standing disciplines: reproduction pins 1e-9 where numeric;
+        no serving, no publish, no deploy.sh, no Trello; >2-min
+        commands to the operator paste-ready (time the cross-vertical
+        guard sweep on one shard first); worktree; PR -> dev.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: plat-cvp2
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "PLAT-CVP2" / "cv_power" / "positive control" (board Credence Sports, 2026-09-03)'
+    duplicates: []
+    adjacent:
+      - "PLAT-CVP1 (Done, PR #1044 lineage) — the first hardening; same MH2.7 playbook; its DEFLATION_REFUSED/lockstep/helper states are the base this extends."
+      - "NF-INJ2c (IN FLIGHT) — names this fix in its prereg (consume-if-landed, annotate-if-not); no mid-study coordination."
+      - "MLB-TV2-3 (Backlog, funded) — its registration consumes the declared-gate-class input; sequenced AFTER this story by PM ruling."
+      - "Guard-maintenance bundle (5mFfCaCo) — harness scheduling/drift; disjoint from instrument semantics."
+      - "MLB served-row helper card (HTG77WvQ) — population predicate, different layer; not folded in."
+  triedLedger:
+    files:
+      - "The four incident records: PR #1051 D2 (BLIND-on-invariant-gate); ablation_results/mlb_tv2_2_mixture_head.md §15/§17 (zero-intersection inversion + sign-floor trap); nf_inj2c_coherence_diagnosis.md §6 (games_floor_binding predicate split)"
+      - "cv_power module + injected_effect_positive_control + every pinning suite (grep the imports; PLAT-CVP1's node-1 census is the pattern)"
+      - "plan_specs/platform/plat-cvp1.yaml closeout (the re-anchor playbook + docstring-retirement convention)"
+    recordedNulls:
+      - "None re-approached — instrument changes for FUTURE studies only; every past verdict (incl. TV2-2's hand-corrected reading) stands as recorded."
+  supersedes: []
+  dependsOn:
+    - "PLAT-CVP1 merged (landed — verify with an import check at kickoff, not by assumption)"
+  feedsInto:
+    - "TV2-3's registration; NF-INJ2c's classify step (if timing allows); every future §0.5 study's positive control being trustworthy without hand-reading"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: plat-cvp2-plan
+spec:
+  goalRef: { name: plat-cvp2 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-consumer-census
+        desc: "Grep every importer + pinning suite; name each guard's owning CI shard. Re-anchor list fixed BEFORE the first edit."
+      - id: 2-fixes
+        desc: "Defects 1-4, each with its historical case as the fixture proving the new classification."
+      - id: 3-reanchor
+        desc: "Every pin onto the new implementation, same properties + new-state pins; run every owning shard."
+      - id: 4-red
+        desc: "Two-sided RED proofs (all four defects, both directions); baseline-pass + NOT-SELECTED controls in the harness."
+      - id: 5-closeout
+        desc: "Verdict + findings into closeout.followUps; docstring retirement note with the four citations; operator summary."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

@@ -1,4 +1,4 @@
-"""ncaaf.py — NCAAF-P3.1: the PUBLIC college-football API (games/predictions + futures).
+"""ncaaf.py — the PUBLIC college-football API (games/predictions, futures, team pages).
 
 NCAAF is FREE (E9.45 — fantasy is the paid hook), so this router carries no `Depends` at all: no
 `require_subscriber`, no `require_fantasy_access`, nothing. It is mounted with no `dependencies=`
@@ -8,9 +8,15 @@ gated router.
 ⚠️ BEING PUBLIC IN FASTAPI IS NOT SUFFICIENT AND NEVER HAS BEEN. The HTTP API applies a Cognito JWT
 authorizer PER ROUTE, configured in the AWS console and living in NO repo IaC — so a route that is
 genuinely public in code still answers **401 at the gateway before the Lambda is ever invoked**
-(NF3.2). Each route below needs an explicit `--authorization-type NONE` route; the four
+(NF3.2). Each route below needs an explicit `--authorization-type NONE` route; the
 `create-route` commands are in `infrastructure/aws_resources.md`. ⛔ This story is NOT done at
-merge: `deploy.sh` ships the code and the gateway routes are a separate operator step.
+merge: `deploy.sh` ships the code and the gateway routes are a separate operator step — and that
+applies to EVERY route added later, one per path. NCAAF-P3.3's `/ncaaf/teams/{team_id}` is the
+fifth and needs its own; a new public route with no gateway route 401s for everyone, with nothing
+in this repo to show why.
+
+📚 WHAT LIVES HERE. The game board (manifest / slate / one game), the P1.5 futures board, and —
+NCAAF-P3.3 — one FBS team's stats page. The team route is the link-out target of the game cards.
 
 📣 WHAT IT SERVES — AND WHAT IT STRUCTURALLY CANNOT
 ---------------------------------------------------
@@ -51,6 +57,7 @@ from app.backend.models.ncaaf import (
     NcaafGamePrediction,
     NcaafManifest,
     NcaafSlate,
+    NcaafTeamPage,
 )
 from app.backend.services import ncaaf_serving
 from betting_ml.utils.game_day import current_game_date_iso
@@ -72,6 +79,10 @@ _NO_MANIFEST = (
 _NO_SLATE = "No NCAAF projections are published for this game-day."
 _NO_GAME = "No NCAAF projection is published for this game."
 _NO_FUTURES = "No NCAAF futures board is published for this season."
+_NO_TEAM = (
+    "No NCAAF team page is published for this team. Either the team id is not an FBS team we "
+    "model, or the serving store has not been written for this season yet."
+)
 
 
 @router.get("/manifest", response_model=NcaafManifest)
@@ -110,6 +121,38 @@ def ncaaf_game(game_id: int = Path(..., ge=1, description="the CFBD game id")):
     if blob is None:
         raise HTTPException(status_code=404, detail=f"{_NO_GAME} (game_id={game_id})")
     return NcaafGamePrediction.model_validate(blob)
+
+
+@router.get("/teams/{team_id}", response_model=NcaafTeamPage)
+def ncaaf_team(team_id: int = Path(..., ge=1, description="the CFBD team id")):
+    """One FBS team's stats page: the P1.2 strength rating WITH its posterior band, the P1.1
+    opponent-adjusted efficiency, the season's schedule and results, and the trench/pace splits.
+
+    ⭐ THE BAND IS SERVED WITH THE RATING, ALWAYS. At week 1 nothing has been played and the
+    posterior is the prior — a real number with a wide interval (~7 points of sd on the 2026
+    opener). A rating without its band would publish a precision the model does not claim, which on
+    this vertical is exactly the line between context and a pick. `best_alpha = 0`: a strength
+    rating is context, never a recommendation.
+
+    ⚖️ EACH BLOCK STATES ITS OWN AVAILABILITY. The page assembles from four independently-available
+    sources — the P1.2 strength lake and three P1.1 marts — and on a September Saturday a CORRECT
+    page has a rating, a schedule, and three structurally empty blocks because no game has been
+    played. That must not render identically to "our mart build failed", so every block carries a
+    `status` and a machine-readable `reason` (`no_games_played_yet` vs `source_marts_unavailable`
+    vs `no_row_for_this_team_and_season`) rather than one shared blank (NF-C6b / NF-K1).
+
+    ⛔ 404 MEANS ABSENT. A team we publish nothing for is a 404, never an empty-but-successful body
+    — "we have no page for this team" and "we have a page and some field is null" are different
+    facts (the same rule the slate and game routes follow).
+
+    ⚠️ LIKE EVERY ROUTE HERE, BEING PUBLIC IN CODE IS NOT SUFFICIENT: this path needs its own
+    API-Gateway route with `--authorization-type NONE`, or the Cognito JWT authorizer answers 401
+    before the Lambda is invoked (NF3.2). See `infrastructure/aws_resources.md`.
+    """
+    blob = ncaaf_serving.read_team(team_id)
+    if blob is None:
+        raise HTTPException(status_code=404, detail=f"{_NO_TEAM} (team_id={team_id})")
+    return NcaafTeamPage.model_validate(blob)
 
 
 @router.get("/futures", response_model=NcaafFuturesBoard)

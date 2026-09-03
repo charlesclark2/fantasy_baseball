@@ -325,6 +325,173 @@ def read_market_lines(season: int) -> tuple[dict[int, dict], bool]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════
+# NCAAF-P3.3 — the TEAM PAGE inputs
+# ══════════════════════════════════════════════════════════════════════════════════════════
+#
+# 🚦 TIER: ALERT-loud-but-continue, and the tiering is the design rather than caution.
+#
+# The team page assembles from a source the predictions write does NOT use: the P1.1 dbt marts,
+# which live in the sports DuckDB rather than the lake. That is a strictly heavier dependency than
+# this job's stated contract (lake + AWS, nothing else), so it is added at a tier where it cannot
+# reach the HALT-tier board:
+#
+#   * the STRENGTH block reads the LAKE (`ncaaf/derived/team_strength_week`), so the page's LEAD
+#     number — the rating and its band — never depends on the DuckDB at all;
+#   * the P1.1 blocks (efficiency, trench/pace, schedule) read the marts, and when the DuckDB is
+#     absent they are served as STATED absences with `reason=source_marts_unavailable` rather than
+#     omitted, so a reader is told which half is missing instead of shown a thinner page that looks
+#     complete;
+#   * a failure anywhere in here writes no team blobs and leaves the previous ones in place. The
+#     manifest / slates / per-game / futures write is untouched.
+#
+# ⚠️ WHY A DuckDB DEPENDENCY IS ACCEPTABLE HERE WHEN THIS MODULE'S HEADER SAYS "NO sports.duckdb".
+# That line predates NF-INFRA1, which moved the file onto the `sports_duckdb` NAMED VOLUME and made
+# `SPORTS_DUCKDB_PATH` a deploy-gated required env var. The hazard it named — a HALT-tier op quietly
+# depending on a deploy-EPHEMERAL artifact and running green over a frozen table (NF-FRESH1) — is
+# answered on both counts: the artifact is persistent, and this read is not HALT-tier and says so
+# loudly when it cannot run. ⛔ The predictions path stays lake-only; do not move it.
+#
+# ⭐ VINTAGE IS SERVED, NOT INFERRED (NF-FRESH2). The marts are rebuilt by a DIFFERENT job on a
+# different cadence, so a team page can legitimately be a build behind. Every block states the
+# `as_of_week` it describes, and the run log reports the mart vintage — staleness must be visible
+# rather than something a reader has to deduce from a number that looks fine.
+
+#: The mart schema `_run_sports_dbt` materializes the NCAAF project into.
+NCAAF_MARTS_SCHEMA = "main_ncaaf_marts"
+
+
+def _team_marts_query(table: str, season: int) -> str:
+    return f"select * from {NCAAF_MARTS_SCHEMA}.{table} where season = {int(season)}"
+
+
+def read_team_marts(season: int) -> tuple[dict[str, "pd.DataFrame"], str | None]:
+    """The P1.1 mart frames for `season`, or `({}, reason)` when the DuckDB cannot be read.
+
+    ⭐ ONE RESOLVER FOR THE PATH (NF-INFRA1). `sports_duckdb_path()` is the single owner;
+    a literal here would re-create the four-owners divergence that made an NFL gate read a file
+    nothing wrote. Opened READ-ONLY: this process must never be able to write, lock or vacuum a
+    database a dbt build owns.
+
+    ⚠️ RETURNS A REASON, NEVER RAISES. This is ALERT tier — a missing mart build must degrade the
+    team pages, not fail the serving write. But an ABSENT DuckDB is reported with the shared
+    `missing_duckdb_remedy()` string so the operator is told what to run, rather than seeing a
+    green job that quietly published pages with three empty blocks.
+    """
+    from betting_ml.utils.sports_duckdb import missing_duckdb_remedy, resolve_sports_duckdb
+
+    resolved = resolve_sports_duckdb()
+    if not resolved.exists():
+        log.warning("[ALERT] NCAAF team pages: %s", missing_duckdb_remedy(resolved))
+        _send_alert(
+            "NCAAF team pages — the sports DuckDB is missing",
+            missing_duckdb_remedy(resolved),
+            severity="WARN", dedup_key="ncaaf-team-pages-duckdb-missing")
+        return {}, contract.TEAM_BLOCK_REASON_NOT_BUILT
+
+    try:
+        import duckdb
+        con = duckdb.connect(str(resolved), read_only=True)
+    except Exception as exc:  # noqa: BLE001 — ALERT tier
+        log.warning("[ALERT] NCAAF team pages: cannot open %s read-only (%s) — the P1.1 blocks are "
+                    "served as stated absences.", resolved, exc)
+        return {}, contract.TEAM_BLOCK_REASON_NOT_BUILT
+
+    frames: dict[str, pd.DataFrame] = {}
+    try:
+        for key, table in (
+            ("efficiency", "rollup_ncaaf_team_week_opponent_adjusted"),
+            ("splits", "rollup_ncaaf_team_week_asof"),
+            ("schedule", "dim_ncaaf_game"),
+        ):
+            frames[key] = con.execute(_team_marts_query(table, season)).df()
+        # ⭐ THE SCD-2 READ, POINT-IN-TIME AND EXPLICIT. `dim_ncaaf_team` is season-VERSIONED, so a
+        # team's row is the version whose validity range CONTAINS the season — never `is_current`,
+        # which would file every 2026 conference mover under whatever league it ends up in last.
+        # The PRIOR season is read too, and only for one purpose: a team with no prior-season row
+        # is new to FBS, whose absent pre-season covariates are structural rather than a defect.
+        for key, yr in (("team_dim", season), ("prior_team_dim", season - 1)):
+            frames[key] = con.execute(
+                f"select * from {NCAAF_MARTS_SCHEMA}.dim_ncaaf_team "
+                f"where {int(yr)} between valid_from_season and coalesce(valid_to_season, 9999)"
+            ).df()
+    except Exception as exc:  # noqa: BLE001 — ALERT tier
+        log.warning("[ALERT] NCAAF team pages: a P1.1 mart read FAILED (%s) — the affected blocks "
+                    "are served as stated absences; the game board is unaffected.", exc)
+        return {}, contract.TEAM_BLOCK_REASON_NOT_BUILT
+    finally:
+        con.close()
+
+    return frames, None
+
+
+def read_team_strength(season: int) -> "pd.DataFrame | None":
+    """The season's P1.2 posterior rows from the LAKE, or None when it cannot be read.
+
+    Uses NCAAF's own `query_or_missing`, so "the table does not exist yet" and "a read failed" are
+    decided in ONE place — by LISTING the Delta log, never by matching an engine's error text
+    (NCAAF-LAKE1: a message match against an unpinned dependency is a time bomb, and it fired).
+    """
+    try:
+        from quant_sports_intel_models.football.ncaaf.ingest import query_lake as ql
+        table = ql.delta("team_strength_week", tier="derived")
+        return ql.query_or_missing(f"select * from {table} where season = {int(season)}")
+    except Exception as exc:  # noqa: BLE001 — ALERT tier
+        log.warning("[ALERT] NCAAF team pages: the P1.2 strength read FAILED (%s) — team pages are "
+                    "served with the strength block absent; the game board is unaffected.", exc)
+        return None
+
+
+def build_team_blobs(season: int, *, now: datetime | None = None) -> tuple[list[dict], dict]:
+    """`(team payloads, a report dict)`. Never raises — ALERT tier throughout."""
+    from quant_sports_intel_models.football.ncaaf.serving import team_payloads
+
+    strength = read_team_strength(season)
+    frames, marts_reason = read_team_marts(season)
+    marts_available = marts_reason is None
+
+    payloads_by_team = team_payloads.build_team_payloads(
+        season=season,
+        strength=strength,
+        efficiency=frames.get("efficiency"),
+        splits=frames.get("splits"),
+        schedule=frames.get("schedule"),
+        team_dim=frames.get("team_dim"),
+        prior_team_dim=frames.get("prior_team_dim"),
+        marts_available=marts_available,
+        now=now,
+    )
+    blobs = [payloads_by_team[t] for t in sorted(payloads_by_team)]
+
+    def _block_counts(block: str) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for blob in blobs:
+            key = blob[block]["status"] if blob[block]["status"] == "available" else                 f"unavailable:{blob[block]['reason']}"
+            counts[key] = counts.get(key, 0) + 1
+        return dict(sorted(counts.items()))
+
+    report = {
+        "n_teams": len(blobs),
+        "marts_available": marts_available,
+        "strength_read_ok": strength is not None,
+        # ⭐ PER-BLOCK, NEVER POOLED (MH2.1 (c)). "82% coverage" cannot tell a week-1 slate whose
+        # efficiency blocks are correctly empty from a mart build that did not run, and those are
+        # the two states an operator most needs to distinguish here.
+        "strength_blocks": _block_counts("strength"),
+        "efficiency_blocks": _block_counts("efficiency"),
+        "splits_blocks": _block_counts("splits"),
+        "schedule_blocks": _block_counts("schedule"),
+        # A conference the SCD-2 dim and the P1.2 pooling level DISAGREE on is a finding about the
+        # model's inputs, so it is counted rather than logged once and lost.
+        "conference_mismatches": sorted(
+            b["team"]["team_id"] for b in blobs
+            if b["team"]["conference_matches_model_input"] is False),
+        "teams_new_to_fbs": sorted(
+            b["team"]["team_id"] for b in blobs if b["team"]["is_new_to_fbs"] is True),
+    }
+    return blobs, report
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════
 # The write
 # ══════════════════════════════════════════════════════════════════════════════════════════
 
@@ -344,7 +511,8 @@ def _count_by(slates: dict, field: str) -> dict[str, int]:
 
 def write_serving_store(season: int, *, dry_run: bool = False, local_root: str | None = None,
                         with_market: bool = True, with_futures: bool = True,
-                        out_dir: str | None = None, now: datetime | None = None) -> dict:
+                        with_teams: bool = True, out_dir: str | None = None,
+                        now: datetime | None = None) -> dict:
     """Build + write every NCAAF serving blob. Returns a manifest dict (what the Dagster op logs)."""
     current_day = current_game_date_iso()  # INC-22 — LA, never UTC
     result: dict = {"season": int(season), "current_game_day": current_day, "dry_run": bool(dry_run)}
@@ -379,6 +547,18 @@ def write_serving_store(season: int, *, dry_run: bool = False, local_root: str |
             log.warning("[ALERT] NCAAF futures board unavailable for season=%s: %s — the per-game "
                         "slates are unaffected and were written.", season, exc)
 
+    # NCAAF-P3.3 — team pages. ALERT tier: a failure here writes no team blobs and leaves the
+    # previous ones in place; the manifest / slates / per-game / futures write is untouched.
+    team_blobs: list[dict] = []
+    team_report: dict = {"n_teams": 0, "skipped": True}
+    if with_teams:
+        try:
+            team_blobs, team_report = build_team_blobs(season, now=now)
+        except Exception as exc:  # noqa: BLE001 — ALERT-loud-but-continue (the bonus surface)
+            log.warning("[ALERT] NCAAF team pages unavailable for season=%s: %s — the game board "
+                        "and futures are unaffected and were written.", season, exc)
+            team_report = {"n_teams": 0, "error": str(exc)}
+
     any_game = next(iter(next(iter(slates.values()))["games"]), None) if slates else None
     manifest = payloads.build_manifest_payload(
         slates, season=season, current_game_day=current_day,
@@ -394,6 +574,9 @@ def write_serving_store(season: int, *, dry_run: bool = False, local_root: str |
             blobs.append((contract.game_cache_key(gid), contract.game_s3_key(gid), game))
     if futures_payload is not None:
         blobs.append((contract.FUTURES_CACHE_KEY, contract.FUTURES_S3_KEY, futures_payload))
+    for team_blob in team_blobs:
+        tid = team_blob["team"]["team_id"]
+        blobs.append((contract.team_cache_key(tid), contract.team_s3_key(tid), team_blob))
 
     # The honest-framing gate, applied to the ACTUAL bytes about to be written — not to the model
     # defaults that produced them. A writer that assembled a framing block from lake values could
@@ -449,6 +632,7 @@ def write_serving_store(season: int, *, dry_run: bool = False, local_root: str |
         market_read_failed=bool(market_failed),
         model_version=(any_game or {}).get("provenance", {}).get("model_version"),
         snapshot_ts=(any_game or {}).get("provenance", {}).get("snapshot_ts"),
+        team_pages=team_report,
     )
     return result
 
@@ -462,6 +646,7 @@ def main(argv=None) -> int:
     p.add_argument("--local-root", default=None, help="read the lake from a local Delta root")
     p.add_argument("--no-market", action="store_true", help="skip the market-line enrichment join")
     p.add_argument("--no-futures", action="store_true", help="skip the P1.5 futures board")
+    p.add_argument("--no-teams", action="store_true", help="skip the P3.3 per-team pages")
     p.add_argument("--out-dir", default=None, help="also write each blob to a local JSON file")
     args = p.parse_args(argv)
 
@@ -470,7 +655,8 @@ def main(argv=None) -> int:
 
     manifest = write_serving_store(
         season, dry_run=args.dry_run, local_root=args.local_root,
-        with_market=not args.no_market, with_futures=not args.no_futures, out_dir=args.out_dir)
+        with_market=not args.no_market, with_futures=not args.no_futures,
+        with_teams=not args.no_teams, out_dir=args.out_dir)
     print(json.dumps(manifest, indent=2, default=str))
     return 0
 

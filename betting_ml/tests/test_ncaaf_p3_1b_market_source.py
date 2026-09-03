@@ -464,17 +464,39 @@ def test_a_real_write_run_reports_which_line_it_attached(monkeypatch, tmp_path):
     assert result["market_reasons"] == {}
 
 
-def test_the_generated_e2e_fixtures_still_clear_the_real_leakage_guard():
-    """The market fixture is built by the SHIPPING `_market()`, so if the guard refused those rows
-    the fixture would silently become an all-unavailable slate and the panel's available branch
-    would stop being covered at all."""
+def test_the_shipped_e2e_market_fixture_carries_a_line_this_guard_would_accept():
+    """The E2E market-available branch is reached by a payload the leakage guard ADMITS.
+
+    ⚠️ RE-ANCHORED BY NCAAF-P3.3, and the re-anchoring is the substance rather than a rename. This
+    used to read the GENERATED `-market.synthetic.json`, whose market blocks were built by feeding
+    2025 closes to this module's own `_market()` — so it asserted that the builder's output clears
+    the builder's own guard, which it does by construction. That fixture is retired: the same URL
+    now returns real lines from NCAAF-ODDS-LIVE's ahead-of-kickoff feed, captured verbatim as
+    `ncaaf-slate-2026-08-29-mixed.json`.
+
+    So the property is now a real one: bytes the SERVER sent carry a `source`/`as_of` pair this
+    contract recognises, and every one of them is a line the shipping guard would admit. If a
+    re-capture ever came back all-`unavailable`, the E2E's priced loop would iterate zero times and
+    stay green while covering nothing — this is where that goes red instead (NF1.7 (a)).
+    """
     blob = json.loads(
-        (_REPO / "frontend/e2e/fixtures/api/ncaaf-slate-2026-08-29-market.synthetic.json").read_text())
+        (_REPO / "frontend/e2e/fixtures/api/ncaaf-slate-2026-08-29-mixed.json").read_text())
     available = [g["market"] for g in blob["games"] if g["market"]["status"] == "available"]
-    assert len(available) == 3, f"the market-available branch lost its coverage ({len(available)})"
+    assert available, "the market-available branch lost its coverage — the fixture prices nothing"
+    known_sources = {payloads.MARKET_SOURCE_CLOSE, payloads.MARKET_SOURCE_T1,
+                     payloads.MARKET_SOURCE_LIVE}
     for block in available:
         assert block["as_of"] == block["snapshot_ts"] is not None
-        assert block["source"] in (payloads.MARKET_SOURCE_CLOSE, payloads.MARKET_SOURCE_T1)
+        assert block["source"] in known_sources, (
+            f"the served line names {block['source']!r}, which this contract does not declare — a "
+            "reader cannot recover what observation they are looking at")
+        assert block["reason"] is None
+
+    # ...and the ABSENT arm survives the feed. A refusal serves no line however good the feed is,
+    # so the stated-absence branch is not something a live capture retires (P3.1b's own note).
+    absent = [g["market"] for g in blob["games"] if g["market"]["status"] == "unavailable"]
+    assert absent, "the fixture prices every game — the stated-absence branch is uncovered"
+    assert all(a["reason"] for a in absent)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

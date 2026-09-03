@@ -3,7 +3,8 @@
 Runs `scripts/write_ncaaf_serving_store.py`: reads the latest NCAAF-PS pre-kickoff per-game
 snapshots + the P1.5 futures-board snapshot from the lake, and writes the manifest / per-day slates
 / per-game blobs / futures board to **DynamoDB (primary) + S3 (fallback)** under the `ncaaf/` key
-namespace — the store the FastAPI NCAAF routers read.
+namespace — the store the FastAPI NCAAF routers read. NCAAF-P3.3 adds the per-TEAM stats pages to
+the same write, at a strictly lower tier (see below).
 
 🚦 TIER: **HALT.** This is the serving-critical write. If it fails, the app has no NCAAF board, and
 a run that goes red is exactly what an operator needs to see. The op does NOT swallow: the writer
@@ -16,11 +17,21 @@ that returns `status="no_snapshots"` and logs a no-op. A lake we could not READ 
 (`query_or_missing`), because a write that "succeeded" over an unreadable input is the 19-green-runs
 class (NF-FRESH1, INC-38).
 
-🖥️ NO BOX PREREQUISITES BEYOND AWS. Lake-only + the serving store: no Snowflake, no CFBD key, no
-Odds-API credits, no `sports.duckdb` and no gitignored parquet (NF-INFRA1 — an op that quietly
-depends on a deploy-ephemeral file is how a schedule runs green over a frozen table). The one
-optional read that touches anything else is the market-line join, which is WARN-tier and reads the
-same S3 lake.
+🖥️ BOX PREREQUISITES — AWS FOR THE SERVING-CRITICAL PATH, AND NOTHING ELSE. The predictions write
+is lake-only: no Snowflake, no CFBD key, no Odds-API credits, no gitignored parquet (NF-INFRA1 — an
+op that quietly depends on a deploy-ephemeral file is how a schedule runs green over a frozen
+table). The market-line join is WARN-tier and reads the same S3 lake.
+
+⚠️ NCAAF-P3.3 ADDED ONE MORE DEPENDENCY, AND DELIBERATELY BELOW THE HALT LINE. The team pages read
+the P1.1 dbt marts, which live in the sports DuckDB rather than the lake. That is heavier than this
+job's original contract, so it sits at ALERT tier: the team page's LEAD number (the P1.2 strength
+rating and its band) comes from the LAKE and never touches the DuckDB, the mart-backed blocks
+degrade to STATED absences (`reason=source_marts_unavailable`) when it cannot be read, and no
+failure in that half can reach the manifest / slate / per-game / futures write. The NF-FRESH1
+hazard the original line names — a HALT-tier op depending on a deploy-EPHEMERAL file and running
+green over a frozen table — is answered on both counts: NF-INFRA1 moved the DuckDB onto a persistent
+named volume with `SPORTS_DUCKDB_PATH` deploy-gated, and this read is loud when it cannot run.
+⛔ Do not move the predictions path onto the DuckDB.
 
 ⛔ NOTHING HERE KEYS ON A WEEK. CFBD restarts `week` at 1 for the postseason and
 `game_prediction_snapshot.py`'s `season_order_week` is a verbatim alias of that raw week (the
@@ -70,6 +81,46 @@ def _run_serving_write(context) -> None:
         manifest.get("market_lines_by_source"),
         manifest.get("market_read_failed"), manifest.get("market_reasons"),
         manifest.get("model_version"), manifest.get("snapshot_ts"))
+
+    # NCAAF-P3.3 — the team pages, reported PER BLOCK rather than as one coverage number.
+    # ⭐ A POOLED "n% populated" CANNOT TELL THE TWO STATES APART that an operator most needs to
+    # distinguish here: a week-1 slate whose efficiency/pace blocks are CORRECTLY empty (nobody has
+    # played) versus a mart build that did not run at all (MH2.1 (c) — report per-column absence,
+    # never a pooled mean). The reasons are machine-readable on the payload for the same purpose.
+    teams = manifest.get("team_pages") or {}
+    if teams.get("skipped"):
+        context.log.info("NCAAF team pages: SKIPPED this run (--no-teams).")
+    elif teams.get("error"):
+        context.log.warning(
+            "[ALERT] NCAAF team pages FAILED to build (%s) — the game board and futures were "
+            "written and are unaffected; the previously-published team pages are untouched.",
+            teams["error"])
+    else:
+        context.log.info(
+            "NCAAF team pages: %s team(s). P1.1 marts available: %s. P1.2 strength read ok: %s. "
+            "Blocks by status — strength %s, efficiency %s, splits %s, schedule %s. "
+            "New to FBS this season: %s.",
+            teams.get("n_teams"), teams.get("marts_available"), teams.get("strength_read_ok"),
+            teams.get("strength_blocks"), teams.get("efficiency_blocks"),
+            teams.get("splits_blocks"), teams.get("schedule_blocks"),
+            teams.get("teams_new_to_fbs"))
+        if not teams.get("marts_available"):
+            context.log.warning(
+                "[ALERT] NCAAF team pages: the P1.1 marts were UNREADABLE, so every team's "
+                "efficiency / trench-pace / schedule block is served as a stated absence "
+                "(reason=source_marts_unavailable). The strength rating and its band are "
+                "unaffected — they come from the lake. Run `sports_ncaaf_dbt_build_job` on the box "
+                "and confirm SPORTS_DUCKDB_PATH.")
+        if teams.get("conference_mismatches"):
+            # ⭐ NOT a display problem. The SCD-2 dim and the P1.2 pooling level are independently
+            # derived; a disagreement means the posterior was shrunk toward a conference the team
+            # does not play in, which is a finding about the model's INPUTS.
+            context.log.warning(
+                "[ALERT] NCAAF team pages: %d team(s) whose SCD-2 conference DISAGREES with the "
+                "conference the P1.2 strength row was pooled under: %s. The dim's answer is "
+                "served; the disagreement is recorded on each payload as "
+                "`team.conference_matches_model_input = false`.",
+                len(teams["conference_mismatches"]), teams["conference_mismatches"])
 
     if manifest.get("market_read_failed"):
         context.log.warning(

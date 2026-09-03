@@ -84,5 +84,14 @@ def read_game(game_id: int) -> dict | None:
     return read_blob(contract.game_cache_key(game_id), contract.game_s3_key(game_id))
 
 
+def read_team(team_id: int) -> dict | None:
+    """NCAAF-P3.3 — one FBS team's stats page. LATEST-WINS, like the futures board.
+
+    The key carries no season: the payload declares the season it describes, so a client never has
+    to guess one from a key (the same reasoning that makes every NCAAF blob a PERMANENT row).
+    """
+    return read_blob(contract.team_cache_key(team_id), contract.team_s3_key(team_id))
+
+
 def read_futures() -> dict | None:
     return read_blob(contract.FUTURES_CACHE_KEY, contract.FUTURES_S3_KEY)
