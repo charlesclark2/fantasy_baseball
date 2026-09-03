@@ -25,14 +25,18 @@ import { forbiddenPhrasesIn } from "../support/claim-denylist"
  *
  *   2. AN ABSENT MARKET LINE COULD RENDER AS PARITY. A blank cell in a two-column comparison
  *      reads as agreement and a zero reads as a line of zero; both are a fabricated market view.
- *      The CAPTURED slate is all-`unavailable` — the wire's state when it was taken, and still
- *      prod's state as measured 2026-08-28 — while the available branch is covered by the
- *      GENERATED `ncaaf-slate-2026-08-29-market.synthetic.json`.
- *      ⚠️ NCAAF-ODDS-LIVE's ahead-of-kickoff feed makes `available` the ordinary case once its
- *      data lands, so the captured fixture WILL change character on the next re-capture. When it
- *      does: keep a genuinely absent game in the fixture and RE-ANCHOR the all-`unavailable`
- *      clause below onto it — do not delete it. The stated-absence branch stays live whatever the
- *      feed does, because a leakage refusal still serves no line.
+ *      ⭐ BOTH ARMS ARE NOW REAL, AND THE MARKET CLAUSES RUN OVER BOTH (NCAAF-P3.3). Two CAPTURED
+ *      payloads from the same URL: `ncaaf-slate-2026-08-29.json` (taken 2026-08-25, every game
+ *      `unavailable` — a shape prod no longer produces for this day, so it is FROZEN in
+ *      `capture-fixtures.mjs`) and `ncaaf-slate-2026-08-29-mixed.json` (taken 2026-09-01, once
+ *      NCAAF-ODDS-LIVE's ahead-of-kickoff feed had landed: seven priced games and one without a
+ *      line). The GENERATED `-market.synthetic.json` that used to reach the available branch is
+ *      RETIRED — a fixture whose market blocks were built by the very builder under test cannot
+ *      disconfirm it (E9.64b), and there is a real payload standing behind it now.
+ *      ⚠️ THE MIXED FIXTURE'S ABSENT GAME IS A REFUSAL, not an uncaptured kickoff
+ *      (`reason = market_snapshot_not_pre_kickoff`): the leakage guard declined a line it could not
+ *      prove was taken before kickoff. It is the only fixture in the tree reaching that branch —
+ *      keep it on any re-capture rather than deleting it.
  *
  *   3. THE COPY COULD DRIFT INTO A CLAIM. `best_alpha = 0` — VAL1 came back ALL_BUCKETS_NULL, ATS
  *      0.496 against the close, indistinguishable from a placebo. The denylist runs over the WHOLE
@@ -45,7 +49,27 @@ const readFixture = (name: string) => JSON.parse(readFileSync(join(FIXTURE_DIR, 
 
 const MANIFEST = readFixture("ncaaf-manifest.json")
 const SLATE = readFixture("ncaaf-slate-2026-08-29.json")
-const SLATE_MARKET = readFixture("ncaaf-slate-2026-08-29-market.synthetic.json")
+const SLATE_MIXED = readFixture("ncaaf-slate-2026-08-29-mixed.json")
+
+/**
+ * ⭐ THE TWO REAL MARKET ARMS, PARAMETRISED (NCAAF-P3.3).
+ *
+ * Every market clause below runs over BOTH captured payloads rather than over whichever one
+ * happens to reach the branch it names. The point is not coverage arithmetic: an all-absent slate
+ * and a mixed one drive the SAME component down different paths, and a panel that renders an
+ * absence correctly on a slate where nothing is priced can still render a line into the wrong row
+ * on a slate where something is. Running one arm each is how this surface was tested before, and it
+ * could not tell those two apart.
+ *
+ * ⚠️ EACH CLAUSE READS ITS ARM'S OWN VALUES. Nothing below assumes an arm has a priced game or an
+ * absent one — the arms genuinely differ, so a clause that needed one and found none would be
+ * passing on nothing (NF1.7 (a)). Where that could happen the clause asserts the population it
+ * found is non-empty first.
+ */
+const MARKET_ARMS = [
+  { mode: "captured" as const, slate: SLATE, label: "all-absent (captured 2026-08-25)" },
+  { mode: "mixed" as const, slate: SLATE_MIXED, label: "mixed (captured 2026-09-01)" },
+]
 const SLATE_DEGRADED = readFixture("ncaaf-slate-degraded.synthetic.json")
 
 const PATH = "/ncaaf/games"
@@ -422,67 +446,94 @@ test("a margin curve carries the even-money reference and a total curve does not
 // 3. Model and market — both branches
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
-test("with no captured line the market column says so, and never blanks or zeroes", async ({ page }) => {
-  await open(page)
-  const g = SLATE.games[0]
-  // ⚠️ RE-ANCHOR, NEVER DELETE (see the file header). This reads the CAPTURED fixture's own state
-  // rather than hard-coding a belief about the wire; when a re-capture brings live lines in, point
-  // it at whichever game is still absent instead of dropping the branch.
-  expect(g.market.status).toBe("unavailable")
-  const panel = card(page, g.game_id).getByTestId("ncaaf-market-comparison")
-  await expect(panel).toHaveAttribute("data-market-status", "unavailable")
-  for (const row of ["margin", "total", "winprob"]) {
-    const cell = panel.getByTestId(`ncaaf-market-comparison-${row}-market`)
-    await expect(cell).toHaveText("No market line")
-  }
-  // The machine-readable reason, said in words. The contract carries it precisely so a surface can
-  // distinguish the causes of a null line; collapsing them at the last hop would throw that away.
-  await expect(panel.getByTestId("ncaaf-market-comparison-absent-reason")).toContainText(
-    "have not captured a closing line",
-  )
-})
+for (const arm of MARKET_ARMS) {
+  test(`[${arm.label}] an absent line says so, and never blanks or zeroes`, async ({ page }) => {
+    // ⭐ RUN ON BOTH ARMS. On the all-absent capture this is a whole-slate statement; on the mixed
+    // one it is the single game the leakage guard REFUSED, sitting beside seven priced cards —
+    // which is the harder case, because that is where a component could quietly inherit its
+    // neighbour's line or collapse the absence into a blank the eye reads as parity.
+    await open(page, { ncaafSlate: arm.mode })
+    const absent = arm.slate.games.filter((g: any) => g.market.status === "unavailable")
+    expect(absent.length, `${arm.label}: no absent game to assert on`).toBeGreaterThan(0)
 
-test("a captured line renders in the model's units, and no difference is ever shown", async ({ page }) => {
-  await open(page, { ncaafSlate: "market" })
-  const priced = SLATE_MARKET.games.filter((g: any) => g.market.status === "available")
+    for (const g of absent) {
+      const panel = card(page, g.game_id).getByTestId("ncaaf-market-comparison")
+      await expect(panel).toHaveAttribute("data-market-status", "unavailable")
+      for (const row of ["margin", "total", "winprob"]) {
+        // ⛔ NOT a blank and NOT a zero: a blank cell in a two-column comparison reads as parity
+        // and a zero reads as a line of zero. Both are a fabricated market view.
+        await expect(panel.getByTestId(`ncaaf-market-comparison-${row}-market`)).toHaveText(
+          "No market line",
+        )
+      }
+      // Something is always SAID about why — the contract carries a machine-readable `reason`
+      // precisely so a surface can distinguish the causes of a null line, and a panel that fell
+      // through to nothing would be collapsing them at the last hop.
+      await expect(panel.getByTestId("ncaaf-market-comparison-absent-reason")).not.toHaveText("")
+    }
+  })
+
+  test(`[${arm.label}] a captured line renders in the model's units, and no difference is shown`, async ({
+    page,
+  }) => {
+    await open(page, { ncaafSlate: arm.mode })
+    const priced = arm.slate.games.filter((g: any) => g.market.status === "available")
+    // ⚠️ NOT an `expect(...).toBeGreaterThan(0)` — the all-absent arm legitimately has none, and
+    // demanding one there would turn a correct fixture into a red. The population that must be
+    // non-empty ACROSS the arms is asserted once, below.
+    for (const g of priced) {
+      const panel = card(page, g.game_id).getByTestId("ncaaf-market-comparison")
+      await expect(panel).toHaveAttribute("data-market-status", "available")
+      // The book quotes a home SPREAD (negative = home favoured); the model publishes a home
+      // MARGIN. Same quantity, opposite sign convention — so the panel negates it to put both
+      // numbers under one heading. A build that forgot the negation would show the market backing
+      // the WRONG TEAM, which is the most consequential silent error available on this panel.
+      const implied = -g.market.home_spread
+      const shown = `${implied > 0 ? "+" : ""}${implied.toFixed(1)}`
+      await expect(panel.getByTestId("ncaaf-market-comparison-margin-market")).toHaveText(shown)
+      await expect(panel.getByTestId("ncaaf-market-comparison-total-market")).toHaveText(
+        g.market.total.toFixed(1),
+      )
+    }
+
+    if (priced.length) {
+      // ⛔ NO DIFFERENCE COLUMN, EVER. The served contract declares none on purpose: "model beats
+      // market by 3.5" is the claim VAL1's null forbids, and a signed difference column is one
+      // rename away from being read as exactly that. Three columns and no more.
+      const columns = await card(page, priced[0].game_id)
+        .getByTestId("ncaaf-market-comparison-margin")
+        .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length)
+      expect(columns).toBe(3)
+    }
+  })
+}
+
+test("the available branch is reached by a REAL payload, not only by a constructed one", async ({
+  page,
+}) => {
+  // ⭐ THE NON-VACUITY CLAUSE FOR THE PARAMETRISED BLOCK ABOVE, and it is the whole reason Task 0
+  // exists. Before NCAAF-P3.3 the only fixture that reached `available` was GENERATED — its market
+  // blocks built by feeding 2025 closes to `payloads._market()`, the very builder the render is
+  // being checked against. That fixture could confirm the shape we already assumed and could never
+  // disconfirm it (E9.64b). This asserts the priced arm is a CAPTURED payload carrying a source the
+  // live feed actually produces, so if a future re-capture ever came back all-absent this clause
+  // goes red HERE rather than letting the priced loop silently iterate zero times.
+  const priced = SLATE_MIXED.games.filter((g: any) => g.market.status === "available")
   expect(priced.length).toBeGreaterThan(0)
-  for (const g of priced) {
-    const panel = card(page, g.game_id).getByTestId("ncaaf-market-comparison")
-    await expect(panel).toHaveAttribute("data-market-status", "available")
-    // The book quotes a home SPREAD (negative = home favoured); the model publishes a home MARGIN.
-    // Same quantity, opposite sign convention — so the panel negates it to put both numbers under
-    // one heading. A build that forgot the negation would show the market backing the WRONG TEAM,
-    // which is the most consequential silent error available on this panel.
-    const implied = -g.market.home_spread
-    const shown = `${implied > 0 ? "+" : ""}${implied.toFixed(1)}`
-    await expect(panel.getByTestId("ncaaf-market-comparison-margin-market")).toHaveText(shown)
-    await expect(panel.getByTestId("ncaaf-market-comparison-total-market")).toHaveText(
-      g.market.total.toFixed(1),
-    )
-  }
+  expect(new Set(priced.map((g: any) => g.market.source))).toContain("odds_api_live")
+  // ...and a real Saturday is MIXED. A slate where every game had a line could not tell "the panel
+  // renders a line" from "the panel renders whatever it is handed".
+  expect(SLATE_MIXED.games.some((g: any) => g.market.status === "unavailable")).toBe(true)
 
-  // ⛔ NO DIFFERENCE COLUMN, EVER. The served contract declares none on purpose: "model beats
-  // market by 3.5" is the claim VAL1's null forbids, and a signed difference column is one rename
-  // away from being read as exactly that. Three columns and no more.
-  const columns = await card(page, priced[0].game_id)
-    .getByTestId("ncaaf-market-comparison-margin")
-    .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length)
-  expect(columns).toBe(3)
-})
-
-test("the mixed slate prices some games and not others", async ({ page }) => {
-  // A fixture where every game had a line could not tell "the panel renders a line" from "the panel
-  // renders whatever it is handed" — and a mixed slate is also the state a real in-season Saturday
-  // will be in.
-  //
-  // ⚠️ `expect.poll` RATHER THAN A BARE `evaluateAll`, and this one was PAID FOR: the first cut read
-  // the attributes once and passed locally on every run, then failed on CI. `evaluateAll` does NOT
-  // auto-retry (the NF-C6P2 finding, one method over from `locator.count()`) — so on a slower,
-  // contended runner it sampled the DOM while only the first cards had rendered, saw nothing but
-  // `available`, and reported a one-sided slate. The defect was in the assertion's timing, not in
-  // the page; a retrying read is what makes it a statement about the finished render.
-  await open(page, { ncaafSlate: "market" })
-  await expect(page.getByTestId("ncaaf-game-card")).toHaveCount(SLATE_MARKET.games.length)
+  await open(page, { ncaafSlate: "mixed" })
+  await expect(page.getByTestId("ncaaf-game-card")).toHaveCount(SLATE_MIXED.games.length)
+  // ⚠️ `expect.poll` RATHER THAN A BARE `evaluateAll`, and this one was PAID FOR: the first cut
+  // read the attributes once and passed locally on every run, then failed on CI. `evaluateAll`
+  // does NOT auto-retry (the NF-C6P2 finding, one method over from `locator.count()`) — so on a
+  // slower, contended runner it sampled the DOM while only the first cards had rendered, saw
+  // nothing but `available`, and reported a one-sided slate. The defect was in the assertion's
+  // timing, not in the page; a retrying read is what makes it a statement about the finished
+  // render.
   await expect
     .poll(async () =>
       [
@@ -643,7 +694,7 @@ test("every rendered word passes the claim denylist", async ({ page, browserName
   // Over the WHOLE RENDERED PAGE rather than over the copy module, because a component's inline
   // heading is exactly where a stronger sentence would appear and no module-level screen can see
   // it. Run in all three data modes so a claim hiding in a degraded branch is caught too.
-  for (const mode of ["captured", "market", "degraded"] as const) {
+  for (const mode of ["captured", "mixed", "degraded"] as const) {
     const context = await page.context().browser()!.newContext()
     const p = await context.newPage()
     await mockApi(p, { ncaafSlate: mode })
@@ -688,9 +739,11 @@ test("a payload whose framing flags change makes the surface WITHDRAW its own co
 })
 
 test("the market panel states the no-advantage framing on every card", async ({ page }) => {
-  await open(page, { ncaafSlate: "market" })
+  // On the MIXED arm deliberately: the framing sentence must appear on a card that HAS a line just
+  // as much as on one that does not, and a slate where nothing is priced could not show that.
+  await open(page, { ncaafSlate: "mixed" })
   const framings = page.getByTestId("ncaaf-market-comparison-framing")
-  await expect(framings).toHaveCount(SLATE_MARKET.games.length)
+  await expect(framings).toHaveCount(SLATE_MIXED.games.length)
   await expect(framings.first()).toContainText("make no claim to an advantage")
   // The two-sided half of the clause above: on the REAL payload the posture holds, so a component
   // that withdrew its copy unconditionally would pass that test and say nothing on any real card.

@@ -586,6 +586,17 @@ def writer(monkeypatch, snapshots, futures_rows):
 
     monkeypatch.setattr(w, "read_snapshots", fake_read)
     monkeypatch.setattr(w, "read_market_lines", lambda season: ({}, False))
+    # ⭐ RE-ANCHORED BY NCAAF-P3.3, and this is a SCOPE statement rather than a convenience.
+    #
+    # The same write now also publishes per-TEAM pages, off the P1.1 dbt marts and the P1.2
+    # strength lake. This suite is about the PREDICTIONS write — its blob counts, its store
+    # fan-out, its dry-run contract — and every one of those is a count that would silently become
+    # "plus however many teams happened to build". Worse, an unstubbed team read is real IO from a
+    # suite whose whole premise is that all IO is mocked: measured here, it reached the live lake
+    # and returned 138 teams. The team half has its own suite
+    # (`test_ncaaf_p3_3_team_page.py`), including the clause that this stub cannot hide — that a
+    # team-page FAILURE must not fail this write.
+    monkeypatch.setattr(w, "build_team_blobs", lambda season, now=None: ([], {"n_teams": 0}))
     monkeypatch.setenv("CACHE_BUCKET", "credence-prod-s3-api-cache")
     return w
 

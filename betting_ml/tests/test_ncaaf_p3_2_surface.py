@@ -39,6 +39,7 @@ import pytest
 from app.backend.models import ncaaf as contract
 from betting_ml.governance import gates
 from quant_sports_intel_models.football.nfl.fantasy import export_track_record_json as ex
+from quant_sports_intel_models.football.ncaaf.serving import payloads
 
 _REPO = Path(__file__).resolve().parents[2]
 _FRONTEND = _REPO / "frontend"
@@ -51,8 +52,12 @@ _ROUTE = _FRONTEND / "app/ncaaf/games/page.tsx"
 _FIXTURES = _FRONTEND / "e2e/fixtures/api"
 _CAPTURED_MANIFEST = _FIXTURES / "ncaaf-manifest.json"
 _CAPTURED_SLATE = _FIXTURES / "ncaaf-slate-2026-08-29.json"
+#: NCAAF-P3.3 — the SECOND capture of the same URL, taken 2026-09-01 once NCAAF-ODDS-LIVE's
+#: ahead-of-kickoff feed had landed: seven priced games and one the leakage guard refused. It
+#: replaced the GENERATED market fixture, so the market-available branch is now reached by bytes
+#: the server actually sent rather than by output of the builder under test (E9.64b).
+_MIXED_SLATE = _FIXTURES / "ncaaf-slate-2026-08-29-mixed.json"
 _GENERATED = (
-    _FIXTURES / "ncaaf-slate-2026-08-29-market.synthetic.json",
     _FIXTURES / "ncaaf-slate-degraded.synthetic.json",
 )
 _GENERATOR = _FRONTEND / "e2e/fixtures/build-ncaaf-degraded.py"
@@ -308,8 +313,12 @@ def _split_fields_added_since_capture(validated, blob, path=""):
 
 @pytest.mark.parametrize(
     "path,model",
-    [(_CAPTURED_MANIFEST, contract.NcaafManifest), (_CAPTURED_SLATE, contract.NcaafSlate)],
-    ids=["manifest", "slate"],
+    [
+        (_CAPTURED_MANIFEST, contract.NcaafManifest),
+        (_CAPTURED_SLATE, contract.NcaafSlate),
+        (_MIXED_SLATE, contract.NcaafSlate),
+    ],
+    ids=["manifest", "slate", "slate_mixed"],
 )
 def test_the_captured_fixtures_are_payloads_the_server_could_actually_send(path, model):
     """Otherwise every E2E conclusion is "given a payload no caller can receive, the page renders Y".
@@ -367,6 +376,38 @@ def test_the_captured_slate_still_holds_the_state_the_specs_reason_from():
     assert all(g["margin"]["interval_lo"] is not None for g in slate["games"])
     # 'Today' has no slate — the case that makes `defaultGameDay` more than `current_game_day`.
     assert manifest["current_game_day"] not in [d["game_day"] for d in manifest["game_days"]]
+
+
+def test_the_mixed_slate_still_holds_the_state_the_market_clauses_reason_from():
+    """The P3.3 capture's CHARACTER — both market arms realized on one real payload.
+
+    ⭐ THE POINT OF THE FIXTURE, asserted rather than assumed. `ncaaf-games.spec.ts` runs its market
+    clauses over this payload expecting to find priced games AND an absent one; if a re-capture came
+    back one-sided, the priced loop would iterate zero times and the suite would stay green while
+    covering nothing (NF1.7 (a) — a clause that did not run is not a pass). This is where that goes
+    red, and it says which half moved.
+
+    ⚠️ THE ABSENT GAME IS A REFUSAL. Its reason is `market_snapshot_not_pre_kickoff`: the leakage
+    guard declined a line it could not prove was taken before kickoff. That is a THIRD reason value
+    and no other fixture in the tree reaches it — keep it on any re-capture rather than deleting it.
+    """
+    blob = json.loads(_MIXED_SLATE.read_text())
+    priced = [g for g in blob["games"] if g["market"]["status"] == "available"]
+    absent = [g for g in blob["games"] if g["market"]["status"] == "unavailable"]
+    assert priced, "the mixed capture lost its priced arm — the market-available branch is uncovered"
+    assert absent, "the mixed capture lost its absent arm — an all-priced slate cannot tell a " \
+                   "panel that renders a line from one that renders whatever it is handed"
+    # A REAL line off the live feed, not a rehydrated historical one. This is what makes the fixture
+    # a capture rather than a reconstruction.
+    assert any(g["market"]["source"] == payloads.MARKET_SOURCE_LIVE for g in priced)
+    for g in priced:
+        m = g["market"]
+        assert m["reason"] is None
+        assert m["as_of"] == m["snapshot_ts"] is not None
+        assert m["home_spread"] is not None or m["total"] is not None
+    for g in absent:
+        # ⛔ Never a bare null: a reason a surface can BRANCH on is the whole contract here.
+        assert g["market"]["reason"], f"game {g['game_id']} is absent with no stated reason"
 
 
 def test_the_generated_fixtures_are_the_shipping_builders_own_output():

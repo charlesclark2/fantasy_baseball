@@ -2,7 +2,7 @@
   "sport": "ncaaf",
   "game_day": "2026-08-29",
   "season": 2026,
-  "generated_at": "2026-08-25T01:35:43.000Z",
+  "generated_at": "2026-08-31T13:01:06.000Z",
   "n_games": 8,
   "games": [
     {
@@ -90,13 +90,13 @@
       "market": {
         "status": "available",
         "reason": null,
-        "source": "odds_api_historical_close",
-        "snapshot_ts": "2025-10-03T22:50:39Z",
-        "as_of": "2025-10-03T22:50:39Z",
-        "home_spread": -2.5,
-        "total": 63.0,
-        "home_moneyline_american": -145.0,
-        "home_moneyline_implied_probability": 0.5918367346938775
+        "source": "odds_api_live",
+        "snapshot_ts": "2026-08-28T01:38:24Z",
+        "as_of": "2026-08-28T01:38:24Z",
+        "home_spread": -9,
+        "total": 46.5,
+        "home_moneyline_american": -350,
+        "home_moneyline_implied_probability": 0.7777777777777778
       },
       "provenance": {
         "model_version": "ncaaf_game_distribution_v2",
@@ -107,15 +107,15 @@
         "strength_as_of_week": 1,
         "pace_term_active": false,
         "n_draws": 20000,
-        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_ts": "2026-08-25T16:00:44.000Z",
         "snapshot_kind": "pre_kickoff"
       },
       "framing": {
         "framing": "market_blind_projection",
-        "best_alpha": 0.0,
+        "best_alpha": 0,
         "market_blind": true,
         "projection_only": true,
-        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only \u2014 we make no claim to an advantage over it, and we publish no picks."
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
       }
     },
     {
@@ -137,7 +137,7 @@
       },
       "away": {
         "team_id": 23,
-        "team": "San Jos\u00e9 State",
+        "team": "San José State",
         "conference": "Mountain West",
         "strength_margin": -11.25438109148021,
         "strength_margin_sd": 7.334726222464596
@@ -203,13 +203,13 @@
       "market": {
         "status": "available",
         "reason": null,
-        "source": "odds_api_historical_close",
-        "snapshot_ts": "2025-08-23T22:50:39Z",
-        "as_of": "2025-08-23T22:50:39Z",
-        "home_spread": -10.0,
-        "total": 59.5,
-        "home_moneyline_american": -365.0,
-        "home_moneyline_implied_probability": 0.7849462365591398
+        "source": "odds_api_live",
+        "snapshot_ts": "2026-08-28T01:38:24Z",
+        "as_of": "2026-08-28T01:38:24Z",
+        "home_spread": -38.5,
+        "total": 61.5,
+        "home_moneyline_american": -30000,
+        "home_moneyline_implied_probability": 0.9966777408637874
       },
       "provenance": {
         "model_version": "ncaaf_game_distribution_v2",
@@ -220,15 +220,15 @@
         "strength_as_of_week": 1,
         "pace_term_active": false,
         "n_draws": 20000,
-        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_ts": "2026-08-25T16:00:44.000Z",
         "snapshot_kind": "pre_kickoff"
       },
       "framing": {
         "framing": "market_blind_projection",
-        "best_alpha": 0.0,
+        "best_alpha": 0,
         "market_blind": true,
         "projection_only": true,
-        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only \u2014 we make no claim to an advantage over it, and we publish no picks."
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
       }
     },
     {
@@ -316,13 +316,13 @@
       "market": {
         "status": "available",
         "reason": null,
-        "source": "odds_api_historical_close",
-        "snapshot_ts": "2025-08-30T22:50:38Z",
-        "as_of": "2025-08-30T22:50:38Z",
-        "home_spread": -27.5,
-        "total": 55.5,
-        "home_moneyline_american": -5000.0,
-        "home_moneyline_implied_probability": 0.9803921568627451
+        "source": "odds_api_live",
+        "snapshot_ts": "2026-08-28T01:38:24Z",
+        "as_of": "2026-08-28T01:38:24Z",
+        "home_spread": -4,
+        "total": 51.5,
+        "home_moneyline_american": -190,
+        "home_moneyline_implied_probability": 0.6551724137931034
       },
       "provenance": {
         "model_version": "ncaaf_game_distribution_v2",
@@ -333,15 +333,15 @@
         "strength_as_of_week": 1,
         "pace_term_active": false,
         "n_draws": 20000,
-        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_ts": "2026-08-25T16:00:44.000Z",
         "snapshot_kind": "pre_kickoff"
       },
       "framing": {
         "framing": "market_blind_projection",
-        "best_alpha": 0.0,
+        "best_alpha": 0,
         "market_blind": true,
         "projection_only": true,
-        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only \u2014 we make no claim to an advantage over it, and we publish no picks."
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
       }
     },
     {
@@ -427,15 +427,15 @@
         "interval_width": 44.20173145917877
       },
       "market": {
-        "status": "unavailable",
-        "reason": "no_line_captured_for_this_kickoff",
-        "source": null,
-        "snapshot_ts": null,
-        "as_of": null,
-        "home_spread": null,
-        "total": null,
-        "home_moneyline_american": null,
-        "home_moneyline_implied_probability": null
+        "status": "available",
+        "reason": null,
+        "source": "odds_api_live",
+        "snapshot_ts": "2026-08-28T01:38:24Z",
+        "as_of": "2026-08-28T01:38:24Z",
+        "home_spread": -7,
+        "total": 46.5,
+        "home_moneyline_american": -260,
+        "home_moneyline_implied_probability": 0.7222222222222222
       },
       "provenance": {
         "model_version": "ncaaf_game_distribution_v2",
@@ -446,15 +446,15 @@
         "strength_as_of_week": 1,
         "pace_term_active": false,
         "n_draws": 20000,
-        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_ts": "2026-08-25T16:00:44.000Z",
         "snapshot_kind": "pre_kickoff"
       },
       "framing": {
         "framing": "market_blind_projection",
-        "best_alpha": 0.0,
+        "best_alpha": 0,
         "market_blind": true,
         "projection_only": true,
-        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only \u2014 we make no claim to an advantage over it, and we publish no picks."
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
       }
     },
     {
@@ -540,15 +540,15 @@
         "interval_width": 44.0326299437691
       },
       "market": {
-        "status": "unavailable",
-        "reason": "no_line_captured_for_this_kickoff",
-        "source": null,
-        "snapshot_ts": null,
-        "as_of": null,
-        "home_spread": null,
-        "total": null,
-        "home_moneyline_american": null,
-        "home_moneyline_implied_probability": null
+        "status": "available",
+        "reason": null,
+        "source": "odds_api_live",
+        "snapshot_ts": "2026-08-29T22:01:02Z",
+        "as_of": "2026-08-29T22:01:02Z",
+        "home_spread": -9,
+        "total": 52.5,
+        "home_moneyline_american": -350,
+        "home_moneyline_implied_probability": 0.7777777777777778
       },
       "provenance": {
         "model_version": "ncaaf_game_distribution_v2",
@@ -559,15 +559,15 @@
         "strength_as_of_week": 1,
         "pace_term_active": false,
         "n_draws": 20000,
-        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_ts": "2026-08-25T16:00:44.000Z",
         "snapshot_kind": "pre_kickoff"
       },
       "framing": {
         "framing": "market_blind_projection",
-        "best_alpha": 0.0,
+        "best_alpha": 0,
         "market_blind": true,
         "projection_only": true,
-        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only \u2014 we make no claim to an advantage over it, and we publish no picks."
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
       }
     },
     {
@@ -654,7 +654,7 @@
       },
       "market": {
         "status": "unavailable",
-        "reason": "no_line_captured_for_this_kickoff",
+        "reason": "market_snapshot_not_pre_kickoff",
         "source": null,
         "snapshot_ts": null,
         "as_of": null,
@@ -672,15 +672,15 @@
         "strength_as_of_week": 1,
         "pace_term_active": false,
         "n_draws": 20000,
-        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_ts": "2026-08-25T16:00:44.000Z",
         "snapshot_kind": "pre_kickoff"
       },
       "framing": {
         "framing": "market_blind_projection",
-        "best_alpha": 0.0,
+        "best_alpha": 0,
         "market_blind": true,
         "projection_only": true,
-        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only \u2014 we make no claim to an advantage over it, and we publish no picks."
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
       }
     },
     {
@@ -766,15 +766,15 @@
         "interval_width": 43.76127202812027
       },
       "market": {
-        "status": "unavailable",
-        "reason": "no_line_captured_for_this_kickoff",
-        "source": null,
-        "snapshot_ts": null,
-        "as_of": null,
-        "home_spread": null,
-        "total": null,
-        "home_moneyline_american": null,
-        "home_moneyline_implied_probability": null
+        "status": "available",
+        "reason": null,
+        "source": "odds_api_live",
+        "snapshot_ts": "2026-08-29T22:01:02Z",
+        "as_of": "2026-08-29T22:01:02Z",
+        "home_spread": -31,
+        "total": 53.5,
+        "home_moneyline_american": -10000,
+        "home_moneyline_implied_probability": 0.9900990099009901
       },
       "provenance": {
         "model_version": "ncaaf_game_distribution_v2",
@@ -785,15 +785,15 @@
         "strength_as_of_week": 1,
         "pace_term_active": false,
         "n_draws": 20000,
-        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_ts": "2026-08-25T16:00:44.000Z",
         "snapshot_kind": "pre_kickoff"
       },
       "framing": {
         "framing": "market_blind_projection",
-        "best_alpha": 0.0,
+        "best_alpha": 0,
         "market_blind": true,
         "projection_only": true,
-        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only \u2014 we make no claim to an advantage over it, and we publish no picks."
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
       }
     },
     {
@@ -879,15 +879,15 @@
         "interval_width": 44.1432393989956
       },
       "market": {
-        "status": "unavailable",
-        "reason": "no_line_captured_for_this_kickoff",
-        "source": null,
-        "snapshot_ts": null,
-        "as_of": null,
-        "home_spread": null,
-        "total": null,
-        "home_moneyline_american": null,
-        "home_moneyline_implied_probability": null
+        "status": "available",
+        "reason": null,
+        "source": "odds_api_live",
+        "snapshot_ts": "2026-08-30T01:00:30Z",
+        "as_of": "2026-08-30T01:00:30Z",
+        "home_spread": -4.5,
+        "total": 55.5,
+        "home_moneyline_american": -200,
+        "home_moneyline_implied_probability": 0.6666666666666666
       },
       "provenance": {
         "model_version": "ncaaf_game_distribution_v2",
@@ -898,23 +898,23 @@
         "strength_as_of_week": 1,
         "pace_term_active": false,
         "n_draws": 20000,
-        "snapshot_ts": "2026-08-25T01:32:57.000Z",
+        "snapshot_ts": "2026-08-25T16:00:44.000Z",
         "snapshot_kind": "pre_kickoff"
       },
       "framing": {
         "framing": "market_blind_projection",
-        "best_alpha": 0.0,
+        "best_alpha": 0,
         "market_blind": true,
         "projection_only": true,
-        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only \u2014 we make no claim to an advantage over it, and we publish no picks."
+        "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
       }
     }
   ],
   "framing": {
     "framing": "market_blind_projection",
-    "best_alpha": 0.0,
+    "best_alpha": 0,
     "market_blind": true,
     "projection_only": true,
-    "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only \u2014 we make no claim to an advantage over it, and we publish no picks."
+    "disclosure": "These are market-blind projections: probabilities and distributional intervals from a model that never sees a betting line. Where a market line is shown it is shown for comparison only — we make no claim to an advantage over it, and we publish no picks."
   }
 }

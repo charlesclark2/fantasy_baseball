@@ -486,21 +486,40 @@ not ship" rather than "one route is missing". Confirmed live 2026-08-08: the Lam
 serving, and `curl https://api.credencesports.com/fantasy/nfl/featured-player` returned
 `401 {"message":"Unauthorized"}` while every other public surface returned 200.
 
-#### NCAAF-P3.1 — the four `/ncaaf/*` routes (the college-football vertical) — ⛔ NOT YET APPLIED
+#### The `/ncaaf/*` routes (the college-football vertical) — ✅ FOUR APPLIED · ⛔ ONE OUTSTANDING
 
-NCAAF is unconditionally FREE (E9.45 — fantasy is the paid hook), so all four routes are public in
-the FastAPI layer (`routers/ncaaf.py`, mounted with no `dependencies=`) — which, as always, is **not
+NCAAF is unconditionally FREE (E9.45 — fantasy is the paid hook), so every route is public in the
+FastAPI layer (`routers/ncaaf.py`, mounted with no `dependencies=`) — which, as always, is **not
 sufficient**: the catch-all `ANY /{proxy+}` carries the Cognito authorizer, so until an explicit
 route exists each of these answers **401 before the Lambda is ever invoked**.
 
+**MEASURED ANONYMOUSLY 2026-09-01** (the verification loop below), and the header above is the
+result rather than an intention — this block previously read "⛔ NOT YET APPLIED" while all four
+P3.1 routes had in fact been applied, which is the documented-≠-actual class the repo keeps paying
+for, facing the harmless direction. Correct it from a measurement, never from a memory of doing it.
+
+| route key | state 2026-09-01 |
+|---|---|
+| `GET /ncaaf/manifest` | ✅ applied (200) |
+| `GET /ncaaf/games` | ✅ applied (404 — no slate today, which is the ROUTER answering) |
+| `GET /ncaaf/games/{game_id}` | ✅ applied (200) |
+| `GET /ncaaf/futures` | ✅ applied (200) |
+| `GET /ncaaf/teams/{team_id}` | ⛔ **NOT APPLIED — 401** (NCAAF-P3.3, added 2026-09-01) |
+
+⚠️ **A NEW ROUTE NEEDS ITS OWN `create-route`, EVERY TIME.** There is no prefix rule and no wildcard
+short of the authorizer-carrying catch-all, so `/ncaaf/teams/{team_id}` being a sibling of four
+exempt routes buys it nothing — it 401s for everyone until the command below runs, with nothing in
+this repo to show why (NF3.2). This is a POST-MERGE operator step; `deploy.sh` ships the code and
+the gateway route is separate.
+
 ```bash
-for RK in "GET /ncaaf/manifest" "GET /ncaaf/games" "GET /ncaaf/games/{game_id}" "GET /ncaaf/futures"; do
-  aws apigatewayv2 create-route \
-    --api-id 8dhmehjak7 --region us-east-1 \
-    --route-key "$RK" \
-    --target "integrations/p093jnh" \
-    --authorization-type NONE
-done
+# NCAAF-P3.3 — the outstanding one. (The other four are already applied; re-running is harmless
+# but returns ConflictException, so only the new key is listed.)
+aws apigatewayv2 create-route \
+  --api-id 8dhmehjak7 --region us-east-1 \
+  --route-key "GET /ncaaf/teams/{team_id}" \
+  --target "integrations/p093jnh" \
+  --authorization-type NONE
 ```
 
 ⭐ **Verify without `apigateway:*`** (the everyday `baseball-access-user` profile is denied it) — curl
@@ -508,7 +527,7 @@ each path anonymously and read the status. **401 = the authorizer is still in fr
 including a 404 from the router when nothing has been published yet, means the route is exempt:
 
 ```bash
-for P in /ncaaf/manifest /ncaaf/games /ncaaf/futures /ncaaf/games/401628319; do
+for P in /ncaaf/manifest /ncaaf/games /ncaaf/futures /ncaaf/games/401628319 /ncaaf/teams/68; do
   printf '%s -> ' "$P"; curl -s -o /dev/null -w '%{http_code}\n' "https://api.credencesports.com$P"
 done
 ```
@@ -517,14 +536,19 @@ done
 found nothing published, which is exactly the absent-vs-null contract (`app/backend/models/ncaaf.py`).
 A 401 means the gateway route is missing; a 500 means the Lambda has not been `deploy.sh`'d.
 
-⚠️ `GET /ncaaf/games/{game_id}` is a PATH-PARAMETER route key — API Gateway matches the literal
-`{game_id}` template, so the braces are part of the route key and must survive shell quoting.
+⚠️ `GET /ncaaf/games/{game_id}` and `GET /ncaaf/teams/{team_id}` are PATH-PARAMETER route keys —
+API Gateway matches the literal `{game_id}` / `{team_id}` template, so the braces are part of the
+route key and must survive shell quoting.
 
 ⭐ These carry **no entitlement decision** and read **no Bearer token at all** — they serve a
 pre-built, identical-for-everyone blob (`ncaaf/…` in `credence-prod-serving-cache`, `ncaaf-cache/…`
 in `credence-prod-s3-api-cache`). `/ncaaf` is in `_DEGRADE_ALLOWED_PREFIXES` and `_PUBLIC_CACHE_RULES`
 (`services/cost_guardrails.py`), so `check_stripe_golive_readiness.py`'s NONE-route cross-check
-passes and the anonymous read is CDN-cacheable at `s-maxage=900`.
+passes and the anonymous read is CDN-cacheable at `s-maxage=900`. Both registries match by PREFIX,
+so `/ncaaf/teams/{team_id}` inherits them with no edit — which is what we want for a free route, and
+which is exactly why a route under this prefix must never become GATED (a gated route inheriting a
+public prefix's cache rule and degrade entry is the defect G100-C1 measured). Pinned by
+`betting_ml/tests/test_ncaaf_p3_3_team_page.py::test_the_team_route_inherits_the_ncaaf_cost_guardrails_rather_than_needing_its_own`.
 
 
 ### 🔒 The generic-board public routes — ✅ APPLIED (re-confirmed anonymously 2026-08-08)
