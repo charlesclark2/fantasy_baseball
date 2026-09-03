@@ -1,0 +1,169 @@
+# Plan spec — NF-INJ4 (FULL tier: §0.5 — the designation→games-missed DURATION model;
+# weekly Q/D/O finally move the availability input, honestly)
+# Authored by PM 2026-09-03 per the NF-C8 handoff item 1 (card wufGcjB8, 🔴 Sprint) — capability (a) ONLY.
+# Premises verified on origin/dev per the spec-premise rule: sleeper_injuries_source.py
+# deliberately maps weekly game-report tags to None (its own §"no override" comment block;
+# 2026-08-21 census: None 2338 · Questionable 116 · IR 24 across 2,501 rows); the availability
+# discount fires only on IR/PUP/NFI/SUS; write-up ablation_results/nf_c8_injury_designation_gap.md.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj4
+  vertical: nfl_fantasy
+  card: https://trello.com/c/wufGcjB8   # the gap record; NF-INJ4 story card linked at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    Weekly Questionable/Doubtful/Out designations currently apply an
+    availability discount of EXACTLY ZERO — the model reacts to roster
+    transactions (IR/PUP/NFI/SUS), not injury reports. Leakage-safe by
+    design, but not what a reader assumes, and from Week 1 (9/9) the
+    Q/D/O channel becomes the PRIMARY live availability signal for the
+    paying user base. The honest fix is a DURATION model: an empirical
+    designation→games-missed distribution fit on point-in-time
+    designation history — because a weekly "Out" carries no duration,
+    and Out→fixed-penalty is a guess dressed as a projection. The
+    model's expected-games-missed feeds the SEASON board's
+    remaining-games availability input through the existing discount
+    machinery. best_alpha=0; §0.5 forward-registered; DEPLOY-HELD —
+    this re-orders the flagship paid surface if it ships, so nothing
+    serves without the gated ship path + operator approval. Capability
+    (b) — news ingest — is explicitly OUT of scope (new data source,
+    live leakage question, operator-gated spend).
+  acceptanceCriteria:
+    - description: >
+        DATA HONESTY FIRST, and it may bind: the PIT-safe designation
+        history is the NF-W2c/W2c-CBS wayback substrate (2,187
+        admissible (player,week,source) rows, 2025, 18/18 weeks) plus
+        the NF-W0a forward capture (2026). State the realized depth in
+        the prereg and let power speak: if one-ish seasons cannot
+        certify position-conditional distributions, the registered
+        fallback shapes are coarser conditioning (designation-only, or
+        designation×position-group) — declared FORWARD as the family,
+        never chosen after seeing fits. A POWER_LIMITED or refused
+        verdict with the 2026 season as the named calendar-bound
+        re-test is an acceptable, publishable outcome (the trigger is
+        genuinely reachable — data accrues weekly).
+    - description: >
+        FORWARD PRE-REGISTRATION (committed before any scoring):
+        target = games missed from the designation week onward
+        (zero-heavy — most Questionables play; NF-D11 discipline, CRPS
+        on the count distribution, never a point MAE); arms = the
+        empirical conditional distribution(s) + degenerates
+        (always-zero = the incumbent's implicit model, and a fixed-
+        penalty strawman) + a matched status-blind foil; gates via
+        cv_power with declared_field_size. ⭐ INSTRUMENT: PLAT-CVP2
+        just landed — this registration DECLARES gate_classes=
+        explicitly (no name-heuristic fallback), declares any
+        injection-invariant gates forward, and runs
+        validate_sign_certifiability at registration time (a refusal
+        there re-shapes folds BEFORE scoring, not after). This story
+        is one of the two named triggers for retiring the instrument's
+        name heuristic.
+    - description: >
+        LEAKAGE DISCIPLINE: every designation row enters as-of its
+        capture stamp (assert_point_in_time on the assembled frame —
+        wired AND invoked, row counts reported); no post-designation
+        information (next week's practice report, the transaction that
+        followed) conditions the prediction for the week it predicts.
+        The 2025 wayback rows are capture-stamped by construction;
+        state the stamp rule for each source in the prereg.
+    - description: >
+        APPLICATION SEMANTICS, registered forward: expected games
+        missed maps into the season board's remaining-games input
+        through the EXISTING availability-discount machinery — one
+        owner, no second discount path. DISJOINTNESS with the curated
+        news cap binds (the NEWS-1 rule: "formal discount APPLIED"):
+        a player carrying both a news cap and a live Q/D/O designation
+        takes the single strongest applicable discount, never a
+        stacked one — assert this on a constructed both-channels row.
+        The remaining-season rate formula convention applies
+        (new_games = min(current, (17−n)×current/17) family) where the
+        reported absence is week-denominated. NF-INJ1's realized-max
+        envelope and NF-RATE1's render suppression are downstream
+        guards that must stay green on any counterfactual board.
+    - description: >
+        IF IT CLEARS — the gated ship path, all deploy-held, per the
+        injury-thread convention: counterfactual board rebuild against
+        a capture-pinned baseline (the D3 convention: capture the
+        published board + stamp input vintages; the NF-INJ2c vintage-
+        match preconditions are the pattern), population-scoped
+        material diff (1e-9, never bitwise; rookie-band motion vs the
+        ≥5-draw envelope), whole-board placement read + interval reval
+        via --out stems, operator packet with top-25 moves per config
+        incl. superflex, combined read on the exact publish-candidate
+        board. The publish decision is the operator's. In-season
+        cadence stated: the discount updates when designations update
+        (the existing publish cadence), no new schedule invented here.
+    - description: >
+        Standing disciplines: >2-min commands to the operator
+        paste-ready (the wayback assembly and any bake-off almost
+        certainly qualify — time a slice first); RED-proofs with
+        unique mutation anchors + baseline-pass + NOT-SELECTED
+        controls; reproduction pins 1e-9; no post-hoc trims (MH2.2);
+        E2.1-r absolute (NF-W2's weekly CONSTRAINT_REFUSED and the
+        NF-INJ2 lineage stand as recorded — this story is the SEASON
+        board's duration lever, it re-reads nothing weekly); run the
+        owning CI shard for any shared guard touched; worktree;
+        PR → dev; no Trello.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj4
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "designation" / "availability" / "duration" (board Credence Sports, 2026-09-03)'
+    duplicates: []
+    adjacent:
+      - "NF-W2 (Done) / NF-W2b (queued) — the WEEKLY model's current-week zero-leg; different consumer and horizon (this is the season board's multi-week duration input); its CONSTRAINT_REFUSED record is not re-read."
+      - "NF-INJ-NEWS-0/1 (Done, live) — the curated news cap for UN-tagged players; the disjointness clause above is the shared boundary; the cap's curation flow is untouched."
+      - "NF-C9 / NF-C8 (Done, live) — the disclosure interim this story exists to retire for tagged players; its guards stay green until the model actually ships, then the copy is revisited as a follow-up, not silently."
+      - "NF-INJ2c (IN FLIGHT) — ordering/assignment; disjoint mechanism (availability level vs ordering); shared only in the capture-pinned reproduction conventions."
+      - "NF-W2c / NF-W2c-CBS (Done) — the data substrate; append-only, read here, never rebuilt."
+      - "PLAT-CVP2 (Done, PR #1069) — the instrument this registration consumes with explicit gate_classes."
+  triedLedger:
+    files:
+      - "ablation_results/nf_c8_injury_designation_gap.md (the measured gap + the two-capability scoping + the Tyson exhibit)"
+      - "quant_sports_intel_models/football/nfl/fantasy/sleeper_injuries_source.py (the deliberate None mapping + the 2,501-row census in its comments)"
+      - "nfl/pit/wayback_injuries substrate (NF-W2c: 629 nfl + 537 espn + 1,021 cbs admissible rows, 18/18 weeks 2025)"
+      - "season_projection.py availability-discount owner (IR/PUP/NFI/SUS today)"
+    recordedNulls:
+      - "NF-W2 QB/RB/WR CONSTRAINT_REFUSED (weekly attribution clause) — different story, different gate, stands; nothing here re-tests it."
+      - "NF-INJ3's absence-history findings — consumed as context, not re-run."
+  supersedes: []
+  dependsOn:
+    - "PLAT-CVP2 merged (verified 2026-09-03, PR #1069 on dev)"
+  feedsInto:
+    - "The season board's availability input reacting honestly to the Week-1+ designation stream; retiring NF-C9's 'un-modeled' disclosure for tagged players; the weekly product's duration prior (later, NF-W2b's lane)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj4-plan
+spec:
+  goalRef: { name: nf-inj4 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-data-census
+        desc: "Assemble the PIT designation→outcome frame; report realized depth per source/season/position; assert_point_in_time invoked. Power arithmetic BEFORE registration."
+      - id: 2-prereg
+        desc: "Full registration: family incl. fallback conditioning shapes, gates with explicit gate_classes, sign-certifiability check, controls — committed BEFORE scoring."
+      - id: 3-bake-off
+        desc: "Decisive run (slice-timed; operator handoff if >2 min)."
+      - id: 4-classify
+        desc: "Gates + classify_null in registered order; POWER_LIMITED with the calendar-bound 2026 re-test is a valid decisive record."
+      - id: 5-ship-path
+        desc: "ONLY IF CLEARED: application semantics + disjointness asserts + counterfactual rebuild + operator packet; publish is the operator's."
+      - id: 6-closeout
+        desc: "Verdict + findings into closeout.followUps; operator summary; NF-C9 copy follow-up named if shipped."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
