@@ -7,7 +7,7 @@ metadata:
   name: mlb-tv2-2
   vertical: mlb
   card: https://trello.com/c/J9G2VHu8
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     The funded shape fix. TV2-0 measured (served rows, post_lineup n=758,
@@ -174,12 +174,22 @@ spec:
       - id: 6-closeout
         desc: "Verdict + findings into closeout.followUps; operator summary; epic card updated by PM (tripwire clock noted)."
   closeout:
-    verdict: "NODES 0-2 COMPLETE; node 3-4 (the decisive run) is an OPERATOR step (~8 min, timed).
-      Node 2 REPLICATION PASSED: the shape gap survives on the widest served window this champion
-      has produced (FULL_ERA n=851, gap +0.0734, outside its null band [0.0006,0.0382], MC p=0.0010,
-      power 0.989), so the funding premise HOLDS and the study proceeds. Registered forward: at this
-      design a planted GROSS defect yields DSR ~0.92-0.95 against the 0.95 bar, so DEFLATION_BLOCKED
-      is the expected binding state and is NOT evidence against the mechanism."
+    verdict: "DEFLATION_REFUSED. The mechanism is real and large; the pre-registered FIELD-LEVEL
+      deflation gate refused the study. Node 2 REPLICATED (FULL_ERA n=851, gap +0.0734, outside its
+      null band, MC p=0.0010, power 0.989). The vacuity floor CLEARED at 20 reps (positive control
+      1.00 / clean 0.00 / gross METRIC detection 1.00). All four mixture arms clear C1-C6 and
+      C8-C10; the winner mix3_full posts DSR 0.9789 vs the 0.95 bar and is sign-stable across all 8
+      leave-one-block-out refits (0.0588..0.0742). NOTHING SHIPS because PBO is 0.771 vs the 0.20
+      bar and ALL THREE registered readings fail (declared 0.221, eligible 0.771, two_arm 0.250),
+      so the refusal does not hinge on which reading binds; classify_null returns DEFLATION_REFUSED
+      with pbo_refusal_admitted=True. NO fold/season/row re-test trigger is published - no fold
+      count moves a pre-registered gate POPULATION (NF-D18). NF1.8's discriminators, reported
+      beside the refusal and gating nothing, say it is a TIE signature and not an unstable search:
+      the four arms sit within a CONTENDER SPREAD of 0.00128 (2.33% of the best arm) and the flip
+      mass over 16 buckets sits on two of them (7/7/2/0) - the coin flip is over WHICH of four
+      near-identical parameterizations of ONE marginal shape wins in-sample, not over WHETHER to
+      correct. DEPLOY-HELD throughout: nothing merged to main, no registry entry touched,
+      deploy.sh not run. E13.6b-B untouched."
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
@@ -218,3 +228,37 @@ spec:
       genuinely INDEPENDENT replication is calendar-bound, not obtainable now.
 
       (5) E13.6b-B tripwire clock: kickoff 2026-08-31.
+
+      (6) ⭐ THE SUCCESSOR, and the one thing it must NOT do. classify_null's own
+      admissible remedy is a FORWARD-registered NARROWER COHERENT family chosen on
+      MECHANISM - never a post-hoc re-cut of a field already scored (MH2.2). The
+      field here is four parameterizations of ONE marginal shape, i.e. near-clones
+      by construction, which is exactly why PBO reads as a coin flip. A successor
+      that registers ONE form forward on mechanistic grounds makes PBO a two-arm
+      decision (or inapplicable). ⛔ It must NOT register the arm that won here -
+      that is discovering a family after scoring it, the exact laundering MH2.2
+      forbids - and ⛔ this study deliberately computes NO per-candidate-family PBO
+      menu, because publishing one would hand a successor a family selected on its
+      own deflation statistic (NF-INJ3b).
+
+      (7) ⭐ INSTRUMENT DEFECT in PLAT-CVP1, and it inverts a verdict silently.
+      `injected_effect_positive_control` partitions a study's gates into
+      deflation-class and metric BY NAME, and BLIND ("a null from this family is
+      free") and DEFLATION_BLOCKED ("every metric gate fired; only deflation
+      stopped it") are OPPOSITE readings. The intersection of its default names
+      {cscv, deflated_sharpe, dsr, pbo} with this study's clause names was EMPTY,
+      so the default call filed C7_deflation as a METRIC gate and returned BLIND
+      for a family whose own blocking_gates showed every arm clearing every metric
+      clause. Nothing warned. Candidate: have the helper RAISE (or report
+      UNVERIFIED) when the caller's gate names intersect its deflation-class set in
+      ZERO places, the way MH2.7 made the field-size remedy self-safe - a partition
+      that matches nothing is the NF1.7 (a) vacuous-anchor class, one level up.
+
+      (8) PROCESS: a renderer must be exercised against REAL producer output. The
+      decisive run completed every computation and then died in write_report on a
+      KeyError, because amendment 5 renamed a controls key and the rehearsal that
+      was meant to de-risk the report path ran with controls=False - so the ONE
+      section the amendment had changed never rendered. Recovery needed no re-run
+      (the JSON is written BEFORE the markdown; --rebuild-report now makes that
+      explicit). The guard added uses the COMMITTED decisive JSON as the renderer
+      fixture: a hand-written one would restate the schema the renderer assumes.

@@ -1,0 +1,147 @@
+# Plan spec — NCAAF-P3.3 (FULL tier: Team Stats page — backend phase first, page second;
+# first task = the realistic-Saturday fixture ADD from the P3.1b closeout ruling ①)
+# Authored by PM 2026-09-01. Premises verified against origin/main per the spec-premise rule:
+# the router serves manifest/games/games/{id}/futures ONLY (no team endpoint);
+# ncaaf_team_strength_week exists in sports_dbt/models/ncaaf/marts; the serving path is
+# sports_ncaaf_serving_write_job.py -> S3 -> Lambda; NCAAF is FREE (no Depends on the router).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-p3-3
+  vertical: ncaaf
+  card: https://trello.com/c/H5o3c7jc   # fixture-ADD card; P3.3 card linked at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    The Team Stats page (ncaaf_story_prompts.md P3.3): per team, the
+    strength rating with its posterior band (honest uncertainty),
+    opponent-adjusted efficiency, schedule/results, and trench/pace
+    splits — off the P1.1 marts + ncaaf_team_strength_week. VERIFIED
+    GAP: no team endpoint exists today, so this story is BACKEND-FIRST
+    BY STRUCTURE (the operator sequencing rule applied inside one
+    story): Phase A lands the team payload in the serving-write job +
+    a /ncaaf/teams/{team_id} endpoint and is verified SERVED before
+    any page code is written; Phase B builds the page against the
+    landed contract. NAMED FIRST TASK (P3.1b closeout ruling ①,
+    before either phase): the realistic-Saturday E2E fixture ADD.
+    best_alpha=0; NCAAF stays FREE (no gating anywhere); transparency
+    framing — a strength rating is context, never a pick.
+  acceptanceCriteria:
+    - description: >
+        TASK 0 — FIXTURE ADD (the carded ruling, executed first): add a
+        realistic-Saturday E2E fixture derived from a CAPTURED real
+        payload (capture RAW, pre-transform — E9.64b; a mixed slate:
+        games with a live/T-1 market line AND games genuinely absent),
+        BESIDE the existing all-absent fixture, and in the same motion
+        RETIRE the synthetic ncaafSlateWithMarket fixture in
+        frontend/e2e/support/api-mock.ts. Both arms of the market
+        render become genuinely realized under E2E (run both arms,
+        parametrised); assert rendered output per surface. This task
+        alone is a shippable commit — land it before Phase A so the
+        market-render coverage gap closes even if the story stalls.
+    - description: >
+        PHASE A — SERVING (complete + verified before Phase B starts):
+        the serving-write job additionally writes per-team payloads
+        (strength rating + posterior band per week from
+        ncaaf_team_strength_week; opponent-adjusted efficiency;
+        schedule/results; trench/pace splits from the P1.1 marts) and
+        the router gains GET /ncaaf/teams/{team_id} on the existing
+        free, no-Depends pattern — response model fully declared on the
+        Pydantic contract (E9.41), additive only (NF-C0), honest absent
+        states with machine-readable reasons (never fabricated
+        coverage; NULLs stay NULL). REALIGNMENT-CORRECT via the SCD-2
+        conference dim — a team's 2026 conference is 2026's, and the
+        2026 movers (e.g. the newly-FBS/moved programs) are the test
+        cases, not an afterthought. RUNTIME GATE: CI mocks IO — the
+        real box serving-write run + deployed-Lambda curls (a real
+        team payload, incl. one realignment mover) are OPERATOR-RUN
+        paste-ready steps; deploy.sh is the ONLY Lambda deploy path;
+        merged never means served. ⛔ PHASE GATE: no page code before
+        the operator confirms the curls.
+    - description: >
+        PHASE B — THE PAGE: renders for any FBS team from the Phase A
+        API. The strength rating leads WITH its posterior band (the
+        signature honesty: a band, not a number — reuse the P3.2
+        distribution-curve/band components where they fit rather than
+        forking a second renderer); opponent-adjusted efficiency,
+        schedule/results (played + upcoming, honest about what is
+        realized vs projected), trench/pace splits. Team logo/colors
+        via the existing team-logo.tsx asset path. Link-outs wired
+        from the P3.2 game cards (the page is their target). Copy
+        through the NCAAF claim-copy conventions: no pick language, no
+        edge claims; early-season smallness stated honestly (week-1
+        posteriors are wide — the band IS the disclosure, don't
+        suppress it).
+    - description: >
+        Guards: E2E per surface both ways off the NEW realistic
+        fixture (a team with market-context games, a team with absent
+        rows, a realignment mover's conference label); rendered-output
+        assertions (NF-C4); RED-proofs with unique mutation anchors and
+        the two Python-harness controls (baseline-pass + NOT-SELECTED)
+        from day one; run the owning CI shard for any shared guard
+        touched. Changelog entry (user-facing) only when the page
+        actually serves (declaration never outruns production).
+    - description: >
+        Standing disciplines: one frontend story at a time across all
+        sports (this IS it); worktree; PR -> dev; frontend auto-deploys
+        on main but the Lambda + box legs ride deploy.sh/box image —
+        state every post-merge operator step in the LAPTOP-vs-BOX
+        paste-ready format; >2-min commands to the operator; no Trello
+        cards; roadmap .md files frozen.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-p3-3
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "P3.3" / "team stats" / "NCAAF frontend" (board Credence Sports, 2026-09-01)'
+    duplicates: []
+    adjacent:
+      - "Fixture-ADD card (H5o3c7jc) — CONSUMED as Task 0; that card closes with this story."
+      - "P3.1/P3.1b/ODDS-LIVE (Done, serving) — the router + payload patterns extended, not modified; market serving untouched (the P3.9 boundary instinct: this story adds a team surface, it does not touch market.status call sites)."
+      - "P3.2/P3.2b (Done, live) — the flagship cards gain their link-out target; band components reused, not forked."
+      - "NCAAF-CLK1 (To Do) — the mart-clock report story; disjoint; if its REPORT lands mid-story it does NOT change any P3.3 payload (E2.1-r: verdicts stand)."
+      - "NF-INJ2c / MLB-TV2-2 (IN FLIGHT) — disjoint verticals; changelog week-block shared (rebase)."
+      - "P3.4 Player Stats / P3.5 Standings (queued) — NOT folded in; this story's endpoint pattern is what they will extend."
+  triedLedger:
+    files:
+      - "ncaaf_story_prompts.md P3.3 (the story text: strength + band, opp-adjusted efficiency, schedule/results, trench/pace, SCD-2 realignment AC)"
+      - "app/backend/routers/ncaaf.py (verified: manifest/games/{id}/futures only; free no-Depends pattern) + app/backend/models/ncaaf.py"
+      - "pipeline/jobs/sports_ncaaf_serving_write_job.py (the serving path this extends)"
+      - "sports_dbt/models/ncaaf/marts/ncaaf_team_strength_week.sql + _ncaaf_marts.yml:459"
+      - "P3.1b closeout ruling ① (the fixture ADD + synthetic-fixture retirement)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "P3.4/P3.5's endpoint pattern; the P3.2 cards' link-outs; the market-render E2E coverage gap closed (Task 0)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-p3-3-plan
+spec:
+  goalRef: { name: ncaaf-p3-3 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-fixture-add
+        desc: "Task 0: captured realistic-Saturday fixture + retire ncaafSlateWithMarket; shippable commit."
+      - id: 2-phase-a-serving
+        desc: "Team payloads in the serving-write job + /ncaaf/teams/{team_id}; guards; operator box run + Lambda deploy + curls. ⛔ GATE."
+      - id: 3-phase-b-page
+        desc: "The Team Stats page off the landed contract; link-outs from P3.2 cards; copy conventions."
+      - id: 4-verify
+        desc: "E2E both ways on the new fixture; RED proofs; realignment mover checks; live post-deploy verification (browser/Vercel — curl is blind)."
+      - id: 5-closeout
+        desc: "Verdict + findings into closeout.followUps; operator summary with LAPTOP-vs-BOX steps."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

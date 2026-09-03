@@ -99,10 +99,25 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "33.96 on all seven arms",
      "test_the_d4_annotation_records_the_measurement_that_settles_the_baseline_question"),
 
+    ("the D3 landmine loses its dated CORRECTION marker, so a reader cannot tell it was re-measured",
+     _CLAUDE,
+     "⚠️ MECHANISM CORRECTED IN PLACE 2026-09-01 from a misattribution",
+     "(mechanism as originally recorded)",
+     "MECHANISM CORRECTED IN PLACE 2026-09-01",
+     "test_the_d3_pin_against_capture_landmine_is_in_claude_md"),
+
+    ("the D3 landmine reverts to prescribing a same-day rebuild as sufficient", _CLAUDE,
+     "A SAME-DAY REBUILD IS NECESSARY BUT **NOT SUFFICIENT**",
+     "A SAME-DAY REBUILD IS WHAT IT NEEDS",
+     "SAME-DAY REBUILD IS NECESSARY BUT **NOT SUFFICIENT**",
+     "test_the_d3_pin_against_capture_landmine_is_in_claude_md"),
+
+    # RE-AIMED 2026-09-01 with the entry's correction: the measurement now lives in the
+    # corrected mechanism sentence, and the guard pins BOTH failures (40.58 and 84.72).
     ("the D3 landmine loses the measurement that makes it actionable", _CLAUDE,
-     "**FAILED at a worst absolute difference of 40.58 over 797 rows**",
-     "**FAILED**",
-     "40.58 over 797 rows",
+     "pin failed at **40.58** with its rebuild on the **SAME UTC DAY**",
+     "pin failed with its rebuild on the **SAME UTC DAY**",
+     "40.58",
      "test_the_d3_pin_against_capture_landmine_is_in_claude_md"),
 
     # ── nodes 3a / 3b / 3c ────────────────────────────────────────────────────────────────────
@@ -333,6 +348,57 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "5. **DSR at 7 folds does not clear 0.95**",
      "DSR at 8 folds does not clear 0.95",
      "test_the_superseded_margin_rule_branch_is_marked_not_edited"),
+    # ── node 3b (PM ruling 2026-09-01 (a)) — the MARKET-VINTAGE precondition ──────────────────
+    ("a mismatched market vintage stops being refused", _BASE,
+     '        elif str(mine) != str(served):',
+     '        elif False:',
+     'elif str(mine) != str(served):',
+     "test_the_run_1_mismatch_REFUSES_and_names_input_both_vintages_and_the_fix"),
+
+    ("an UNREADABLE local vintage is scored as a pass", _BASE,
+     '        elif mine is None:\n            problems.append(',
+     '        elif mine is None:\n            _ignored = (',
+     'elif mine is None:\n            problems.append(',
+     "test_an_unreadable_local_vintage_REFUSES_rather_than_passing"),
+
+    ("a manifest with no vintage is scored as a pass", _BASE,
+     '        if served is None:\n            problems.append(',
+     '        if served is None:\n            _skipped = (',
+     'if served is None:\n            problems.append(',
+     "test_a_manifest_without_the_vintage_REFUSES_rather_than_passing"),
+
+    ("the refusal drops the remedy the operator needs", _BASE,
+     '                f" — MISMATCHED. Refresh it, then re-capture:\\n      {cmd}")',
+     '                f" — MISMATCHED.")',
+     'MISMATCHED. Refresh it, then re-capture',
+     "test_the_run_1_mismatch_REFUSES_and_names_input_both_vintages_and_the_fix"),
+
+    ("capture stops enforcing the precondition, so it can be bypassed", _BASE,
+     '    vintage = assert_market_vintage_matches()\n    doc = json.loads(_SERVED_JSON.read_text())',
+     '    vintage = market_vintage()\n    doc = json.loads(_SERVED_JSON.read_text())',
+     # ⚠️ the gone-token must not be a SUBSTRING of the sibling call: `now_vintage = assert_…`
+     # in `assert_capture_intact` contains `vintage = assert_…` verbatim (the E11.24 wrong-symbol
+     # class, caught by the harness rather than by review).
+     '    vintage = assert_market_vintage_matches()\n    doc = json.loads',
+     "test_capture_enforces_the_precondition_so_it_cannot_be_bypassed"),
+
+    ("the run path stops re-checking that the caches held still", _BASE,
+     '    now_vintage = assert_market_vintage_matches()\n    captured_vintage = stamp.get("market_vintage")',
+     '    now_vintage = market_vintage()\n    captured_vintage = None',
+     'now_vintage = assert_market_vintage_matches()',
+     "test_the_run_path_rechecks_that_the_caches_did_not_move_after_the_capture"),
+
+    ("the market-input registry is emptied, so the precondition checks nothing", _BASE,
+     '_MARKET_INPUTS: tuple[tuple[str, str, str], ...] = (\n    ("adp", "adp_as_of",',
+     '_MARKET_INPUTS: tuple[tuple[str, str, str], ...] = ()\n_UNUSED = (\n    ("adp", "adp_as_of",',
+     '_MARKET_INPUTS: tuple[tuple[str, str, str], ...] = (\n    ("adp", "adp_as_of",',
+     "test_every_declared_market_input_carries_a_real_refresh_command"),
+
+    ("a MATCHED vintage starts being refused too, blocking the study outright", _BASE,
+     '        elif str(mine) != str(served):',
+     '        elif True:',
+     'elif str(mine) != str(served):',
+     "test_a_matched_market_vintage_PASSES"),
 ]
 
 

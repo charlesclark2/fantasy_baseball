@@ -200,3 +200,11 @@ spec:
       `frontend/lib/fantasy.ts` so the derivation is re-runnable without re-deriving it, and the
       Python guard PARSES the shipped constant rather than re-declaring it - a Python copy would
       be a second owner of the very thing this story single-owns.
+# --- PM ANNOTATION 2026-09-01 (NF-CSV1 closeout ruling ②; record above unedited) ---
+# The measured firing population recorded in this spec (34 cells / 12,152 across
+# 14 configs: Levis + Kittle + Pierce) is a POINT-IN-TIME census of the staged
+# 2026-08-30 board, not a standing property. Live board 2026-09-01: Levis only
+# (Kittle and Pierce dropped below the envelope after NF-TR2b's level
+# recalibration and subsequent republishes). The suppression RULE is anchored on
+# realized 2006-2025 football and is unaffected; only the census moved. Anyone
+# re-verifying must re-measure from the live payload, never cite this census.

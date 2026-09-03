@@ -66,3 +66,12 @@ The defect entered at spec-writing time (a PM paraphrase), and the same shape
 would send a future session hunting a Python artifact that isn't there. Same
 family as the repo's "pre-flight a card's premise against the running system"
 rule — applied one step earlier, to the spec itself.
+
+## Pre-registration provenance guards (PM ruling 2026-09-01, from the NF-CSV1/NF-INJ2c cross-story event)
+A provenance guard keyed on "the later artifact does not exist yet" is
+SELF-EXPIRING: the moment the artifact legitimately lands, the guard fires on
+correct work (NF-INJ2c's blind-to-node-3b guard fired against the dev→main gate
+21s after an unrelated merge). Key provenance guards on the SUBSTANCE of the
+claim instead — e.g. "the prereg quotes no number from the later measurement"
+(commit 6547d75c) — which stays true forever if the claim is true. Applies to
+every §0.5 pre-registration's blindness/ordering clauses.
