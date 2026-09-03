@@ -486,7 +486,7 @@ not ship" rather than "one route is missing". Confirmed live 2026-08-08: the Lam
 serving, and `curl https://api.credencesports.com/fantasy/nfl/featured-player` returned
 `401 {"message":"Unauthorized"}` while every other public surface returned 200.
 
-#### The `/ncaaf/*` routes (the college-football vertical) — ✅ FOUR APPLIED · ⛔ ONE OUTSTANDING
+#### The `/ncaaf/*` routes (the college-football vertical) — ✅ ALL FIVE APPLIED
 
 NCAAF is unconditionally FREE (E9.45 — fantasy is the paid hook), so every route is public in the
 FastAPI layer (`routers/ncaaf.py`, mounted with no `dependencies=`) — which, as always, is **not
@@ -504,7 +504,7 @@ for, facing the harmless direction. Correct it from a measurement, never from a 
 | `GET /ncaaf/games` | ✅ applied (404 — no slate today, which is the ROUTER answering) |
 | `GET /ncaaf/games/{game_id}` | ✅ applied (200) |
 | `GET /ncaaf/futures` | ✅ applied (200) |
-| `GET /ncaaf/teams/{team_id}` | ⛔ **NOT APPLIED — 401** (NCAAF-P3.3, added 2026-09-01) |
+| `GET /ncaaf/teams/{team_id}` | ✅ applied 2026-09-03 (200 — NCAAF-P3.3) |
 
 ⚠️ **A NEW ROUTE NEEDS ITS OWN `create-route`, EVERY TIME.** There is no prefix rule and no wildcard
 short of the authorizer-carrying catch-all, so `/ncaaf/teams/{team_id}` being a sibling of four
@@ -513,8 +513,8 @@ this repo to show why (NF3.2). This is a POST-MERGE operator step; `deploy.sh` s
 the gateway route is separate.
 
 ```bash
-# NCAAF-P3.3 — the outstanding one. (The other four are already applied; re-running is harmless
-# but returns ConflictException, so only the new key is listed.)
+# NCAAF-P3.3 — applied 2026-09-03, kept for the record and for a rebuild. (Re-running any of these
+# is harmless but returns ConflictException, so only the most recent key is listed.)
 aws apigatewayv2 create-route \
   --api-id 8dhmehjak7 --region us-east-1 \
   --route-key "GET /ncaaf/teams/{team_id}" \
