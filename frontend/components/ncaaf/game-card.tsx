@@ -8,6 +8,7 @@
 // selection — a pick expressed as an ordering — and `best_alpha = 0` (VAL1: ATS 0.496 against the
 // close, indistinguishable from a placebo). There is no badge, no star and no highlight.
 
+import Link from "next/link"
 import {
   AccordionContent,
   AccordionItem,
@@ -21,7 +22,7 @@ import {
   MARGIN_CURVE_LABEL,
   PACE_INACTIVE_NOTE,
   PROVENANCE_LABEL,
-  TEAM_PAGE_STUB_LABEL,
+  TEAM_PAGE_LINK_LABEL,
   TOTAL_CURVE_HINT,
   TOTAL_CURVE_HINT_NO_PACE,
   SUMMARY_NO_PACE_MARKER,
@@ -242,19 +243,47 @@ export function NcaafGameCard({
       </AccordionTrigger>
 
       <AccordionContent className="space-y-4 pb-4">
-        {/* P3.3 is not built. ⛔ A CTA pointing at a route that does not exist is precisely the
-            defect this suite exists to catch, so the affordance is present, named and INERT —
-            a disabled button rather than an anchor to a 404. It lives HERE rather than in the
-            header because a <button> inside the trigger's <button> is invalid HTML. */}
-        <button
-          type="button"
-          disabled
-          data-testid="ncaaf-team-page-stub"
-          className="cursor-not-allowed text-[11px] text-gray-600 underline decoration-dotted underline-offset-2"
-          title={TEAM_PAGE_STUB_LABEL}
-        >
-          {TEAM_PAGE_STUB_LABEL}
-        </button>
+        {/* ⭐ NCAAF-P3.3 SHIPPED, so the affordance NAVIGATES. It was a disabled button through
+            P3.2 because a CTA pointing at a route that does not exist is precisely the defect the
+            E2E suite exists to catch (E9.56c); the route now exists and is served, so the inert
+            control is replaced by real links — ONE PER TEAM, because "team page" in the singular
+            beside a matchup cannot say which of the two it means.
+
+            ⛔ A LINK IS ONLY RENDERED FOR A TEAM WHOSE `team_id` WAS SERVED. A null id would build
+            `/ncaaf/teams/null`, which is a 404 dressed as a working link — the same defect one
+            step along. The name renders without a link in that case rather than vanishing.
+
+            It lives HERE rather than in the header because an <a> inside the trigger's <button>
+            is invalid HTML. */}
+        <div data-testid="ncaaf-team-page-links" className="flex flex-wrap gap-x-4 gap-y-1">
+          {[game.home, game.away].map((side, i) => {
+            const key = i === 0 ? "home" : "away"
+            const name = side.team ?? "—"
+            if (side.team_id == null) {
+              return (
+                <span
+                  key={key}
+                  data-testid={`ncaaf-team-page-link-${key}`}
+                  data-team-id=""
+                  className="text-[11px] text-gray-600"
+                >
+                  {name}
+                </span>
+              )
+            }
+            return (
+              <Link
+                key={key}
+                href={`/ncaaf/teams/${side.team_id}`}
+                data-testid={`ncaaf-team-page-link-${key}`}
+                data-team-id={side.team_id}
+                className="text-[11px] text-gray-500 underline decoration-dotted underline-offset-2 transition-colors hover:text-gray-300"
+              >
+                {name} {TEAM_PAGE_LINK_LABEL}
+              </Link>
+            )
+          })}
+        </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <DistributionCurve

@@ -754,14 +754,63 @@ test("the market panel states the no-advantage framing on every card", async ({ 
 })
 
 test("no link on the surface points at a route that does not exist", async ({ page }) => {
-  // P3.3's team page is not built. The stub is an affordance, not an anchor — a CTA pointing at a
-  // 404 is precisely the defect this suite exists to catch (E9.56c).
+  // ⭐ RE-ANCHORED BY NCAAF-P3.3, NOT DELETED (MH2.7). The property this clause defends is
+  // unchanged and is the whole reason it exists — a CTA pointing at a 404 is precisely the defect
+  // this suite was built to catch (E9.56c). What changed is the affordance: through P3.2 the team
+  // page did not exist, so the control was a DISABLED BUTTON and the assertion was that NO
+  // `/ncaaf/teams` href was rendered. The route exists and is served now, so the honest form of the
+  // same property is the stronger one — the links are real, they carry SERVED team ids, and the
+  // server answers each of them.
+  //
+  // ⛔ Asking the SERVER rather than matching a path shape: a `/ncaaf/teams/null` matches any
+  // reasonable regex and is a 404 in disguise, which is the exact failure mode a null `team_id`
+  // would produce.
   await open(page)
-  const stub = page.getByTestId("ncaaf-team-page-stub").first()
-  await expect(stub).toBeVisible()
-  await expect(stub).toBeDisabled()
-  const hrefs = await internalHrefs(page)
-  expect(hrefs.filter((h) => h.startsWith("/ncaaf/teams"))).toEqual([])
+  const links = page.getByTestId("ncaaf-team-page-links").first()
+  await expect(links).toBeVisible()
+
+  const hrefs = [...new Set(await internalHrefs(page))]
+  const teamHrefs = hrefs.filter((h) => h.startsWith("/ncaaf/teams"))
+  expect(teamHrefs.length, "the board offers no team links at all").toBeGreaterThan(0)
+  for (const h of teamHrefs) {
+    expect(h, "a team link carries no numeric id — /ncaaf/teams/null is a 404 in disguise").toMatch(
+      /^\/ncaaf\/teams\/\d+$/,
+    )
+  }
+  for (const h of hrefs) {
+    const res = await page.request.get(new URL(h, page.url()).toString())
+    expect(res.status(), `${h} is not a route this app serves`).toBeLessThan(400)
+  }
+})
+
+test("a team served with no id gets no link rather than a link to nowhere", async ({ page }) => {
+  // ⭐ THE HALF THE HAPPY PATH CANNOT REACH. Every captured game carries both team ids, so a build
+  // that interpolated a null straight into the href would pass every clause above — and ship
+  // `/ncaaf/teams/null`, a link that looks fine and 404s. The name still renders; only the anchor
+  // is withheld.
+  await open(page, {
+    transform: (pathname, body) =>
+      pathname.startsWith("/ncaaf/games")
+        ? {
+            ...body,
+            games: (body as any).games.map((g: any, i: number) =>
+              i === 0 ? { ...g, home: { ...g.home, team_id: null } } : g,
+            ),
+          }
+        : body,
+  })
+  const first = card(page, SLATE.games[0].game_id)
+  const homeLink = first.getByTestId("ncaaf-team-page-link-home")
+  await expect(homeLink).toBeVisible()
+  await expect(homeLink).toHaveAttribute("data-team-id", "")
+  // ...and it is not an anchor at all.
+  expect(await homeLink.evaluate((el) => el.tagName.toLowerCase())).not.toBe("a")
+  // The AWAY side of the same card still links, so this is a per-team decision rather than the
+  // whole block collapsing.
+  await expect(first.getByTestId("ncaaf-team-page-link-away")).toHaveAttribute(
+    "data-team-id",
+    String(SLATE.games[0].away.team_id),
+  )
 })
 
 test("a game whose kickoff has passed says so, and does not read as upcoming", async ({ page }) => {
