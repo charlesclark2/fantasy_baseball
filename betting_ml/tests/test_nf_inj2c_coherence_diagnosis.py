@@ -53,18 +53,58 @@ def _cap(games, *, eligible=None):
             else np.asarray(eligible, dtype=bool)}
 
 
-def test_the_recorded_binding_count_misses_a_non_finite_row_the_kernel_does_floor():
-    """`games_floor_binding()` requires `isfinite(g)`; `gsafe` floors a non-finite row anyway.
+def test_the_binding_count_now_SEES_the_non_finite_row_the_kernel_floors():
+    """⭐ **RE-ANCHORED BY PLAT-CVP2 DEFECT 4 — this is the fix, in the shape of its own fixture.**
 
-    This is the whole reason the report prints two columns. If they were the same measurement the
-    node-1 refutation would rest on the NARROWER one, and "the floor is inert" would be read off a
-    count that cannot see one of the two ways the floor acts (NF1.7 (a))."""
+    The original clause pinned the DEFECT: `games_floor_binding()` required `isfinite(g)` while the
+    kernel floored a non-finite row anyway, so the census could not see one of the two ways its own
+    mechanism acts, and "the floor is inert" would have been read off the narrower of two counts
+    (NF1.7 (a)). Its message said in as many words that if the two ever agreed, the guard would be
+    "pinning a behaviour that no longer exists" — which is exactly what happened, so the clause is
+    re-anchored onto the fixed behaviour rather than deleted, and it now asserts the STRONGER
+    property: **one predicate, so the two columns agree by construction.**
+
+    ⛔ The recorded numbers do not move. The divergence was only ever on a row shape this
+    population does not contain (0 on every fold of the committed run, by both definitions), which
+    is why the fix is a latent-defect repair and not a re-scoring (`nf_inj2c_coherence_diagnosis.md`
+    §6.3 stands exactly as recorded)."""
     audit = D.games_audit(_cap([5.0, float("nan"), 12.0]))
-    assert audit["recorded_games_floor_binding"] == 0, (
-        "the recorded definition should NOT see the non-finite row — if it does, this guard is "
-        "pinning a behaviour that no longer exists and the two-column report is redundant")
     assert audit["kernel_rows_actually_floored"] == 1
+    assert audit["recorded_games_floor_binding"] == 1, (
+        "the census cannot see a non-finite row the kernel floors — PLAT-CVP2 defect 4 has "
+        "regressed and the two columns are two predicates again")
     assert audit["floor_can_act"] is True
+
+
+def test_the_two_floor_columns_now_agree_on_every_row_shape():
+    """The one-predicate property, driven over the shapes that used to separate them.
+
+    ⭐ Two-sided by construction: it is not enough that the columns agree on a healthy column (they
+    always did) — they must agree on the NON-FINITE row that used to divide them and on the exact
+    boundary that used to divide the kernel's BRANCH from its VALUE."""
+    F = RP.GAMES_FLOOR
+    for shape in ([5.0, float("nan"), 12.0], [float("inf"), 3.0], [F, 9.0], [0.1, 9.0],
+                  [-3.0, 4.0], [0.81, 3.0, 17.0]):
+        a = D.games_audit(_cap(shape))
+        assert a["recorded_games_floor_binding"] == a["kernel_rows_actually_floored"], (
+            f"the two columns disagree on {shape} — they are two predicates again")
+
+
+def test_the_shared_floor_predicate_leaves_the_kernels_divisor_bit_identical():
+    """⭐ The fix's SAFETY claim, measured rather than asserted: repointing the kernel onto the
+    shared predicate changed no divisor anywhere, the exact-boundary row included.
+
+    `np.where(mask, FLOOR, g)` and the retired `np.where(isfinite(g) & (g > FLOOR), g, FLOOR)` agree
+    on every input — at `g == FLOOR` the retired form took its substitution branch and substituted
+    `FLOOR`, which is what the row already held. Without this, "the kernel is unchanged" would be a
+    comment (the class of claim NF-D20 says to count rather than reason about)."""
+    import numpy as np
+    F = RP.GAMES_FLOOR
+    g = np.array([5.0, np.nan, np.inf, -np.inf, F, F - 1e-12, F + 1e-12, 0.1, 12.0, -3.0, 0.0])
+    retired = np.where(np.isfinite(g) & (g > F), g, F)
+    shipped = np.where(RP.games_floored_mask(g), F, g)
+    assert np.array_equal(retired, shipped, equal_nan=True), (
+        f"the shared predicate moved a divisor: {retired} -> {shipped}")
 
 
 def test_a_row_exactly_at_the_floor_is_a_value_identical_no_op_and_both_definitions_agree():
