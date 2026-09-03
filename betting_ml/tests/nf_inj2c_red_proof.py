@@ -36,6 +36,8 @@ _FOLD = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_result
 _PREREG = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
                    "nf_inj2c_preregistration.md")
 _SPEC = _REPO / "plan_specs/nfl_fantasy/nf-inj2c.yaml"
+_N12 = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_nf1_2.py"
+_N15 = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_nf1_5.py"
 _SUITE = "betting_ml/tests/test_nf_inj2c_coherence_diagnosis.py"
 #: nodes 3a/3b/3c live in their own suite; the harness routes each break to the suite that owns it.
 _SUITE_BY_NODE = {}
@@ -43,12 +45,14 @@ _SUITE_BY_NODE = {}
 #: (label, file, anchor, replacement, token that must be GONE afterwards, the guard(s) it must break)
 BREAKS: list[tuple[str, Path, str, str, str, str]] = [
     ("the kernel-floor count silently narrows to the recorded definition", _DIAG,
-     'moved = np.where(np.isfinite(g), gsafe != g, True)',
-     'moved = np.where(np.isfinite(g), gsafe != g, False)',
-     # ⚠️ the `gone` token must be as SPECIFIC as the anchor: `attribute()` carries the identical
-     # expression under the name `floored`, so a loose token survives the mutation and the harness
-     # (correctly) refuses the break rather than reporting a false vacuity (#815 / E11.24).
-     'moved = np.where(np.isfinite(g), gsafe != g, True)',
+     'floored = np.where(np.isfinite(g), gsafe != g, True)',
+     'floored = np.where(np.isfinite(g), gsafe != g, False)',
+     # ⚠️ the `gone` token must be as SPECIFIC as the anchor (#815 / E11.24). RE-ANCHORED
+     # 2026-09-03: PLAT-CVP2 (642ca608) renamed this binding `moved` -> `floored`, which retired
+     # the old anchor and left this guard silently UN-RED-PROVEN — the harness caught it as
+     # "ANCHOR NOT UNIQUE (0 occurrences)" rather than reporting a false vacuity. Re-anchored onto
+     # the new implementation, never weakened or deleted (MH2.7).
+     'floored = np.where(np.isfinite(g), gsafe != g, True)',
      "test_the_recorded_binding_count_misses_a_non_finite_row_the_kernel_does_floor"),
 
     ("an inactive floor stops refuting the hypothesis", _DIAG,
@@ -399,6 +403,44 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      '        elif True:',
      'elif str(mine) != str(served):',
      "test_a_matched_market_vintage_PASSES"),
+    # ── the cache guard (NF-INJ2c, 2026-09-03) ────────────────────────────────────────────────
+    # The guard checked 20 of the NF1.5 pool's 120 columns and was blind to the other 100, so a
+    # Jul-31 cache missing 5 registered columns was served as "current" for a month. These breaks
+    # prove the fix cannot silently revert to that state.
+    ("the guard ignores the caller's family (the pre-fix behaviour)", _N12,
+     "    return not missing_registered_cols(pool, required)",
+     "    return not missing_registered_cols(pool, None)",
+     "return not missing_registered_cols(pool, required)",
+     "test_a_pool_missing_five_registered_columns_REFUSES"),
+
+    ("missing_registered_cols always reports 'nothing missing'", _N12,
+     "    return sorted(c for c in req if c not in pool.columns)",
+     "    return []",
+     "return sorted(c for c in req if c not in pool.columns)",
+     "test_a_pool_missing_five_registered_columns_REFUSES"),
+
+    ("POOL_REQUIRED_COLS is hand-listed instead of DERIVED", _N15,
+     '''POOL_REQUIRED_COLS: frozenset[str] = frozenset(
+    {c for feats in M13.POSITION_FEATURES.values() for c in feats}
+    | set(M13.MARKET_FEATURES)
+    | set(M12.REFINEMENT_COLS)
+    | {"real_fp_ppr", "real_games"}
+)''',
+     'POOL_REQUIRED_COLS: frozenset[str] = frozenset({"wopr", "team_pace"})',
+     "{c for feats in M13.POSITION_FEATURES.values() for c in feats}",
+     "test_the_required_family_is_DERIVED_so_a_new_feature_joins_without_an_edit"),
+
+    ("build_pool stops passing the family to the guard (wired != invoked)", _N15,
+     "absent = missing_registered_cols(cached, POOL_REQUIRED_COLS)",
+     "absent = missing_registered_cols(cached)",
+     "missing_registered_cols(cached, POOL_REQUIRED_COLS)",
+     "test_build_pool_actually_passes_the_family_to_the_guard"),
+
+    ("an empty/absent pool is scored as current (NF1.7(a))", _N12,
+     "        return sorted(required if required is not None else M12.REFINEMENT_COLS)",
+     "        return []",
+     "return sorted(required if required is not None else M12.REFINEMENT_COLS)",
+     "test_an_absent_or_empty_pool_refuses"),
 ]
 
 
@@ -431,6 +473,7 @@ def _run(node_id: str) -> bool:
 _OTHER_SUITES = (
     "betting_ml/tests/test_nf_inj2c_dominance_baseline.py",
     "betting_ml/tests/test_nf_inj2c_preregistration.py",
+    "betting_ml/tests/test_nf_inj2c_cache_guard.py",
 )
 
 

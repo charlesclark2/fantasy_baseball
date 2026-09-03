@@ -63,6 +63,7 @@ from quant_sports_intel_models.football.nfl.fantasy.run_nf1_2 import (  # noqa: 
     build_extended_frame,
     build_pool as build_nf1_2_pool,
     cache_is_current,
+    missing_registered_cols,
     load_inputs,
 )
 from quant_sports_intel_models.football.nfl.fantasy.run_nf1_3 import (  # noqa: E402
@@ -80,6 +81,27 @@ log = logging.getLogger("nfl.fantasy.nf1_5")
 _ART = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/artifacts"
 _REPORT_DIR = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/ablation_results"
 _FEATURE_CACHE = _ART / "nf1_5_feature_cache"
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-INJ2c — THE REGISTERED FAMILY THIS POOL'S CACHE IS GUARDED AGAINST
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#: Every column a consumer of the NF1.5 pool will ask for: the per-position learner sets, the
+#: market axes, NF1.2's refinement family, and the fit TARGETS. DERIVED from the model modules,
+#: never hand-listed — a newly-registered feature joins the cache guard with no edit here, which
+#: is the property whose absence caused the defect below.
+#:
+#: 🧨 WHY THIS EXISTS (NF-INJ2c, 2026-09-03): `build_pool` guarded this 120-column pool with
+#: `cache_is_current(cached)`, whose default family is `M12.REFINEMENT_COLS` — NF1.2's OWN 20
+#: columns. It therefore checked 20/120 and was blind to 100, so a Jul-31 cache missing 5 of the
+#: registered columns was served as "current" for over a month and silently degraded every local
+#: NF1.5 fit. It cost three VOIDed node-3b runs before the cause was found (the reproduction
+#: pin moved 5.64 → 1.82 the moment the pool was rebuilt).
+POOL_REQUIRED_COLS: frozenset[str] = frozenset(
+    {c for feats in M13.POSITION_FEATURES.values() for c in feats}
+    | set(M13.MARKET_FEATURES)
+    | set(M12.REFINEMENT_COLS)
+    | {"real_fp_ppr", "real_games"}
+)
 _NF1_1_JSON = _REPORT_DIR / "nf1_1_per_position.json"
 _NF1_3_JSON = _REPORT_DIR / "nf1_3_per_position.json"
 _NF1_3_SCORECARD = _REPORT_DIR / "nf1_3_vs_consensus_scorecard.json"
@@ -103,10 +125,14 @@ def build_pool(con, base_seasons: list[int], schema: str = MARTS_SCHEMA,
         # (see `run_nf1_2.cache_is_current`; NF-D10 is the family that surfaced this)
         if use_cache and cache.exists():
             cached = pd.read_parquet(cache)
-            if cache_is_current(cached):
+            absent = missing_registered_cols(cached, POOL_REQUIRED_COLS)
+            if not absent:
                 frames.append(cached)
             else:
-                log.info("nf1_5 pool cache base%d predates a registered family — rebuilding", b)
+                # NAME the columns: the predecessor logged only "predates a registered family",
+                # which is indistinguishable from a benign rebuild in a log nobody reads.
+                log.info("nf1_5 pool cache base%d is MISSING %d registered column(s) — rebuilding "
+                         "(%s)", b, len(absent), ", ".join(absent[:8]))
                 missing.append(b)
         else:
             missing.append(b)
