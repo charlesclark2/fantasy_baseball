@@ -75,3 +75,15 @@ correct work (NF-INJ2c's blind-to-node-3b guard fired against the dev→main gat
 claim instead — e.g. "the prereg quotes no number from the later measurement"
 (commit 6547d75c) — which stays true forever if the claim is true. Applies to
 every §0.5 pre-registration's blindness/ordering clauses.
+
+## Two §0.5 registration conventions (PM rulings 2026-09-01, from MLB-TV2-2 findings ③ + ⑧)
+1. POOLED-CALIBRATION STATISTICS get per-ROW fold series, never per-fold. A
+   statistic that is constant within a fold (calibration-in-the-large, a stated
+   probability, any pooled quantity) carries ~1 effective observation per fold —
+   a per-fold series over it is a sign test wearing a t-test's clothes.
+   Generalises to every vertical (NCAAF/prospect totals included).
+2. RENDERERS ARE EXERCISED AGAINST REAL PRODUCER OUTPUT before the decisive
+   run. TV2-2's 9-minute run completed everything then died in write_report:
+   the rehearsal ran with controls=False, so the one section an amendment had
+   changed never rendered. A report path rehearsed only on a config that skips
+   the changed section is untested where it changed.
