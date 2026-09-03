@@ -9,7 +9,7 @@ metadata:
   name: plat-cvp2
   vertical: platform
   card: https://trello.com/c/YAxmU2Cv
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Second hardening pass on the shared null-classification / positive-
