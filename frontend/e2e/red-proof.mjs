@@ -2863,6 +2863,23 @@ const CASES = [
     grep: "never blanks or zeroes",
   },
   {
+    id: "ncaaf-mixed-slate-loses-its-priced-arm",
+    shipped:
+      "NCAAF-P3.3 — the market-AVAILABLE branch covered by a fixture that reaches it zero times",
+    // ⭐ THE VACUITY THIS TASK EXISTS TO CLOSE, and it is the reason the clause is worth a case of
+    // its own. Every market assertion on this surface loops over the payload's PRICED games — so a
+    // fixture with none makes the loop iterate zero times and the whole suite stays green while
+    // asserting nothing (NF1.7 (a)). Before P3.3 the only fixture reaching `available` was
+    // GENERATED from the very builder under test (E9.64b); it is now a real capture, and this
+    // break simulates the way it could silently regress — the mock quietly answering with the
+    // all-absent slate instead.
+    detail: "The `mixed` slate mode falls back to the all-absent capture.",
+    file: "e2e/support/api-mock.ts",
+    from: '    if (slateMode === "mixed") return { body: FIXTURES.ncaafSlateMixed() }',
+    to: '    if (slateMode === "mixed") return { body: FIXTURES.ncaafSlate() }',
+    grep: "reached by a REAL payload",
+  },
+  {
     id: "ncaaf-market-null-causes-collapsed",
     shipped: "NCAAF-P3.2 — two causes of a null market line rendered as one",
     // NF-C6b/NF-K1: an empty state that means several things costs an investigation every time it
