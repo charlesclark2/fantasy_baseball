@@ -12,7 +12,7 @@ metadata:
   name: nf-inj4
   vertical: nfl_fantasy
   card: https://trello.com/c/wufGcjB8   # the gap record; NF-INJ4 story card linked at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Weekly Questionable/Doubtful/Out designations currently apply an
