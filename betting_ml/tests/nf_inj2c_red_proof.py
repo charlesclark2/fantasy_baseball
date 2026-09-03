@@ -354,9 +354,11 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "test_the_superseded_margin_rule_branch_is_marked_not_edited"),
     # ── node 3b (PM ruling 2026-09-01 (a)) — the MARKET-VINTAGE precondition ──────────────────
     ("a mismatched market vintage stops being refused", _BASE,
-     '        elif str(mine) != str(served):',
-     '        elif False:',
-     'elif str(mine) != str(served):',
+     '        elif str(mine) != str(served):\n            problems.append(',
+     '        elif False:\n            problems.append(',
+     'elif str(mine) != str(served):\n            problems.append(',
+     # RE-ANCHORED at D3 (2026-09-03): the precondition widened and moved this call/expression.
+     # Re-anchored onto the new implementation, never weakened (MH2.7).
      "test_the_run_1_mismatch_REFUSES_and_names_input_both_vintages_and_the_fix"),
 
     ("an UNREADABLE local vintage is scored as a pass", _BASE,
@@ -378,18 +380,18 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "test_the_run_1_mismatch_REFUSES_and_names_input_both_vintages_and_the_fix"),
 
     ("capture stops enforcing the precondition, so it can be bypassed", _BASE,
-     '    vintage = assert_market_vintage_matches()\n    doc = json.loads(_SERVED_JSON.read_text())',
+     '    vintage = assert_vintages_match(con, season, schema)\n    doc = json.loads(_SERVED_JSON.read_text())',
      '    vintage = market_vintage()\n    doc = json.loads(_SERVED_JSON.read_text())',
      # ⚠️ the gone-token must not be a SUBSTRING of the sibling call: `now_vintage = assert_…`
      # in `assert_capture_intact` contains `vintage = assert_…` verbatim (the E11.24 wrong-symbol
      # class, caught by the harness rather than by review).
-     '    vintage = assert_market_vintage_matches()\n    doc = json.loads',
+     '    vintage = assert_vintages_match(con, season, schema)\n    doc = json.loads',
      "test_capture_enforces_the_precondition_so_it_cannot_be_bypassed"),
 
     ("the run path stops re-checking that the caches held still", _BASE,
-     '    now_vintage = assert_market_vintage_matches()\n    captured_vintage = stamp.get("market_vintage")',
+     '    now_vintage = assert_vintages_match(con, season, schema)\n    captured_vintage = stamp.get("market_vintage")',
      '    now_vintage = market_vintage()\n    captured_vintage = None',
-     'now_vintage = assert_market_vintage_matches()',
+     'now_vintage = assert_vintages_match(con, season, schema)',
      "test_the_run_path_rechecks_that_the_caches_did_not_move_after_the_capture"),
 
     ("the market-input registry is emptied, so the precondition checks nothing", _BASE,
@@ -399,9 +401,11 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "test_every_declared_market_input_carries_a_real_refresh_command"),
 
     ("a MATCHED vintage starts being refused too, blocking the study outright", _BASE,
-     '        elif str(mine) != str(served):',
-     '        elif True:',
-     'elif str(mine) != str(served):',
+     '        elif str(mine) != str(served):\n            problems.append(',
+     '        elif True:\n            problems.append(',
+     'elif str(mine) != str(served):\n            problems.append(',
+     # RE-ANCHORED at D3 (2026-09-03): the precondition widened and moved this call/expression.
+     # Re-anchored onto the new implementation, never weakened (MH2.7).
      "test_a_matched_market_vintage_PASSES"),
     # ── the cache guard (NF-INJ2c, 2026-09-03) ────────────────────────────────────────────────
     # The guard checked 20 of the NF1.5 pool's 120 columns and was blind to the other 100, so a
@@ -441,6 +445,37 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "        return []",
      "return sorted(required if required is not None else M12.REFINEMENT_COLS)",
      "test_an_absent_or_empty_pool_refuses"),
+    # ── D3: the widened vintage precondition (PM ruling 2026-09-03) ──────────────────
+    ('the ADP window table is emptied, so a same-day re-pull passes', _BASE,
+     '("window_start", "start_date"), ("window_end", "end_date"), ("drafts", "total_drafts"),',
+     '',
+     '("window_start", "start_date")',
+     'test_a_moved_adp_window_REFUSES_even_though_the_DAY_still_matches'),
+    ('the ECR fingerprint table is emptied', _BASE,
+     '_ECR_FINGERPRINT_FIELDS: tuple[tuple[str, str], ...] = (("experts", "total_experts"),)',
+     '_ECR_FINGERPRINT_FIELDS: tuple[tuple[str, str], ...] = ()',
+     '(("experts", "total_experts"),)',
+     'test_a_changed_ecr_expert_count_REFUSES_even_though_the_DAY_still_matches'),
+    ('a consensus published AFTER the board stops being refused', _BASE,
+     '            if when > board:',
+     '            if False:  # was: when later than board',
+     'if when > board:',
+     'test_an_ecr_consensus_published_AFTER_the_board_REFUSES'),
+    ('the input-vintage leg iterates nothing', _BASE,
+     '    for key, got in input_vintage(con, season, schema).items():',
+     '    for key, got in dict().items():',
+     'for key, got in input_vintage(con, season, schema).items():',
+     'test_a_mismatched_input_vintage_REFUSES_and_names_the_mart_rebuild'),
+    ('a missing marts connection is scored as a pass (NF1.7(a))', _BASE,
+     '    if con is None:',
+     '    if con is None and False:',
+     '    if con is None:',
+     'test_a_published_input_vintage_with_NO_marts_connection_REFUSES'),
+    ("the input-vintage leg hardcodes its keys instead of reading the manifest's", _BASE,
+     '    return {k: {"served": served.get(k), "local": local.get(k)} for k in served}',
+     '    return {k: {"served": served.get(k), "local": local.get(k)}\n            for k in ("depth_chart_as_of", "sleeper_status_as_of")}',
+     'for k in served}',
+     'test_the_input_vintage_leg_is_TABLE_DRIVEN_over_the_manifests_own_keys'),
 ]
 
 

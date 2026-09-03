@@ -89,6 +89,163 @@ _MANIFEST_CMD = (
     "aws s3 cp s3://credence-prod-s3-api-cache/fantasy/nfl/2026/manifest.json "
     f"{_MANIFEST_JSON} --region us-east-1")
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-INJ2c D3 — THE FULL VINTAGE SURFACE, TABLE-DRIVEN OVER WHAT THE MANIFEST PUBLISHES
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The day-granularity market check above caught run 1 (ECR six days stale). It could not catch
+# run 3 (the DuckDB marts two days stale -> 644 rows of wrong `proj_games`) or run 4 (the NF1.5
+# feature pool missing 5 registered columns), because neither input is a market input. Both were
+# found only AFTER a full build, which is exactly the expensive VOID the precondition exists to
+# convert into a cheap refusal.
+#
+# ⭐ TABLE-DRIVEN, not enumerated: the input-vintage leg iterates over whatever keys the SERVED
+# manifest publishes under `freshness.input_vintage`, and the board stamps that block from
+# `run_nf1_5._VINTAGE_READS`. So a future input added to that table is published by the board AND
+# checked here with no edit to this file and no new ruling.
+#
+#: served `freshness.adp` key -> the local FFC cache's own meta key. The ADP WINDOW is a finer
+#: fingerprint than `as_of`: a re-pull inside the same day that moved the window or the draft count
+#: is a different consensus wearing the same date.
+_ADP_WINDOW_FIELDS: tuple[tuple[str, str], ...] = (
+    ("window_start", "start_date"), ("window_end", "end_date"), ("drafts", "total_drafts"),
+)
+#: served `freshness.ecr` key -> the local FantasyPros cache's own key. The EXPERT COUNT moves
+#: whenever the consensus is recomputed, so it separates two same-day pulls the date cannot.
+_ECR_FINGERPRINT_FIELDS: tuple[tuple[str, str], ...] = (("experts", "total_experts"),)
+
+
+def _served_freshness() -> dict:
+    if not _MANIFEST_JSON.exists():
+        raise SystemExit(
+            f"the served MANIFEST is not staged at {_MANIFEST_JSON} — it carries the vintages the "
+            f"precondition checks against. Stage it:\n  {_MANIFEST_CMD}")
+    return dict(json.loads(_MANIFEST_JSON.read_text()).get("freshness") or {})
+
+
+def _local_market_caches(fresh: dict, season: int) -> dict:
+    """The raw local ADP/ECR cache payloads, addressed by the SERVED manifest's own descriptors.
+
+    Deriving the filenames from the manifest (format/teams/scoring) rather than hardcoding them
+    means we always read the cache the BOARD's own configuration names."""
+    adp, ecr = dict(fresh.get("adp") or {}), dict(fresh.get("ecr") or {})
+    out: dict[str, dict | None] = {"adp": None, "ecr": None}
+    a = RB._ART / "adp_cache" / f"ffc_{adp.get('format')}_{adp.get('teams')}_{season}.json"
+    e = RB._ART / "ecr_cache" / f"fp_ecr_{ecr.get('scoring')}_{season}.json"
+    if a.exists():
+        try:
+            out["adp"] = dict(json.loads(a.read_text()).get("meta") or {})
+        except Exception:                                    # noqa: BLE001 - unreadable != current
+            out["adp"] = None
+    if e.exists():
+        try:
+            out["ecr"] = json.loads(e.read_text())
+        except Exception:                                    # noqa: BLE001
+            out["ecr"] = None
+    return out
+
+
+def market_fingerprint(season: int = 2026) -> dict:
+    """The finer-than-a-day market surface: the ADP window, the ECR expert count, ECR recency."""
+    fresh = _served_freshness()
+    local = _local_market_caches(fresh, season)
+    served_adp, served_ecr = dict(fresh.get("adp") or {}), dict(fresh.get("ecr") or {})
+    out: dict = {"adp": {}, "ecr": {}}
+    for served_key, local_key in _ADP_WINDOW_FIELDS:
+        out["adp"][served_key] = {
+            "served": served_adp.get(served_key),
+            "local": (local["adp"] or {}).get(local_key) if local["adp"] is not None else None,
+        }
+    for served_key, local_key in _ECR_FINGERPRINT_FIELDS:
+        out["ecr"][served_key] = {
+            "served": served_ecr.get(served_key),
+            "local": (local["ecr"] or {}).get(local_key) if local["ecr"] is not None else None,
+        }
+    out["ecr"]["last_updated_ts"] = {
+        "local": (local["ecr"] or {}).get("last_updated_ts") if local["ecr"] is not None else None,
+        "board_generated_at": json.loads(_MANIFEST_JSON.read_text()).get("generated_at"),
+    }
+    return out
+
+
+def input_vintage(con, season: int = 2026, schema: str = N15.MARTS_SCHEMA) -> dict:
+    """The SERVED board's `freshness.input_vintage` block beside the LOCAL marts', key by key.
+
+    ⭐ TABLE-DRIVEN over the manifest's published keys — see the block comment above."""
+    served = dict(_served_freshness().get("input_vintage") or {})
+    local = N15.read_input_vintage(con, season, schema) if con is not None else {}
+    return {k: {"served": served.get(k), "local": local.get(k)} for k in served}
+
+
+def _input_vintage_remedy() -> str:
+    return ("rebuild the marts from the lake INTO THE DATABASE THE BUILD READS — an unset\n"
+            "      SPORTS_DUCKDB_PATH silently builds a parallel database and exits 0:\n"
+            "        export SPORTS_DUCKDB_PATH=\"$PWD/quant_sports_intel_models/sports_dbt/"
+            "sports.duckdb\"\n"
+            "        uv run python -m dbt.cli.main run --select nfl.staging --threads 1 \\\n"
+            "          --project-dir quant_sports_intel_models/sports_dbt "
+            "--profiles-dir quant_sports_intel_models/sports_dbt\n"
+            "        uv run python -m dbt.cli.main run --select nfl.marts \\\n"
+            "          --project-dir quant_sports_intel_models/sports_dbt "
+            "--profiles-dir quant_sports_intel_models/sports_dbt")
+
+
+def _fingerprint_problems(season: int) -> list[str]:
+    fp = market_fingerprint(season)
+    probs: list[str] = []
+    for name, cmd in ((n, c) for n, _k, c in _MARKET_INPUTS):
+        for key, got in fp.get(name, {}).items():
+            if key == "last_updated_ts":
+                continue
+            served, mine = got.get("served"), got.get("local")
+            if served is None:
+                continue                       # the manifest does not publish it -> nothing to bind
+            if mine is None:
+                probs.append(f"  · {name.upper()}.{key}: served {served}, LOCAL CACHE UNREADABLE "
+                             f"OR ABSENT — an unevaluable check is never a pass.\n      {cmd}")
+            elif str(mine) != str(served):
+                probs.append(f"  · {name.upper()}.{key}: served {served}, local {mine} — "
+                             f"MISMATCHED (same DAY, different consensus).\n      {cmd}")
+    # ECR recency is ONE-SIDED by necessity: the manifest publishes no `last_updated_ts`, so there
+    # is no served twin to equate. What IS checkable, and sound, is that the local consensus was
+    # published BEFORE the board was built — a consensus stamped after it cannot be the one it read.
+    rec = fp.get("ecr", {}).get("last_updated_ts", {})
+    ts, built = rec.get("local"), rec.get("board_generated_at")
+    if ts is not None and built:
+        try:
+            when = datetime.fromtimestamp(int(ts), timezone.utc)
+            board = datetime.fromisoformat(str(built))
+            if when > board:
+                probs.append(
+                    f"  · ECR.last_updated_ts: the local consensus was published {when.isoformat()},"
+                    f" AFTER the board was built ({board.isoformat()}) — it cannot be the one the "
+                    f"board read.\n      re-stage the board + manifest, then re-capture:"
+                    f"\n      {_STAGE_CMD}")
+        except Exception:                                    # noqa: BLE001
+            probs.append("  · ECR.last_updated_ts: unreadable — an unevaluable check is never a "
+                         "pass. Re-stage the manifest:\n      " + _MANIFEST_CMD)
+    return probs
+
+
+def _input_vintage_problems(con, season: int, schema: str) -> list[str]:
+    served_block = dict(_served_freshness().get("input_vintage") or {})
+    if not served_block:
+        return []                              # nothing published -> nothing to bind (not a pass)
+    if con is None:
+        return ["  · INPUT_VINTAGE: no marts connection was supplied, so the board's "
+                f"{len(served_block)} published input vintage(s) COULD NOT BE CHECKED — and an "
+                "unevaluable check is never a pass (NF1.7(a)). Pass --duckdb."]
+    probs: list[str] = []
+    for key, got in input_vintage(con, season, schema).items():
+        served, mine = got.get("served"), got.get("local")
+        if mine is None:
+            probs.append(f"  · {key}: served {served}, LOCAL MART UNREADABLE OR ABSENT.\n      "
+                         + _input_vintage_remedy())
+        elif str(mine).strip() != str(served).strip():
+            probs.append(f"  · {key}: served {served}, local {mine} — MISMATCHED.\n      "
+                         + _input_vintage_remedy())
+    return probs
+
+
 # ── the margin rule's TIE BANDS, READ not defined (node 3a owns them) ──────────────────────────
 #: M3 — `times_over` is recorded at 2 decimals, so its band is that precision (rule R2).
 M3_TIE_BAND = 0.01
@@ -180,7 +337,34 @@ def assert_market_vintage_matches(season: int = 2026) -> dict:
     return v
 
 
-def capture(force: bool = False) -> dict:
+def assert_vintages_match(con=None, season: int = 2026,
+                          schema: str = N15.MARTS_SCHEMA) -> dict:
+    """REFUSE unless EVERY vintage the served manifest publishes matches this checkout's.
+
+    D3 (PM ruling, 2026-09-03). The market DAY check alone caught NF-INJ2c run 1 and was blind to
+    runs 3 and 4 — the marts two days stale, and the feature pool missing 5 registered columns.
+    Both were found only after a full build. This is the same refusal, widened to the whole
+    surface the manifest exposes and driven by that manifest rather than by a list here.
+
+    Every refusal names the mismatched INPUT, BOTH vintages, and the FIX — a refusal that does not
+    carry its own remedy has not converted an expensive VOID into a cheap stop."""
+    market = assert_market_vintage_matches(season)          # the day check; raises on its own
+    problems = _fingerprint_problems(season) + _input_vintage_problems(con, season, schema)
+    if problems:
+        raise SystemExit(
+            "⛔ INPUT VINTAGE MISMATCH — refusing before the arms are built.\n\n"
+            + "\n".join(problems)
+            + "\n\nWHY: the reproduction pin compares this checkout's rebuild against the board "
+              "that was actually SERVED. Any input at a different vintage than the board's makes "
+              "the comparison a measurement of the gap between two checkouts rather than of any "
+              "arm. NF-INJ2c spent three VOID runs (84.72 -> 18.95 -> 5.64 -> 1.82) discovering "
+              "these one at a time, each only after a full build.")
+    return {"market": market, "fingerprint": market_fingerprint(season),
+            "input_vintage": input_vintage(con, season, schema) if con is not None else {}}
+
+
+def capture(force: bool = False, con=None, season: int = 2026,
+            schema: str = N15.MARTS_SCHEMA) -> dict:
     """Stamp the staged published board ONCE, at study start (the D3 convention)."""
     if not _SERVED_JSON.exists():
         raise SystemExit(f"nothing staged at {_SERVED_JSON} — stage it first:\n  {_STAGE_CMD}")
@@ -192,7 +376,7 @@ def capture(force: bool = False) -> dict:
     # ⭐ THE MARKET PRECONDITION, enforced HERE — before anything is stamped and long before the
     # >2-min arm build. A capture taken against caches of the wrong vintage is a capture that
     # cannot be pinned, so refusing at capture time is what converts a VOID run into a cheap no.
-    vintage = assert_market_vintage_matches()
+    vintage = assert_vintages_match(con, season, schema)
     doc = json.loads(_SERVED_JSON.read_text())
     stamp = {
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -214,7 +398,8 @@ def capture(force: bool = False) -> dict:
     return stamp
 
 
-def assert_capture_intact() -> dict:
+def assert_capture_intact(con=None, season: int = 2026,
+                          schema: str = N15.MARTS_SCHEMA) -> dict:
     """The staged bytes must still be the ones the capture stamped. REFUSES, never warns."""
     if not _CAPTURE_STAMP.exists():
         raise SystemExit(
@@ -237,7 +422,7 @@ def assert_capture_intact() -> dict:
     # ⭐ RE-CHECKED AT RUN TIME, not only at capture: the caches are ordinary files that a later
     # refresh can move underneath a valid capture. The board's bytes matching does not constrain
     # them, so an unchanged sha256 is NOT evidence the ordering inputs are unchanged.
-    now_vintage = assert_market_vintage_matches()
+    now_vintage = assert_vintages_match(con, season, schema)
     captured_vintage = stamp.get("market_vintage")
     if captured_vintage and captured_vintage != now_vintage:
         raise SystemExit(
@@ -376,11 +561,9 @@ def main(argv: list[str] | None = None) -> int:
                         format="%(asctime)s %(levelname)-7s %(message)s")
     logging.getLogger("nfl").setLevel(logging.INFO)
 
-    if args.capture or args.recapture:
-        capture(force=args.recapture)
-        return 0
-    stamp = assert_capture_intact()
-
+    # D3: the marts connection is opened BEFORE the capture branch, because the vintage
+    # precondition now binds the board's `freshness.input_vintage` block against THIS checkout's
+    # marts — and a check that cannot be evaluated is never a pass (NF1.7(a)).
     import duckdb
     if not Path(args.duckdb).is_absolute() and not Path(args.duckdb).exists():
         cand = _PROJECT_ROOT / args.duckdb
@@ -390,6 +573,11 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"DuckDB not found at {args.duckdb} — a fresh worktree does not carry the "
                          "gitignored artifact (NF-INFRA1); pass --duckdb with an absolute path.")
     con = duckdb.connect(args.duckdb, read_only=True)
+
+    if args.capture or args.recapture:
+        capture(force=args.recapture, con=con, schema=args.schema)
+        return 0
+    stamp = assert_capture_intact(con, schema=args.schema)
     selections = N15.load_selection(json.loads(RB._NF1_5_REPORT.read_text()),
                                     board="beats-incumbent")
     arms = (tuple(a.strip() for a in args.arms.split(",")) if args.arms else BASELINE_ARMS)
