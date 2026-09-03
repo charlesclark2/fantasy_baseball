@@ -564,3 +564,74 @@ def purged_week_folds(frame: pd.DataFrame,
                              f"rows — an empty side is a vacuous fold, never a free pass")
         out.append((train, test))
     return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# APPLICATION SEMANTICS — pure, tested, and DELIBERATELY NOT WIRED INTO THE SERVING PATH
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#: ⛔ **WHY THIS LIVES HERE AND NOT IN `season_projection`.** The bake-off returned
+#: `CONSTRAINT_REFUSED` and the model is deploy-held, so wiring a branch into the shipped
+#: availability owner would put an uncertified, never-invoked code path on the serving module —
+#: the "wired ≠ invoked" / dead-config hazard, for a model that is not authorised to serve. The
+#: semantics are nevertheless implemented and ASSERTED here, because the spec registers them
+#: forward and because the disjointness invariant is the thing most likely to be got wrong by a
+#: future session wiring this up in a hurry. `compose_availability_caps` is the exact shape the
+#: ship path would call; wiring it is a one-line change made ONLY under the gated ship path.
+
+#: The channels that can cap `proj_games`, in the order a reader should think about them. Each is a
+#: MIN-CAP on one quantity, which is what makes "the strongest wins" well defined.
+CHANNEL_FORMAL = "formal_status"        # season_projection.injury_availability_games (RES/PUP/NFI/SUS)
+CHANNEL_DESIGNATION = "weekly_designation"   # THIS story
+CHANNEL_NEWS = "reported_absence"       # season_projection.reported_absence_games (NF-INJ-NEWS-1)
+CHANNEL_NONE = "none"
+
+
+def remaining_season_rate_cap(current_games: float, expected_missed: float,
+                              *, season_games: float = SEASON_GAMES) -> float:
+    """The shipped remaining-season RATE, reused verbatim rather than re-derived:
+
+        `new_games = min(current, current × (season_games − missed) / season_games)`
+
+    ⭐ A RATE, NOT A CEILING, and the reason is measured rather than argued: the PM ruled this form
+    on 2026-08-23 after `min(current, season_games − missed)` moved 5 of 6 proposed rows by ZERO on
+    the real board — the model already projects starters at 11–16 games, so a ceiling of "17 minus a
+    short absence" sits ABOVE the current projection. The `min()` is redundant arithmetic for any
+    `missed ≥ 0` and is KEPT: monotonicity is the property, and it should be visible in the
+    expression rather than inferred from the sign of a coefficient.
+    """
+    if not np.isfinite(current_games):
+        return float("nan")
+    target = (float(season_games) - float(expected_missed)) / float(season_games)
+    return float(min(float(current_games), float(current_games) * target))
+
+
+def compose_availability_caps(current_games: float, *, formal_games: float | None = None,
+                              designation_games: float | None = None,
+                              news_games: float | None = None) -> tuple[float, str]:
+    """Return `(applied_games, owning_channel)` — the SINGLE STRONGEST applicable discount.
+
+    ⭐ **DISJOINTNESS, ENFORCED RATHER THAN TRUSTED.** Every channel is a min-cap on the same
+    `proj_games`, so "strongest" is unambiguously the smallest resulting figure, and exactly ONE
+    channel is recorded as the owner. A player carrying a news cap AND a live designation takes one
+    of them, never their composition.
+
+    ⚠️ **THE FAILURE MODE THIS EXISTS TO STOP.** `season_projection.reported_absence_games` skips a
+    row when a formal discount **WAS APPLIED**, reading a per-row `_formal_discount_applied` flag.
+    If the designation channel does not SET that flag, a player with both would take the news cap
+    ON TOP of the designation cap — the exact stacking the NEWS-1 rule exists to prevent, arriving
+    silently through a third channel the rule predates. So the ship path sets the same flag whenever
+    this function returns `CHANNEL_DESIGNATION`, and the invariant is asserted on a CONSTRUCTED
+    both-channels row rather than trusted to a reading of the code.
+
+    Ties go to the EARLIER channel in (formal, designation, news) — a deterministic order, so two
+    channels arriving at the same number can never make the owner depend on dict iteration.
+    """
+    candidates = [(CHANNEL_FORMAL, formal_games), (CHANNEL_DESIGNATION, designation_games),
+                  (CHANNEL_NEWS, news_games)]
+    best_val, best_owner = float(current_games), CHANNEL_NONE
+    for name, val in candidates:
+        if val is None or not np.isfinite(val):
+            continue
+        if float(val) < best_val - 1e-12:
+            best_val, best_owner = float(val), name
+    return best_val, best_owner
