@@ -509,3 +509,198 @@ def test_the_serving_key_is_namespaced_and_carries_no_season():
     assert contract.team_cache_key(BOISE) == f"{contract.NAMESPACE}/team/{BOISE}"
     assert contract.team_s3_key(BOISE).startswith(f"{contract.S3_PREFIX}/")
     assert "2026" not in contract.team_cache_key(BOISE)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Standings — the rank, and the range that is the only thing making it publishable
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⭐ THE MEASUREMENT THESE CLAUSES DEFEND. On the live 2026 week-1 board — 138 teams, every
+# posterior sd ≈ 7.3 against a rating range of −25.9 to +21.2 — the MEDIAN team's 80% rank range
+# spans 77 of 138 places and 130 of 138 span more than 40. A bare rank is therefore the most
+# over-precise number this page could publish, and the range is what converts it into the most
+# interpretable one. Every clause below exists to keep those two shipped together.
+
+
+def _board(n: int = 40, sd: float = 7.3) -> dict[int, dict]:
+    """A synthetic FBS-shaped board: `n` teams spread over a realistic rating range."""
+    step = 46.0 / max(n - 1, 1)
+    return {
+        1000 + i: {
+            "team": {"team_id": 1000 + i, "team": f"T{i}",
+                     "conference": ["A", "B", "C", "D"][i % 4]},
+            # ⚠️ CONTRACT-SHAPED, not merely enough for `attach_standings` to read. The serialize
+            # clause below is the one that would catch an E9.41 strip, and it can only do that
+            # against a block the response model actually accepts.
+            "strength": {"status": "available", "reason": None, "as_of_week": 1,
+                         "weeks": [],
+                         "current": {"as_of_week": 1,
+                                     "strength_margin": 21.0 - i * step,
+                                     "strength_margin_sd": sd}},
+        }
+        for i in range(n)
+    }
+
+
+def test_a_rank_is_never_attached_without_its_range():
+    """⛔ THE CENTRAL CONTRACT. A payload carrying a rank and no bounds is the one shape the client
+    is required to refuse to render, so the writer must never produce it."""
+    out = tp.attach_standings(_board())
+    seen = 0
+    for blob in out.values():
+        for key in ("standing_fbs", "standing_conference"):
+            standing = blob["strength"].get(key)
+            if standing is None:
+                continue
+            seen += 1
+            assert standing["rank"] is not None
+            assert standing["rank_lo"] is not None and standing["rank_hi"] is not None, (
+                f"{key} carries a rank with no range")
+            assert standing["rank_lo"] <= standing["rank_hi"]
+    assert seen, "no standing was attached at all — this test asserted nothing"
+
+
+def test_the_point_rank_lies_inside_its_own_range():
+    """A range that excludes the number it qualifies reads as a bug to a reader and IS one."""
+    out = tp.attach_standings(_board())
+    checked = 0
+    for blob in out.values():
+        s = blob["strength"]["standing_fbs"]
+        assert s["rank_lo"] <= s["rank"] <= s["rank_hi"], s
+        assert 1 <= s["rank_lo"] and s["rank_hi"] <= s["n_ranked"]
+        checked += 1
+    assert checked >= 40
+
+
+def test_the_range_is_wide_at_week_one_rather_than_cosmetic():
+    """⭐ NON-VACUITY, AND IT IS THE POINT OF THE WHOLE FEATURE. If the computed range came out one
+    or two places wide, the honest thing would be to publish a bare rank and this design would be
+    unjustified. It does not: at the sd the model actually carries in week 1, the typical range
+    spans a large fraction of the board — which is exactly why the range ships."""
+    out = tp.attach_standings(_board(n=40, sd=7.3))
+    widths = [b["strength"]["standing_fbs"]["rank_hi"] - b["strength"]["standing_fbs"]["rank_lo"]
+              for b in out.values()]
+    widths.sort()
+    median = widths[len(widths) // 2]
+    assert median >= 10, (
+        f"the median 80% rank range is only {median} places wide on a 40-team board at sd=7.3 — "
+        "if that is real, a bare rank would be defensible and this design is not")
+
+
+def test_a_narrower_posterior_produces_a_narrower_range():
+    """⏳ THE HAZARD EXPIRES, and that is why the fix is a range rather than a refusal to rank: the
+    width is a function of the posterior sd, which shrinks as games are played. A November board
+    must therefore rank more sharply than a September one WITH NO CODE CHANGE."""
+    def median_width(sd: float) -> float:
+        out = tp.attach_standings(_board(n=40, sd=sd))
+        w = sorted(b["strength"]["standing_fbs"]["rank_hi"] - b["strength"]["standing_fbs"]["rank_lo"]
+                   for b in out.values())
+        return w[len(w) // 2]
+
+    wide, narrow = median_width(7.3), median_width(1.5)
+    assert narrow < wide, f"a sharper posterior did not sharpen the rank range ({narrow} vs {wide})"
+
+
+def test_the_standings_are_deterministic_across_writes(monkeypatch):
+    """⛔ THE SEED IS LOAD-BEARING, AND THAT IS A MEASUREMENT RATHER THAN AN ASSUMPTION.
+
+    The serving store is rewritten daily. An unseeded draw would move a published rank range with
+    nothing in the model having changed — indistinguishable, to a reader or to a diff, from a real
+    movement. Measured on the LIVE 138-team 2026 board at this draw count: **29.65% of published
+    bounds change under a reseed** (24 reseeds, 6,624 bounds).
+
+    ⚠️ THE BOARD BELOW IS AT REAL DENSITY ON PURPOSE, and the first version of this test was
+    VACUOUS for exactly that reason — its 40 evenly-spaced teams left every percentile far from a
+    rounding boundary, so an unseeded run rounded to the same integers and deleting the seed left
+    the clause GREEN (the red proof caught it). Rank-range sensitivity is a property of how tightly
+    the population is PACKED, so a guard on it has to be run at the packing the board actually has.
+    """
+    dense = _board(n=138)
+    a = tp.attach_standings(dense)
+    b = tp.attach_standings(_board(n=138))
+    for tid in a:
+        assert a[tid]["strength"]["standing_fbs"] == b[tid]["strength"]["standing_fbs"]
+        assert a[tid]["strength"]["standing_conference"] == b[tid]["strength"]["standing_conference"]
+
+    # ⭐ NON-VACUITY, and it is what makes the clause above mean anything: a DIFFERENT seed must
+    # actually move a bound at this density. If it does not, this test is asserting that a constant
+    # equals itself and the seed could be deleted with nothing going red.
+    monkeypatch.setattr(tp, "STANDING_SEED", tp.STANDING_SEED + 1)
+    c = tp.attach_standings(_board(n=138))
+    moved = sum(
+        1 for tid in a
+        if a[tid]["strength"]["standing_fbs"] != c[tid]["strength"]["standing_fbs"]
+    )
+    assert moved, (
+        "a different seed changed nothing at all, so this board is too sparse to detect an "
+        "unseeded draw and the determinism clause above is vacuous")
+
+
+def test_a_population_too_small_to_rank_gets_no_standing():
+    """A rank of 1 of 1 is not a standing. Both the whole-board and the per-conference floors."""
+    single = {k: v for k, v in list(_board().items())[:1]}
+    assert tp.attach_standings(single)[next(iter(single))]["strength"].get("standing_fbs") is None
+
+    # A conference of one still gets an FBS standing — it is only its CONFERENCE rank that is
+    # meaningless — so the two floors are independent, not one switch.
+    board = _board(n=4)
+    for i, blob in enumerate(board.values()):
+        blob["team"]["conference"] = "Solo" if i == 0 else "Shared"
+    out = tp.attach_standings(board)
+    solo = next(b for b in out.values() if b["team"]["conference"] == "Solo")
+    assert solo["strength"]["standing_fbs"] is not None
+    assert solo["strength"].get("standing_conference") is None
+
+
+def test_a_team_without_a_usable_posterior_is_left_unranked_and_out_of_the_denominator():
+    """⛔ NOT RANKED, AND NOT COUNTED. `n_ranked` names the population a rank was taken within —
+    inflating it with teams that had no rating would quietly weaken every other team's placement."""
+    board = _board(n=10)
+    ids = list(board)
+    board[ids[0]]["strength"] = {"status": "unavailable", "current": None}
+    board[ids[1]]["strength"]["current"]["strength_margin_sd"] = 0.0   # a spread of zero is not one
+    board[ids[2]]["strength"]["current"]["strength_margin"] = None
+    out = tp.attach_standings(board)
+    for tid in ids[:3]:
+        assert out[tid]["strength"].get("standing_fbs") is None
+    assert out[ids[3]]["strength"]["standing_fbs"]["n_ranked"] == 7
+
+
+def test_the_served_levels_match_the_band_the_rating_is_published_with():
+    """⭐ ONE OWNER. "42nd, plausibly 18th–97th" beside "+3.1, plausibly −6.2 to +12.4" is only one
+    coherent statement if both are taken at the same confidence — so the levels are served, not
+    assumed on the client, and they are the SAME levels."""
+    out = tp.attach_standings(_board())
+    s = next(iter(out.values()))["strength"]["standing_fbs"]
+    assert s["interval_lo_level"] == contract.TEAM_STANDING_INTERVAL_LO_LEVEL
+    assert s["interval_hi_level"] == contract.TEAM_STANDING_INTERVAL_HI_LEVEL
+    assert round((s["interval_hi_level"] - s["interval_lo_level"]) * 100) == 80
+
+
+def test_the_standing_is_declared_on_the_contract_and_carries_no_claim_token():
+    """E9.41: a field the store carries and the model does not declare is silently STRIPPED."""
+    declared = contract.declared_field_names(contract.NcaafTeamStrength)
+    assert "standing_fbs" in declared and "standing_conference" in declared
+    assert contract.NcaafTeamStanding in contract.CONTRACT_MODELS
+    contract.assert_no_edge_claim_in_schema()
+
+    # ...and it survives a real serialize, which is the step that does the stripping.
+    out = tp.attach_standings(_board())
+    blob = next(iter(out.values()))["strength"]
+    model = contract.NcaafTeamStrength.model_validate(blob)
+    assert model.standing_fbs is not None and model.standing_fbs.rank_hi is not None
+
+
+def test_the_writer_attaches_standings_rather_than_leaving_them_to_a_caller():
+    """⭐ WIRED *AND* INVOKED (NF-C0e). `build_team_payloads` is the only place that sees the whole
+    board, so the post-pass has to run THERE — a `attach_standings` that exists and is never called
+    is the defect this repo has shipped before."""
+    strength = pd.DataFrame([
+        {"team_id": 1, "as_of_week": 1, "strength_margin": 10.0, "strength_margin_sd": 7.3},
+        {"team_id": 2, "as_of_week": 1, "strength_margin": -4.0, "strength_margin_sd": 7.3},
+        {"team_id": 3, "as_of_week": 1, "strength_margin": 1.0, "strength_margin_sd": 7.3},
+    ])
+    out = tp.build_team_payloads(season=2026, strength=strength)
+    assert out[1]["strength"]["standing_fbs"]["rank"] == 1
+    assert out[2]["strength"]["standing_fbs"]["rank"] == 3
+    assert out[1]["strength"]["standing_fbs"]["n_ranked"] == 3

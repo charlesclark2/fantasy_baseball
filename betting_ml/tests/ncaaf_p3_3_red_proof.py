@@ -43,6 +43,37 @@ SUITE = "betting_ml/tests/test_ncaaf_p3_3_team_page.py"
 
 #: (label, file, find, replace, test id)
 CASES: list[tuple[str, Path, str, str, str]] = [
+    # ── standings: a rank is publishable only WITH its range ─────────────────────────────────
+    ("a rank is published without the range that makes it honest",
+     BUILDER,
+     '        "rank_lo": rank_lo,\n        "rank_hi": rank_hi,',
+     '        "rank_lo": None,\n        "rank_hi": None,',
+     "test_a_rank_is_never_attached_without_its_range"),
+
+    ("the rank range is drawn UNSEEDED, so every daily write jiggles it",
+     BUILDER,
+     "np.random.default_rng(STANDING_SEED)",
+     "np.random.default_rng()",
+     "test_the_standings_are_deterministic_across_writes"),
+
+    ("a team with no usable posterior is counted in the denominator anyway",
+     BUILDER,
+     "        if not (math.isfinite(mu) and math.isfinite(sd)) or sd <= 0:\n            continue",
+     "        if False:\n            continue",
+     "test_a_team_without_a_usable_posterior_is_left_unranked_and_out_of_the_denominator"),
+
+    ("a one-team conference is published as a standing",
+     BUILDER,
+     "        if len(cols) < 2:\n            continue",
+     "        if False:\n            continue",
+     "test_a_population_too_small_to_rank_gets_no_standing"),
+
+    ("the standings are computed but never attached to any payload",
+     BUILDER,
+     "    return attach_standings(payloads)",
+     "    return payloads",
+     "test_the_writer_attaches_standings_rather_than_leaving_them_to_a_caller"),
+
     # ── realignment: the AC this story is graded on ──────────────────────────────────────────
     ("the conference is read off the MODEL row instead of the SCD-2 dim",
      BUILDER,

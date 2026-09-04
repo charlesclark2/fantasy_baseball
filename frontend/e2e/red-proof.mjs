@@ -2864,6 +2864,37 @@ const CASES = [
   },
   // ── NCAAF-P3.3 — the team stats page ─────────────────────────────────────────────────────────
   {
+    id: "ncaaf-team-borrows-the-game-warning",
+    shipped: "NCAAF-P3.3 — the game board's degradation warning on a team page",
+    // ⭐ THIS ONE ACTUALLY SHIPPED AND THE OPERATOR HIT IT ON THE FIRST PAGE THEY OPENED. The
+    // shared curve shows an amber "this game's simulated quantiles were not published" whenever its
+    // source is parametric. On a game card that is a real degradation. On a strength posterior —
+    // whose served form IS a mean and a spread — there are never any simulated quantiles to be
+    // missing, so it announced a defect that does not exist, in a warning colour, with the wrong
+    // noun. One rendering, two different facts (NF-C6b).
+    //
+    // ⛔ THE MUTATION RESTORES THE DEFAULT rather than deleting a guard, because that is precisely
+    // the state that shipped — this proves the clause catches the REGRESSION, not merely a syntax
+    // change. The anchor is unique: `parametricNote={null}` appears in this file once (NF-INJ2b).
+    detail: "Removes the suppression, so the team curve renders the game card's amber warning.",
+    file: "components/ncaaf/team-strength.tsx",
+    from: "          parametricNote={null}",
+    to: "          /* parametricNote intentionally defaulted */",
+    grep: "does not borrow the game board",
+  },
+  {
+    id: "ncaaf-team-zero-rule-labelled-for-a-game",
+    shipped: "NCAAF-P3.3 — a rating axis labelled with the game board's noun",
+    // Zero on a game margin is a TIED GAME ("even"); zero on a rating axis is an AVERAGE FBS TEAM.
+    // The rule exists to give the reader the one comparison that makes the rating mean anything, so
+    // the wrong noun there answers the wrong question in the worst possible place.
+    detail: "Drops the rating-axis label, falling back to the game surface's 'even'.",
+    file: "components/ncaaf/team-strength.tsx",
+    from: "          zeroLabel={STRENGTH_ZERO_LABEL}",
+    to: "          /* zeroLabel intentionally defaulted */",
+    grep: "named for a rating",
+  },
+  {
     id: "ncaaf-team-rating-without-its-band",
     shipped: "NCAAF-P3.3 — a strength rating published as a point number",
     // ⭐⭐ THE ONE THAT MATTERS MOST ON THIS PAGE. `best_alpha = 0`, and at week 1 the posterior IS

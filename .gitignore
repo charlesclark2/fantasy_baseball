@@ -174,7 +174,22 @@ quant_sports_intel_models/football/nfl/fantasy/artifacts/served_board_snapshots/
 # it is the vintage/provenance record the report cites.
 quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_*.json
 quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/board_2026_*.parquet
+# NF-INJ2c (PM ruling, decision request #5): the D3 CAPTURE STAMP is machine-local operational
+# state, not a record — it names an absolute `source` path and stamps the market vintage of the
+# machine that captured. Tracking it meant the `COPY . .` image carried ONE machine's stamp into
+# EVERY container, so a fresh box container arrived pre-seeded with a laptop capture pointing at a
+# /Users/... path and a different board. The guard REFUSED it (which is why this is a finding and
+# not an incident) — but a stamp that ships in the image is a trap waiting for the next reader who
+# does not validate it. The audit trail is NOT lost: the run's report embeds the stamp verbatim
+# under `capture`, and the report IS tracked.
+quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/nf_inj2c_capture.json
 .nf_c8_red_proof_backup/
+# NF-W7h's RED proof mutates REAL source and runs INSIDE the collected pytest suite, so a killed
+# run can leave both the mutation and its on-disk backup behind. The mutation is repaired at the
+# next import; the backup must never be committable (2026-09-03: a sweeping commit shipped the
+# mutations themselves to `dev`, deleting a §0.5 gate clause on a decided story).
+*.nf_w7h_red_proof_backup
+.nf_w7h_red_proof.lock
 
 # NF-INJ3b-M (PM ruling D4): the neutral "latest run" stems that
 # run_nf_tr2b_placement_read / run_interval_revalidation now write BY DEFAULT, so a session

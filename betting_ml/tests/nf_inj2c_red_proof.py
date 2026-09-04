@@ -36,6 +36,10 @@ _FOLD = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_result
 _PREREG = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
                    "nf_inj2c_preregistration.md")
 _SPEC = _REPO / "plan_specs/nfl_fantasy/nf-inj2c.yaml"
+_N12 = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_nf1_2.py"
+_N15 = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_nf1_5.py"
+_RB = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/run_nf_inj2b_rate_ordering.py")
+_GITIGNORE = _REPO / ".gitignore"
 _SUITE = "betting_ml/tests/test_nf_inj2c_coherence_diagnosis.py"
 #: nodes 3a/3b/3c live in their own suite; the harness routes each break to the suite that owns it.
 _SUITE_BY_NODE = {}
@@ -43,12 +47,14 @@ _SUITE_BY_NODE = {}
 #: (label, file, anchor, replacement, token that must be GONE afterwards, the guard(s) it must break)
 BREAKS: list[tuple[str, Path, str, str, str, str]] = [
     ("the kernel-floor count silently narrows to the recorded definition", _DIAG,
-     'moved = np.where(np.isfinite(g), gsafe != g, True)',
-     'moved = np.where(np.isfinite(g), gsafe != g, False)',
-     # ⚠️ the `gone` token must be as SPECIFIC as the anchor: `attribute()` carries the identical
-     # expression under the name `floored`, so a loose token survives the mutation and the harness
-     # (correctly) refuses the break rather than reporting a false vacuity (#815 / E11.24).
-     'moved = np.where(np.isfinite(g), gsafe != g, True)',
+     'floored = np.where(np.isfinite(g), gsafe != g, True)',
+     'floored = np.where(np.isfinite(g), gsafe != g, False)',
+     # ⚠️ the `gone` token must be as SPECIFIC as the anchor (#815 / E11.24). RE-ANCHORED
+     # 2026-09-03: PLAT-CVP2 (642ca608) renamed this binding `moved` -> `floored`, which retired
+     # the old anchor and left this guard silently UN-RED-PROVEN — the harness caught it as
+     # "ANCHOR NOT UNIQUE (0 occurrences)" rather than reporting a false vacuity. Re-anchored onto
+     # the new implementation, never weakened or deleted (MH2.7).
+     'floored = np.where(np.isfinite(g), gsafe != g, True)',
      "test_the_recorded_binding_count_misses_a_non_finite_row_the_kernel_does_floor"),
 
     ("an inactive floor stops refuting the hypothesis", _DIAG,
@@ -350,9 +356,11 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "test_the_superseded_margin_rule_branch_is_marked_not_edited"),
     # ── node 3b (PM ruling 2026-09-01 (a)) — the MARKET-VINTAGE precondition ──────────────────
     ("a mismatched market vintage stops being refused", _BASE,
-     '        elif str(mine) != str(served):',
-     '        elif False:',
-     'elif str(mine) != str(served):',
+     '        elif str(mine) != str(served):\n            problems.append(',
+     '        elif False:\n            problems.append(',
+     'elif str(mine) != str(served):\n            problems.append(',
+     # RE-ANCHORED at D3 (2026-09-03): the precondition widened and moved this call/expression.
+     # Re-anchored onto the new implementation, never weakened (MH2.7).
      "test_the_run_1_mismatch_REFUSES_and_names_input_both_vintages_and_the_fix"),
 
     ("an UNREADABLE local vintage is scored as a pass", _BASE,
@@ -374,18 +382,18 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "test_the_run_1_mismatch_REFUSES_and_names_input_both_vintages_and_the_fix"),
 
     ("capture stops enforcing the precondition, so it can be bypassed", _BASE,
-     '    vintage = assert_market_vintage_matches()\n    doc = json.loads(_SERVED_JSON.read_text())',
+     '    vintage = assert_vintages_match(con, season, schema)\n    doc = json.loads(_SERVED_JSON.read_text())',
      '    vintage = market_vintage()\n    doc = json.loads(_SERVED_JSON.read_text())',
      # ⚠️ the gone-token must not be a SUBSTRING of the sibling call: `now_vintage = assert_…`
      # in `assert_capture_intact` contains `vintage = assert_…` verbatim (the E11.24 wrong-symbol
      # class, caught by the harness rather than by review).
-     '    vintage = assert_market_vintage_matches()\n    doc = json.loads',
+     '    vintage = assert_vintages_match(con, season, schema)\n    doc = json.loads',
      "test_capture_enforces_the_precondition_so_it_cannot_be_bypassed"),
 
     ("the run path stops re-checking that the caches held still", _BASE,
-     '    now_vintage = assert_market_vintage_matches()\n    captured_vintage = stamp.get("market_vintage")',
+     '    now_vintage = assert_vintages_match(con, season, schema)\n    captured_vintage = stamp.get("market_vintage")',
      '    now_vintage = market_vintage()\n    captured_vintage = None',
-     'now_vintage = assert_market_vintage_matches()',
+     'now_vintage = assert_vintages_match(con, season, schema)',
      "test_the_run_path_rechecks_that_the_caches_did_not_move_after_the_capture"),
 
     ("the market-input registry is emptied, so the precondition checks nothing", _BASE,
@@ -395,10 +403,160 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "test_every_declared_market_input_carries_a_real_refresh_command"),
 
     ("a MATCHED vintage starts being refused too, blocking the study outright", _BASE,
-     '        elif str(mine) != str(served):',
-     '        elif True:',
-     'elif str(mine) != str(served):',
+     '        elif str(mine) != str(served):\n            problems.append(',
+     '        elif True:\n            problems.append(',
+     'elif str(mine) != str(served):\n            problems.append(',
+     # RE-ANCHORED at D3 (2026-09-03): the precondition widened and moved this call/expression.
+     # Re-anchored onto the new implementation, never weakened (MH2.7).
      "test_a_matched_market_vintage_PASSES"),
+    # ── the cache guard (NF-INJ2c, 2026-09-03) ────────────────────────────────────────────────
+    # The guard checked 20 of the NF1.5 pool's 120 columns and was blind to the other 100, so a
+    # Jul-31 cache missing 5 registered columns was served as "current" for a month. These breaks
+    # prove the fix cannot silently revert to that state.
+    ("the guard ignores the caller's family (the pre-fix behaviour)", _N12,
+     "    return not missing_registered_cols(pool, required)",
+     "    return not missing_registered_cols(pool, None)",
+     "return not missing_registered_cols(pool, required)",
+     "test_a_pool_missing_five_registered_columns_REFUSES"),
+
+    ("missing_registered_cols always reports 'nothing missing'", _N12,
+     "    return sorted(c for c in req if c not in pool.columns)",
+     "    return []",
+     "return sorted(c for c in req if c not in pool.columns)",
+     "test_a_pool_missing_five_registered_columns_REFUSES"),
+
+    ("POOL_REQUIRED_COLS is hand-listed instead of DERIVED", _N15,
+     '''POOL_REQUIRED_COLS: frozenset[str] = frozenset(
+    {c for feats in M13.POSITION_FEATURES.values() for c in feats}
+    | set(M13.MARKET_FEATURES)
+    | set(M12.REFINEMENT_COLS)
+    | {"real_fp_ppr", "real_games"}
+)''',
+     'POOL_REQUIRED_COLS: frozenset[str] = frozenset({"wopr", "team_pace"})',
+     "{c for feats in M13.POSITION_FEATURES.values() for c in feats}",
+     "test_the_required_family_is_DERIVED_so_a_new_feature_joins_without_an_edit"),
+
+    ("build_pool stops passing the family to the guard (wired != invoked)", _N15,
+     "absent = missing_registered_cols(cached, POOL_REQUIRED_COLS)",
+     "absent = missing_registered_cols(cached)",
+     "missing_registered_cols(cached, POOL_REQUIRED_COLS)",
+     "test_build_pool_actually_passes_the_family_to_the_guard"),
+
+    ("an empty/absent pool is scored as current (NF1.7(a))", _N12,
+     "        return sorted(required if required is not None else M12.REFINEMENT_COLS)",
+     "        return []",
+     "return sorted(required if required is not None else M12.REFINEMENT_COLS)",
+     "test_an_absent_or_empty_pool_refuses"),
+    # ── D3: the widened vintage precondition (PM ruling 2026-09-03) ──────────────────
+    ('the ADP window table is emptied, so a same-day re-pull passes', _BASE,
+     '("window_start", "start_date"), ("window_end", "end_date"), ("drafts", "total_drafts"),',
+     '',
+     '("window_start", "start_date")',
+     'test_a_moved_adp_window_REFUSES_even_though_the_DAY_still_matches'),
+    ('the ECR fingerprint table is emptied', _BASE,
+     '_ECR_FINGERPRINT_FIELDS: tuple[tuple[str, str], ...] = (("experts", "total_experts"),)',
+     '_ECR_FINGERPRINT_FIELDS: tuple[tuple[str, str], ...] = ()',
+     '(("experts", "total_experts"),)',
+     'test_a_changed_ecr_expert_count_REFUSES_even_though_the_DAY_still_matches'),
+    ('a consensus published AFTER the board stops being refused', _BASE,
+     '            if when > board:',
+     '            if False:  # was: when later than board',
+     'if when > board:',
+     'test_an_ecr_consensus_published_AFTER_the_board_REFUSES'),
+    ('the input-vintage leg iterates nothing', _BASE,
+     '    for key, got in input_vintage(con, season, schema).items():',
+     '    for key, got in dict().items():',
+     'for key, got in input_vintage(con, season, schema).items():',
+     'test_a_mismatched_input_vintage_REFUSES_and_names_the_mart_rebuild'),
+    ('a missing marts connection is scored as a pass (NF1.7(a))', _BASE,
+     '    if con is None:',
+     '    if con is None and False:',
+     '    if con is None:',
+     'test_a_published_input_vintage_with_NO_marts_connection_REFUSES'),
+    ("the input-vintage leg hardcodes its keys instead of reading the manifest's", _BASE,
+     '    return {k: {"served": served.get(k), "local": local.get(k)} for k in served}',
+     '    return {k: {"served": served.get(k), "local": local.get(k)}\n            for k in ("depth_chart_as_of", "sleeper_status_as_of")}',
+     'for k in served}',
+     'test_the_input_vintage_leg_is_TABLE_DRIVEN_over_the_manifests_own_keys'),
+
+    # ── PM ruling, decision request #5: the pin is evaluated at the PUBLISHED artifact's own
+    # resolution. Both directions are RED-proven — a correct reproduction must PASS, a genuinely
+    # wrong row must still REFUSE — because a fix in either direction alone is the defect.
+    ("the pin compares a DECIMAL bar with raw BINARY `<=` again (the defect)", _RB,
+     'return bool(w <= PUBLISHED_ROUNDING_TOL + PUBLISHED_TOL_REPR_EPS)',
+     'return bool(w <= PUBLISHED_ROUNDING_TOL)',
+     'PUBLISHED_ROUNDING_TOL + PUBLISHED_TOL_REPR_EPS',
+     "TestACorrectReproductionPasses::test_the_exact_measured_worst_passes"),
+
+    ("the representation epsilon is widened into SLACK", _RB,
+     'PUBLISHED_TOL_REPR_EPS = 1e-9',
+     'PUBLISHED_TOL_REPR_EPS = 1e-3',
+     'PUBLISHED_TOL_REPR_EPS = 1e-9',
+     "TestAWrongRowStillRefuses::test_the_epsilon_is_not_slack_at_any_material_scale"),
+
+    ("the epsilon shrinks until it no longer covers the error it exists for", _RB,
+     'PUBLISHED_TOL_REPR_EPS = 1e-9',
+     'PUBLISHED_TOL_REPR_EPS = 1e-15',
+     'PUBLISHED_TOL_REPR_EPS = 1e-9',
+     "TestTheRegisteredBarIsUnchanged::"
+     "test_the_epsilon_brackets_the_representation_error_without_reaching_the_data"),
+
+    # ⭐ the E2.1-r break: "fix" the pin by MOVING THE BAR instead of the comparison. This is the
+    # thing the PM ruling explicitly did NOT authorise, so a guard must refuse it.
+    ("the REGISTERED BAR is moved instead of the comparison being fixed", _RB,
+     'PUBLISHED_ROUNDING_TOL = 0.05',
+     'PUBLISHED_ROUNDING_TOL = 0.06',
+     'PUBLISHED_ROUNDING_TOL = 0.05',
+     "TestTheRegisteredBarIsUnchanged::test_the_tolerance_is_still_half_the_published_quantum"),
+
+    ("the comparison stops failing closed on an unevaluable worst", _RB,
+     '    if not math.isfinite(w):\n        return False\n',
+     '    if math.isinf(w) and w > 0:\n        return False\n',
+     'if not math.isfinite(w):',
+     "TestAWrongRowStillRefuses::test_an_unevaluable_worst_refuses"),
+
+    ("the pin stops routing through the helper (wired != invoked)", _RB,
+     '"reproduces": reproduces_at_published_resolution(worst),',
+     '"reproduces": bool(worst <= PUBLISHED_ROUNDING_TOL),',
+     'reproduces_at_published_resolution(worst)',
+     "TestThePinUsesIt::test_the_pin_calls_the_helper_rather_than_comparing_raw"),
+
+    ("the pin folds the epsilon into the reported tolerance, hiding that the bar did not move", _RB,
+     '            "representation_epsilon": PUBLISHED_TOL_REPR_EPS,\n',
+     '',
+     '"representation_epsilon": PUBLISHED_TOL_REPR_EPS',
+     "TestThePinUsesIt::test_the_pin_reports_the_bar_and_the_epsilon_SEPARATELY"),
+
+    ("the comparison site stops saying the epsilon is not slack", _RB,
+     '⛔ `PUBLISHED_TOL_REPR_EPS` IS NOT slack',
+     'The epsilon is applied here',
+     'IS NOT slack',
+     "TestTheRegisteredBarIsUnchanged::"
+     "test_the_source_documents_the_epsilon_as_representation_not_slack"),
+
+    # ── PM ruling, decision request #5 (second half): the D3 capture stamp is machine-local state
+    # and must not ship in the `COPY . .` image. The TRACKING half is RED-proven by index mutation
+    # in the suite's own docstring — this harness cannot express a `git add`.
+    ("the capture stamp is un-ignored, so the image ships one machine's study state", _GITIGNORE,
+     'quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/'
+     'nf_inj2c_capture.json\n',
+     '',
+     'nf_inj2b_baseline/nf_inj2c_capture.json',
+     "TestTheCaptureStampNeverShipsInTheImage::test_gitignore_names_the_capture_stamp"),
+
+    ("the report stops embedding the stamp, so untracking WOULD lose the provenance", _BASE,
+     '"capture": stamp,',
+     '"capture_note": "see the stamp file",',
+     '"capture": stamp',
+     "TestTheCaptureStampNeverShipsInTheImage::"
+     "test_the_reports_carry_the_stamp_so_untracking_loses_no_audit_trail"),
+
+    ("the run stops asserting the capture is intact (the guard that made this a finding)", _BASE,
+     '    stamp = assert_capture_intact(con, schema=args.schema)',
+     '    stamp = json.loads(_CAPTURE_STAMP.read_text())',
+     '= assert_capture_intact(',
+     "TestTheCaptureStampNeverShipsInTheImage::"
+     "test_the_validation_that_refused_the_stale_stamp_is_still_wired"),
 ]
 
 
@@ -431,6 +589,8 @@ def _run(node_id: str) -> bool:
 _OTHER_SUITES = (
     "betting_ml/tests/test_nf_inj2c_dominance_baseline.py",
     "betting_ml/tests/test_nf_inj2c_preregistration.py",
+    "betting_ml/tests/test_nf_inj2c_cache_guard.py",
+    "betting_ml/tests/test_nf_inj2c_published_resolution_pin.py",
 )
 
 

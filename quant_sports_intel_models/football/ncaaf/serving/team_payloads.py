@@ -42,6 +42,7 @@ approximately zero for every team in the league.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime
 from typing import Any, Mapping, Sequence
 
@@ -479,6 +480,136 @@ def build_team_payload(*, team_id: int, season: int,
     return contract.NcaafTeamPage.model_validate(payload).model_dump()
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# Standings — where a rating places a team, and how sure that placement is
+# ══════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⭐⭐ WHY THIS IS A MONTE CARLO AND NOT A SORT.
+#
+# Sorting 138 ratings gives a rank in one line. It also publishes a number that is very nearly
+# noise in September and says nothing about it. Measured on the live 2026 week-1 board — 138 teams,
+# every posterior sd ≈ 7.3 against a rating range of −25.9 to +21.2 — the MEDIAN team's 80% rank
+# range spans 77 of 138 places, and 130 of 138 span more than 40. Boise State ranks 42nd on the
+# point estimate and 18th–97th once its own published spread is taken seriously.
+#
+# So the rank and the range are computed TOGETHER, from the same draws, and the contract makes the
+# range non-optional (`NcaafTeamStanding`). The alternative considered and rejected was refusing to
+# rank at all: correct in week 1, wrong by week 10, because the width is a function of a posterior
+# sd that shrinks as games are played. Rank-with-range is right in both.
+#
+# ⛔ IT COMPUTES NO MODEL QUANTITY. Every input is a number already served on the same block — this
+# is an ordering of the P1.2 posterior, not a new estimate of anything, so there is no selection to
+# deflate and no §0.5 bake-off implied. It is the same line `distribution-curve.tsx` draws between
+# rendering a served distribution and re-deriving one.
+#
+# ⚠️ IT READS THE FINISHED BLOBS, DELIBERATELY. Ranking off the raw strength frame would be a
+# SECOND selection of "this team's current rating" living beside `build_strength`'s, free to
+# disagree the moment one changed — the two-renderers class (E9.61) that `build_strength`'s own
+# header records paying for once already. Reading the blob means the rank is an ordering of exactly
+# the numbers the page displays, and cannot drift from them.
+
+#: Draws per team. 20k puts the Monte-Carlo error on a rank percentile well under one place, which
+#: is the resolution the field is reported at; the whole pass is ~2.8M normals for a full FBS board.
+STANDING_DRAWS = 20_000
+
+#: ⛔ FIXED, and it must stay fixed. The serving store is rewritten daily, and an unseeded draw
+#: would jiggle every team's published rank range by a place or two on every write with nothing in
+#: the model having changed — indistinguishable, to a reader or to a diff, from a real movement.
+STANDING_SEED = 20260903
+
+
+def _standing(*, scope: str, scope_label: str | None, rank: int | None,
+              rank_lo: int | None, rank_hi: int | None, n_ranked: int) -> dict:
+    return {
+        "scope": scope,
+        "scope_label": scope_label,
+        "rank": rank,
+        "rank_lo": rank_lo,
+        "rank_hi": rank_hi,
+        "n_ranked": n_ranked,
+        "interval_lo_level": contract.TEAM_STANDING_INTERVAL_LO_LEVEL,
+        "interval_hi_level": contract.TEAM_STANDING_INTERVAL_HI_LEVEL,
+    }
+
+
+def attach_standings(payloads: Mapping[int, dict]) -> Mapping[int, dict]:
+    """Write `standing_fbs` / `standing_conference` onto each blob's strength block, in place.
+
+    A team is RANKABLE when its strength block is available and carries a finite rating and a
+    finite positive spread. Everything else — a team whose posterior did not build, a conference
+    with one rankable member — gets `None` rather than a fabricated placement: a rank of 1 of 1 is
+    not a standing, and an absent one must stay visibly absent (NF-C6b).
+    """
+    import numpy as np
+
+    ranked: list[tuple[int, float, float, str | None]] = []
+    for tid, blob in payloads.items():
+        strength = blob.get("strength") or {}
+        if strength.get("status") != "available":
+            continue
+        current = strength.get("current") or {}
+        mu, sd = current.get("strength_margin"), current.get("strength_margin_sd")
+        if not isinstance(mu, (int, float)) or not isinstance(sd, (int, float)):
+            continue
+        if not (math.isfinite(mu) and math.isfinite(sd)) or sd <= 0:
+            continue
+        conference = ((blob.get("team") or {}).get("conference")) or None
+        ranked.append((tid, float(mu), float(sd), conference))
+
+    # ⛔ TWO IS THE FLOOR FOR AN ORDERING. One team ranked first of one says nothing at all.
+    if len(ranked) < 2:
+        return payloads
+
+    ids = [r[0] for r in ranked]
+    mu = np.array([r[1] for r in ranked], dtype=float)
+    sd = np.array([r[2] for r in ranked], dtype=float)
+    confs = [r[3] for r in ranked]
+    n = len(ids)
+
+    draws = np.random.default_rng(STANDING_SEED).normal(mu, sd, size=(STANDING_DRAWS, n))
+    lo_pct = contract.TEAM_STANDING_INTERVAL_LO_LEVEL * 100.0
+    hi_pct = contract.TEAM_STANDING_INTERVAL_HI_LEVEL * 100.0
+
+    def _ranks_for(cols: Sequence[int]) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
+        """Point rank (by the served rating) and the rank range (from the draws), for a sub-population."""
+        sub_mu = mu[list(cols)]
+        # 1 = best. `argsort().argsort()` on the NEGATED values turns an ordering into a rank.
+        point = (-sub_mu).argsort().argsort() + 1
+        sub = draws[:, list(cols)]
+        sub_ranks = (-sub).argsort(axis=1).argsort(axis=1) + 1
+        lo = np.percentile(sub_ranks, lo_pct, axis=0)
+        hi = np.percentile(sub_ranks, hi_pct, axis=0)
+        k = len(cols)
+        return (
+            {cols[i]: int(point[i]) for i in range(k)},
+            {cols[i]: int(min(max(round(float(lo[i])), 1), k)) for i in range(k)},
+            {cols[i]: int(min(max(round(float(hi[i])), 1), k)) for i in range(k)},
+        )
+
+    all_cols = list(range(n))
+    fbs_point, fbs_lo, fbs_hi = _ranks_for(all_cols)
+    for i, tid in enumerate(ids):
+        payloads[tid]["strength"]["standing_fbs"] = _standing(
+            scope="fbs", scope_label="FBS", rank=fbs_point[i],
+            rank_lo=fbs_lo[i], rank_hi=fbs_hi[i], n_ranked=n,
+        )
+
+    by_conf: dict[str, list[int]] = {}
+    for i, conference in enumerate(confs):
+        if conference:
+            by_conf.setdefault(conference, []).append(i)
+    for conference, cols in by_conf.items():
+        if len(cols) < 2:
+            continue
+        c_point, c_lo, c_hi = _ranks_for(cols)
+        for i in cols:
+            payloads[ids[i]]["strength"]["standing_conference"] = _standing(
+                scope="conference", scope_label=conference, rank=c_point[i],
+                rank_lo=c_lo[i], rank_hi=c_hi[i], n_ranked=len(cols),
+            )
+    return payloads
+
+
 def build_team_payloads(*, season: int,
                         strength: "pd.DataFrame | None",
                         efficiency: "pd.DataFrame | None" = None,
@@ -530,7 +661,7 @@ def build_team_payloads(*, season: int,
                 sched_by_team.setdefault(tid, []).append(row)
 
     universe = sorted(set(by_team_strength) | set(dim_by_team))
-    return {
+    payloads = {
         tid: build_team_payload(
             team_id=tid, season=season,
             strength_rows=by_team_strength.get(tid, ()),
@@ -545,3 +676,6 @@ def build_team_payloads(*, season: int,
         )
         for tid in universe
     }
+    # ⭐ A POST-PASS, because a rank is the one field on this page that cannot be built from one
+    # team's rows — it is a property of the whole board, and this is the only place that sees it.
+    return attach_standings(payloads)
