@@ -188,4 +188,17 @@ spec:
       name-heuristic retirement trigger (card YAxmU2Cv) — this is the SECOND
       registration consuming explicit gate_classes, partition_source
       "gate_classes", partition_verified true. (6) ESPN attribution (card
-      yjZo7pk9) still owns the 25% substrate; untouched, as registered.
+      yjZo7pk9) still owns the 25% substrate; untouched, as registered. (7)
+      ⭐ A FOURTH way a RED PROOF LIES, repo-wide: pytest exits NON-ZERO on
+      an unresolvable node id, so a guard that has been RENAMED, MOVED or
+      DELETED scores a perfect RED forever. Caught live — NF-INJ4's own red
+      proof reported 14/14 with one case pointing at a test this story had
+      renamed. Both proofs here now assert every named node id RESOLVES, in
+      the BASELINE phase (a mutation that trips a module assert legitimately
+      breaks collection). Re-anchoring that case then exposed two further
+      real defects: a stale MUTATION written against the retired property,
+      and a caller scan that resolved the repo root one level too high so it
+      iterated an EMPTY set and passed on nothing (DSR-CONV #690). Worth
+      propagating to the repo's other red proofs; it belongs beside #682 /
+      #815 / E11.24 in the standing "three ways a red proof lies" note,
+      which is now four.
