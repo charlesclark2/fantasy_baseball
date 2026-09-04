@@ -76,6 +76,10 @@ try:
         delta_read_enabled,
         delta_w1_mode,
     )
+    # MLB-INC-0904: the intraday leg cap this tier must fit in, + the grading policy. Imported
+    # from the SINGLE OWNER rather than re-stated here — a second copy of 480 is how a budget
+    # and the thing it budgets drift apart (also pure stdlib, so it adds no import weight).
+    from betting_ml.monitoring.intraday_tick_budget import w3pre_tier_verdict
 except ModuleNotFoundError:  # bare invocation without the project on sys.path
     sys.path.insert(0, str(REPO_ROOT))
     from betting_ml.utils.delta_lakehouse import (
@@ -84,6 +88,7 @@ except ModuleNotFoundError:  # bare invocation without the project on sys.path
         delta_read_enabled,
         delta_w1_mode,
     )
+    from betting_ml.monitoring.intraday_tick_budget import w3pre_tier_verdict
 
 # ── S3 locations (mirrors lakehouse_loc() macro in dbt/macros/lakehouse.sql) ──
 BUCKET = "s3://baseball-betting-ml-artifacts"
@@ -188,11 +193,37 @@ W4_BUILD_MODELS = W4_PRECURSOR_MODELS + W4_MART_MODELS
 # they build independently. Built to lakehouse/<model>/data.parquet like the marts; the
 # Snowflake side is a view over the lakehouse_ext external table. (stg_oddsapi_events is
 # included though its live feed stalled 2026-06-04 — historical rows still flatten.)
+# ⭐ MLB-INC-0904 (2026-09-04) — ORDER IS LOAD-BEARING: THE SERVING-CRITICAL TABLE GOES FIRST.
+# The models are INDEPENDENT (each flattens its own raw JSON; see _build_w3pre), so this order is
+# free to choose — and the choice decides WHICH table dies when the tier runs out of time.
+#
+# This list used to end with stg_statsapi_games, and that is the whole incident. `--w3pre-only` is
+# one leg of the 30-min intraday tick, capped at LEG_TIMEOUT_SECONDS (480 s, E11.26). Measured on
+# a QUIET overnight tick (2026-09-04 03:30Z, reconstructed from the S3 write timestamps):
+#
+#     stg_oddsapi_odds      ~140 s     no intraday consumer
+#     stg_oddsapi_events       8 s     no intraday consumer
+#     stg_derivative_odds    299 s     no intraday consumer (daily CLV: mart_derivative_closes)
+#     stg_statsapi_games      12 s     ⚠ THE ONLY intraday consumer — 90-min freshness SLA
+#                          ------
+#                           ~459 s of a 480 s cap == 21 s of margin on a QUIET tick
+#
+# So the 12-second table that the tick exists to refresh was queued behind ~447 s of staging that
+# nothing reads intraday, and on any busier tick it was killed before it ran at all — freezing
+# served game state (Preview/Live/Final) and the game universe every downstream build scopes to.
+# The odds tables' inputs grow monotonically all season (their flattens bind the FULL-HISTORY raw
+# glob), so this was never a threshold event; it was a slow squeeze that had to cross 480 s.
+#
+# Putting stg_statsapi_games FIRST inverts the failure mode: the tier's cheapest, most urgent
+# table completes in ~12 s and can no longer be starved, and a timeout instead truncates the
+# daily-cadence odds staging, which loses one intraday refresh nobody reads and is rebuilt by the
+# next tick. ⛔ Do NOT re-sort this list "logically" (by source, alphabetically, odds-first) —
+# the order encodes the serving priority. Pinned by test_mlb_inc_0904_w3pre_priority.py.
 W3PRE_STG_MODELS = [
-    "stg_oddsapi_odds",      # ← lakehouse_raw/mlb_odds_raw      (⚠ feeds serving mart_odds_outcomes)
-    "stg_oddsapi_events",    # ← lakehouse_raw/mlb_events_raw
-    "stg_derivative_odds",   # ← lakehouse_raw/derivative_odds_raw (eval/CLV only)
-    "stg_statsapi_games",    # ← lakehouse_raw/monthly_schedule   (⚠ double-duty + serving)
+    "stg_statsapi_games",    # ← lakehouse_raw/monthly_schedule   (⚠ SERVING: 90-min SLA — FIRST)
+    "stg_oddsapi_odds",      # ← lakehouse_raw/mlb_odds_raw       (daily cadence; no intraday reader)
+    "stg_oddsapi_events",    # ← lakehouse_raw/mlb_events_raw     (daily cadence)
+    "stg_derivative_odds",   # ← lakehouse_raw/derivative_odds_raw (eval/CLV only — daily)
 ]
 
 # E11.1-W5: the seeds + the mart_game_results / mart_game_spine team/game chain (10
@@ -1159,6 +1190,11 @@ def _build_w3pre(conn, dry_run: bool) -> None:
     # working set small enough that the box-aware limit is ample on the resized host.
     for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
         conn.execute(_pragma)
+    # MLB-INC-0904: time each model and grade the TIER against the intraday leg cap. The
+    # per-model seconds were always printed; nothing ever compared them to the budget they had
+    # to fit in, so a season of monotonic growth crossed 480 s unannounced. [METRIC] lines make
+    # the trend machine-readable for a future monitor (the repo's send_alert convention).
+    timings: dict[str, float] = {}
     for model in W3PRE_STG_MODELS:
         source = _raw_source_for(model)
         glob = f"{LAKEHOUSE_RAW}/{source}/**/*.parquet"
@@ -1170,7 +1206,23 @@ def _build_w3pre(conn, dry_run: bool) -> None:
             print(f"  ⚠️  SKIP {model}: no raw parquet at lakehouse_raw/{source}/ "
                   f"(run scripts/export_odds_raw_to_s3.py --source {source} first)")
             continue
+        _t0 = time.monotonic()
         _build_marts(conn, [model], dry_run)
+        _elapsed = time.monotonic() - _t0
+        timings[model] = _elapsed
+        # File count, not bytes, is what drives DuckDB's bind cost on an append-only raw store
+        # (INC-42) — carry it so a slow model's CAUSE is in the same line as its symptom.
+        print(f"[METRIC] w3pre_model_seconds_{model}={_elapsed:.1f} raw_files={has_files}",
+              flush=True)
+
+    _v = w3pre_tier_verdict(timings)
+    print(f"[METRIC] w3pre_tier_seconds={_v.total_seconds:.1f}", flush=True)
+    print(f"[METRIC] w3pre_tier_budget_fraction={_v.fraction:.3f}", flush=True)
+    print(f"[METRIC] w3pre_tier_verdict={_v.verdict}", flush=True)
+    # OK is informational; anything else is loud. Never raises — see the module docstring in
+    # betting_ml/monitoring/intraday_tick_budget.py (a build script that fails on slowness
+    # manufactures the outage it exists to predict).
+    print(("  " if _v.verdict == "OK" else "") + _v.message, flush=True)
 
 
 def _build_w3(conn, dry_run: bool) -> None:

@@ -7,7 +7,7 @@ metadata:
   name: mlb-inc-0904
   vertical: mlb
   card: https://trello.com/c/PENDING   # PM links at kickoff
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Two CRITICAL alerts in the past day, possibly one cause. (A) The
@@ -113,8 +113,57 @@ spec:
   graph:
     nodes: []   # MINI tier — restore -> diagnose A -> diagnose B -> fix + guards -> write-up
   closeout:
-    verdict: null
+    verdict: >
+      RESTORED + ALERT-A FIXED; ALERT-B RESTORED, PROXIMATE CAUSE OPEN ON THE EVENT LOG.
+      Two SEPARATE causes sharing one pressure (September season-max data on a 2-vCPU box),
+      NOT one incident. (A) The W3pre tier's COST outgrew its 480s leg cap and the ONE table
+      with an intraday consumer was built LAST. Measured per-table on a quiet 03:30 tick:
+      stg_oddsapi_odds ~140s, stg_oddsapi_events 8s, stg_derivative_odds 299s, and
+      stg_statsapi_games — the only intraday consumer, 90-min SLA — 12s. ~459s of a 480s cap,
+      21s of margin. Hypothesis (i) CONFIRMED (odds = 93% of the tier; both flattens bind the
+      FULL-HISTORY raw glob every 30 min and DuckDB bind cost is ~linear in FILE COUNT, INC-42);
+      (ii) REFUTED with a number (games is 12s, starved not slow); (iii) contention is the
+      trigger, not the cause. Asymmetry explained: mlb_odds_raw IS compacted daily (1,859->225
+      files); derivative_odds_raw is absent from COMPACTABLE_SOURCES and the cron and grew
+      6->813->1,123 objects/month — INC-42's cure applied to one of two identical stores (the
+      one-logical-thing-many-owners class). (B) Sources are HEALTHY (dry-run: 31,078 players /
+      1,420 current-season vs a floor of 200), so not the E5.10 signature; the writer simply did
+      not advance. Resolves to fork (i) WRITER STOPPED, not an SLA-vs-cadence mismatch — the op
+      DOES send_alert on failure and no such page fired, so the leaf never EXECUTED; a 30h SLA
+      over a ~24h cadence is correctly sized and NO SLA CHANGE IS PROPOSED.
+      TWO ALERT PREMISES CORRECTED BY MEASUREMENT: post_lineup was never at risk (INC-41's
+      independent try-blocks held; --w7b-only ran, lineups + probables OK at 30m), and Alert A
+      had already SELF-HEALED (games OK at 30m) — the timeout is INTERMITTENT, which is the
+      diagnosis. Alert B was WORSE than paged (1817 -> 2347 active-min, still climbing).
+      SHIPPED: stg_statsapi_games built FIRST (inverts which table a timeout kills); a tier-budget
+      threshold in the module that already owns LEG_TIMEOUT_SECONDS (per-model seconds were always
+      PRINTED, never COMPARED — the E11.30 shape), warning at 60% of the cap, never raising; the
+      DDL generator's mirrored list documented as mirroring MEMBERSHIP not ORDER, with a guard.
+      NO budget raise: E11.26's I3/I2 cap a raise at ~+25% against monotone season-long growth.
+      NOT TOUCHED: E11.26 constants, any SLA, schedule, .env, and the INC-41 content-timestamp /
+      active-hours semantics. Restore verified by CONTENT timestamp: all 5 artifacts OK,
+      artifact_freshness_problem_count=0. best_alpha=0; no user-facing change (no changelog entry).
+      Guards RED-proven BOTH ways: 8/8 breaks RED (incl. "the freshness check stops firing on a
+      frozen artifact"), 3/3 NOT-SELECTED controls GREEN, baseline GREEN.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      (1) COMPACT derivative_odds_raw — the largest single cost in the tier (299s / 2,063 files).
+      Needs a PER-SOURCE reader argument (compact_lakehouse_raw REFUSES a borrowed rationale), an
+      allowlist entry, an operator --apply and a crontab line. Partial analysis done here:
+      mart_derivative_closes IS duplicate-idempotent (row_number()=1 over event_id/market_key/
+      bookmaker_key/outcome_name/outcome_description/outcome_point) so the promote-then-delete dup
+      window is a no-op for it; ⚠️ BUT stg_derivative_odds itself has NO dedup and
+      eval_cross_market.py reads its parquet and does its own closing selection — that reader must
+      be signed off before allowlisting. (2) MOVE the three odds staging models out of the intraday
+      tick (they are daily-cadence) — ⚠️ BLOCKED on verifying W11_W3PRE_DAILY on the box: it is
+      default-OFF and NOT in env.required, so the intraday tick may currently be their ONLY builder
+      and removing them would freeze them. Recent-scoping is NOT a safe substitute (full-history
+      tables; a recent-scoped write to the same key truncates history). (3) A "did every expected
+      LEAF run?" check for daily_ingestion_job — the missing detector: a fan-out leaf pages when it
+      FAILS and is SILENT when it never RUNS, so only a ~30h freshness SLA can see it. (4) Name the
+      09-03 daily-run failure from the Dagster event log (commands in the incident record);
+      corroborating oddity: feature_pregame_lineup_features stamped 2026-09-03 22:51Z, far later
+      than a healthy 12:00 UTC run would produce. (5) OPTIONAL doc nit: compact_lakehouse_raw's
+      module docstring cites mlb_odds_raw at 1,859 files; it is now 225 post-compaction.
+      Incident record: docs/mlb_inc_0904_w3pre_tick_timeout_and_ref_players_sla.md.
+      PM triages into: checklist item on the parent card | merge into an existing card (name it) |
+      a new spec. Worker sessions never create Trello cards.
