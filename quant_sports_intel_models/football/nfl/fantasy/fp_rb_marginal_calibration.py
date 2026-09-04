@@ -106,8 +106,7 @@ MAX_POSITIVE_LAW_DRIFT_RATIO = QM.MAX_POSITIVE_LAW_DRIFT_RATIO
 MIN_CONDITIONAL_KNOTS = QM.MIN_CONDITIONAL_KNOTS
 ZERO_THRESHOLD = QM.ZERO_THRESHOLD
 
-def resplice_zero_mass(banks, targets):
-    return QM.resplice_zero_mass(banks, targets)
+resplice_zero_mass = QM.resplice_zero_mass
 resplice_edges = QM.resplice_edges
 zero_mass_hits_target = QM.zero_mass_hits_target
 positive_law_drift = QM.positive_law_drift
@@ -487,7 +486,7 @@ def rb_marginal_verdict(*, pit_by_arm: dict[str, float], cap_mean: float,
     while the clamp's mean upward move on π̂ collapsed 112×, so a headline quoting the share alone
     would have said *nothing changed* about a constraint that had stopped mattering)."""
     lifted = bool(np.isfinite(cap_mean) and np.isfinite(predecessor_cap_mean)
-                  and True)
+                  and (cap_mean - predecessor_cap_mean) >= min_lift)
     best_arm = min(pit_by_arm, key=pit_by_arm.get) if pit_by_arm else None
     if not pit_by_arm or not np.isfinite(cap_mean):
         state = CAP_UNDEFINED
