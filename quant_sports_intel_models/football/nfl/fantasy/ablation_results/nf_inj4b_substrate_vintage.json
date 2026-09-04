@@ -1,0 +1,86 @@
+{
+  "story": "NF-INJ4b",
+  "node": "0b-substrate",
+  "generated_at": "2026-09-04T05:52:30.245873+00:00",
+  "artifact": "quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj4_designation_frame_2025.parquet",
+  "vintage_check": {
+    "matches_nf_inj4_record": true,
+    "recorded": {
+      "rows": 1309,
+      "distinct_players": 398,
+      "weeks_covered": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "cell_sizes_designation": {
+        "questionable": 842,
+        "none_listed": 239,
+        "out": 199,
+        "doubtful": 29
+      },
+      "pit_records_checked": 1309,
+      "pit_rows_dropped": 0
+    },
+    "rebuilt": {
+      "rows": 1309,
+      "distinct_players": 398,
+      "weeks_covered": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "cell_sizes_designation": {
+        "questionable": 842,
+        "none_listed": 239,
+        "out": 199,
+        "doubtful": 29
+      },
+      "pit_records_checked": 1309,
+      "pit_rows_dropped": 0
+    },
+    "differences": {},
+    "reading": "UNCHANGED \u2014 the rebuilt substrate reproduces NF-INJ4's recorded census exactly, so NF-INJ4b's honesty-clause precondition ('field, folds and data unchanged') HOLDS as a measurement rather than as an assumption."
+  },
+  "forward_capture_nfl_pit_injuries": {
+    "rows": 12136,
+    "distinct_capture_dates": [
+      "2026-08-05"
+    ],
+    "rows_2026": 0,
+    "seasons": {
+      "2025": 12136
+    }
+  },
+  "elapsed_s": 24.49
+}
