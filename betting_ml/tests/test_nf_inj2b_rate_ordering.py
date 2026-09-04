@@ -329,8 +329,25 @@ def test_v_excludes_the_degenerates_and_the_reference_arm():
     members = R._v_members(srs)
     assert set(members) == set(B.ARMS) - set(B.DEGENERATE_ARMS) - set(B.REFERENCE_ARMS)
     src = _RUNNER.read_text()
-    assert "R2.dsr_conv(deltas, list(v_members.values()), B.DECLARED_FIELD_SIZE)" in src, (
+    # RE-ANCHORED (NF-INJ2c): `deflation` now takes the DECLARED FIELD as a value object so a second
+    # registration reuses this arithmetic instead of forking a copy that drifts (MH2.7). The property
+    # is unchanged — the binding DSR is still the reference-excluded `V` at the FULL declared size —
+    # so the guard is re-anchored onto the new implementation, ⛔ never weakened or deleted.
+    assert "R2.dsr_conv(deltas, list(v_members.values()), f.declared_field_size)" in src, (
         "the BINDING DSR must be computed over the reference-excluded V at the full declared field")
+    # ⭐ AND THE DEFAULT MUST STILL BE NF-INJ2b'S OWN FIELD, or the parameterisation would have
+    # silently changed THIS story's numbers. This is the clause that makes the refactor provably
+    # inert rather than merely intended to be.
+    assert (R.NF_INJ2B_FIELD.arms == tuple(B.ARMS)
+            and R.NF_INJ2B_FIELD.degenerates == tuple(B.DEGENERATE_ARMS)
+            and R.NF_INJ2B_FIELD.reference == tuple(B.REFERENCE_ARMS)
+            and R.NF_INJ2B_FIELD.declared_field_size == B.DECLARED_FIELD_SIZE), (
+        "the default FieldSpec no longer transcribes NF-INJ2b's declared field")
+    import inspect
+    for fn in (R.deflation, R._v_members, R._dsr_2x2):
+        default = inspect.signature(fn).parameters["field"].default
+        assert default in (None, R.NF_INJ2B_FIELD), (
+            f"{fn.__name__} no longer defaults to NF-INJ2b's field")
 
 
 def test_the_joint_criterion_does_not_pass_on_inactive_positions_alone():
@@ -507,9 +524,25 @@ def test_the_coherence_column_cannot_round_a_violation_away(tmp_path):
     #      leaves the committed .md untouched and this clause stays GREEN on its own break (the
     #      RED proof measured exactly that: the artifact read alone is VACUOUS against the renderer).
     import importlib.util
+    import sys as _sys
     spec = importlib.util.spec_from_file_location("_nf_inj2b_runner", _RUNNER)
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # ⭐ REGISTER BEFORE EXEC, then restore exactly. importlib documents this, and without it any
+    # `@dataclass` in the module fails at class-creation time: with `from __future__ import
+    # annotations` the annotations are STRINGS, and dataclasses resolves them through
+    # `sys.modules[cls.__module__]`, which is None for a module loaded by path and never registered.
+    # Restoring is the house rule (`_serving_store_loader`): a test may not leave `sys.modules`
+    # mutated, or it becomes a collection-order-dependent flake that is unsafe to shard.
+    _missing = object()
+    _prev = _sys.modules.get(spec.name, _missing)
+    _sys.modules[spec.name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        if _prev is _missing:
+            _sys.modules.pop(spec.name, None)
+        else:
+            _sys.modules[spec.name] = _prev
     fresh = tmp_path / "rerender.md"
     mod.write_report_md(rep, fresh)
     for label, md in (("committed", _REPORT_MD.read_text()), ("re-rendered", fresh.read_text())):

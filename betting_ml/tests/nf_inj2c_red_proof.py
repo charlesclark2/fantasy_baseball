@@ -40,6 +40,8 @@ _N12 = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_nf1_2.py"
 _N15 = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_nf1_5.py"
 _RB = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/run_nf_inj2b_rate_ordering.py")
 _GITIGNORE = _REPO / ".gitignore"
+_DEC = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/run_nf_inj2c_decisive.py")
+_REG2C = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/nf_inj2c_assignment_rule.py")
 _SUITE = "betting_ml/tests/test_nf_inj2c_coherence_diagnosis.py"
 #: nodes 3a/3b/3c live in their own suite; the harness routes each break to the suite that owns it.
 _SUITE_BY_NODE = {}
@@ -557,6 +559,97 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      '= assert_capture_intact(',
      "TestTheCaptureStampNeverShipsInTheImage::"
      "test_the_validation_that_refused_the_stale_stamp_is_still_wired"),
+
+    # ── node 4: the decisive run. Every clause below defends a route the registration FORBIDS.
+    ("the primary arm is SELECTED from the scores instead of read from the registration", _DEC,
+     "    arm = C.PRIMARY_ARM\n",
+     "    cands = [a for a in C.ARMS if a not in C.DEGENERATE_ARMS]\n"
+     "    arm = min(cands, key=lambda a: (scored[a]['crps'] or float('inf')))\n",
+     "arm = C.PRIMARY_ARM",
+     "TestThePrimaryArmIsNotSelected::"
+     "test_the_runner_reads_the_registered_arm_and_never_argmins_crps"),
+
+    ("an absent node-3b report is tolerated instead of refused", _DEC,
+     '        raise SystemExit(\n            f"node 3b\'s report is not committed at {p}',
+     '        return {"arms": {}, "served_incumbent_baseline": {}}  # noqa\n        _unused = (\n'
+     '            f"node 3b\'s report is not committed at {p}',
+     'raise SystemExit(\n            f"node 3b\'s report is not committed at {p}',
+     "TestTheBoardMeasuresAreRead::test_an_absent_node_3b_report_REFUSES_and_names_the_command"),
+
+    ("a FAILED reproduction pin is treated as a null instead of VOID", _DEC,
+     '    if not pin.get("reproduces", False):',
+     '    if False:',
+     'if not pin.get("reproduces", False):',
+     "TestTheBoardMeasuresAreRead::test_a_failed_reproduction_pin_is_VOID_not_a_null"),
+
+    ("M2 drops its attribution control", _DEC,
+     "    paired = (np.maximum(a - null, 0.0) - np.maximum(i - null, 0.0))[ok]",
+     "    paired = (a - i)[ok]",
+     "np.maximum(a - null, 0.0)",
+     "TestM2::test_violations_the_control_also_produces_are_subtracted"),
+
+    ("M6 averages per-fold RATES instead of pooling over ROWS", _DEC,
+     "            covered += float(rate) * int(k)\n            n += int(k)",
+     "            covered += float(rate)\n            n += 1",
+     "covered += float(rate) * int(k)",
+     "TestM6::test_coverage_is_pooled_over_ROWS_not_averaged_over_folds"),
+
+    ("M6 uses a FLAT nominal point-floor instead of the power-derived one", _DEC,
+     "        floor = round(float(CPF.power_floor(n, nominal=NOMINAL_COVERAGE)), 4)",
+     "        floor = NOMINAL_COVERAGE",
+     "CPF.power_floor(n, nominal=NOMINAL_COVERAGE)",
+     "TestM6::test_the_floor_is_DERIVED_from_n_and_is_below_nominal"),
+
+    ("an UNEVALUABLE measure is scored as a pass", _DEC,
+     '    if unevaluable:\n        state = "UNEVALUABLE"\n    elif regressed:',
+     '    if False:\n        state = "UNEVALUABLE"\n    elif regressed:',
+     'if unevaluable:\n        state = "UNEVALUABLE"',
+     "TestDominance::test_an_UNEVALUABLE_measure_is_NEVER_a_pass"),
+
+    ("a REGRESSION is downgraded to a deflation refusal instead of a NULL", _DEC,
+     '    elif dominance["state"] == "REGRESSES":\n        state = "NULL"',
+     '    elif dominance["state"] == "REGRESSES":\n        state = "DEFLATION_REFUSED"',
+     'dominance["state"] == "REGRESSES":\n        state = "NULL"',
+     "TestTheVerdict::test_a_regression_is_a_NULL_even_when_every_gate_passes"),
+
+    ("an UNCOMPUTABLE gate is scored as a FAILURE instead of UNDEFINED", _DEC,
+     '        "dsr": (None if binding_dsr is None else bool(binding_dsr >= dsr_min)),',
+     '        "dsr": bool(binding_dsr is not None and binding_dsr >= dsr_min),',
+     '(None if binding_dsr is None else bool(binding_dsr >= dsr_min))',
+     "TestTheVerdict::test_an_UNCOMPUTABLE_gate_is_UNDEFINED_never_FAILED"),
+
+    ("the fold-consistency clause reverts to the LEGACY (looser) requirement", _DEC,
+     "    required = (None if clause.wins_required is None else int(clause.wins_required))",
+     "    required = (None if clause.legacy_wins_required is None\n"
+     "                else int(clause.legacy_wins_required))",
+     "int(clause.wins_required)",
+     "TestTheVerdict::test_the_fold_consistency_clause_is_the_CALIBRATED_one"),
+
+    ("a THIRD deflation field is constructed", _DEC,
+     "DIAGNOSTIC_FIELD = RB.NF_INJ2B_FIELD",
+     "DIAGNOSTIC_FIELD = RB.FieldSpec(arms=tuple(B.ARMS), degenerates=tuple(B.DEGENERATE_ARMS),\n"
+     "                                reference=tuple(B.REFERENCE_ARMS), declared_field_size=10,\n"
+     '                                label="a third field")',
+     "DIAGNOSTIC_FIELD = RB.NF_INJ2B_FIELD",
+     "TestTheFields::test_there_is_no_THIRD_field"),
+
+    ("the calendar-bound fold trigger is published even when SR <= SR0", _DEC,
+     '        "fold_trigger_publishable": reachable,\n        "why": ("a fold trigger only means',
+     '        "fold_trigger_publishable": True,\n        "why": ("a fold trigger only means',
+     '"fold_trigger_publishable": reachable',
+     "TestTheLockstepLever::test_the_trigger_is_WITHHELD_when_SR_does_not_exceed_SR0"),
+
+    ("the registration stops proving `V` has the two members it reasons about", _REG2C,
+     "    if len(v_members) != 2:",
+     "    if False:",
+     "if len(v_members) != 2:",
+     "TestTheRegistration::test_assert_coherent_REFUSES_a_field_whose_V_is_not_two_members"),
+
+    ("the registration's coherence check stops running at import", _REG2C,
+     "\n\nassert_coherent()\n",
+     "\n\n_SKIPPED = assert_coherent\n",
+     "\nassert_coherent()\n",
+     "TestTheRegistration::test_assert_coherent_runs_at_import"),
 ]
 
 
@@ -591,6 +684,7 @@ _OTHER_SUITES = (
     "betting_ml/tests/test_nf_inj2c_preregistration.py",
     "betting_ml/tests/test_nf_inj2c_cache_guard.py",
     "betting_ml/tests/test_nf_inj2c_published_resolution_pin.py",
+    "betting_ml/tests/test_nf_inj2c_decisive.py",
 )
 
 

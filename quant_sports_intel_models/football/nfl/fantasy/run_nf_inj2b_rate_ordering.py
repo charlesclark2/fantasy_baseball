@@ -42,6 +42,7 @@ import logging
 import math
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -239,7 +240,31 @@ def anchor_audit(scored: dict[str, dict], winner: str) -> dict:
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Deflation — the pre-registration's §3, computed rather than described
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def _v_members(srs_all: dict[str, float]) -> dict[str, float]:
+@dataclass(frozen=True)
+class FieldSpec:
+    """The DECLARED field a deflation statistic is computed over.
+
+    ⭐ Threaded rather than read from a module global so a SECOND registration over a DIFFERENT
+    declared family (NF-INJ2c's five-arm point-space field) reuses this exact arithmetic instead of
+    forking a copy that drifts — the MH2.7 lesson ("a defect corrected N times downstream is a defect
+    in the INSTRUMENT") and the NF-C0e two-implementations class.
+
+    ⛔ It is NOT a knob. A field is a PRE-REGISTRATION act; passing one here records which declared
+    family a number belongs to, and no caller may assemble one after seeing a score (MH2.2)."""
+    arms: tuple[str, ...]
+    degenerates: tuple[str, ...]
+    reference: tuple[str, ...]
+    declared_field_size: int
+    label: str
+
+
+#: NF-INJ2b's own declared field — the DEFAULT, so every existing call site is byte-identical.
+NF_INJ2B_FIELD = FieldSpec(
+    arms=tuple(B.ARMS), degenerates=tuple(B.DEGENERATE_ARMS), reference=tuple(B.REFERENCE_ARMS),
+    declared_field_size=B.DECLARED_FIELD_SIZE, label="NF-INJ2b declared 10-arm field")
+
+
+def _v_members(srs_all: dict[str, float], field: FieldSpec | None = None) -> dict[str, float]:
     """The arms whose trial Sharpes form `V`.
 
     ⭐ DECLARED FORWARD (pre-registration §3): the two lose-by-construction DEGENERATES are excluded
@@ -248,11 +273,13 @@ def _v_members(srs_all: dict[str, float]) -> dict[str, float]:
     anchor does (MH2.1 (a)). `n_trials` stays at the FULL declared field, so nothing is bought back
     on multiplicity. This is the convention NF-INJ3's null turned on, fixed here BEFORE any score;
     ⛔ it is not a re-read of NF-INJ2's number."""
-    drop = set(B.DEGENERATE_ARMS) | set(B.REFERENCE_ARMS)
+    f = field or NF_INJ2B_FIELD
+    drop = set(f.degenerates) | set(f.reference)
     return {k: v for k, v in srs_all.items() if k not in drop and np.isfinite(v)}
 
 
-def deflation(per_fold: dict[str, dict[int, dict]], folds: tuple[int, ...], winner: str) -> dict:
+def deflation(per_fold: dict[str, dict[int, dict]], folds: tuple[int, ...], winner: str,
+              *, field: FieldSpec | None = None) -> dict:
     """PBO / DSR / spread / flip distribution over the DECLARED 10-arm field.
 
     PBO is computed over the ELIGIBLE set — the declared field, the search the selection actually ran
@@ -262,7 +289,8 @@ def deflation(per_fold: dict[str, dict[int, dict]], folds: tuple[int, ...], winn
     unstable" from "my pick is tied": the FLIP DISTRIBUTION, Bailey's PERFORMANCE DEGRADATION, and
     the CONTENDER spread beside the whole-field spread (which, containing this field's own declared
     degenerates, measures the degenerates)."""
-    arms = list(B.ARMS)
+    f = field or NF_INJ2B_FIELD
+    arms = list(f.arms)
     S = np.full((len(arms), len(folds)), np.nan, dtype=float)
     for i, a in enumerate(arms):
         for j, y in enumerate(folds):
@@ -270,7 +298,7 @@ def deflation(per_fold: dict[str, dict[int, dict]], folds: tuple[int, ...], winn
             if v is not None:
                 S[i, j] = -float(v)                       # negate: cscv_pbo maximises
     pbo = M14.cscv_pbo(S)
-    contenders = [i for i, a in enumerate(arms) if a not in B.DEGENERATE_ARMS]
+    contenders = [i for i, a in enumerate(arms) if a not in f.degenerates]
 
     import itertools
     n_s = len(folds)
@@ -298,9 +326,9 @@ def deflation(per_fold: dict[str, dict[int, dict]], folds: tuple[int, ...], winn
 
     lift = {a: [R2.fold_lift(per_fold, a, y) for y in folds] for a in arms}
     srs_all = R2._srs(lift)
-    v_members = _v_members(srs_all)
+    v_members = _v_members(srs_all, f)
     v_nondeg_only = {k: v for k, v in srs_all.items()
-                     if k not in B.DEGENERATE_ARMS and np.isfinite(v)}
+                     if k not in f.degenerates and np.isfinite(v)}
     deltas = np.asarray(lift.get(winner, []), dtype=float)
     return {
         "pbo": pbo, "pbo_max": M14.PBO_MAX,
@@ -312,30 +340,44 @@ def deflation(per_fold: dict[str, dict[int, dict]], folds: tuple[int, ...], winn
         "bailey_degradation_pct": (round(float(np.median(degr)) * 100, 3) if degr else None),
         "trial_sharpes": {k: round(v, 4) for k, v in srs_all.items()},
         "v_members": sorted(v_members),
-        "v_excluded": sorted(set(B.DEGENERATE_ARMS) | set(B.REFERENCE_ARMS)),
+        "field_label": f.label,
+        "v_excluded": sorted(set(f.degenerates) | set(f.reference)),
         "dsr_whole_field": M14.deflated_sharpe(deltas, np.asarray(list(srs_all.values()))),
         # ⭐ THE BINDING FIGURE, per the pre-registration §3: degenerates AND the reference arm out
         # of `V`, `n_trials` at the full declared field.
-        "dsr_binding": R2.dsr_conv(deltas, list(v_members.values()), B.DECLARED_FIELD_SIZE),
+        "dsr_binding": R2.dsr_conv(deltas, list(v_members.values()), f.declared_field_size),
         # reported BESIDE it so the convention's effect is on the record rather than asserted —
         # this is NF-INJ2's convention (degenerates out, reference IN), recomputed on this field.
         "dsr_reference_included_in_v": R2.dsr_conv(deltas, list(v_nondeg_only.values()),
-                                                   B.DECLARED_FIELD_SIZE),
+                                                   f.declared_field_size),
         "dsr_min": M14.DSR_MIN,
-        "dsr_2x2_diagnostic": _dsr_2x2(deltas, srs_all, winner),
-        "declared_field_size": B.DECLARED_FIELD_SIZE,
+        "dsr_2x2_diagnostic": _dsr_2x2(deltas, srs_all, winner, f),
+        "declared_field_size": f.declared_field_size,
     }
 
 
-def _dsr_2x2(deltas, srs_all: dict[str, float], winner: str) -> dict:
+def _dsr_2x2(deltas, srs_all: dict[str, float], winner: str,
+              field: FieldSpec | None = None) -> dict:
     """DSR under the declared field vs the same winner with the single most extreme trial Sharpe
     dropped — a DIAGNOSTIC, never acted on (NF-W7f: measure the 2×2 BEFORE naming a remedy).
 
     ⛔ NF-W7h: a DSR reached only by deleting the WINNER is INADMISSIBLE, so the dropped arm is named
     and the diagnostic REFUSES to report a figure when that arm is the winner."""
-    srs = _v_members(srs_all)
+    f = field or NF_INJ2B_FIELD
+    srs = _v_members(srs_all, f)
     if len(srs) < 3:
-        return {"evaluable": False, "why": "fewer than 3 finite trial Sharpes in `V`"}
+        # ⭐ At exactly TWO members the diagnostic is not merely unevaluated, it is INADMISSIBLE BY
+        # CONSTRUCTION (NF-W7h): the only drops available are the arm under test — inadmissible
+        # outright — or the other contributor, which leaves `V` undefined at one point. A refusal is
+        # then stated A FORTIORI on the design, ⛔ never as a trimmed number.
+        return {"evaluable": False,
+                "structurally_unavailable": len(srs) == 2,
+                "v_member_count": len(srs),
+                "why": ("`V` has exactly two members, so the only available drops are the arm under "
+                        "test (inadmissible — NF-W7h) or the sole other contributor (leaving `V` "
+                        "undefined). The 2x2 is STRUCTURALLY UNAVAILABLE for this declared field; "
+                        "state any refusal a fortiori on the design."
+                        if len(srs) == 2 else "fewer than 3 finite trial Sharpes in `V`")}
     mean = float(np.mean(list(srs.values())))
     far = max(srs, key=lambda k: abs(srs[k] - mean))
     if far == winner:
@@ -347,8 +389,8 @@ def _dsr_2x2(deltas, srs_all: dict[str, float], winner: str) -> dict:
         "evaluable": True, "dropped_arm": far, "dropped_arm_sharpe": round(srs[far], 4),
         "V_declared": round(float(np.var(list(srs.values()), ddof=1)), 4),
         "V_without_dropped_arm": round(float(np.var(kept, ddof=1)), 4),
-        "dsr_declared": R2.dsr_conv(deltas, list(srs.values()), B.DECLARED_FIELD_SIZE),
-        "dsr_without_dropped_arm": R2.dsr_conv(deltas, kept, B.DECLARED_FIELD_SIZE),
+        "dsr_declared": R2.dsr_conv(deltas, list(srs.values()), f.declared_field_size),
+        "dsr_without_dropped_arm": R2.dsr_conv(deltas, kept, f.declared_field_size),
         "note": "⛔ A DIAGNOSTIC, NOT A TRIM. Every arm here is DECLARED; you get to pre-register a "
                 "family, you do not get to discover one (MH2.2).",
         "reading": "if V falls hard and DSR barely moves, the binding quantity is per-fold NOISE "

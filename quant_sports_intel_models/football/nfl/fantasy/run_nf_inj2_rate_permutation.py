@@ -189,16 +189,31 @@ def score_frame(frame: pd.DataFrame, realized: pd.DataFrame,
     # no realized outcome is still an impossible number on the served board.
     coh = PC.frame_coherence_summary(f)
     per_pos_crps: dict[str, float] = {}
+    # ⭐ PER-GROUP COVERAGE AND ITS n, from THIS reducer (NF-INJ2c M6). `band_metrics` is the single
+    # reducer every arm, foil, degenerate and oracle passes through, so computing coverage anywhere
+    # else would let a candidate and an anchor be scored by two different functions — the exact
+    # "two implementations of one rule" class this docstring exists to prevent. The `n` travels with
+    # it because NF-D22's floor is DERIVED FROM n and is meaningless without the n it was derived
+    # from (⛔ never a flat nominal point-floor).
+    per_pos_cov: dict[str, float] = {}
+    per_pos_n: dict[str, int] = {}
     for p in POSITIONS:
         d = m[m["position"].astype(str).str.upper() == p]
         if len(d) >= 10:
             per_pos_crps[p] = round(float(np.mean(LR.crps_from_band(
                 d["proj_fp_ppr"], d["fp_ppr_p10"], d["fp_ppr_p90"], d["real_fp_ppr"]))), 4)
+            pm = LR.band_metrics(d["proj_fp_ppr"], d["fp_ppr_p10"], d["fp_ppr_p90"],
+                                 d["real_fp_ppr"])
+            if pm.get("coverage80") is not None:
+                per_pos_cov[p] = pm["coverage80"]
+                per_pos_n[p] = int(pm.get("n") or 0)
     return {
         "crps": met[LR.SELECTION_METRIC], "mae": met.get("mae"),
         "coverage80": met.get("coverage80"), "interval_score80": met.get("interval_score80"),
         "bias": met.get("bias"), "n": met.get("n"),
         "crps_by_position": per_pos_crps,
+        "coverage80_by_position": per_pos_cov,
+        "coverage_n_by_position": per_pos_n,
         "rho_by_position": rho_by_pos,
         "rho_pooled": (round(float(np.mean(list(rho_by_pos.values()))), 4)
                        if rho_by_pos else None),
