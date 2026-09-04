@@ -72,6 +72,11 @@ export interface DistributionCurveProps {
   /** A vertical reference the reader already understands — 0 for a margin (the win/loss boundary).
    *  ⛔ NOT a model quantity and never labelled as one. */
   zeroReference?: boolean
+  /** What that reference is CALLED. Default "even", which is what zero means on a game margin.
+   *  ⚠️ It means something else on a rating axis — zero there is an AVERAGE FBS TEAM, not a tied
+   *  game — and a label carried across from the game surface would quietly answer the reader's
+   *  question ("nothing is at stake here") with the wrong noun. */
+  zeroLabel?: string
   /** The market's number for this quantity, drawn as a second vertical rule for comparison ONLY.
    *  Null when no line has been captured — universal through P3.2 (P3.1 closeout item 2) and
    *  still ordinary after NCAAF-ODDS-LIVE, since a leakage refusal serves no line. A first-class
@@ -83,6 +88,29 @@ export interface DistributionCurveProps {
    *  weight than a neutral caption; it does NOT withdraw or restyle the curve itself, because the
    *  range is exactly as trustworthy as it ever was. */
   undifferentiated?: boolean
+  /** The amber "drawn from moments" note, when the served payload carried no quantile ladder.
+   *
+   * ⭐⭐ CALLER-CONTROLLED BECAUSE IT MEANS TWO DIFFERENT THINGS. On a GAME curve a parametric
+   * source is a DEGRADED state — the simulator publishes a quantile ladder and we did not get it —
+   * so an amber warning is the correct reading and stays the default. On the P3.3 team page the
+   * strength posterior's served form IS a mean and a spread: there are no simulated quantiles to be
+   * missing, so the same amber sentence announces a defect that does not exist, and its noun
+   * ("this game's") is wrong on a page that is not about a game. One rendering for two different
+   * facts is exactly the NF-C6b class this vertical keeps paying for.
+   *
+   * Pass `null` to suppress it — which a caller may do ONLY when its own `hint` already states the
+   * provenance, as `STRENGTH_CURVE_NOTE` does. ⛔ Suppressing it to tidy a card up would be hiding
+   * a real degradation. */
+  parametricNote?: string | null
+  /** The drawn height, as Tailwind classes.
+   *
+   * ⚠️ THIS IS AN ASPECT-RATIO CONTROL, NOT A SIZE PREFERENCE. The `viewBox` is 320×96 and
+   * `preserveAspectRatio="none"` STRETCHES the drawing to whatever box it is given — so a curve
+   * rendered at 896px wide and 96px tall is stretched ~2.8× horizontally against the shape it was
+   * drawn for, and a bell curve deformed that far reads as a broken chart rather than a wide one
+   * (measured on the P3.3 team page, which is `max-w-4xl`). A caller wider than a game card must
+   * either constrain its container or raise the height until the box is near 320:96 ≈ 3.3:1. */
+  heightClass?: string
   /** Distinguishes the two curves on a card for a screen reader and for a spec. */
   testId: string
 }
@@ -92,9 +120,12 @@ export function DistributionCurve({
   label,
   hint,
   zeroReference = false,
+  zeroLabel = "even",
   marketValue = null,
   marketLabel,
   undifferentiated = false,
+  parametricNote = CURVE_PARAMETRIC_NOTE,
+  heightClass = "h-24",
   testId,
 }: DistributionCurveProps) {
   const curve = buildDistributionCurve(distribution)
@@ -161,7 +192,7 @@ export function DistributionCurve({
       <svg
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         preserveAspectRatio="none"
-        className="h-24 w-full"
+        className={`w-full ${heightClass}`}
         role="img"
         aria-label={`${label}: ${hint}${
           band ? ` ${bandName} of simulated outcomes fall between ${fmt1(band.lo)} and ${fmt1(band.hi)}.` : ""
@@ -194,7 +225,7 @@ export function DistributionCurve({
               strokeDasharray="3 3"
             />
             <text x={sx(0) + 3} y={PAD_TOP + 8} fill={MUTED} fontSize={9}>
-              even
+              {zeroLabel}
             </text>
           </>
         )}
@@ -237,9 +268,9 @@ export function DistributionCurve({
       >
         {hint}
       </p>
-      {curve.source === "parametric" && (
+      {curve.source === "parametric" && parametricNote && (
         <p data-testid={`${testId}-parametric-note`} className="text-[11px] leading-snug text-amber-500/80">
-          {CURVE_PARAMETRIC_NOTE}
+          {parametricNote}
         </p>
       )}
     </div>

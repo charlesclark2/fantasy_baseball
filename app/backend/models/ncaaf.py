@@ -480,6 +480,48 @@ class NcaafTeamStrengthWeek(BaseModel):
     strength_defense_sd: float | None = None
 
 
+class NcaafTeamStanding(BaseModel):
+    """Where a team's rating places it in a population — WITH how uncertain that placement is.
+
+    ⭐⭐ THE RANGE IS THE WHOLE REASON THIS MODEL EXISTS, and it is not the same argument as the
+    band on the rating. A rank is the most compressed, most quotable, most screenshot-able number
+    a page like this can publish, and it reads as exact in a way a point estimate with a `±` does
+    not. Measured on the live 2026 week-1 board (138 teams, every sd ≈ 7.3): the MEDIAN team's 80%
+    rank range spans **77 of 138 places**, and 130 of 138 span more than 40. Boise State's point
+    rank is 42nd and its 80% range is 18th to 97th. A bare "42nd" would therefore be the single
+    most over-precise thing on the page — worse than a bare rating, which at least carries its own
+    spread.
+
+    ⏳ AND THE NOISE EXPIRES, WHICH IS WHY THE FIX IS A RANGE RATHER THAN A REFUSAL. The width is a
+    function of the posterior sd, which shrinks as games are played, so the same fields get sharper
+    on their own through the season and a November rank is genuinely informative. Refusing to rank
+    at all would have been correct in week 1 and wrong by week 10; publishing a bare rank is wrong
+    in week 1 and fine by week 10. Publishing rank-with-range is right in both.
+
+    ⛔ NOT A RATING OF ANYTHING NEW. Every field here is a descriptive re-expression of the P1.2
+    posterior that is already served on this same block — an ordering of numbers a reader can
+    already see. No selection is performed, no new predictive claim is made, and nothing here is a
+    recommendation about a game (`best_alpha = 0`).
+    """
+
+    #: `"fbs"` or `"conference"` — which population the rank is within.
+    scope: str
+    #: What to call that population to a reader: `"FBS"`, or the conference's own name.
+    scope_label: str | None = None
+    #: 1 = the highest-rated team in the population, by the served `strength_margin`.
+    rank: int | None = None
+    #: The rank interval, at the SAME levels as the rating's own band so the two cannot be read
+    #: against different confidences. `rank_lo` is the BETTER (numerically smaller) rank.
+    rank_lo: int | None = None
+    rank_hi: int | None = None
+    #: How many teams were ranked. ⚠️ Not the size of the conference — the size of the population
+    #: that HAD a usable posterior, which is the only set a rank can honestly be taken within.
+    n_ranked: int | None = None
+    #: Restated from the interval that produced the range, never a constant on the client.
+    interval_lo_level: float | None = None
+    interval_hi_level: float | None = None
+
+
 class NcaafTeamStrength(BaseModel):
     """The strength block: the CURRENT week's posterior plus the season's week-by-week series."""
 
@@ -498,6 +540,11 @@ class NcaafTeamStrength(BaseModel):
     #: how many prior seasons the shrinkage was calibrated on. The first emitted season has only
     #: one and is measurably weaker; disclosed rather than buried.
     hyper_n_prior_seasons: int | None = None
+    #: Where this rating places the team, in FBS and in its own conference. See `NcaafTeamStanding`
+    #: for why each carries a RANGE. Null when the population was too small to rank within (a
+    #: one-team conference is not a standing) or when this team has no posterior to place.
+    standing_fbs: NcaafTeamStanding | None = None
+    standing_conference: NcaafTeamStanding | None = None
 
 
 class NcaafTeamEfficiency(BaseModel):
@@ -667,7 +714,8 @@ CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     NcaafDistribution, NcaafMarketLine, NcaafGamePrediction, NcaafSlate, NcaafGameDayRef,
     NcaafManifest, NcaafFuturesTeam, NcaafFuturesBoard,
     # NCAAF-P3.3 — the team stats page
-    NcaafTeamBlockStatus, NcaafTeamIdentity, NcaafTeamStrengthWeek, NcaafTeamStrength,
+    NcaafTeamBlockStatus, NcaafTeamIdentity, NcaafTeamStrengthWeek, NcaafTeamStanding,
+    NcaafTeamStrength,
     NcaafTeamEfficiency, NcaafTeamSplits, NcaafTeamGame, NcaafTeamSchedule, NcaafTeamPage,
 )
 
@@ -728,3 +776,14 @@ def assert_best_alpha_is_zero(payload: dict) -> None:
 # this module, so neither can start against a schema that violates the posture. A guard that only
 # runs under pytest would let a bad deploy ship on a day CI was skipped.
 assert_no_edge_claim_in_schema()
+
+
+#: The levels the strength band and the rank range are BOTH taken at.
+#:
+#: ⭐ ONE OWNER, because the two are read together: "42nd of 138, plausibly 18th–97th" beside
+#: "+3.1, plausibly −6.2 to +12.4" invites a reader to treat them as the same statement, and they
+#: only ARE the same statement if they are taken at the same confidence. Serving the levels rather
+#: than assuming them also means a later ladder change is additive on the client instead of
+#: silently relabelling a range it did not recompute.
+TEAM_STANDING_INTERVAL_LO_LEVEL: float = 0.10
+TEAM_STANDING_INTERVAL_HI_LEVEL: float = 0.90

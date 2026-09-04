@@ -266,7 +266,27 @@
     "home_field_advantage": 2.848385,
     "residual_sigma": 16.6,
     "model_version": "ncaaf_team_strength_v1",
-    "hyper_n_prior_seasons": 4
+    "hyper_n_prior_seasons": 4,
+    "standing_fbs": {
+      "scope": "fbs",
+      "scope_label": "FBS",
+      "rank": 4,
+      "rank_lo": 3,
+      "rank_hi": 5,
+      "n_ranked": 8,
+      "interval_lo_level": 0.1,
+      "interval_hi_level": 0.9
+    },
+    "standing_conference": {
+      "scope": "conference",
+      "scope_label": "Mountain West",
+      "rank": 1,
+      "rank_lo": 1,
+      "rank_hi": 2,
+      "n_ranked": 2,
+      "interval_lo_level": 0.1,
+      "interval_hi_level": 0.9
+    }
   },
   "efficiency": {
     "status": "available",
