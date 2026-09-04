@@ -9,7 +9,7 @@ metadata:
   name: ncaaf-p3-3b
   vertical: ncaaf
   card: https://trello.com/c/dpQKTbYd   # P3.3 record; P3.3b card linked at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Close the product-expectation gap P3.3 measured and flagged: the
