@@ -87,3 +87,16 @@ every §0.5 pre-registration's blindness/ordering clauses.
    the rehearsal ran with controls=False, so the one section an amendment had
    changed never rendered. A report path rehearsed only on a config that skips
    the changed section is untested where it changed.
+
+## Oracle-anchor resolution matching (PM ruling 2026-09-04, from NF-INJ4)
+An "arm must not beat its own-form oracle" clause is only meaningful when the
+oracle is fitted at MATCHED RESOLUTION (the NF1.9 (f) reading: own_form_oracle
+vs a matched-n control, equal family and equal resolution). NF-INJ4's anchor
+was fitted on ~131 test rows against arms trained on ~1,178 (9.0x, fixed by the
+CV design) — so the clause measured the oracle's sample size, not any arm
+property, and refused a result that passed 7/8 gates. Two registrations, two
+guards: the NF-W6d inactive-pair reading and the NF1.9 (f) capacity reading are
+DIFFERENT clauses — registering one does not give you the other; name both
+explicitly. And a gate measured injection-invariant after the fact is a finding
+for the SUCCESSOR's forward declaration, never a reclassification applied to
+the run that it blocked.
