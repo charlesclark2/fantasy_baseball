@@ -21,6 +21,7 @@ import pytest
 from quant_sports_intel_models.football.nfl.fantasy import (
     nf_inj4_designation_duration as DD,
     nf_inj4b_designation_duration as B,
+    run_nf_inj4b_counterfactual as CF,
     run_nf_inj4b_designation_duration as R,
 )
 
@@ -240,3 +241,81 @@ def test_the_preregistration_states_the_expected_result_forward():
     assert "never to be presented as fresh confirmation" in txt
     assert "zero rows for 2026" in txt, (
         "the NF-W0a capture dependency must be stated with its MEASURED value at registration time")
+
+
+
+# ── the counterfactual's two load-bearing controls ─────────────────────────────────────────────
+def _board(config: str, n_teams: int, n: int = 6) -> pd.DataFrame:
+    """A synthetic published board whose `overall_rank` IS the rank of `vor`, as the real one's is."""
+    pts = np.linspace(200.0, 100.0, n)
+    repl = 90.0 + (n_teams - 10)
+    df = pd.DataFrame({
+        "config_name": [config] * n, "n_teams": [n_teams] * n,
+        "player_id": [f"{i}" for i in range(n)],
+        "player_name": [f"P{i}" for i in range(n)],
+        "position": ["RB"] * n, "proj_games": [15.0] * n,
+        "league_points": pts, "replacement_points": [repl] * n,
+        "vor": pts - repl})
+    df["overall_rank"] = df["vor"].rank(ascending=False, method="first").astype(int)
+    return df
+
+
+def test_an_empty_designation_map_moves_exactly_zero_ranks_on_every_board():
+    """⭐⭐ THE NO-OP CONTROL. Its first run reported 1,715 of 1,716 rows moving under an EMPTY map,
+    because the board key is `(config_name, n_teams)` and not `config_name` — every "rank move" in
+    the operator packet would have been an artifact of concatenating two boards."""
+    boards = pd.concat([_board("full_ppr", 10), _board("full_ppr", 12)], ignore_index=True)
+    out = CF.board_moves(boards, {}, {"questionable": 0.9629})
+    assert set(out) == {"full_ppr__10team", "full_ppr__12team"}, (
+        "the boards were not separated by (config_name, n_teams)")
+    for k, v in out.items():
+        assert v["rows_whose_rank_moved"] == 0, f"{k} moved ranks under NO discount"
+        assert v["recomputed_baseline_rank_agrees_with_published"] == 1.0, (
+            f"{k}: the re-derived baseline rank disagrees with the PUBLISHED rank, so the 'move' "
+            f"column would fold an ordering-convention difference into the result")
+
+
+def test_a_real_discount_actually_MOVES_ranks():
+    """The other side of the two-sided control: a control that only ever checks 'nothing moved'
+    passes just as happily on a discount that silently does nothing (NF1.7 (a))."""
+    boards = _board("full_ppr", 12)
+    out = CF.board_moves(boards, {"1": "questionable"}, {"questionable": 0.60})
+    assert out["full_ppr__12team"]["rows_whose_rank_moved"] > 0
+
+
+def test_an_unmapped_designation_label_REFUSES_rather_than_pricing_at_one():
+    """⛔ THE DEFECT THE REHEARSAL CAUGHT. The feed emits `Questionable`; the model's levels are
+    lower-case. `.map(...).fillna(1.0)` turned the whole discount into a NO-OP — 89 designated
+    players on the board, no discount applied, no error, and an id-join coverage that read healthy.
+    A silent no-discount is indistinguishable from a correctly-applied one that moved nothing."""
+    boards = _board("full_ppr", 12)
+    with pytest.raises(SystemExit, match="no fitted multiplier"):
+        CF.board_moves(boards, {"1": "Questionable"}, {"questionable": 0.9629})
+
+
+def test_the_live_label_crosswalk_covers_every_designation_the_feed_can_emit():
+    """Derived from the feed's own vocabulary and asserted at import, so a designation added
+    upstream fails loudly instead of silently pricing at 1.0."""
+    from quant_sports_intel_models.football.nfl.fantasy import sleeper_injuries_source as SI
+    assert set(CF._MODEL_LEVEL) == set(SI.WEEKLY_DESIGNATIONS.values())
+    assert set(CF._MODEL_LEVEL.values()) <= set(DD.DESIGNATION_LEVELS)
+
+
+def test_the_rank_move_is_like_for_like_and_an_ordering_difference_is_DISCLOSED_not_absorbed():
+    """⭐ The move column must be immune to a difference in ordering CONVENTION, and the difference
+    must still be visible.
+
+    If `cf_move` were `published_rank − discounted_rank`, every disagreement between the publisher's
+    ordering and this re-derivation would be folded into the "move" column and reported as a board
+    change caused by the discount. Here the published rank is deliberately PERTURBED: an empty
+    designation map must STILL move exactly zero ranks (the comparison is like-for-like), while the
+    agreement diagnostic must drop below 1.0 so the divergence is disclosed rather than absorbed.
+    """
+    b = _board("full_ppr", 12, n=6)
+    b.loc[0, "overall_rank"], b.loc[1, "overall_rank"] = 2, 1     # publisher disagrees with vor
+    out = CF.board_moves(b, {}, {"questionable": 0.9629})["full_ppr__12team"]
+    assert out["rows_whose_rank_moved"] == 0, (
+        "an ordering-convention difference leaked into the rank-move column — the counterfactual "
+        "would report board changes the discount did not cause")
+    assert out["recomputed_baseline_rank_agrees_with_published"] < 1.0, (
+        "the disagreement with the published ordering must be DISCLOSED, not silently absorbed")

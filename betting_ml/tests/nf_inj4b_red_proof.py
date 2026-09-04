@@ -31,6 +31,7 @@ _RUNNER = _FAN / "run_nf_inj4b_designation_duration.py"
 _MODULE = _FAN / "nf_inj4b_designation_duration.py"
 _SEASON = _FAN / "season_projection.py"
 _SCORER = _FAN / "run_nf_inj4_designation_duration.py"
+_CF = _FAN / "run_nf_inj4b_counterfactual.py"
 
 _GUARD = _REPO / "betting_ml/tests/test_nf_inj4b_matched_resolution.py"
 _INJ4_GUARD = _REPO / "betting_ml/tests/test_nf_inj4_designation_duration.py"
@@ -124,6 +125,24 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      'df[FORMAL_APPLIED_COL] = new_games < old_games - 1e-9',
      'df[FORMAL_APPLIED_COL] = formal_new < old_games - 1e-9',
      f"{_INJ4_GUARD}::test_a_designation_cap_STAMPS_the_flag_that_keeps_the_news_channel_disjoint"),
+
+    ("the counterfactual groups on config_name alone (two boards concatenated)",
+     _CF,
+     'for (cfg, n_teams), g in boards.groupby(["config_name", "n_teams"]):',
+     'for cfg, g in boards.groupby("config_name"):\n        n_teams = int(g["n_teams"].iloc[0])',
+     f"{_GUARD}::test_an_empty_designation_map_moves_exactly_zero_ranks_on_every_board"),
+
+    ("an unmapped designation label silently prices at 1.0 again",
+     _CF,
+     'unmapped = sorted(set(g["cf_desig"].dropna()) - set(mult))',
+     'unmapped = []',
+     f"{_GUARD}::test_an_unmapped_designation_label_REFUSES_rather_than_pricing_at_one"),
+
+    ("the counterfactual compares against the PUBLISHED rank, not a like-for-like baseline",
+     _CF,
+     'g["cf_move"] = g["cf_base_rank"] - g["cf_rank"]',
+     'g["cf_move"] = g["overall_rank"].astype(int) - g["cf_rank"]',
+     f"{_GUARD}::test_the_rank_move_is_like_for_like_and_an_ordering_difference_is_DISCLOSED_not_absorbed"),
 ]
 
 #: The NOT-SELECTED control: a test that must stay GREEN under every mutation above, so a red
