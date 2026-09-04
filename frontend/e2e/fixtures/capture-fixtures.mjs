@@ -112,7 +112,11 @@ const TARGETS = [
   },
   // ── NCAAF-P3.3 — the team stats page ──────────────────────────────────────────────────────────
   //
-  // ⭐ CAPTURED THE MORNING THE ROUTE WENT LIVE (2026-09-03), once the box serving-write, the
+  // ⭐ CAPTURED THE MORNING THE ROUTE WENT LIVE (2026-09-03) and RE-TAKEN 2026-09-04 by
+  // NCAAF-P3.3b, once the standings write had landed — the re-capture the P3.3 closeout
+  // asked for, and the way its self-announcing "the capture has acquired standings" clause
+  // was RETIRED. ⛔ Retire such a clause BY RE-CAPTURING, never by weakening it into
+  // something the new payload happens to satisfy. Originally taken once the box serving-write, the
   // Lambda deploy and the API-Gateway `NONE` route had all landed. Two teams, chosen because they
   // differ in the ways the page has to handle, not because they were convenient:
   //

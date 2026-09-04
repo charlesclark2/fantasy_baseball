@@ -680,12 +680,145 @@ test("the page says what the rating MEANS, not only what its unit is", async ({ 
 })
 
 test("a deployed payload with no standings renders the named absence, not a blank", async ({ page }) => {
-  // ⭐ THE CAPTURED FIXTURES ARE PRE-STANDINGS BY CONSTRUCTION — they were taken off the live API
-  // before this shipped, and they are kept that way on purpose: they are exactly what a client
-  // sees during the deploy skew between `frontend/` (auto) and the API Lambda (manual). That
-  // window must render a named absence, never a blank heading (NF-C0 / NF-C6b).
-  await open(page, 68)
-  expect(TEAM_68.strength.standing_fbs ?? null, "the capture has acquired standings — re-check this clause").toBeNull()
+  // ⭐ RE-ANCHORED BY NCAAF-P3.3b, AND THE SELF-ANNOUNCING CLAUSE DID ITS JOB. This used to read
+  // the absence off the CAPTURE and assert it with "the capture has acquired standings — re-check
+  // this clause". The 2026-09-04 re-capture acquired them (68 now serves rank 42 of 138, range
+  // 18–97), so that assertion fired exactly as designed and was retired BY RE-CAPTURING — never by
+  // weakening it into something the new payload happens to satisfy.
+  //
+  // ⛔ THE BRANCH STAYS COVERED, because the state it describes is still reachable: `frontend/`
+  // auto-deploys on main while the API Lambda ships only via a manual `deploy.sh` (NF-C0), so a
+  // client WILL meet a standings-less payload during that skew. The pre-standings server state is
+  // now SYNTHESIZED rather than captured — which is what `transform` exists for — and the fixture's
+  // own values are asserted to be present first, so this cannot silently become a test of nothing.
+  expect(TEAM_68.strength.standing_fbs, "the capture must CARRY standings for the strip to mean anything").not.toBeNull()
+  const { errors } = await open(page, 68, {
+    transform: (pathname, body) =>
+      pathname.startsWith("/ncaaf/teams")
+        ? { ...body, strength: { ...body.strength, standing_fbs: null, standing_conference: null } }
+        : body,
+  })
   await expect(page.getByTestId("ncaaf-team-standing")).toBeVisible()
   await expect(page.getByTestId("ncaaf-team-standing-absent")).toBeVisible()
+  expectNoPageErrors(errors)
+})
+
+test("the re-captured payload renders its real standing, with the range attached", async ({ page }) => {
+  // The other side of the re-capture: the AVAILABLE branch is now reachable from production bytes
+  // for the first time, so it is asserted against the capture's OWN values rather than a typed
+  // expectation (the file-header rule). This is what retires the clause above by REPLACEMENT.
+  await open(page, 68)
+  await expect(page.getByTestId("ncaaf-standing-fbs")).toBeVisible()
+  await expect(page.getByTestId("ncaaf-team-standing-absent")).toHaveCount(0)
+  const fbs = page.getByTestId("ncaaf-standing-fbs")
+  await expect(fbs).toContainText(String(TEAM_68.strength.standing_fbs.rank_lo))
+  await expect(fbs).toContainText(String(TEAM_68.strength.standing_fbs.rank_hi))
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// NCAAF-P3.3b — WHEN these ratings last took in games
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// ⭐ WHAT THESE CLAUSES ARE FOR. P3.3 measured a reader misread that no number on the page is wrong
+// about: the rating, band and both ranks move only when P1.2 is re-fit, so a Saturday win can sit
+// beside a rating that predates it. The stamp is the missing fact, and BOTH its halves are read off
+// the payload — so the two failure modes worth guarding are (a) a half that stops rendering and
+// (b) a half that renders a date the payload never carried, which is far worse because it looks
+// authoritative. Every clause below reads the FIXTURE'S OWN values; none types a date.
+
+/** The date part of an ISO instant, computed the way the surface computes it. Kept here rather
+ *  than importing the app's helper on purpose: a spec that called `isoDateOf` would be asserting
+ *  the function against itself (the NF-C0e "a test that reads a value back under the key the code
+ *  wrote" shape). Two independent derivations that must agree is the point. */
+const isoDay = (v: string) => v.slice(0, 10)
+
+test("the stamp states BOTH absences on a pre-deploy payload, and invents no date", async ({ page }) => {
+  // ⭐ THE CAPTURES ARE THE PRE-DEPLOY SHAPE, AND THAT IS REAL PRODUCTION RIGHT NOW: they were taken
+  // from the live API before the Phase-A field shipped, so neither stamp field exists on them. The
+  // API Lambda deploys by hand while `frontend/` auto-deploys (NF-C0), so this is not a contrived
+  // state — it is the state every reader is in until `deploy.sh` runs.
+  expect(TEAM_68.strength.ratings_as_of ?? null, "the capture has acquired a vintage — re-anchor this clause onto a transform-stripped payload, do not weaken it").toBeNull()
+  const { errors } = await open(page, 68)
+  await expect(page.getByTestId("ncaaf-ratings-stamp")).toBeVisible()
+  await expect(page.getByTestId("ncaaf-ratings-as-of-absent")).toBeVisible()
+  await expect(page.getByTestId("ncaaf-ratings-next-update-absent")).toBeVisible()
+  // ⛔ THE ANTI-FABRICATION HALF, and it is the one that matters. A stamp that fell back to "now",
+  // or to `generated_at` (the HOURLY serving write — the very number that makes a five-week-old
+  // rating look fresh), would render a plausible date over an unread artifact. Nothing
+  // date-shaped may appear in the stamp when the payload carried no instant.
+  const stamp = await page.getByTestId("ncaaf-ratings-stamp").innerText()
+  expect(stamp, "the stamp printed a date the payload does not carry").not.toMatch(/\d{4}-\d{2}-\d{2}/)
+  expect(stamp).not.toContain(isoDay(TEAM_68.generated_at))
+  expectNoPageErrors(errors)
+})
+
+test("the stamp renders on BOTH the played and the unplayed capture", async ({ page }) => {
+  // The played/unplayed contrast the fixture pair exists for: 2449 carries a completed game (and a
+  // 1-0 record) while 68 is wholly upcoming. The stamp is a fact about OUR cadence, not about the
+  // team, so it must render identically in both — a stamp that quietly disappeared on the state a
+  // reader is most likely to misread would be worse than none.
+  expect(TEAM_2449.schedule.n_completed).toBeGreaterThan(0)
+  expect(TEAM_68.schedule.n_completed).toBe(0)
+  for (const id of [68, 2449]) {
+    await open(page, id)
+    await expect(page.getByTestId("ncaaf-ratings-stamp")).toBeVisible()
+    await expect(page.getByTestId("ncaaf-ratings-vintage-hint")).toBeVisible()
+  }
+})
+
+test("a real vintage PRINTS, and it is the payload's own date", async ({ page }) => {
+  // ⭐ THE PRESENT ARM, reached through the generated fixture — the shape prod cannot serve until
+  // the Phase-A deploy lands, exactly as the efficiency/splits AVAILABLE branch is reached. The
+  // expected text is derived from the fixture, so a re-capture moves it with the payload.
+  const asOf = TEAM_POPULATED.strength.ratings_as_of
+  expect(asOf, "the populated fixture must carry a vintage — rebuild it").toBeTruthy()
+  const { errors } = await open(page, 68, { ncaafTeam: "populated" })
+  await expect(page.getByTestId("ncaaf-ratings-as-of")).toContainText(isoDay(asOf))
+  await expect(page.getByTestId("ncaaf-ratings-as-of-absent")).toHaveCount(0)
+  // ⛔ AND IT IS NOT `generated_at`. The two are different instants by design (the artifact's Delta
+  // commit vs this write's clock) and a stamp that read the wrong one would look completely normal.
+  expect(isoDay(asOf)).not.toBe(isoDay(TEAM_POPULATED.generated_at))
+  await expect(page.getByTestId("ncaaf-ratings-stamp")).not.toContainText(isoDay(TEAM_POPULATED.generated_at))
+  expectNoPageErrors(errors)
+})
+
+test("production's real shape today — a vintage, and no scheduled next update", async ({ page }) => {
+  // ⛔ THE ASYMMETRY IS THE MEASUREMENT, not a gap in the fixture. Nothing in `pipeline/` re-fits
+  // P1.2 — it is an operator step, and the lake agrees (the ratings table last committed
+  // 2026-08-18 while the roll-forward's own tables committed 2026-08-31, i.e. it fired and moved
+  // nothing here). So the surface must say so rather than name a schedule that would not deliver.
+  expect(TEAM_POPULATED.strength.ratings_next_update ?? null).toBeNull()
+  await open(page, 68, { ncaafTeam: "populated" })
+  await expect(page.getByTestId("ncaaf-ratings-next-update-absent")).toBeVisible()
+  await expect(page.getByTestId("ncaaf-ratings-next-update")).toHaveCount(0)
+})
+
+test("a scheduled next update PRINTS its date rather than the absence", async ({ page }) => {
+  // ⭐ THE FORWARD BRANCH, EXERCISED SO IT IS NOT DEAD CODE. `RATINGS_REFRESH_SCHEDULES` is empty
+  // today, so no fixture can reach this arm — and a render branch nothing ever reaches is a
+  // declaration that outran its production (NF-C0e). The day a re-fit is scheduled, the surface
+  // must already be able to say so; this proves it can, without waiting for that decision.
+  const next = "2099-01-04T14:00:00+00:00"
+  const { errors } = await open(page, 68, {
+    transform: (pathname, body) =>
+      pathname.startsWith("/ncaaf/teams")
+        ? { ...body, strength: { ...body.strength, ratings_next_update: next } }
+        : body,
+  })
+  await expect(page.getByTestId("ncaaf-ratings-next-update")).toContainText(isoDay(next))
+  await expect(page.getByTestId("ncaaf-ratings-next-update-absent")).toHaveCount(0)
+  expectNoPageErrors(errors)
+})
+
+test("the stamp promises only a rewrite, never that the rating will move", async ({ page }) => {
+  // ⛔ THE NO-OVERCLAIM CLAUSE. A re-fit over a bye week produces the same number, so a stamp that
+  // said the ratings WILL change would be wrong through no fault of the data — and this page's
+  // whole licence to publish is that it claims only what it has measured (best_alpha = 0).
+  await open(page, 68, { ncaafTeam: "populated" })
+  const text = (await page.getByTestId("ncaaf-ratings-vintage").innerText()).toLowerCase()
+  expect(forbiddenPhrasesIn(text), "the stamp reached for a claim phrase").toEqual([])
+  for (const claim of ["will change", "will move", "will update to", "improve", "expect the rating"]) {
+    expect(text, `the stamp promises "${claim}" — a re-fit over a bye week moves nothing`)
+      .not.toContain(claim)
+  }
 })

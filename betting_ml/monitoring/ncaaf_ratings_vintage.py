@@ -104,6 +104,21 @@ def read_ratings_vintage(*, bucket: str | None = None,
     return reading.last_commit
 
 
+def next_fire(cron: str, tz: str, now: datetime) -> datetime:
+    """The next firing instant of `cron` in `tz`, as tz-aware UTC.
+
+    ⚠️ DAGSTER'S OWN CRON ITERATOR, NEVER `croniter`. croniter is NOT installed on the box (dagster
+    1.13 vendors its own), so a croniter-based resolver works on a laptop and fails in production —
+    the NF-FRESH2 finding, and exactly the kind of defect CI cannot see because CI is a laptop.
+
+    Pure and injectable on purpose: it takes a cron STRING, so the arithmetic is testable without
+    importing `pipeline` (whose package state the fast gate does not have — E11.23).
+    """
+    from dagster._utils.schedules import cron_string_iterator  # noqa: PLC0415 — see docstring
+
+    return next(cron_string_iterator(now.timestamp(), cron, tz)).astimezone(timezone.utc)
+
+
 def next_ratings_update(now: datetime | None = None,
                         schedules: tuple[str, ...] | None = None) -> datetime | None:
     """The earliest next fire across the schedules that rewrite the ratings, or None.
@@ -115,22 +130,8 @@ def next_ratings_update(now: datetime | None = None,
     names = RATINGS_REFRESH_SCHEDULES if schedules is None else schedules
     if not names:
         return None
-
-    # ⚠️ dagster's OWN cron iterator, never `croniter` — croniter is not installed on the box
-    # (dagster 1.13 vendors its own), so a `croniter` import here would work on a laptop and fail
-    # in production. Imported lazily: `betting_ml/` must stay importable in the fast gate, which
-    # has no `pipeline` package state and must never pay a dagster import at collection (E11.23).
-    from dagster._utils.schedules import cron_string_iterator
-
-    from pipeline.schedules import sports_rollforward_schedules  # noqa: F401 — registry side-effect
-
     at = now or datetime.now(timezone.utc)
-    fires: list[datetime] = []
-    for name in names:
-        cron, tz = _schedule_cron(name)
-        it = cron_string_iterator(at.timestamp(), cron, tz)
-        fires.append(next(it).astimezone(timezone.utc))
-    return min(fires) if fires else None
+    return min(next_fire(*_schedule_cron(name), at) for name in names)
 
 
 def _schedule_cron(name: str) -> tuple[str, str]:
@@ -139,13 +140,18 @@ def _schedule_cron(name: str) -> tuple[str, str]:
     Reading the live `ScheduleDefinition` rather than re-declaring a cron string is what keeps this
     from becoming a second owner of a cadence — the defect class this whole module is a correction
     for (INC-30/36/38: one logical thing, two execution owners).
-    """
-    from pipeline.repository import defs  # noqa: PLC0415 — lazy; see next_ratings_update
 
-    for sched in defs.get_all_schedules():
-        if sched.name == name:
-            return sched.cron_schedule, (sched.execution_timezone or "UTC")
-    raise KeyError(f"no Dagster schedule named {name!r} — RATINGS_REFRESH_SCHEDULES is stale")
+    ⛔ RAISES on an unknown name. Returning None would render a stated absence — byte-identical to
+    the correct empty-registry answer — so a typo would be indistinguishable from the measured
+    truth (NF1.7(a)).
+    """
+    import pipeline  # noqa: PLC0415 — lazy: `betting_ml/` must import without `pipeline` state
+
+    sched = pipeline.defs.get_schedule_def(name) if name in {
+        s.name for s in pipeline.defs.schedules} else None
+    if sched is None:
+        raise KeyError(f"no Dagster schedule named {name!r} — RATINGS_REFRESH_SCHEDULES is stale")
+    return sched.cron_schedule, (sched.execution_timezone or "UTC")
 
 
 def iso(value: datetime | None) -> str | None:
