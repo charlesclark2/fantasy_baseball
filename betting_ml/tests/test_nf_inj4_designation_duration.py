@@ -321,15 +321,30 @@ def test_the_designation_channel_is_wired_but_structurally_off_in_production():
 
     # ⛔ THE DEPLOY HOLD, as a MEASURED property rather than a comment: nothing in the production
     #    tree passes the argument, so the branch cannot execute on a served build.
-    repo = Path(DD.__file__).resolve().parents[5]
-    callers = []
-    for path in (repo / "quant_sports_intel_models").rglob("*.py"):
+    repo = Path(DD.__file__).resolve().parents[4]
+    tree = repo / "quant_sports_intel_models"
+    callers, scanned = [], 0
+    for path in tree.rglob("*.py"):
+        scanned += 1
         if path.name.startswith("run_nf_inj4b_"):
             continue          # the story's own counterfactual is allowed to turn it on
         body = "\n".join(ln for ln in path.read_text().splitlines()
                           if not ln.lstrip().startswith("#"))
-        if re.search(r"\bdesignation_games\s*=(?!None)", body) and path != sp:
+        # ⛔ The availability owner itself is NOT exempt — a serving caller defined INSIDE
+        #    `season_projection` lifts the deploy hold exactly as one outside it does, and the
+        #    first cut of this guard excluded that file and stayed GREEN when the RED proof put a
+        #    production caller there. The parameter's own default (`designation_games=None`) is
+        #    excluded by the pattern, not by the path.
+        if re.search(r"\bdesignation_games\s*=\s*(?!None\b)", body):
             callers.append(str(path.relative_to(repo)))
+    # ⛔ NON-VACUITY, and it is not decoration: the first cut of this guard resolved the repo root
+    #    one level too HIGH, so `rglob` matched NOTHING, the loop never ran and the guard passed on
+    #    an empty set. A guard that ITERATES matches must assert the match set is non-empty, or it
+    #    certifies nothing while looking like it certifies everything (DSR-CONV #690). The RED proof
+    #    is what surfaced it — a production caller planted in the owner module stayed GREEN.
+    assert scanned > 100, (
+        f"the caller scan visited only {scanned} file(s) under {tree} — it is not scanning the "
+        f"production tree, so its 'no callers' verdict is vacuous")
     assert not callers, (
         f"{callers} pass `designation_games=` into the availability owner. NF-INJ4b is DEPLOY-HELD: "
         f"the served Q/D/O discount must stay EXACTLY ZERO until the gated ship path and explicit "

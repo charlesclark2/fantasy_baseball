@@ -113,11 +113,17 @@ CASES: tuple[Case, ...] = (
          "        if float(val) > best_val - 1e-12:",
          "test_a_player_with_both_a_news_cap_and_a_designation_takes_ONE_of_them",
          "test_no_channel_leaves_the_projection_untouched"),
-    Case("the refused model is wired into the serving owner", _SEASON, "",
-         "\n\n# RED-PROOF MUTATION — a serving branch reading the refused model\n"
-         "def _nf_inj4_designation_cap(df):\n"
-         "    return compose_availability_caps(df)\n",
-         "test_the_designation_model_is_not_wired_into_the_serving_availability_owner",
+    # ⭐ RE-ANCHORED BY NF-INJ4b (MH2.7 — never weakened, never deleted). The guard this case
+    #    drives used to forbid the model being wired into the serving owner AT ALL; NF-INJ4b
+    #    certified the model and wired the channel DEFAULT-OFF, so the property being defended is
+    #    no longer "there is no code" but "no PRODUCTION CALLER passes it". The mutation moves with
+    #    it: a serving caller that passes `designation_games=` is what must go RED now. Leaving the
+    #    old mutation in place produced a case that ran against a property nothing holds.
+    Case("a production caller passes the designation channel (the deploy hold is lifted)", _SEASON,
+         "", "\n\n# RED-PROOF MUTATION — a production caller turning the certified channel ON\n"
+         "def _nf_inj4b_serving_caller(df):\n"
+         "    return apply_availability_chain(df, designation_games=lambda d: d['proj_games'])\n",
+         "test_the_designation_channel_is_wired_but_structurally_off_in_production",
          "test_espn_is_excluded_from_the_admissible_sources"),
 )
 
@@ -136,8 +142,24 @@ def _restore_stale() -> int:
 
 
 def _pytest(node: str) -> int:
+    """⛔ **A NODE ID THAT COLLECTS NOTHING MUST NOT READ AS RED.** pytest exits NON-ZERO on an
+    unresolvable node id, so a guard that has merely been RENAMED reports a perfect RED for a test
+    that no longer exists — the harness's own worst failure mode, and it fired for real: NF-INJ4b
+    renamed this file's wiring guard and this proof went on reporting 14/14 RED, one of them
+    against nothing at all. The collection is asserted FIRST, and a non-collecting node is a HARD
+    ERROR, never a red (the "a red proof's RED can mean the clause never ran" class)."""
+    target = f"{_TESTS}::{node}"
+    probe = subprocess.run(
+        [sys.executable, "-m", "pytest", target, "-q", "--no-header", "--collect-only", "-p",
+         "no:cacheprovider"],
+        cwd=_ROOT, capture_output=True, text=True)
+    if probe.returncode != 0 or "no tests ran" in (probe.stdout + probe.stderr):
+        raise SystemExit(
+            f"⛔ `{node}` collects NOTHING — it has been renamed, moved or deleted. Every 'RED' "
+            f"credited to it would be pytest refusing an unresolvable node id, not a guard "
+            f"catching a break. Re-anchor this proof onto the guard's current name (MH2.7).")
     return subprocess.run(
-        [sys.executable, "-m", "pytest", f"{_TESTS}::{node}", "-q", "--no-header", "-p",
+        [sys.executable, "-m", "pytest", target, "-q", "--no-header", "-p",
          "no:cacheprovider"],
         cwd=_ROOT, capture_output=True, text=True).returncode
 

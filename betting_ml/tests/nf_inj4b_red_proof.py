@@ -155,10 +155,27 @@ NOT_SELECTED = f"{_INJ4_GUARD}::test_no_channel_leaves_the_projection_untouched"
 
 
 def _run(nodeid: str) -> bool:
-    """True when the selected test PASSES."""
+    """True when the selected test PASSES.
+
+    ⛔ **A NODE ID THAT COLLECTS NOTHING MUST NOT READ AS RED — the fourth way a red proof lies.**
+    pytest exits NON-ZERO on an unresolvable node id, so a guard that has merely been RENAMED
+    reports a perfect RED for a test that no longer exists. Not hypothetical: NF-INJ4b renamed a
+    guard in `test_nf_inj4_designation_duration.py` and NF-INJ4's own red proof went on reporting
+    14/14 RED with one case pointing at nothing. `_collects` is asserted for every case during the
+    BASELINE phase, before any source is touched."""
     r = subprocess.run([sys.executable, "-m", "pytest", nodeid, "-q", "--no-header", "-p",
                         "no:cacheprovider"], cwd=_REPO, capture_output=True, text=True)
     return r.returncode == 0
+
+
+def _collects(nodeid: str) -> bool:
+    """Does this node id resolve to at least one test? ⚠️ Asked ONLY on UNBROKEN source: a mutation
+    that trips a module-level assertion legitimately breaks COLLECTION, and refusing there would
+    turn a working RED case into a hard error."""
+    probe = subprocess.run([sys.executable, "-m", "pytest", nodeid, "-q", "--no-header",
+                            "--collect-only", "-p", "no:cacheprovider"],
+                           cwd=_REPO, capture_output=True, text=True)
+    return probe.returncode == 0 and "no tests ran" not in (probe.stdout + probe.stderr)
 
 
 def _sweep_stale_backups() -> list[str]:
@@ -188,7 +205,14 @@ def main() -> int:
     if not _run(str(_GUARD)) or not _run(str(_INJ4_GUARD)):
         print("⛔ BASELINE FAILED — fix the suite before reading any RED below")
         return 1
-    print("   ✅ baseline green\n")
+    # ⛔ …and every named guard must RESOLVE on unbroken source, or its "RED" is pytest refusing an
+    #    unresolvable node id rather than a guard catching a break.
+    missing = sorted({c[4] for c in CASES if not _collects(c[4])})
+    if missing:
+        print(f"⛔ BASELINE FAILED — these node ids collect NOTHING (renamed/moved/deleted), so "
+              f"every RED credited to them would be meaningless: {missing}")
+        return 1
+    print(f"   ✅ baseline green, all {len({c[4] for c in CASES})} named guards resolve\n")
 
     red = 0
     for label, path, old, new, nodeid in CASES:
