@@ -52,6 +52,27 @@ SOURCES = REPO / "quant_sports_intel_models/football/ncaaf/ingest/sources.py"
 
 STAMP_FIELDS = ("ratings_as_of", "ratings_next_update")
 
+#: ⚠️ `import pipeline` READS THE dbt MANIFEST AT IMPORT (`pipeline/assets/dbt_assets.py`), and
+#: `dbt/target/` is gitignored — so it is ABSENT on a CI runner and in any fresh worktree, where
+#: the import raises **FileNotFoundError**. The fast gate must never import `pipeline` for exactly
+#: this reason (E11.23), and the two clauses below are the only ones here that must.
+#:
+#: 🪤 `pytest.importorskip("pipeline")` DOES NOT PROTECT THEM — it skips on ImportError, and this
+#: is a FileNotFoundError. That is how these two shipped green on a laptop (this worktree carries a
+#: SYMLINK to the main checkout's manifest) and went red on the first CI run. Guard on the
+#: MANIFEST, which is the thing that is actually missing.
+#:
+#: ⛔ A SKIP IS A VACUITY RISK, so it is bounded: the cron ARITHMETIC is covered by
+#: `test_the_cron_arithmetic_resolves_a_real_next_fire`, which never imports `pipeline` and always
+#: runs, and both skipped clauses are RED-proven in `ncaaf_p3_3b_red_proof.py` (run where the
+#: manifest exists). What is skipped is the LOOKUP's wiring, not the behaviour it feeds.
+_DBT_MANIFEST = REPO / "dbt/target/manifest.json"
+needs_pipeline = pytest.mark.skipif(
+    not _DBT_MANIFEST.exists(),
+    reason="importing `pipeline` reads dbt/target/manifest.json, which is gitignored and absent "
+           "here (CI runner / fresh worktree) — E11.23",
+)
+
 
 def _executable_source(src: str) -> str:
     """`src` with every comment AND every docstring removed.
@@ -208,15 +229,15 @@ def test_the_cron_arithmetic_resolves_a_real_next_fire():
     assert got.tzinfo is not None and got.utcoffset() == timedelta(0), "not returned as UTC"
 
 
+@needs_pipeline
 def test_the_schedule_lookup_reads_the_live_definition_rather_than_a_copied_cron():
     """The cadence has ONE owner: the `ScheduleDefinition`. A cron re-declared here would be the
     INC-30/36/38 shape (one logical thing, two execution owners) — the very class this module is a
     correction for.
 
-    Guarded rather than unconditional: this is the one clause that must import `pipeline`, whose
-    package state a fast-gate run does not have (E11.23). A SKIP is loud about why.
+    Guarded rather than unconditional: this is one of two clauses that must import `pipeline`,
+    which reads the dbt manifest at import — absent on a CI runner. See `needs_pipeline`.
     """
-    pytest.importorskip("pipeline", reason="pipeline package state absent (fast gate / worktree)")
     now = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
     got = vintage.next_ratings_update(now, schedules=("sports_ncaaf_roll_forward_schedule",))
     assert got is not None and got.weekday() == 0
@@ -225,12 +246,12 @@ def test_the_schedule_lookup_reads_the_live_definition_rather_than_a_copied_cron
     assert got == vintage.next_fire("0 6 * 2-12,1 1", "America/Los_Angeles", now)
 
 
+@needs_pipeline
 def test_an_unknown_schedule_name_raises_rather_than_silently_resolving_to_none():
     """A stale registry entry must be LOUD. Returning None would render a stated absence — i.e. the
     same output as the correct empty-registry answer — so a typo would look exactly like the
     measured truth (NF1.7(a): a check that could not run is not a check that passed).
     """
-    pytest.importorskip("pipeline", reason="pipeline package state absent (fast gate / worktree)")
     with pytest.raises(KeyError, match="no Dagster schedule named"):
         vintage.next_ratings_update(schedules=("sports_ncaaf_no_such_schedule",))
 
