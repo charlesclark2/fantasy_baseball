@@ -64,6 +64,10 @@ HALF_PPR_PER_RECEPTION = 0.5
 #: to decide disjointness. ⚠️ Deliberately NOT in `REPORTED_ABSENCE_COLS` / `OUTPUT_COLS`: it is
 #: build-time scaffolding, not a served fact, and shipping it would invite a consumer to read it.
 FORMAL_APPLIED_COL = "_formal_discount_applied"
+#: NF-INJ4b — set on a row whose games figure is OWNED by the weekly-designation channel, so the
+#: applied owner is recorded per row rather than inferred. ⛔ Only ever stamped when a caller passes
+#: `designation_games`; no production caller does (the model is DEPLOY-HELD).
+DESIGNATION_APPLIED_COL = "_designation_discount_applied"
 
 REPORTED_ABSENCE_COLS = [
     "reported_absence_source_url", "reported_absence_entered_at", "reported_absence_games_missed",
@@ -813,6 +817,7 @@ def apply_availability_chain(
     df: pd.DataFrame,
     *,
     formal_games=None,
+    designation_games=None,
     absence_prior: "AbsenceReturnPrior | None" = None,
     absence_prior_blend: float = 0.0,
     reported_absence_rows=None,
@@ -837,10 +842,40 @@ def apply_availability_chain(
     a tag exists. A tagged player whose games already sat below the status level is unchanged by the
     blend and nothing was double-counted for him either, so he keeps his override.
     """
-    # ── 1) the FORMAL roster-status cap ─────────────────────────────────────────────────────────
-    if formal_games is not None:
-        new_games = np.asarray(formal_games(df), dtype=float)
-        old_games = df["proj_games"].to_numpy()
+    # ── 1) the FORMAL roster-status cap, COMPOSED with the WEEKLY-DESIGNATION cap ───────────────
+    # ⭐ NF-INJ4b: `designation_games` is the model NF-INJ4 measured and NF-INJ4b certified under a
+    #    matched-resolution anchor. It is a callable `frame -> np.ndarray`, exactly like
+    #    `formal_games`, and it DEFAULTS TO NONE.
+    #
+    # ⛔ **DEPLOY-HELD, AND THE HOLD IS STRUCTURAL RATHER THAN A FLAG NOBODY CHECKS.** No production
+    #    caller passes this argument, so the served board's Questionable / Doubtful / Out discount is
+    #    EXACTLY ZERO and the whole branch is provably unreachable in production. With the argument
+    #    absent, `new_games` is `formal_new` ITSELF — not `min(formal_new, old_games)` — so the
+    #    pre-NF-INJ4b behaviour is preserved BY CONSTRUCTION rather than by an argument about
+    #    monotonicity that a later edit could quietly falsify.
+    #
+    # ⭐ **THE TWO CHANNELS COMPOSE AS A SINGLE STRONGEST CAP, NEVER A STACK** (the registered
+    #    `nf_inj4_designation_duration.compose_availability_caps` semantics). Both are min-caps on
+    #    the same `proj_games` computed from the SAME pre-step baseline, so the composition is
+    #    `min(...)` and exactly one channel owns the result. Applying them SEQUENTIALLY would
+    #    compound two rate caps — measured on the registered both-channels row as 7.83 where the
+    #    composed answer is 9.06 — which is precisely the stacking the NEWS-1 rule exists to prevent,
+    #    arriving through a third channel that rule predates.
+    #
+    # ⚠️ And the designation cap STAMPS `FORMAL_APPLIED_COL` whenever it moves a row, because
+    #    `reported_absence_games` skips a row on that flag. A designation cap that did not set it
+    #    would let a player carrying BOTH a news cap and a live designation take both.
+    if formal_games is not None or designation_games is not None:
+        old_games = df["proj_games"].to_numpy(dtype=float)
+        formal_new = (np.asarray(formal_games(df), dtype=float)
+                      if formal_games is not None else old_games)
+        if designation_games is None:
+            new_games = formal_new
+        else:
+            desig_new = np.asarray(designation_games(df), dtype=float)
+            new_games = np.minimum(formal_new, desig_new)
+            df[DESIGNATION_APPLIED_COL] = (
+                (desig_new < old_games - 1e-9) & (desig_new <= formal_new + 1e-9))
         df[FORMAL_APPLIED_COL] = new_games < old_games - 1e-9
         df = rescale_line_to_games(df, new_games)
 

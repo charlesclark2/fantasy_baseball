@@ -16,6 +16,7 @@ import pytest
 
 from quant_sports_intel_models.football.nfl.fantasy import (
     nf_inj4_designation_duration as DD,
+    season_projection as SP,
 )
 
 _SRC = Path(DD.__file__)
@@ -287,13 +288,122 @@ def test_the_cap_is_monotone_and_never_raises_a_projection():
         assert DD.remaining_season_rate_cap(10.0, missed) <= 10.0 + 1e-12
 
 
-def test_the_designation_model_is_not_wired_into_the_serving_availability_owner():
-    """⛔ DEPLOY-HELD. The bake-off returned CONSTRAINT_REFUSED, so the shipped availability owner
-    must carry NO branch that reads this model — wiring an uncertified path into the serving module
-    is the "wired ≠ invoked" hazard for a model that is not authorised to serve."""
-    sp = Path(
-        DD.__file__).parent / "season_projection.py"
-    src = "\n".join(ln for ln in sp.read_text().splitlines()
-                    if not ln.lstrip().startswith("#"))
-    assert "nf_inj4" not in src
-    assert not re.search(r"\bcompose_availability_caps\s*\(", src)
+def test_the_designation_channel_is_wired_but_structurally_off_in_production():
+    """⭐ **THE ABSENCE GUARD, FLIPPED TO A PRESENCE GUARD — NF-INJ4b, in the same commit that wired
+    the channel** (MH2.7: a guard whose property is deliberately changed is RE-ANCHORED onto the new
+    implementation, never weakened and never deleted).
+
+    NF-INJ4 was `CONSTRAINT_REFUSED`, so this asserted the availability owner carried NO branch
+    reading the model. NF-INJ4b certified the same measurement under a matched-resolution anchor, so
+    the branch now EXISTS — and the deploy hold has to be re-expressed as something stronger than an
+    absence, because "there is no code" is no longer the thing keeping the served discount at zero.
+
+    ⭐ What replaces it: the channel is wired, it DEFAULTS TO OFF, and **no production caller passes
+    it**, so the served Questionable / Doubtful / Out discount is EXACTLY ZERO and the branch is
+    provably unreachable in production. That is a stronger claim than the old one — the old guard
+    could only say the code was absent; this one says the SERVED BOARD does not move.
+    """
+    sp = Path(DD.__file__).parent / "season_projection.py"
+    raw = sp.read_text()
+    src = "\n".join(ln for ln in raw.splitlines() if not ln.lstrip().startswith("#"))
+
+    chain = src.split("def apply_availability_chain(", 1)[1].split("\ndef ", 1)[0]
+    assert "designation_games=None" in chain, (
+        "the weekly-designation channel is no longer wired into the availability owner, or its "
+        "parameter was renamed — NF-INJ4b's certified model has been silently unplugged")
+    assert "np.minimum(formal_new, desig_new)" in chain, (
+        "the two channels must compose as a SINGLE STRONGEST min-cap from one baseline; applying "
+        "them sequentially compounds two rate caps (the 9.06-vs-7.83 stacking the NEWS-1 rule "
+        "exists to prevent)")
+    assert "DESIGNATION_APPLIED_COL" in chain and "FORMAL_APPLIED_COL" in chain, (
+        "the designation cap must stamp the formal-applied flag, or a player carrying BOTH a news "
+        "cap and a live designation takes both")
+
+    # ⛔ THE DEPLOY HOLD, as a MEASURED property rather than a comment: nothing in the production
+    #    tree passes the argument, so the branch cannot execute on a served build.
+    repo = Path(DD.__file__).resolve().parents[5]
+    callers = []
+    for path in (repo / "quant_sports_intel_models").rglob("*.py"):
+        if path.name.startswith("run_nf_inj4b_"):
+            continue          # the story's own counterfactual is allowed to turn it on
+        body = "\n".join(ln for ln in path.read_text().splitlines()
+                          if not ln.lstrip().startswith("#"))
+        if re.search(r"\bdesignation_games\s*=(?!None)", body) and path != sp:
+            callers.append(str(path.relative_to(repo)))
+    assert not callers, (
+        f"{callers} pass `designation_games=` into the availability owner. NF-INJ4b is DEPLOY-HELD: "
+        f"the served Q/D/O discount must stay EXACTLY ZERO until the gated ship path and explicit "
+        f"operator approval. This is also the code form of NF-C9's disclosure copy — the moment a "
+        f"production caller passes it, 'our projected-games figure does not take this into account' "
+        f"is FALSE everywhere it renders")
+
+
+def test_passing_no_designation_channel_leaves_the_chain_byte_identical():
+    """⛔ The deploy hold must be true of BEHAVIOUR, not only of the source. A source guard cannot
+    see a wiring that changes the no-argument path (NF-C0e: a declaration is not a production)."""
+    df = pd.DataFrame({"proj_games": [14.0, 12.0, 9.0],
+                       "fp_ppr": [220.0, 180.0, 90.0],
+                       "proj_status": ["ACT", "RES", "ACT"]})
+    before = df["proj_games"].to_numpy(dtype=float).copy()
+    after = SP.apply_availability_chain(df.copy())["proj_games"].to_numpy(dtype=float)
+    assert np.allclose(after, before, rtol=0, atol=0), (
+        "the availability chain moved a row with NO designation channel passed — the NF-INJ4b "
+        "wiring is not default-off")
+
+
+def test_a_designation_cap_STAMPS_the_flag_that_keeps_the_news_channel_disjoint():
+    """⭐ BEHAVIOURAL, because the token-presence version of this check was VACUOUS — the RED proof
+    turned the source scan GREEN on a break that stopped the designation cap stamping the flag.
+
+    `reported_absence_games` skips a row when `_formal_discount_applied` is set. If the designation
+    cap does not set it, a player carrying BOTH a news cap and a live designation takes BOTH — the
+    stacking the NEWS-1 rule exists to prevent, arriving through a third channel that rule predates.
+    ⛔ Asserting the CONSTANT's name appears in the function body cannot see that break at all.
+    """
+    n = 2
+    df = SP.score_line(pd.DataFrame({
+        "player_id": ["p0", "p1"], "player_name": ["P0", "P1"], "position": ["RB"] * n,
+        "proj_games": [14.0, 14.0],
+        "proj_pass_att": np.zeros(n), "proj_pass_cmp": np.zeros(n), "proj_pass_yds": np.zeros(n),
+        "proj_pass_td": np.zeros(n), "proj_pass_int": np.zeros(n),
+        "proj_rush_att": np.full(n, 200.0), "proj_rush_yds": np.full(n, 900.0),
+        "proj_rush_td": np.full(n, 7.0),
+        "proj_targets": np.full(n, 60.0), "proj_rec": np.full(n, 45.0),
+        "proj_rec_yds": np.full(n, 380.0), "proj_rec_td": np.full(n, 2.0),
+        "proj_fumbles_lost": np.full(n, 1.5), "proj_two_pt": np.zeros(n),
+    }), prefix="proj_")
+    # row 0 is capped by the designation channel; row 1 is untouched by any channel.
+    capped = np.array([DD.remaining_season_rate_cap(14.0, 2.3145), 14.0], dtype=float)
+    out = SP.apply_availability_chain(df.copy(), designation_games=lambda _d: capped)
+
+    flag = out[SP.FORMAL_APPLIED_COL].to_numpy(dtype=bool)
+    assert flag[0], (
+        "the designation cap moved row 0 and did NOT stamp the disjointness flag — the news "
+        "channel will now stack on top of it")
+    assert not flag[1], "an untouched row must not be flagged"
+    assert out[SP.DESIGNATION_APPLIED_COL].to_numpy(dtype=bool)[0], (
+        "the applied OWNER must be recorded per row, not inferred")
+    assert out["proj_games"].to_numpy(dtype=float)[0] == pytest.approx(capped[0])
+
+
+def test_the_two_channels_compose_as_one_cap_and_never_stack():
+    """⭐ THE DISJOINTNESS INVARIANT, RE-ASSERTED THROUGH THE WIRING rather than through the pure
+    helper alone — the registered both-channels row, on the real availability owner.
+
+    A player with a live designation AND a news cap must take ONE of them. The stacked answer is a
+    materially different number, and it is what a sequential application would silently produce."""
+    current = 14.0
+    desig_missed, news_missed = 2.3145, 6.0
+    desig = DD.remaining_season_rate_cap(current, desig_missed)
+    news = DD.remaining_season_rate_cap(current, news_missed)
+    composed, owner = DD.compose_availability_caps(
+        current, designation_games=desig, news_games=news)
+    stacked = DD.remaining_season_rate_cap(desig, news_missed)
+
+    assert owner == DD.CHANNEL_NEWS
+    assert composed == pytest.approx(min(desig, news))
+    assert composed == pytest.approx(9.0588, abs=5e-4), "the registered composed figure moved"
+    assert stacked == pytest.approx(7.8255, abs=5e-4), "the registered stacked figure moved"
+    assert composed > stacked + 1e-9, (
+        "the composition has become the STACKED value — two rate caps compounding is exactly the "
+        "double-discount the NEWS-1 rule exists to prevent")
