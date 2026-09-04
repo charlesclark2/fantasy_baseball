@@ -50,6 +50,7 @@ import {
   type NcaafTeamStrength,
   type NcaafTeamStrengthWeek,
 } from "@/lib/ncaaf-team"
+import { NcaafRatingsVintage } from "./ratings-vintage"
 import { TeamBlockAbsence } from "./team-block"
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
@@ -240,6 +241,13 @@ export function NcaafTeamStrengthBlock({ strength }: { strength: NcaafTeamStreng
           {week.games_in_window === 1 ? "" : "s"}
         </span>
       </div>
+
+      {/* ⭐ WHEN, DIRECTLY UNDER THE NUMBER IT DATES (NCAAF-P3.3b). It sits above the standing
+          because the stamp covers the ranks too — they are the same posterior — and a reader who
+          meets the rank first has already formed the impression the stamp exists to correct.
+          ⛔ AVAILABLE BRANCH ONLY: with no rating on screen there is nothing to date, and a bare
+          vintage over an absent block would be answering a question nobody asked. */}
+      <NcaafRatingsVintage strength={strength} />
 
       {/* ⭐ WHAT THE NUMBER MEANS, before where it places. A reader who cannot convert the rating
           into a judgement cannot use the rank either — the placement is only legible once the

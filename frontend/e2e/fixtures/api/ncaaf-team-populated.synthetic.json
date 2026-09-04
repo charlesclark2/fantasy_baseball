@@ -286,7 +286,9 @@
       "n_ranked": 2,
       "interval_lo_level": 0.1,
       "interval_hi_level": 0.9
-    }
+    },
+    "ratings_as_of": "2026-08-18T06:16:36.806000+00:00",
+    "ratings_next_update": null
   },
   "efficiency": {
     "status": "available",
