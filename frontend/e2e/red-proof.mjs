@@ -3441,6 +3441,22 @@ const CASES = [
   // clock, or the vintage repeated under "next update", looks completely normal and is a stronger
   // claim than the data supports. Three of the five below are that shape.
   {
+    id: "ncaaf-standing-absence-renders-as-a-blank",
+    shipped: "NCAAF-P3.3 — the named absence this branch exists to render",
+    // ⭐ ADDED BY P3.3b BECAUSE THAT CLAUSE WAS RE-ANCHORED, and a re-anchor is precisely when a
+    // guard quietly stops guarding. The original read the absence off the CAPTURE and announced
+    // itself when that stopped being true; the 2026-09-04 re-capture acquired standings, so it
+    // fired and was retired BY RE-CAPTURING. The branch is now reached through a `transform`-
+    // stripped payload, and the claim "the branch stays covered" is worth exactly as much as this
+    // case: without it, "we synthesized the state instead" would be an assertion about a test
+    // nobody had watched fail.
+    detail: "Renders a blank where the named standing-absence belongs (NF-C6b).",
+    file: "components/ncaaf/team-strength.tsx",
+    from: '          <p data-testid="ncaaf-team-standing-absent" className="text-[11px] text-gray-500">\n            {STANDING_UNAVAILABLE}\n          </p>',
+    to: "          {null}",
+    grep: "renders the named absence, not a blank",
+  },
+  {
     id: "ncaaf-ratings-stamp-hardcodes-a-date",
     shipped: "NCAAF-P3.3b — the defect the whole story exists to avoid, in its simplest form",
     // The reason the stamp is DERIVED rather than written: a cadence sentence is right on the day
