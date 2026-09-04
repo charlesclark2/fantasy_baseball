@@ -209,5 +209,28 @@ that is what produces the publish-candidate board. It needs a serving caller to 
 - **NF-C9's user-facing copy** — *"our projected-games figure does not take this into account"* —
   becomes **FALSE the moment the discount is live**, on every surface that renders it.
 
-**D. `nfl/pit/injuries` needs to be running weekly** for the 2026 re-test to be reachable (§3d).
+**D. `nfl/pit/injuries` needs to be running weekly** for the 2026 re-test to be reachable (§3e).
+
+---
+
+## 6. ⛔ What this story did NOT run, and why — stated rather than silently omitted
+
+Three registered ship-path steps were **not executed**, and none of them was skipped for
+convenience:
+
+- **The whole-board PLACEMENT read and the INTERVAL revalidation** (ship path steps 3 and 4) operate
+  on a candidate board that DIFFERS from the published one. Under the registered scope rule the
+  counterfactual moves **zero rows on all 14 boards**, so today there is no candidate board that
+  differs — the reads have no input, and running them would produce a byte-identical answer that
+  says nothing about the discount. ⛔ That is an INACTIVE read, and reporting one as a passed
+  placement check is precisely the error this program keeps naming (NF1.7 (a) / NF-D20). They become
+  due at the operator's Week-1 rebuild (step B), against a board that actually moved.
+- **The capture-pinned counterfactual REBUILD** (step 1) requires a serving caller to pass
+  `designation_games=`, which is the exact moment the deploy hold is lifted. That is the operator's
+  authorisation to give, not this session's to take.
+- **The publish** (step 5) is the operator's by registration.
+
+What is delivered instead is the decision-relevant magnitude — the per-designation multipliers, the
+live census, and a counterfactual leg proven to execute against real producer output — so the
+Week-1 run is a repeat of something that has worked rather than a first attempt.
 
