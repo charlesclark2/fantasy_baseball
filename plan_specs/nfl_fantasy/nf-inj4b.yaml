@@ -8,7 +8,7 @@ metadata:
   name: nf-inj4b
   vertical: nfl_fantasy
   card: https://trello.com/c/PENDING   # PM links at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Fresh forward registration of the designation→games-missed duration
