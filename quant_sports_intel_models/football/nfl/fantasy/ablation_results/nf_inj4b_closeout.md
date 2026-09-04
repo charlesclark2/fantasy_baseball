@@ -77,12 +77,16 @@ than argued: on payloads where the mechanism is genuinely ABSENT (designations s
 every marginal preserved) **zero arms survive** and five gates fail every time. **The gate family
 does not certify noise.**
 
-⭐ **The instrument finding, general rather than local.** With `inject(0.0)` defined as the IDENTITY,
-the null-control leg is **logically equivalent to the negation of the ship verdict**: `VACUOUS` fires
-exactly when some arm clears every gate on the null payload, the null payload IS the real data, and
-the study ships exactly when some arm clears every gate on the real data. ⇒ **ships ⟺ `VACUOUS`.**
-For any caller defining `inject(0) = identity`, that leg carries **zero information about the gate
-family**.
+⭐ **The instrument finding, general rather than local.** With `inject(0.0)` defined as the IDENTITY
+the null payload IS the real data, so **a study that SHIPS cannot avoid `VACUOUS`** — its winner
+clears every gate on the real data, which makes it a survivor on the null payload. **That direction
+is exact.**
+
+⚠️ The converse is not, and the distinction is stated because an over-stated instrument finding is
+exactly what propagates: `VACUOUS` says only that SOME arm cleared every gate on the real data — a
+statement about the study's own **result**, never about the gate family's **sensitivity**, which is
+what the leg is read as measuring. Either way, for any caller defining `inject(0) = identity` the
+leg carries **no information about the gate family**.
 
 ⭐ **And NF-INJ4's clean null leg was clean for the WRONG REASON** — which is why this could not have
 been seen before. It recorded `null_control_survivors: []`, but its `oracle_respected` clause was

@@ -433,18 +433,20 @@ def mechanism_absent_control(frame: pd.DataFrame) -> dict:
 def null_control_leg_specification(control: dict, absent: dict) -> dict:
     """⭐ **THE INSTRUMENT FINDING, stated as a general property rather than as this study's excuse.**
 
-    With `inject(0.0)` defined as the IDENTITY, the positive control's null-control leg is
-    **logically equivalent to the negation of the ship verdict**:
+    With `inject(0.0)` defined as the IDENTITY, the null payload IS the real data, so:
 
-      · `VACUOUS` fires ⟺ some arm clears every gate on the null payload
+      · `VACUOUS` fires ⟺ some arm clears every gate on the NULL payload
       · the null payload IS the real data
-      · the study SHIPS ⟺ some arm clears every gate on the real data
-      ⇒ **the study ships ⟺ the control returns `VACUOUS`.**
+      ⇒ **a study that SHIPS cannot avoid `VACUOUS`** — its winner clears every gate on the real
+        data, which makes it a survivor on the null payload. That direction is EXACT.
 
-    So for ANY caller defining `inject(0) = identity`, that leg carries **zero information about the
-    gate family** — it cannot fire on a study that fails and cannot help firing on one that
-    succeeds. It is a restatement of the decisive run wearing a control's badge (the NF1.7 (a)
-    family: a check whose outcome is fixed by something other than the thing it claims to measure).
+    ⚠️ Stated precisely, because the converse is NOT exact and an over-stated instrument finding is
+    what propagates: `VACUOUS` says only that SOME arm cleared every gate on the real data. That is
+    a statement about the study's own RESULT, never about the gate family's SENSITIVITY — which is
+    what the leg is read as measuring. Either way, for a caller defining `inject(0) = identity` the
+    leg carries no information about the gate family: it is a restatement of the decisive run
+    wearing a control's badge (the NF1.7 (a) family — a check whose outcome is fixed by something
+    other than the thing it claims to measure).
 
     ⭐ **AND NF-INJ4's CLEAN NULL LEG WAS CLEAN FOR THE WRONG REASON — which is why nobody could
     have seen this before now.** NF-INJ4 recorded `null_control_survivors: []`. That is not evidence
@@ -468,7 +470,11 @@ def null_control_leg_specification(control: dict, absent: dict) -> dict:
             "that CARRIES a real, independently-measured effect. `VACUOUS` presupposes an "
             "effect-FREE null payload, so here 'an arm survives the no-effect payload' is the "
             "study's own finding restated, not evidence that the family certifies noise."),
-        "the_leg_is_equivalent_to_the_negation_of_the_ship_verdict": True,
+        "a_shipping_study_cannot_avoid_this_badge": True,
+        "the_converse_is_not_exact": (
+            "`VACUOUS` says only that SOME arm cleared every gate on the real data — a "
+            "statement about the study's RESULT, never about the gate family's "
+            "SENSITIVITY, which is what the leg is read as measuring"),
         "measured_discrimination_on_a_mechanism_absent_payload": {
             "family_discriminates": absent["family_discriminates"],
             "survivors_on_any_shuffle": absent["survivors_on_any_shuffle"],
@@ -690,12 +696,15 @@ def render(s: dict) -> str:
                          f"{', '.join('`%s`' % x for x in r['failing_gates'])} |")
             L += ["", ab["reading"], ""]
         L += ["⭐ **The instrument finding, stated generally rather than as this study's excuse.** "
-              "With `inject(0.0)` defined as the IDENTITY, the null-control leg is *logically "
-              "equivalent to the negation of the ship verdict*: `VACUOUS` fires exactly when some "
-              "arm clears every gate on the null payload, the null payload IS the real data, and "
-              "the study ships exactly when some arm clears every gate on the real data. ⇒ **the "
-              "study ships ⟺ the control returns `VACUOUS`.** For any caller defining "
-              "`inject(0) = identity` that leg carries ZERO information about the gate family.", "",
+              "With `inject(0.0)` defined as the IDENTITY the null payload IS the real data, "
+              "so **a study that SHIPS cannot avoid `VACUOUS`** — its winner clears every gate "
+              "on the real data, which makes it a survivor on the null payload. That direction "
+              "is EXACT. ⚠️ The converse is not, and the distinction is stated because an "
+              "over-stated instrument finding is what propagates: `VACUOUS` says only that "
+              "SOME arm cleared every gate on the real data — a statement about the study's "
+              "own RESULT, never about the gate family's SENSITIVITY, which is what the leg "
+              "is read as measuring. Either way, for a caller defining `inject(0) = identity` "
+              "the leg carries no information about the gate family.", "",
               "⭐ **And NF-INJ4's clean null leg was clean for the WRONG REASON**, which is why this "
               "could not have been seen before now: it recorded `null_control_survivors: []`, but "
               "its `oracle_respected` clause was FALSE on the real payload, so it blocked every arm "

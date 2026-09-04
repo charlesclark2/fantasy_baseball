@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-04T06:03:55+00:00",
+  "generated_at": "2026-09-04T06:43:26+00:00",
   "story": "NF-INJ4b",
   "supersedes": "NF-INJ4 (anchor clause only; its verdict and record stand unedited \u2014 E2.1-r)",
   "preregistration": "ablation_results/nf_inj4b_preregistration.md",
@@ -722,7 +722,8 @@
       "instrument_verdict_verbatim": "VACUOUS",
       "verdict_stands": true,
       "why_the_leg_is_uninformative_for_this_caller": "`inject(0.0)` is the IDENTITY, so the null payload IS the real data \u2014 a population that CARRIES a real, independently-measured effect. `VACUOUS` presupposes an effect-FREE null payload, so here 'an arm survives the no-effect payload' is the study's own finding restated, not evidence that the family certifies noise.",
-      "the_leg_is_equivalent_to_the_negation_of_the_ship_verdict": true,
+      "a_shipping_study_cannot_avoid_this_badge": true,
+      "the_converse_is_not_exact": "`VACUOUS` says only that SOME arm cleared every gate on the real data \u2014 a statement about the study's RESULT, never about the gate family's SENSITIVITY, which is what the leg is read as measuring",
       "measured_discrimination_on_a_mechanism_absent_payload": {
         "family_discriminates": true,
         "survivors_on_any_shuffle": [],
@@ -895,5 +896,5 @@
       "reading": "\u2b50 ZERO arms survive on a genuinely mechanism-ABSENT payload, on every shuffle, with the metric and deflation gates failing each time. **The gate family does NOT certify noise.** \u21d2 the `VACUOUS` badge is an artifact of the null leg's PAYLOAD SPECIFICATION, not a property of these gates \u2014 see `null_control_leg_specification`."
     }
   },
-  "elapsed_s": 1.58
+  "elapsed_s": 1.65
 }

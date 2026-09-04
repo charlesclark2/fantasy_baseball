@@ -164,9 +164,15 @@ spec:
     followUps: >
       PM triage. (1) ⭐ INSTRUMENT — the PLAT-CVP2 positive control's
       null-control leg is MIS-SPECIFIED for any caller defining
-      inject(0)=identity: the leg is then logically equivalent to the
-      NEGATION OF THE SHIP VERDICT (ships ⟺ VACUOUS), so it carries zero
-      information about the gate family. Measured here: the family does NOT
+      inject(0)=identity: the null payload is then the REAL DATA, so a study
+      that SHIPS cannot avoid VACUOUS (its winner clears every gate on the
+      real data, hence survives the null payload) — that direction is EXACT.
+      ⚠️ The converse is not, and the distinction matters because an
+      over-stated instrument finding propagates: VACUOUS says only that SOME
+      arm cleared every gate on the real data, a statement about the study's
+      RESULT and never about the gate family's SENSITIVITY, which is what the
+      leg is read as measuring. Either way the leg carries no information
+      about the gate family for such a caller. Measured here: the family does NOT
       certify noise (0 survivors on 5 mechanism-absent shuffles). The remedy
       is a MECHANISM-ABSENT null payload (a permutation) rather than an
       UN-INJECTED one — a change to the instrument's contract or to callers'
