@@ -2862,6 +2862,115 @@ const CASES = [
     to: '      {market ?? "\u2014"}',
     grep: "never blanks or zeroes",
   },
+  // ── NCAAF-P3.3 — the team stats page ─────────────────────────────────────────────────────────
+  {
+    id: "ncaaf-team-rating-without-its-band",
+    shipped: "NCAAF-P3.3 — a strength rating published as a point number",
+    // ⭐⭐ THE ONE THAT MATTERS MOST ON THIS PAGE. `best_alpha = 0`, and at week 1 the posterior IS
+    // the prior: measured on the live board, +3.09 with a spread of 7.29 — a range from about −6 to
+    // +12. A bare "+3.1" claims a precision the model does not have, and it looks completely
+    // normal. The band is not an adornment on the number; it is half of it.
+    detail: "Drops the band beside the rating, leaving the point number alone.",
+    file: "components/ncaaf/team-strength.tsx",
+    from: "        {lo && hi && (",
+    to: "        {false && lo && hi && (",
+    grep: "never appears without its band",
+  },
+  {
+    id: "ncaaf-team-band-recomputed-narrower",
+    shipped: "NCAAF-P3.3 — an honest band quietly narrowed into a confident one",
+    // A band is not honest merely by EXISTING. Halving the spread leaves every "the band is
+    // rendered" assertion green while turning an uncertainty-first page into a nearly-confident
+    // one — which is why the clause asserts the band's WIDTH against the served spread rather than
+    // only its presence.
+    detail: "Halves the served spread before the interval is derived from it.",
+    file: "lib/ncaaf-team.ts",
+    from: "  const z = invNormalCdf(STRENGTH_BAND_HI_LEVEL)",
+    to: "  const z = invNormalCdf(STRENGTH_BAND_HI_LEVEL) / 2",
+    grep: "never appears without its band",
+  },
+  {
+    id: "ncaaf-team-block-absences-collapsed",
+    shipped: "NCAAF-P3.3 — three causes of an empty block rendered as one",
+    // NF-C6b / NF-K1. On a September Saturday a CORRECT page has two empty blocks; if "nobody has
+    // played yet" reads the same as "our mart build failed", every recurrence re-investigates from
+    // scratch. The contract carries a machine-readable reason precisely so the surface can say
+    // which, and collapsing it at the last hop throws that away.
+    detail: "Renders one fallback sentence for every block reason.",
+    file: "components/ncaaf/team-block.tsx",
+    from: "        {(reason && BLOCK_REASON_COPY[reason]) || BLOCK_REASON_FALLBACK}",
+    to: "        {BLOCK_REASON_FALLBACK}",
+    grep: "read differently from one another",
+  },
+  {
+    id: "ncaaf-team-unknown-reason-renders-blank",
+    shipped: "NCAAF-P3.3 — a reason added later rendering as a silent blank",
+    // The failure that arrives without anyone doing anything wrong: a later story adds a `reason`
+    // and this page goes quiet. The fallback is what makes the contract's extensibility safe.
+    detail: "Drops the fallback, so an unrecognised reason renders nothing.",
+    file: "components/ncaaf/team-block.tsx",
+    from: "        {(reason && BLOCK_REASON_COPY[reason]) || BLOCK_REASON_FALLBACK}",
+    to: "        {reason && BLOCK_REASON_COPY[reason]}",
+    grep: "still says something",
+  },
+  {
+    id: "ncaaf-team-upcoming-game-scored-as-played",
+    shipped: "NCAAF-P3.3 — an unplayed game rendered with a score",
+    // ⛔ A `0-0` beside next Saturday's opponent is a fabricated result, and in September most of
+    // this page is upcoming games. The distinguishing fact is the ABSENCE of the element, which is
+    // why the clause asserts a count of zero rather than the text of a dash.
+    detail: "Renders the score row for every game, played or not.",
+    file: "components/ncaaf/team-schedule.tsx",
+    from: "        {played && (",
+    to: "        {true && (",
+    grep: "shows no score at all",
+  },
+  {
+    id: "ncaaf-team-schedule-shows-the-utc-date",
+    shipped: "NCAAF-P3.3 — a Saturday night game dated Sunday",
+    // ⭐ INC-22 ON THE PAGE. The served `game_day` is the America/Los_Angeles kickoff day; deriving
+    // one from the instant in the READER's timezone shifts a 02:00-UTC kickoff by a day for anyone
+    // east of the Pacific — and disagrees with the game board about the same game.
+    detail: "Derives the day from the kickoff instant instead of the served game_day.",
+    file: "components/ncaaf/team-schedule.tsx",
+    from: '        {formatGameDay(game.game_day) ?? "TBD"}',
+    to: '        {game.commence_time?.slice(0, 10) ?? "TBD"}',
+    grep: "SERVED kickoff day",
+  },
+  {
+    id: "ncaaf-team-record-counts-unplayed-games",
+    shipped: "NCAAF-P3.3 — a record printed for a season nobody has played",
+    // "3-0 through three games" and "3-0 with nine still to play" are different statements, and a
+    // "0–0" on a team whose opener is next week reads as a played record.
+    detail: "Prints the record even when no game has been played.",
+    file: "lib/ncaaf-team.ts",
+    from: "  if (!played || typeof wins !== \"number\" || typeof losses !== \"number\") return null",
+    to: "  if (typeof wins !== \"number\" || typeof losses !== \"number\") return null",
+    grep: "counts only games that were played",
+  },
+  {
+    id: "ncaaf-team-page-link-to-a-null-id",
+    shipped: "NCAAF-P3.3 — a team link that is a 404 in disguise",
+    // Every captured game carries both ids, so a build that interpolated a null straight into the
+    // href would pass every happy-path clause and ship `/ncaaf/teams/null`.
+    detail: "Links a team whose id was not served.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "            if (side.team_id == null) {",
+    to: "            if (false) {",
+    grep: "gets no link rather than a link to nowhere",
+  },
+  {
+    id: "ncaaf-team-missing-reads-as-a-failure",
+    shipped: "NCAAF-P3.3 — the ordinary 404 reported as an outage",
+    // A team we publish nothing for is an ORDINARY answer here (a non-FBS id, a season not yet
+    // written). Reporting it as "something went wrong" trains a reader to ignore the message that
+    // means it really did.
+    detail: "Treats every team error, including the routine 404, as a failed read.",
+    file: "components/ncaaf/team-page.tsx",
+    from: "  const notFound = query.isError && status === 404",
+    to: "  const notFound = false",
+    grep: "reads differently from a failed read",
+  },
   {
     id: "ncaaf-mixed-slate-loses-its-priced-arm",
     shipped:

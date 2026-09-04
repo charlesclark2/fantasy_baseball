@@ -119,8 +119,16 @@ export default defineConfig({
     // is a page-level fact no desktop viewport ever reaches. `ncaaf-games-mobile.spec.ts` is scoped
     // to what only a small viewport can tell you; the correctness suite stays desktop-only rather
     // than doubling.
+    // ⭐ NCAAF-P3.3 joins for a SEVENTH reason, and it is a DENSITY one. The team page is the
+    // densest layout in the vertical — a six-cell stat grid, a three-column adjusted/raw table, and
+    // a schedule row carrying a date, a venue marker, an opponent, tags, a score and a link — and
+    // its central claim is the rating BESIDE ITS BAND. A layout that pushed the band off-screen, or
+    // shrank it to the point of being unreadable, would turn an uncertainty-first page into a
+    // point-prediction one at exactly the width most readers use, while every desktop assertion
+    // stayed green. `ncaaf-team-mobile.spec.ts` is scoped to what only a small viewport can tell
+    // you.
       testMatch:
-        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|reported-absence|stat-line-suppression|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile|ncaaf-games-mobile)\.spec\.ts/,
+        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|reported-absence|stat-line-suppression|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile|ncaaf-games-mobile|ncaaf-team-mobile)\.spec\.ts/,
     },
   ],
 

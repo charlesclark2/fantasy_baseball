@@ -1,0 +1,514 @@
+{
+  "generated_at": "2026-09-03T06:01:46+00:00",
+  "story": "NF-INJ4",
+  "node": "1-data-census",
+  "season": 2025,
+  "substrate_wayback": {
+    "rows_landed_all_sources": 2187,
+    "rows_by_source": {
+      "cbs": 1021,
+      "nfl": 629,
+      "espn": 537
+    },
+    "distinct_player_weeks_all_sources": 1406,
+    "admissible_sources": [
+      "nfl",
+      "cbs"
+    ],
+    "excluded_sources": [
+      "espn"
+    ],
+    "distinct_player_weeks_admissible": 1309,
+    "player_weeks_lost_to_exclusion": 97,
+    "store_subjects_with_more_than_one_capture": 0,
+    "revision_clause_activity": "INACTIVE \u2014 no store subject holds more than one capture, so the \u00a713 revised-vendor-record clause had nothing to act on. Reported so 'it did not fire' is never read as 'it passed' (NF-D20)."
+  },
+  "substrate_forward_capture": {
+    "rows": 12136,
+    "seasons": {
+      "2025": {
+        "n": 12136,
+        "min_week": 1,
+        "max_week": 22
+      }
+    },
+    "distinct_capture_dates": [
+      "2026-08-05"
+    ],
+    "usable_2026_rows": 0
+  },
+  "resolution": {
+    "rule": "the LATEST admissible capture CARRYING a designation wins; a player-week designated in no admissible capture resolves to `none_listed` (a NULL report_status is MISSING within a capture, never a resolved absence)",
+    "sensitivity_rule": "most SEVERE designation wins, recency breaks ties (pre-registered sensitivity; see `sensitivity_activity` before reading its agreement)",
+    "player_weeks_where_the_two_rules_disagree": 0,
+    "sensitivity_activity": {
+      "player_weeks_with_more_than_one_distinct_designation": 18,
+      "of_those_latest_equals_strongest": 18,
+      "resolution_pairs": {
+        "latest=out|strongest=out": 18
+      },
+      "sensitivity_is_active": false,
+      "reading": "INACTIVE \u2014 every conflicting player-week resolves identically under both rules, because in this population a designation only ever ESCALATES through the week (questionable \u2192 out) and never de-escalates. The pre-registered sensitivity is therefore guaranteed byte-identical to the primary, and its agreement carries NO information (NF-D20: an inactive clause is uninformative, never a pass)."
+    },
+    "null_designation_is_missing_not_a_level": {
+      "capture_lead_days_by_source_and_designation_presence": {
+        "cbs|has_designation=True": {
+          "n": 1021,
+          "median": 1.617,
+          "q25": 0.606,
+          "q75": 3.432
+        },
+        "nfl|has_designation=False": {
+          "n": 499,
+          "median": 1.525,
+          "q25": 1.01,
+          "q75": 1.74
+        },
+        "nfl|has_designation=True": {
+          "n": 130,
+          "median": 0.339,
+          "q25": 0.233,
+          "q75": 1.01
+        }
+      },
+      "captures_by_source_dow_and_designation_presence": {
+        "cbs|Friday|has_designation=True": 203,
+        "cbs|Monday|has_designation=True": 15,
+        "cbs|Saturday|has_designation=True": 259,
+        "cbs|Sunday|has_designation=True": 113,
+        "cbs|Thursday|has_designation=True": 216,
+        "cbs|Tuesday|has_designation=True": 99,
+        "cbs|Wednesday|has_designation=True": 116,
+        "nfl|Friday|has_designation=False": 352,
+        "nfl|Friday|has_designation=True": 45,
+        "nfl|Saturday|has_designation=False": 85,
+        "nfl|Saturday|has_designation=True": 69,
+        "nfl|Sunday|has_designation=False": 7,
+        "nfl|Sunday|has_designation=True": 6,
+        "nfl|Thursday|has_designation=False": 50,
+        "nfl|Wednesday|has_designation=False": 5,
+        "nfl|Wednesday|has_designation=True": 10
+      }
+    }
+  },
+  "pit_gate": {
+    "invoked": true,
+    "records_checked": 1309,
+    "rows_dropped": 0,
+    "rows_kept": 1309,
+    "findings_by_reason": {},
+    "rows_without_a_resolvable_gameday": 0
+  },
+  "modelled_frame": {
+    "rows": 1309,
+    "rows_target_undefined_dropped": 0,
+    "distinct_players": 398,
+    "weeks_covered": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18
+    ],
+    "rows_per_week": {
+      "1": 117,
+      "2": 63,
+      "3": 73,
+      "4": 70,
+      "5": 58,
+      "6": 89,
+      "7": 73,
+      "8": 58,
+      "9": 71,
+      "10": 66,
+      "11": 94,
+      "12": 2,
+      "13": 38,
+      "14": 77,
+      "15": 104,
+      "16": 103,
+      "17": 87,
+      "18": 66
+    },
+    "cell_sizes_designation_x_position": {
+      "out": {
+        "QB": 27,
+        "RB": 32,
+        "TE": 42,
+        "WR": 98
+      },
+      "doubtful": {
+        "QB": 1,
+        "RB": 11,
+        "TE": 6,
+        "WR": 11
+      },
+      "questionable": {
+        "QB": 93,
+        "RB": 174,
+        "TE": 189,
+        "WR": 386
+      },
+      "none_listed": {
+        "QB": 35,
+        "RB": 46,
+        "TE": 55,
+        "WR": 103
+      }
+    },
+    "cell_sizes_designation": {
+      "questionable": 842,
+      "none_listed": 239,
+      "out": 199,
+      "doubtful": 29
+    },
+    "cell_sizes_designation_x_practice": {
+      "doubtful": {
+        "dnp": 20,
+        "full": 0,
+        "limited": 4,
+        "unknown": 5
+      },
+      "none_listed": {
+        "dnp": 27,
+        "full": 152,
+        "limited": 60,
+        "unknown": 0
+      },
+      "out": {
+        "dnp": 33,
+        "full": 0,
+        "limited": 7,
+        "unknown": 159
+      },
+      "questionable": {
+        "dnp": 152,
+        "full": 44,
+        "limited": 354,
+        "unknown": 292
+      }
+    },
+    "practice_level_totals": {
+      "unknown": 456,
+      "limited": 425,
+      "dnp": 232,
+      "full": 196
+    }
+  },
+  "target": {
+    "definition": "consecutive team games missed from the designation week onward, terminated by the next appearance; right-censored at the season end",
+    "mean": 0.8052,
+    "sd": 1.7359,
+    "zero_share": 0.6555,
+    "max": 14,
+    "distribution": {
+      "0": 858,
+      "1": 222,
+      "2": 104,
+      "3": 55,
+      "4": 26,
+      "5": 12,
+      "6": 7,
+      "7": 4,
+      "8": 4,
+      "9": 3,
+      "10": 3,
+      "11": 3,
+      "12": 3,
+      "13": 3,
+      "14": 2
+    },
+    "censored_rows": 77,
+    "censored_share": 0.0588,
+    "games_remaining": {
+      "count": 1309.0,
+      "mean": 9.08,
+      "std": 5.09,
+      "min": 1.0,
+      "25%": 4.0,
+      "50%": 9.0,
+      "75%": 13.0,
+      "max": 17.0
+    }
+  },
+  "frame_integrity_check": {
+    "what": "does an `out` designation overwhelmingly produce a miss? A frame in which it does not is BROKEN, and registering on it would be a silent null. Recorded rather than hidden; no arm is fitted, ranked or chosen on it.",
+    "zero_spell_share_by_designation": {
+      "doubtful": {
+        "n": 29,
+        "zero_share": 0.0
+      },
+      "none_listed": {
+        "n": 239,
+        "zero_share": 0.954
+      },
+      "out": {
+        "n": 199,
+        "zero_share": 0.0201
+      },
+      "questionable": {
+        "n": 842,
+        "zero_share": 0.7435
+      }
+    }
+  },
+  "source_week_attribution_probe": {
+    "lag_-1": {
+      "cbs|doubtful": {
+        "n": 27,
+        "miss_rate": 0.4074
+      },
+      "cbs|out": {
+        "n": 157,
+        "miss_rate": 0.5223
+      },
+      "cbs|questionable": {
+        "n": 662,
+        "miss_rate": 0.3459
+      },
+      "espn|doubtful": {
+        "n": 7,
+        "miss_rate": 0.5714
+      },
+      "espn|out": {
+        "n": 141,
+        "miss_rate": 0.9858
+      },
+      "espn|questionable": {
+        "n": 272,
+        "miss_rate": 0.4007
+      },
+      "nfl|doubtful": {
+        "n": 2,
+        "miss_rate": 0.5
+      },
+      "nfl|none_listed": {
+        "n": 478,
+        "miss_rate": 0.2678
+      },
+      "nfl|out": {
+        "n": 58,
+        "miss_rate": 0.4138
+      },
+      "nfl|questionable": {
+        "n": 69,
+        "miss_rate": 0.2899
+      }
+    },
+    "lag_+0": {
+      "cbs|doubtful": {
+        "n": 28,
+        "miss_rate": 1.0
+      },
+      "cbs|out": {
+        "n": 165,
+        "miss_rate": 1.0
+      },
+      "cbs|questionable": {
+        "n": 828,
+        "miss_rate": 0.2681
+      },
+      "espn|doubtful": {
+        "n": 10,
+        "miss_rate": 1.0
+      },
+      "espn|out": {
+        "n": 159,
+        "miss_rate": 0.4843
+      },
+      "espn|questionable": {
+        "n": 368,
+        "miss_rate": 0.4103
+      },
+      "nfl|doubtful": {
+        "n": 2,
+        "miss_rate": 1.0
+      },
+      "nfl|none_listed": {
+        "n": 499,
+        "miss_rate": 0.2144
+      },
+      "nfl|out": {
+        "n": 58,
+        "miss_rate": 0.931
+      },
+      "nfl|questionable": {
+        "n": 70,
+        "miss_rate": 0.3286
+      }
+    },
+    "lag_+1": {
+      "cbs|doubtful": {
+        "n": 23,
+        "miss_rate": 0.6087
+      },
+      "cbs|out": {
+        "n": 132,
+        "miss_rate": 0.6439
+      },
+      "cbs|questionable": {
+        "n": 722,
+        "miss_rate": 0.2313
+      },
+      "espn|doubtful": {
+        "n": 9,
+        "miss_rate": 0.7778
+      },
+      "espn|out": {
+        "n": 153,
+        "miss_rate": 0.3399
+      },
+      "espn|questionable": {
+        "n": 337,
+        "miss_rate": 0.3027
+      },
+      "nfl|doubtful": {
+        "n": 2,
+        "miss_rate": 0.5
+      },
+      "nfl|none_listed": {
+        "n": 481,
+        "miss_rate": 0.2058
+      },
+      "nfl|out": {
+        "n": 56,
+        "miss_rate": 0.5357
+      },
+      "nfl|questionable": {
+        "n": 70,
+        "miss_rate": 0.1714
+      }
+    }
+  },
+  "power": {
+    "n_arms_planned": 7,
+    "by_fold_count": [
+      {
+        "n_folds": 7,
+        "single_hypothesis": {
+          "bh_cutoff": 0.05,
+          "sign_floor": 0.00781,
+          "certifiable": true,
+          "headroom": 0.1562,
+          "folds_needed": 5,
+          "margin_rule_met": true
+        },
+        "arm_corrected": {
+          "bh_cutoff": 0.00714,
+          "sign_floor": 0.00781,
+          "certifiable": false,
+          "headroom": 1.0938,
+          "folds_needed": 8,
+          "margin_rule_met": false
+        },
+        "fold_consistency": {
+          "wins_required": 6,
+          "attainable": true,
+          "attained_false_fire": 0.0625,
+          "legacy_wins_required": 5
+        },
+        "pbo_evaluable": true,
+        "dsr_ceiling": 0.9997,
+        "mde_sd_units": 1.2
+      },
+      {
+        "n_folds": 8,
+        "single_hypothesis": {
+          "bh_cutoff": 0.05,
+          "sign_floor": 0.00391,
+          "certifiable": true,
+          "headroom": 0.0781,
+          "folds_needed": 5,
+          "margin_rule_met": true
+        },
+        "arm_corrected": {
+          "bh_cutoff": 0.00714,
+          "sign_floor": 0.00391,
+          "certifiable": true,
+          "headroom": 0.5469,
+          "folds_needed": 8,
+          "margin_rule_met": false
+        },
+        "fold_consistency": {
+          "wins_required": 6,
+          "attainable": true,
+          "attained_false_fire": 0.1445,
+          "legacy_wins_required": 5
+        },
+        "pbo_evaluable": true,
+        "dsr_ceiling": 0.9999,
+        "mde_sd_units": 0.95
+      },
+      {
+        "n_folds": 10,
+        "single_hypothesis": {
+          "bh_cutoff": 0.05,
+          "sign_floor": 0.00098,
+          "certifiable": true,
+          "headroom": 0.0195,
+          "folds_needed": 5,
+          "margin_rule_met": true
+        },
+        "arm_corrected": {
+          "bh_cutoff": 0.00714,
+          "sign_floor": 0.00098,
+          "certifiable": true,
+          "headroom": 0.1367,
+          "folds_needed": 8,
+          "margin_rule_met": true
+        },
+        "fold_consistency": {
+          "wins_required": 7,
+          "attainable": true,
+          "attained_false_fire": 0.1719,
+          "legacy_wins_required": 6
+        },
+        "pbo_evaluable": true,
+        "dsr_ceiling": 1.0,
+        "mde_sd_units": 0.8
+      },
+      {
+        "n_folds": 12,
+        "single_hypothesis": {
+          "bh_cutoff": 0.05,
+          "sign_floor": 0.00024,
+          "certifiable": true,
+          "headroom": 0.0049,
+          "folds_needed": 5,
+          "margin_rule_met": true
+        },
+        "arm_corrected": {
+          "bh_cutoff": 0.00714,
+          "sign_floor": 0.00024,
+          "certifiable": true,
+          "headroom": 0.0342,
+          "folds_needed": 8,
+          "margin_rule_met": true
+        },
+        "fold_consistency": {
+          "wins_required": 8,
+          "attainable": true,
+          "attained_false_fire": 0.1938,
+          "legacy_wins_required": 8
+        },
+        "pbo_evaluable": true,
+        "dsr_ceiling": 1.0,
+        "mde_sd_units": 0.75
+      }
+    ]
+  },
+  "artifact": "quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj4_designation_frame_2025.parquet"
+}

@@ -47,7 +47,19 @@ _COPY_TS = _FRONTEND / "lib/ncaaf-copy.ts"
 _CURVE_TS = _FRONTEND / "lib/ncaaf-curve.ts"
 _DATA_TS = _FRONTEND / "lib/ncaaf.ts"
 _COMPONENTS = sorted((_FRONTEND / "components/ncaaf").glob("*.tsx"))
-_ROUTE = _FRONTEND / "app/ncaaf/games/page.tsx"
+#: ⭐ EXTENDED BY NCAAF-P3.3, and this is a SCOPE change rather than a new requirement (NF-D17's
+#: distinction, which matters: adding a new story's REQUIREMENT to an older story's clause couples
+#: them, so that an unrelated reversal fails a test that defends something else). Nothing below
+#: gained a clause. What grew is the SET the existing clauses screen — the denylist's subject is
+#: "every string the NCAAF frontend renders", and the NCAAF frontend now has a team page.
+#: `_COMPONENTS` is a glob and picked the new components up on its own; these two are named paths
+#: and would silently have left a whole surface unscreened.
+_TEAM_DATA_TS = _FRONTEND / "lib/ncaaf-team.ts"
+_ROUTES = [
+    _FRONTEND / "app/ncaaf/games/page.tsx",
+    _FRONTEND / "app/ncaaf/teams/[teamId]/page.tsx",
+]
+_ROUTE = _ROUTES[0]
 
 _FIXTURES = _FRONTEND / "e2e/fixtures/api"
 _CAPTURED_MANIFEST = _FIXTURES / "ncaaf-manifest.json"
@@ -126,13 +138,18 @@ def _prose(src: str) -> list[str]:
     return [t for t in out if t.strip() and not _looks_like_class_names(t)]
 
 
-ALL_SOURCES = [_COPY_TS, _CURVE_TS, _DATA_TS, _ROUTE, *_COMPONENTS]
+ALL_SOURCES = [_COPY_TS, _CURVE_TS, _DATA_TS, _TEAM_DATA_TS, *_ROUTES, *_COMPONENTS]
 
 
 def test_the_source_registry_is_not_empty_and_names_real_files():
     """Every clause below iterates this list. An empty or stale list would make all of them pass on
     nothing — the NF1.7 (a) vacuous-anchor shape, in its cheapest form."""
     assert len(_COMPONENTS) >= 5, f"only {len(_COMPONENTS)} NCAAF component(s) found"
+    # ⭐ NON-VACUITY FOR THE ROUTES TOO. A renamed or moved route file would leave a whole page
+    # unscreened while every clause below still passed — on an EMPTY set, which is the shape this
+    # repo keeps paying for (NF1.7 (a)).
+    for route in _ROUTES:
+        assert route.exists(), f"{route} is in ALL_SOURCES but not on disk — the screen is vacuous"
     for p in ALL_SOURCES:
         assert p.exists(), f"{p} does not exist"
 
@@ -205,7 +222,7 @@ def test_the_prose_lives_in_the_copy_module_not_in_the_components():
     "market", "Team TBD") are labels and belong where they are rendered; anything sentence-length is
     prose and belongs in `lib/ncaaf-copy.ts`, where clause 1 above and the E2E denylist both see it.
     Six words is where a label stops being a label."""
-    for path in _COMPONENTS + [_ROUTE]:
+    for path in _COMPONENTS + _ROUTES:
         for s in _prose(path.read_text()):
             words = [w for w in re.split(r"\s+", s.strip()) if w]
             assert len(words) < 6, (

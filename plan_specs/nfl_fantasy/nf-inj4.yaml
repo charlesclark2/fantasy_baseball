@@ -12,7 +12,7 @@ metadata:
   name: nf-inj4
   vertical: nfl_fantasy
   card: https://trello.com/c/wufGcjB8   # the gap record; NF-INJ4 story card linked at kickoff
-  status: ACCEPTED
+  status: CLOSED(CONSTRAINT_REFUSED)
 spec:
   description: >
     Weekly Questionable/Doubtful/Out designations currently apply an
@@ -162,8 +162,82 @@ spec:
       - id: 6-closeout
         desc: "Verdict + findings into closeout.followUps; operator summary; NF-C9 copy follow-up named if shipped."
   closeout:
-    verdict: null
+    verdict: >
+      CONSTRAINT_REFUSED (2026-09-03) — NOTHING SHIPS. `best_alpha = 0`; DEPLOY-HELD;
+      the served availability discount for a weekly Q/D/O designation stays EXACTLY
+      ZERO. Records: `ablation_results/nf_inj4_data_census.md` (node 1, run before the
+      registration), `nf_inj4_preregistration.md` (committed before any scoring),
+      `nf_inj4_designation_duration.{json,md}` (the decisive run),
+      `nf_inj4_closeout.md` (the narrative verdict + findings).
+
+      THE MECHANISM IS REAL AND MEASURED. Against the matched status-blind foil the
+      winner (`desig_x_practice`) is +0.1408 CRPS on 10 of 10 folds, one-sided p = 0.0,
+      clearing BOTH the binding single-hypothesis cutoff and the conservative
+      arm-corrected one; PBO 0.000 on the declared field AND the eligible set; Bailey
+      degradation 0.000; flip distribution 10/10 on one arm; DSR-CONV 0.9999;
+      permutation beaten; both degenerates beaten. Seven of eight registered gates pass.
+
+      IT IS REFUSED BY ONE PRE-REGISTERED ANCHOR CLAUSE, left FAILING and DECOMPOSED
+      (NF-D20). `oracle_respected` as registered reads "no arm beats its OWN-FORM
+      oracle" and fails 3/3. The NF1.9 (f) half of it — `own_form_oracle <=
+      matched_n_control`, the floor at equal family AND equal RESOLUTION — PASSES on
+      every active pair. The peek is fitted on a ~131-row test fold against arms trained
+      on ~1,178 (a 9.0x resolution ratio) with `MIN_CELL_N=30` collapsing its
+      conditioning at that size, so the naive clause measures the ORACLE'S SAMPLE SIZE,
+      not any property of an arm (the NF-W7i capacity-starved-ceiling shape); an arm
+      beating a label-seeing oracle here can only be CAPACITY, never leakage, the arms
+      being fitted strictly on training rows disjoint by player.
+
+      ⛔ THE REMEDY IS AN ANCHOR DESIGN, NOT DATA. That ratio is fixed by the CV design,
+      so no fold count and no season count moves it — `binding_half = "anchor"`, and NO
+      data re-test trigger is published (NF-D18's misleading direction). `classify_null`
+      has no state for a deterministic-constraint refusal; its output is preserved
+      verbatim beside the verdict rather than overwritten.
+
+      ⛔ THE CLAUSE WAS NOT RE-READ AFTER IT FAILED (E2.1-r). The registration is
+      unedited; the decomposition is reported and rescues nothing.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      1. ⭐ SUCCESSOR (the whole story, cheaply): re-register the oracle floor at
+      MATCHED RESOLUTION and re-run. Every statistical gate already passes and the
+      run costs ~1 s, so this is a registration fix, not new modelling. ⚠️ It must be
+      a FRESH FORWARD registration — this study's clause stays failed, and re-reading
+      it against the NF1.9 (f) half after seeing it fail would be the E2.1-r inversion
+      in its most literal form. ⛔ The successor must NOT inherit this run's DSR/PBO
+      figures: `V` is a sample variance over the field's trial Sharpes and moves
+      NON-MONOTONICALLY with membership (MH2.2 / NF-INJ3 §0a).
+
+      2. ⭐ INSTRUMENT (PLAT-CVP2's next caller): the anchor-clause family needs the
+      SAME forward declaration `degenerates_lose` got. This registration declared the
+      NF-W6d INACTIVE-pair reading forward (and it fired correctly on three arms) but
+      NOT the NF1.9 (f) capacity reading — they are two different guards, and
+      registering one does not give you the other. Measured consequence: the positive
+      control returned BLIND for a family whose metric gates all fire, because the sole
+      blocking gate is FALSE at every rung of a 0-to-4-game injection ladder, i.e.
+      injection-invariant IN FACT but not BY DECLARATION. That is the annotate-around
+      class PLAT-CVP2 retired for future callers, arriving one layer earlier — at
+      registration-design time rather than at read time.
+
+      3. 🩹 DATA — NF-W2c's ESPN leg is attributed ONE WEEK LATE. Measured fingerprint
+      (an ESPN `out` row's realized miss rate is 0.484 on its attributed week and 0.986
+      on the week before, n=141; CBS reads 1.000/0.522 and nfl.com 0.931/0.414 on the
+      identical probe), mechanism UNDIAGNOSED. 537 landed rows — ~25% of the substrate —
+      are currently unusable in either reading. The store is append-only and NF-W2c is
+      Done, so this story read around it.
+
+      4. 🚨 DATA — the NF-W0a forward injury capture has fired ONCE in its life
+      (2026-08-05) and holds ZERO 2026 rows. It is the substrate for every future injury
+      re-test INCLUDING this story's own 2026 trigger, so that trigger is only reachable
+      if the capture is actually running on a weekly cadence through the season. Sibling
+      of NF-INJ3-CAP (the Sleeper partition-overwrite item).
+
+      5. 📐 SCOPE, for whoever wires this up: the fitted population is REGULAR-SEASON
+      weekly designations. A preseason tag is out-of-population and gets nothing, so a
+      counterfactual board built before Week 1 may move almost nothing — the value
+      arrives with the Week-1 report. And `doubtful` (29 rows) sits below `MIN_CELL_N=30`,
+      so it ALWAYS backs off to pooled and is structurally unmodelled at this depth.
+      ⛔ The 29-vs-30 near-miss must NOT become a reason to lower the threshold — that
+      is reverse-engineering a design constant from the answer.
