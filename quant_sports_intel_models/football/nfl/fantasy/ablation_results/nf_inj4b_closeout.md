@@ -128,7 +128,35 @@ For magnitude: the rehearsal moves **453–491 ranks per board** on a `questiona
 — DK Metcalf 96→133). `out` is ×0.8639, roughly four times that cut, so the in-season effect will be
 materially larger.
 
-### 3d. The 2026 capture dependency is still open
+### 3d. ⭐ A FOURTH way a red proof lies — a renamed guard reads as a perfect RED
+
+Found by running **NF-INJ4's own red proof** after this story renamed one of its guards: it kept
+reporting **14/14 RED with one case pointing at a test that no longer exists**. `pytest` exits
+NON-ZERO on an unresolvable node id, and both red proofs read a non-zero exit as "the guard caught
+it" — so a guard that has merely been **renamed, moved or deleted scores a perfect RED forever**.
+
+That joins the three already documented: the mutation never LANDS (#682), it lands but does not MOVE
+the asserted predicate (#815), it lands on the WRONG symbol (E11.24 `prediction_log`). Both proofs
+now assert every named node id RESOLVES. ⚠️ The probe belongs in the **baseline** phase, not
+per-mutation: a mutation that trips a module-level assertion legitimately breaks collection, and
+probing there turns a working RED case into a hard error (it did, on first cut).
+
+Re-anchoring the stale case then exposed **two further real defects**, neither visible from a green
+suite:
+
+1. **The case's MUTATION was stale too** — it wired the model into the serving owner, which the OLD
+   absence guard forbade and the new presence guard permits *by design*. Re-anchored onto the
+   property that now holds: a PRODUCTION CALLER passing `designation_games=` must go red. A guard's
+   mutation moves with it; it is not deleted (MH2.7).
+2. ⭐ **With the mutation re-anchored the guard STILL stayed green**, because its caller scan
+   resolved the repo root one level too HIGH — `rglob` matched NOTHING, the loop never ran, and the
+   guard passed on an **empty set** while appearing to certify the whole production tree
+   (DSR-CONV #690: a guard that ITERATES matches must assert the match set is non-empty). Fixed,
+   with a non-vacuity assertion on the file count; and the scan no longer exempts
+   `season_projection.py` itself, since a serving caller defined INSIDE the availability owner lifts
+   the deploy hold exactly as one outside it does.
+
+### 3e. The 2026 capture dependency is still open
 
 `nfl/pit/injuries` holds **12,136 rows, all season 2025, from exactly ONE capture date (2026-08-05),
 and ZERO rows for 2026** — unchanged since NF-INJ4 measured it. **The NF-W0a capture has fired once,
