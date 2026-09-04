@@ -100,3 +100,16 @@ DIFFERENT clauses — registering one does not give you the other; name both
 explicitly. And a gate measured injection-invariant after the fact is a finding
 for the SUCCESSOR's forward declaration, never a reclassification applied to
 the run that it blocked.
+
+## Pin comparisons over quantized artifacts (PM ruling 2026-09-04, from NF-INJ2c #5)
+A reproduction pin whose tolerance sits ON a decimal boundary of a quantized
+artifact (tol = half the rounding unit) must evaluate its <= with an explicit
+epsilon strictly below the artifact's quantum and strictly above accumulated
+ULP (1e-9 for 1dp artifacts). A strict binary comparison cannot represent the
+boundary it tests, and .x5 ties are structural under quantization — so the
+strict form is an UNACHIEVABLE gate on correct reproduction (the E9.61 class),
+not a stricter one. Round-then-equate is NOT the fix: .x5 is itself
+unrepresentable, so round-half-even can legally split a tie differently on two
+machines. This is instrument repair, not bar movement — the E2.1-r refusal
+covers tolerances, populations, and thresholds, never making <= mean its
+registered decimal semantics.

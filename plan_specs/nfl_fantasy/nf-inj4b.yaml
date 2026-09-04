@@ -1,0 +1,155 @@
+# Plan spec — NF-INJ4b (FULL tier: §0.5 — fresh registration of the duration model with a
+# resolution-matched oracle anchor; the fifth fix-the-spec successor)
+# Authored by PM 2026-09-04 per the NF-INJ4 closeout rulings. HONESTY CLAUSE below is binding.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj4b
+  vertical: nfl_fantasy
+  card: https://trello.com/c/PENDING   # PM links at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    Fresh forward registration of the designation→games-missed duration
+    model. NF-INJ4 measured a real, large mechanism — desig_x_practice
+    +0.1408 CRPS vs the status-blind foil, 10/10 folds, p=0.0, PBO
+    0.000, DSR-CONV 0.9999, monotone product magnitudes — and was
+    CONSTRAINT_REFUSED by one clause: an oracle anchor fitted at 9.0x
+    coarser resolution than the arms, which measured the oracle's
+    sample size rather than any arm property (fixed by the CV design;
+    no data trigger publishable; binding_half=anchor). This is the
+    fifth fix-the-spec successor (MARGIN2→3, W7→W7b, VAL3→VAL3b,
+    NF-INJ2b→2c). ⛔ HONESTY CLAUSE (binding, from NF-INJ4's own
+    record): if field, folds, and data are unchanged, every number is
+    already known and only the gate flips — this story buys a
+    PROPERLY-REGISTERED RECORD of an already-measured result, not new
+    evidence, and its record must say exactly that; it is never
+    presented as fresh confirmation. best_alpha=0; DEPLOY-HELD; the
+    Q/D/O discount stays zero until the gated ship path + operator
+    approval. Value window: the Week-1 report (2026-09-09) onward.
+  acceptanceCriteria:
+    - description: >
+        THE PRE-REGISTRATION (fresh, committed before any scoring)
+        carries the corrected anchor: the oracle clause is registered
+        at MATCHED RESOLUTION per NF1.9 (f) — own_form_oracle judged
+        against a matched-n control of equal family and equal
+        resolution — never a label-seeing fit on a ~131-row test fold
+        against ~1,178-row arms. Both readings are registered
+        EXPLICITLY as separate clauses (the NF-INJ4 lesson, now in
+        plan_spec_process.md): the NF-W6d inactive-pair reading AND
+        the NF1.9 (f) capacity reading, each named, neither implied.
+    - description: >
+        CARRIED FORWARD DECLARATIONS: oracle_respected (the matched
+        form) is declared INJECTION-INVARIANT in gate_classes /
+        invariant_gates — the NF-INJ4 gate-ladder measured it FALSE at
+        every planted-effect rung, so the declaration is now honest
+        and forward (the reclassification NF-INJ4 correctly refused to
+        apply to its own blocked run). Explicit gate_classes= as
+        before (no name-heuristic); validate_sign_certifiability at
+        registration. MIN_CELL_N=30 is UNTOUCHED — doubtful (29 rows)
+        stays pooled-backoff, and the near-miss is restated in the
+        prereg as a non-reason (MH2.2).
+    - description: >
+        FIELD, FOLDS, AND DATA: inherit NF-INJ4's registered field and
+        CV design UNCHANGED unless a change is forced, in which case
+        every deflation statistic recomputes from scratch — no DSR/PBO
+        figure is inherited across any membership change (V moves
+        non-monotonically; MH2.2/NF-INJ3 §0a). The substrate is
+        NF-INJ4's assembled PIT frame (1,309 player-weeks; the ESPN
+        exclusion stands as an admissibility ruling — card yjZo7pk9
+        owns the fix; do not re-litigate it here).
+        assert_point_in_time invoked, counts reported. Data findings
+        already recorded (W0a capture, ESPN attribution) are cited,
+        not re-diagnosed.
+    - description: >
+        IF IT CLEARS (the expected outcome — say so plainly in the
+        record): the gated ship path, all deploy-held. Wiring is the
+        registered one-line change: compose_availability_caps (landed
+        un-wired by NF-INJ4 with its absence guard — flip the guard to
+        presence in the same commit that wires it, never before) into
+        the season board's availability owner; disjointness invariant
+        re-asserted on the both-channels row (composed 9.06 vs stacked
+        7.83). Then the injury-thread convention: capture-pinned
+        counterfactual rebuild (the NF-INJ2c representation-tolerant
+        pin semantics — epsilon 1e-9 below the artifact quantum — and
+        the vintage-match preconditions), population-scoped 1e-9 diff
+        (never bitwise; rookie-band vs the ≥5-draw envelope),
+        placement read + interval reval via --out stems, operator
+        packet with top-25 moves per config incl. superflex and the
+        per-designation magnitude table, combined read on the exact
+        publish-candidate board. Publish is the operator's; the NF-C9
+        disclosure copy follow-up is NAMED in the closeout if this
+        ships (the "we hold it and do not price it" sentence becomes
+        false the moment the discount is live).
+    - description: >
+        DEPENDENCY NAMED, not hidden (the NF-INJ4 discipline): the
+        2026 re-test/monitoring value of this model depends on the
+        NF-W0a weekly injuries capture actually RUNNING — one firing
+        ever, zero 2026 rows as of 2026-09-04; operator enablement is
+        flagged on the PIT-capture Sprint card. State in the prereg
+        whether 2026 rows exist at registration time. Standing
+        disciplines: >2-min to operator paste-ready; RED-proofs with
+        unique anchors + baseline-pass + NOT-SELECTED; pins 1e-9; no
+        post-hoc trims; E2.1-r absolute (NF-INJ4's record stands
+        unedited — this supersedes its anchor clause forward, it never
+        re-reads the refusal); owning CI shard for shared guards;
+        worktree; PR → dev; no Trello.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj4b
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ4" / "duration" / "designation" (board Credence Sports, 2026-09-04)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ4 (Done, CONSTRAINT_REFUSED, PR #1074) — the evidence base; record stands unedited; this is its sanctioned successor per PM ruling ①."
+      - "ESPN attribution card (yjZo7pk9, Backlog) — owns the 25% substrate fix; not touched here."
+      - "PIT-capture Sprint card (DFZDxfRZ) — owns the W0a injuries-capture enablement; operator lane."
+      - "NF-INJ2c (IN FLIGHT) — ordering; disjoint mechanism; shares only the pin/capture conventions (consume its representation-tolerant comparison semantics)."
+      - "PLAT-CVP2 (Done) — the instrument; this is the second registration consuming explicit gate_classes, completing the default-flip trigger on card YAxmU2Cv."
+  triedLedger:
+    files:
+      - "nf_inj4_closeout.md + nf_inj4_designation_duration.{md,json} (the full measurement, the decomposed clause, §6 rules)"
+      - "nf_inj4_preregistration.md (the inherited field/folds/gates; the anchor clause being corrected)"
+      - "nf_inj4_data_census.md (the substrate + the two data findings)"
+      - "compose_availability_caps + its absence guard (the wiring point)"
+    recordedNulls:
+      - "NF-INJ4 CONSTRAINT_REFUSED — never re-read; superseded FORWARD at the anchor clause only, per the fix-the-spec pattern."
+      - "NF-W2 weekly CONSTRAINT_REFUSED — different story/gate; untouched."
+  supersedes:
+    - "nf-inj4 (anchor clause only; verdict and record stand)"
+  dependsOn:
+    - "PLAT-CVP2 on dev (verified); NF-INJ2c's PR #1073 pin semantics preferred if merged first (cite the version used)"
+  feedsInto:
+    - "The Q/D/O stream finally moving the paid board's availability input, from Week 1 onward; the CVP2 default-flip trigger; NF-C9 copy retirement if shipped"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj4b-plan
+spec:
+  goalRef: { name: nf-inj4b }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-prereg
+        desc: "Fresh registration: matched-resolution anchor (both readings named), forward invariance declarations, honesty clause verbatim — committed BEFORE scoring."
+      - id: 2-run
+        desc: "Decisive run (~1s compute; still slice-timed for honesty; operator handoff if anything >2 min)."
+      - id: 3-classify
+        desc: "Gates in registered order; the record states plainly that the result was already measured and this registration certifies it."
+      - id: 4-ship-path
+        desc: "IF CLEARED: wire compose_availability_caps (guard flip in same commit) + the full gated ship path + operator packet."
+      - id: 5-closeout
+        desc: "Verdict + findings into closeout.followUps; NF-C9 follow-up named if shipped; operator summary."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
