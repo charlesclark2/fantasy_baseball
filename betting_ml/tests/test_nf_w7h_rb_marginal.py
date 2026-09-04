@@ -35,8 +35,11 @@ Fast-gate safe: imports `betting_ml` / `quant_sports_intel_models` only, never `
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import inspect
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -76,6 +79,71 @@ _FANTASY = _ROOT / "quant_sports_intel_models" / "football" / "nfl" / "fantasy"
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # The RED-proof harness — it must prove its own mutation before any verdict is trusted
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+#: ⭐⭐ THE RACERS ARE xdist WORKER *PROCESSES*, SO THE LOCK MUST BE CROSS-PROCESS.
+#: This suite mutates REAL source files, and `src = path.read_text()` snapshots whatever is on disk
+#: AT THAT MOMENT. Under `-n auto` a second worker can therefore capture ANOTHER worker's mutation
+#: as its "pristine" and then faithfully restore it — the leak needs no kill at all, just ordinary
+#: parallelism. Measured 2026-09-04: three consecutive `-n 4` runs left 1, 2 and 2 source files
+#: mutated, with two DIFFERENT breaks surviving at once. That is how `dde0c3e8` shipped `and True)`
+#: to `dev` and deleted a §0.5 gate clause on a decided story.
+#:
+#: `flock` is held across the whole read -> mutate -> assert -> restore, so the read is guaranteed
+#: pristine. The OS releases it if the holder dies, so a kill cannot deadlock the suite — the
+#: on-disk backup below is what covers THAT case. The two cures are for two different failures and
+#: neither substitutes for the other.
+_RED_LOCK = _FANTASY / ".nf_w7h_red_proof.lock"
+
+
+@contextlib.contextmanager
+def _exclusive_source_lock(lock_path: Path | None = None):
+    """Serialise source mutation across processes. ⛔ A thread lock would not help: xdist workers
+    are separate PROCESSES."""
+    path = lock_path or _RED_LOCK
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+#: ⭐ E11.26 — A SOURCE-MUTATING RED PROOF'S WORST CASE IS BEING KILLED MID-MUTATION.
+#: `_red_proof` restores in a `finally`, which covers an exception but NOT a SIGKILL, an OOM, a
+#: `pytest -x` process abort, or a killed CI job — and the original was held only in MEMORY, so
+#: NOTHING on disk could put it back. That is not hypothetical: on 2026-09-03 an interrupted run
+#: left BOTH of this suite's mutations on `fp_rb_marginal_calibration.py` (`and True` in place of
+#: the cap-lift clause, and a wrapper in place of the identity import), a sweeping commit shipped
+#: them to `dev`, and a §0.5 gate clause on a DECIDED story sat deleted for a day. The guards caught
+#: it — nothing RESTORED it.
+#:
+#: ⚠️ This suite is the only source-mutating RED proof that runs INSIDE the collected pytest suite;
+#: every other one is a standalone `*_red_proof.py` a session invokes deliberately and watches. So
+#: it mutates real source on every fast-gate run, on every machine, which is why it is the one that
+#: leaked — and why the backup lives on DISK rather than in a local variable.
+_RED_BACKUP_SUFFIX = ".nf_w7h_red_proof_backup"
+
+
+def _restore_stale_red_proof_backups(directory: Path | None = None) -> list[str]:
+    """Put back any source a KILLED run left mutated. Runs at IMPORT, before any test.
+
+    Returns the restored filenames so a caller (and the guard below) can assert it acted."""
+    restored: list[str] = []
+    for bak in sorted((directory or _FANTASY).glob(f"*{_RED_BACKUP_SUFFIX}")):
+        target = bak.with_name(bak.name[: -len(_RED_BACKUP_SUFFIX)])
+        try:
+            target.write_text(bak.read_text())
+            bak.unlink()
+            restored.append(target.name)
+        except OSError:                          # noqa: PERF203 — a partial restore is still worth
+            continue                             # reporting; the next run retries the rest
+    return restored
+
+
+with _exclusive_source_lock():
+    _RESTORED_AT_IMPORT = _restore_stale_red_proof_backups()
+
+
 def _red_proof(path: Path, old: str, new: str, test_fn) -> None:
     """Apply a deliberate break to `path`, assert it LANDED, run `test_fn`, restore.
 
@@ -91,6 +159,15 @@ def _red_proof(path: Path, old: str, new: str, test_fn) -> None:
     pytest's `Failed` derives from `BaseException` — an `except Exception` here would let a
     `pytest.raises` clause's failure sail straight through and the RED proof would report SUCCESS on
     a break it never caught (NF-W6c)."""
+    with _exclusive_source_lock():
+        _red_proof_locked(path, old, new, test_fn)
+
+
+def _red_proof_locked(path: Path, old: str, new: str, test_fn) -> None:
+    """The body of `_red_proof`, run under the exclusive lock. ⛔ Never call this directly UNLESS
+    the caller already holds the lock — it is what makes `path.read_text()` below a PRISTINE read
+    rather than a snapshot of another worker's in-flight mutation. (`flock` is per-file-descriptor,
+    so re-entering through `_red_proof` while holding it would DEADLOCK.)"""
     src = path.read_text()
     assert src.count(old) == 1, (
         f"the RED-proof anchor is not unique in {path.name} ({src.count(old)} occurrences) — "
@@ -98,6 +175,10 @@ def _red_proof(path: Path, old: str, new: str, test_fn) -> None:
         f"function other than the one under test")
     broken = src.replace(old, new, 1)
     assert broken != src, "the mutation did not change the source"
+    # ⛔ the backup goes to DISK before the mutation, never to a local variable — a process killed
+    # between here and the `finally` would otherwise lose the original outright (E11.26).
+    bak = path.with_name(path.name + _RED_BACKUP_SUFFIX)
+    bak.write_text(src)
     path.write_text(broken)
     try:
         reread = path.read_text()
@@ -116,7 +197,8 @@ def _red_proof(path: Path, old: str, new: str, test_fn) -> None:
         assert caught is not None, (
             "THE GUARD IS VACUOUS: the deliberately broken source did NOT turn it red")
     finally:
-        path.write_text(src)
+        path.write_text(bak.read_text() if bak.exists() else src)
+        bak.unlink(missing_ok=True)
         import importlib
         for mod in (RM, R):
             importlib.reload(mod)
@@ -826,13 +908,18 @@ def test_the_red_proof_harness_refuses_a_non_unique_anchor():
     tails make `replace(old, new, 1)` land on the WRONG symbol, and the run comes back green
     reporting a FALSE 'the guard is vacuous' — the dangerous direction, because it invites
     weakening a correct guard."""
-    src = _MODULE.read_text()
-    repeated = "REAL_ARMS"
-    assert src.count(repeated) > 1, "the fixture token no longer repeats — pick another"
-    with pytest.raises(AssertionError, match="not unique"):
-        _red_proof(_MODULE, repeated, "XX", lambda: None)
-    # and the file is UNTOUCHED: the refusal happens before anything is written
-    assert _MODULE.read_text() == src, "a refused RED proof still mutated the file"
+    # ⛔ the before/after snapshot must be taken INSIDE the lock. Read outside it, a concurrent
+    # worker's in-flight mutation shows up as "a refused RED proof mutated the file" — a failure
+    # this test did not cause. `_red_proof_locked` is called directly because the lock is already
+    # held; `_red_proof` would take it again on a fresh fd and deadlock.
+    with _exclusive_source_lock():
+        src = _MODULE.read_text()
+        repeated = "REAL_ARMS"
+        assert src.count(repeated) > 1, "the fixture token no longer repeats — pick another"
+        with pytest.raises(AssertionError, match="not unique"):
+            _red_proof_locked(_MODULE, repeated, "XX", lambda: None)
+        # and the file is UNTOUCHED: the refusal happens before anything is written
+        assert _MODULE.read_text() == src, "a refused RED proof still mutated the file"
 
 
 def test_the_red_proof_harness_catches_a_BaseException_from_a_pytest_raises_clause():
@@ -1296,3 +1383,108 @@ def test_RED_an_unglossed_field_remedy_flag_is_caught():
         'AT ALL "',
         '    None: (" — unavailable "',
         test_field_remedy_admissible_none_is_glossed_as_no_lever_not_as_unmeasured)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 10. The RED proof must survive being KILLED — the defect that shipped a gate deletion to `dev`
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+class TestAKilledRedProofRepairsItself:
+    """🧨 2026-09-03: an interrupted run left this suite's two mutations on
+    `fp_rb_marginal_calibration.py` and a sweeping commit shipped them to `dev` — `and True` in
+    place of the cap-lift clause, and a wrapper in place of the identity import. A `finally` does
+    not run through a SIGKILL, and the original lived only in memory, so nothing could put it back.
+    """
+
+    def test_a_killed_mutation_is_restored_by_the_NEXT_import(self, tmp_path):
+        """The cure, driven end-to-end: a leaked mutation + its backup, repaired on the next run."""
+        victim = tmp_path / "victim.py"
+        victim.write_text("ORIGINAL\n")                       # what a killed run left MUTATED
+        bak = tmp_path / ("victim.py" + RED_BACKUP_SUFFIX)
+        bak.write_text("PRISTINE\n")                          # the on-disk original it left behind
+        victim.write_text("MUTATED\n")
+
+        restored = RESTORE_STALE(tmp_path)
+
+        assert restored == ["victim.py"], "the restore did not act — it must REPORT what it fixed"
+        assert victim.read_text() == "PRISTINE\n", "the killed mutation was not repaired"
+        assert not bak.exists(), "the backup survived the restore and would be restored forever"
+
+    def test_the_restore_is_a_no_op_when_nothing_leaked(self, tmp_path):
+        """It must not be able to invent a restore — an empty directory changes nothing."""
+        (tmp_path / "untouched.py").write_text("FINE\n")
+        assert RESTORE_STALE(tmp_path) == []
+        assert (tmp_path / "untouched.py").read_text() == "FINE\n"
+
+    def test_the_backup_is_written_to_DISK_before_the_mutation(self):
+        """⛔ Not to a local variable: a process killed between the write and the `finally` would
+        otherwise lose the original outright. Read off the source, comment-stripped so the
+        explanation above cannot satisfy the guard (INC-38)."""
+        src = Path(__file__).read_text()
+        src = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+        body = src.split("def _red_proof_locked(", 1)[1].split("\ndef ", 1)[0]
+        i_bak, i_mut = body.find("bak.write_text(src)"), body.find("path.write_text(broken)")
+        assert i_bak != -1, "the backup is no longer written to disk"
+        assert i_mut != -1 and i_bak < i_mut, (
+            "the mutation is written BEFORE its backup — a kill in between loses the original")
+
+    def test_the_restore_runs_at_IMPORT_not_inside_a_test(self):
+        """A repair that only runs when someone remembers to call it is not a repair."""
+        src = Path(__file__).read_text()
+        src = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+        assert ("\nwith _exclusive_source_lock():\n"
+                "    _RESTORED_AT_IMPORT = _restore_stale_red_proof_backups()") in src, (
+            "the stale-backup restore is no longer invoked at module import, so a leaked mutation "
+            "lies in wait for the next `git add -A` (NF-C0e: wired != invoked)")
+
+
+    def test_the_mutation_is_serialised_ACROSS_PROCESSES(self):
+        """⭐ The racers are xdist WORKER PROCESSES, so a thread lock would not help.
+
+        Measured 2026-09-04 on the pre-lock source: three consecutive `-n 4` runs left 1, 2 and 2
+        real source files MUTATED, two different breaks surviving at once — because
+        `path.read_text()` snapshots whatever is on disk, so one worker captures another's in-flight
+        mutation as its "pristine" and faithfully restores it. No kill required."""
+        import subprocess
+        lock = Path(__file__).parent / ".nf_w7h_lock_contention_probe"
+        script = (
+            "import fcntl,sys\n"
+            f"fh=open({str(lock)!r},'w')\n"
+            "try:\n"
+            "    fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+            "    print('ACQUIRED')\n"
+            "except BlockingIOError:\n"
+            "    print('BLOCKED')\n")
+
+        def probe() -> str:
+            return subprocess.run([sys.executable, "-c", script], capture_output=True,
+                                  text=True, timeout=30).stdout.strip()
+
+        try:
+            with _exclusive_source_lock(lock):
+                assert probe() == "BLOCKED", (
+                    "another PROCESS acquired the lock while this one held it — the mutation is "
+                    "not serialised and a worker can snapshot another's mutation as pristine")
+            assert probe() == "ACQUIRED", (
+                "the lock was not released — it would deadlock the suite, which is worse than the "
+                "race it fixes")
+        finally:
+            lock.unlink(missing_ok=True)
+
+    def test_the_lock_spans_the_read_AND_the_restore(self):
+        """Holding it only across the WRITE would still let a foreign mutation be read as pristine.
+
+        `_red_proof` must do nothing but take the lock and delegate; the read, the mutation and the
+        restore all live inside `_red_proof_locked`."""
+        src = Path(__file__).read_text()
+        src = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+        outer = src.split("def _red_proof(", 1)[1].split("\ndef ", 1)[0]
+        assert "with _exclusive_source_lock():" in outer, "the outer wrapper no longer takes the lock"
+        assert "path.read_text()" not in outer and "path.write_text(" not in outer, (
+            "the wrapper touches the source OUTSIDE the lock")
+        inner = src.split("def _red_proof_locked(", 1)[1].split("\ndef ", 1)[0]
+        for needed in ("src = path.read_text()", "path.write_text(broken)", "bak.write_text(src)"):
+            assert needed in inner, f"{needed!r} escaped the locked region"
+
+
+RED_BACKUP_SUFFIX = _RED_BACKUP_SUFFIX
+RESTORE_STALE = _restore_stale_red_proof_backups
