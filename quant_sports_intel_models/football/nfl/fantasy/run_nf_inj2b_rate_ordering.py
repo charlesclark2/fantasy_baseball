@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import sys
 import time
 from datetime import datetime, timezone
@@ -603,6 +604,48 @@ def _pbo_injection_activity(S_real: np.ndarray, S_inj: np.ndarray, argmax_splits
 #: against the SERVED artifact therefore runs at the artifact's OWN resolution, and says so.
 PUBLISHED_ROUNDING_TOL = 0.05
 
+#: ⭐ REPRESENTATION EPSILON for the published-artifact comparison. ⛔ THIS IS NOT SLACK, and the
+#: distinction is the whole point. `PUBLISHED_ROUNDING_TOL` is a DECIMAL bar — half the artifact's
+#: 0.1 quantum — evaluated in BINARY floating point, and a decimal half-unit has no exact binary
+#: representation: a `proj_games` of 16.55 against a published 16.6 differs by
+#: `0.05000000000000071`, ONE ULP above a bar whose own operator (`<=`) already intends 0.05 to
+#: PASS. `proj_games` is quantised on a 0.05 grid, so `.x5` ties are STRUCTURAL and recur on every
+#: board — without this epsilon the pin is incapable of passing on a CORRECT reproduction, which is
+#: the unachievable-gate family `tolerance_note` below already names one step coarser (E9.61), and
+#: this program refuses an unachievable gate as firmly as a loosened one.
+#: 1e-9 is EIGHT ORDERS OF MAGNITUDE below the artifact's own 0.1 quantum and far below the
+#: smallest difference a 1-decimal artifact can express, so it cannot admit a materially wrong row.
+#: It is the same discriminator the diagnosis used to establish that ZERO rows differ by any amount
+#: the artifact could carry.
+#: ⛔ Deliberately NOT "round both sides to 1dp and compare equal": 16.55 is itself unrepresentable,
+#: so round-half-even at the boundary reintroduces the exact artifact this fixes — the publisher's
+#: float and ours could legally round a `.x5` tie in opposite directions.
+#: (PM ruling, NF-INJ2c decision request #5: a COMPARISON-PRECISION defect, not a bar move. The
+#: registered bar, its population and its binding condition are unchanged.)
+PUBLISHED_TOL_REPR_EPS = 1e-9
+
+
+def reproduces_at_published_resolution(worst: float) -> bool:
+    """Does `worst` sit within the PUBLISHED artifact's own resolution?
+
+    Evaluates the REGISTERED bar `worst <= PUBLISHED_ROUNDING_TOL` with decimal-boundary semantics
+    instead of raw binary `<=`. The bar itself is unchanged and is still what the report quotes.
+
+    ⛔ `PUBLISHED_TOL_REPR_EPS` IS NOT slack — it is a REPRESENTATION allowance. The bar is a
+    DECIMAL half-unit with no exact binary form, so the SAME structural tie lands on either side of
+    it by luck of representation: `16.6 - 16.55` is `0.05000000000000071` (over) while
+    `15.1 - 15.05` is `0.049999999999998934` (under). Admitting that ULP is what makes the gate
+    decide on the DATA rather than on floating-point happenstance. A row wrong by any amount the
+    1-decimal artifact can express still REFUSES.
+
+    ⛔ FAIL-CLOSED: a non-finite `worst` (an empty join — nothing was compared) REFUSES, because a
+    comparison that could not be evaluated is never a pass (NF1.7(a)).
+    """
+    w = float(worst)
+    if not math.isfinite(w):
+        return False
+    return bool(w <= PUBLISHED_ROUNDING_TOL + PUBLISHED_TOL_REPR_EPS)
+
 #: how far the local MVP-1 board may lag the SERVED board before the 2026 application REFUSES.
 #: The spec's baseline criterion is explicit — the flip board is the baseline, and the SHIP lesson
 #: binds: verify input freshness BEFORE any board-vintage measurement.
@@ -782,14 +825,26 @@ def apply_2026(con, schema: str, selections: dict, arms: tuple[str, ...],
         # story's 1e-9 discipline still governs every LOCAL comparison; this pin is against the wire.
         out["reproduction_pin"] = {
             "n": int(len(j)), "worst_abs_diff": worst,
-            "tolerance": PUBLISHED_ROUNDING_TOL, "story_tolerance_for_local_diffs": REPRO_TOL,
-            "reproduces": bool(worst <= PUBLISHED_ROUNDING_TOL),
+            "tolerance": PUBLISHED_ROUNDING_TOL,
+            "representation_epsilon": PUBLISHED_TOL_REPR_EPS,
+            "story_tolerance_for_local_diffs": REPRO_TOL,
+            "reproduces": reproduces_at_published_resolution(worst),
             "note": "the incumbent arm rebuilt through this story's code vs the PUBLISHED 2026 "
                     "artifact. If this does not hold, every arm delta is measured against a board "
                     "nobody is served (the CLV / NF-INJ1 stale-vintage trap).",
             "tolerance_note": "the published board is rounded to ONE decimal, so the pin runs at "
                               "half that rounding unit — a 1e-9 bar against a 1dp artifact is "
                               "UNACHIEVABLE, not strict (E9.61).",
+            "representation_note": "the registered bar is UNCHANGED at "
+                                   f"{PUBLISHED_ROUNDING_TOL}; it is a DECIMAL bar evaluated in "
+                                   "BINARY, so it is compared with a "
+                                   f"{PUBLISHED_TOL_REPR_EPS:g} representation epsilon — ⛔ NOT "
+                                   "slack. `proj_games` is quantised on a 0.05 grid, so a `.x5` "
+                                   "value against its 1dp publication differs by exactly the bar "
+                                   "and lands ONE ULP over it in binary; without the epsilon this "
+                                   "pin cannot pass a CORRECT reproduction (the unachievable-gate "
+                                   "family, E9.61). A row wrong by any amount a 1-decimal artifact "
+                                   "can express still REFUSES.",
         }
     return out
 

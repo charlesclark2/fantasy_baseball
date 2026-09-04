@@ -29,6 +29,7 @@ import argparse
 import json
 import logging
 import sys
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -198,17 +199,38 @@ def build_extended_frame(con, base_season: int, projection_season: int,
     return M12.add_refinement_features(feats, inputs)
 
 
-def cache_is_current(pool: pd.DataFrame) -> bool:
-    """Does a cached pool carry EVERY currently-registered refinement column?
+def missing_registered_cols(pool: pd.DataFrame,
+                            required: Iterable[str] | None = None) -> list[str]:
+    """The registered columns this cached pool LACKS, sorted. Empty ⇒ the cache is current. PURE.
+
+    `required` defaults to NF1.2's own family so this module's callers are unchanged; a caller
+    guarding a DIFFERENT pool passes ITS registered family (see `run_nf1_5.POOL_REQUIRED_COLS`)."""
+    if pool is None or pool.empty:
+        return sorted(required if required is not None else M12.REFINEMENT_COLS)
+    req = required if required is not None else M12.REFINEMENT_COLS
+    return sorted(c for c in req if c not in pool.columns)
+
+
+def cache_is_current(pool: pd.DataFrame, required: Iterable[str] | None = None) -> bool:
+    """Does a cached pool carry EVERY registered column its CONSUMER will ask for?
 
     🧨 The landmine this closes (found wiring NF-D10): the per-base-season parquet caches are
     keyed only by season, so adding a family leaves stale caches that silently lack its columns —
     and a bundle that then asks for them either KeyErrors deep in the matrix prep or, worse, gets
     a median-imputed all-NaN column and reports a clean null for a family that was never actually
-    present. A cache missing any registered column is rebuilt instead of trusted. PURE."""
-    if pool is None or pool.empty:
-        return False
-    return all(c in pool.columns for c in M12.REFINEMENT_COLS)
+    present. A cache missing any registered column is rebuilt instead of trusted. PURE.
+
+    ⚠️⚠️ NF-INJ2c (2026-09-03) — THIS GUARD WAS ITSELF VACUOUS FOR THE POOL THAT MATTERED MOST,
+    and it is the reason three NF-INJ2c node-3b runs were VOIDed before the cause was found.
+    `required` was hard-wired to `M12.REFINEMENT_COLS` — NF1.2's OWN family, 20 columns — while
+    `run_nf1_5.build_pool` called it to guard the NF1.5 pool, which carries **120**. So the guard
+    validated **20 of 120 columns and was blind to the other 100**, and a Jul-31 cache missing 5
+    of NF1.5's registered columns was served as "current" for over a month, silently degrading
+    every local NF1.5 fit. A guard that checks a DIFFERENT family than the cache it protects
+    cannot fail for the reason it exists (the NF1.7(a) vacuous-anchor class, in the build path).
+    ⇒ the family is now the CALLER'S, and NF1.5's is DERIVED from the model modules rather than
+    hand-listed, so a newly-registered feature joins the check with no edit here."""
+    return not missing_registered_cols(pool, required)
 
 
 def build_pool(con, base_seasons: list[int], inputs: M12.RefinementInputs,

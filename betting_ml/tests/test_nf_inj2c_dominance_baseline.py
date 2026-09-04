@@ -348,8 +348,11 @@ def test_capture_enforces_the_precondition_so_it_cannot_be_bypassed() -> None:
     import inspect
 
     src = inspect.getsource(_B.capture)
-    assert "assert_market_vintage_matches()" in src, (
-        "`capture` no longer enforces the market precondition — it would stamp a capture that "
+    # RE-ANCHORED at D3 (2026-09-03): the precondition widened from the market DAY check to every
+    # vintage the manifest publishes. `assert_vintages_match` CALLS the market check, so this is
+    # strictly stronger than the clause it replaces (MH2.7 — re-anchor, never weaken).
+    assert "assert_vintages_match(" in src, (
+        "`capture` no longer enforces the vintage precondition — it would stamp a capture that "
         "cannot be pinned")
 
 
@@ -360,7 +363,7 @@ def test_the_run_path_rechecks_that_the_caches_did_not_move_after_the_capture() 
     import inspect
 
     src = inspect.getsource(_B.assert_capture_intact)
-    assert "assert_market_vintage_matches()" in src
+    assert "assert_vintages_match(" in src            # RE-ANCHORED at D3; see `capture` above
     assert "market_vintage" in src and "--recapture" in src
 
 
@@ -374,3 +377,206 @@ def test_every_declared_market_input_carries_a_real_refresh_command() -> None:
         assert (_REPO / "quant_sports_intel_models" / "football" / "nfl" / "fantasy"
                 / f"run_{mod}.py").exists(), f"{name}: refresh command names a missing module"
         assert "--refresh" in cmd, f"{name}: the command would not actually refresh anything"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# D3 (PM ruling 2026-09-03) — the precondition covers EVERY vintage the manifest publishes
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The market DAY check caught NF-INJ2c run 1 and was structurally blind to runs 3 and 4 (the marts
+# two days stale; the feature pool missing 5 registered columns) — each found only after a full
+# build. These guards are two-sided by construction: a MATCHED surface must PASS, or a refusal
+# that fires on everything would block the study rather than protect it.
+
+_FULL_FRESHNESS = {
+    "adp": {"source": "ffc", "format": "ppr", "teams": 12, "as_of": "2026-08-31",
+            "window_start": "2026-08-24", "window_end": "2026-08-31", "drafts": 8161},
+    "ecr": {"source": "fantasypros", "scoring": "PPR", "as_of": "2026-08-31",
+            "label": "8/31", "experts": 99},
+    "input_vintage": {"depth_chart_as_of": "2026-08-31 14:44:50",
+                      "sleeper_status_as_of": "2026-08-31T13:30:16.880706+00:00"},
+}
+#: 05:36:35Z on 2026-08-31 — BEFORE the board's `generated_at`, i.e. a consensus it could have read.
+_ECR_TS_BEFORE_BOARD = 1788154595
+
+
+@pytest.fixture()
+def full_surface(tmp_path, monkeypatch):
+    """A manifest publishing the WHOLE freshness surface, with local inputs that match it."""
+    art = tmp_path / "artifacts"
+    (art / "adp_cache").mkdir(parents=True)
+    (art / "ecr_cache").mkdir(parents=True)
+    (art / "adp_cache" / "ffc_ppr_12_2026.json").write_text(json.dumps(
+        {"meta": {"total_drafts": 8161, "start_date": "2026-08-24", "end_date": "2026-08-31"}}))
+    (art / "ecr_cache" / "fp_ecr_PPR_2026.json").write_text(json.dumps(
+        {"total_experts": 99, "last_updated": "8/31", "last_updated_ts": _ECR_TS_BEFORE_BOARD}))
+    monkeypatch.setattr(DB.RB, "_ART", art)
+
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"generated_at": "2026-08-31T12:00:00+00:00",
+                                    "adp_as_of": "2026-08-31", "ecr_as_of": "2026-08-31",
+                                    "freshness": json.loads(json.dumps(_FULL_FRESHNESS))}))
+    monkeypatch.setattr(DB, "_MANIFEST_JSON", manifest)
+
+    from quant_sports_intel_models.football.nfl.fantasy import market_freshness as _MF
+    monkeypatch.setattr(_MF, "market_as_of", lambda season, **kw: {
+        "adp": {"source": "ffc", "as_of": "2026-08-31"},
+        "ecr": {"source": "fantasypros", "as_of": "2026-08-31", "label": "8/31"}})
+    monkeypatch.setattr(DB.N15, "read_input_vintage",
+                        lambda con, season, schema: dict(_FULL_FRESHNESS["input_vintage"]))
+    return manifest
+
+
+def _edit_manifest(manifest, **freshness_patch):
+    doc = json.loads(manifest.read_text())
+    for section, patch in freshness_patch.items():
+        doc["freshness"][section].update(patch)
+    manifest.write_text(json.dumps(doc))
+
+
+def test_a_matched_full_vintage_surface_PASSES(full_surface):
+    """The two-sided half: a refusal that fires on a MATCHED surface blocks the study."""
+    out = DB.assert_vintages_match(con=object())
+    assert out["input_vintage"]["depth_chart_as_of"]["served"] == "2026-08-31 14:44:50"
+    assert out["fingerprint"]["adp"]["drafts"]["served"] == 8161
+
+
+def test_a_moved_adp_window_REFUSES_even_though_the_DAY_still_matches(full_surface):
+    """`as_of` alone cannot separate two same-day pulls; the window and draft count can."""
+    _edit_manifest(full_surface, adp={"drafts": 8400, "window_start": "2026-08-25"})
+    with pytest.raises(SystemExit) as e:
+        DB.assert_vintages_match(con=object())
+    msg = str(e.value)
+    assert "ADP.drafts: served 8400, local 8161" in msg
+    assert "ADP.window_start: served 2026-08-25, local 2026-08-24" in msg
+    assert "run_adp_ingest" in msg, "a refusal must carry its own remedy"
+
+
+def test_a_changed_ecr_expert_count_REFUSES_even_though_the_DAY_still_matches(full_surface):
+    _edit_manifest(full_surface, ecr={"experts": 101})
+    with pytest.raises(SystemExit) as e:
+        DB.assert_vintages_match(con=object())
+    msg = str(e.value)
+    assert "ECR.experts: served 101, local 99" in msg
+    assert "run_ecr_ingest" in msg
+
+
+def test_an_ecr_consensus_published_AFTER_the_board_REFUSES(full_surface, tmp_path, monkeypatch):
+    """One-sided by necessity: the manifest publishes no `last_updated_ts`, so there is no served
+    twin to equate. What is sound — and what settled the real ECR question — is that a consensus
+    stamped after the board was built cannot be the one the board read."""
+    ecr = tmp_path / "artifacts" / "ecr_cache" / "fp_ecr_PPR_2026.json"
+    ecr.write_text(json.dumps({"total_experts": 99, "last_updated": "8/31",
+                               "last_updated_ts": _ECR_TS_BEFORE_BOARD + 86_400}))
+    with pytest.raises(SystemExit) as e:
+        DB.assert_vintages_match(con=object())
+    assert "AFTER the board was built" in str(e.value)
+
+
+def test_a_mismatched_input_vintage_REFUSES_and_names_the_mart_rebuild(full_surface, monkeypatch):
+    """Run 3's defect: the marts two days stale ⇒ 644 rows of wrong `proj_games`, found only
+    after a full build."""
+    monkeypatch.setattr(DB.N15, "read_input_vintage", lambda con, season, schema: {
+        "depth_chart_as_of": "2026-08-29 12:56:08",
+        "sleeper_status_as_of": "2026-08-31T13:30:16.880706+00:00"})
+    with pytest.raises(SystemExit) as e:
+        DB.assert_vintages_match(con=object())
+    msg = str(e.value)
+    assert "depth_chart_as_of: served 2026-08-31 14:44:50, local 2026-08-29 12:56:08" in msg
+    assert "SPORTS_DUCKDB_PATH" in msg, (
+        "the remedy must name the resolved-path export — an unset one silently builds a parallel "
+        "database and exits 0")
+
+
+def test_a_published_input_vintage_with_NO_marts_connection_REFUSES(full_surface):
+    """NF1.7(a): a check that could not be evaluated is never scored as a pass."""
+    with pytest.raises(SystemExit) as e:
+        DB.assert_vintages_match(con=None)
+    assert "COULD NOT BE CHECKED" in str(e.value)
+    assert "--duckdb" in str(e.value)
+
+
+def test_the_input_vintage_leg_is_TABLE_DRIVEN_over_the_manifests_own_keys(full_surface,
+                                                                          monkeypatch):
+    """⭐ The anti-drift property the ruling asked for: an input the BOARD starts publishing joins
+    the check with no edit here and no new ruling."""
+    doc = json.loads(full_surface.read_text())
+    doc["freshness"]["input_vintage"]["a_future_input_as_of"] = "2026-09-01 00:00:00"
+    full_surface.write_text(json.dumps(doc))
+    monkeypatch.setattr(DB.N15, "read_input_vintage", lambda con, season, schema: {
+        **_FULL_FRESHNESS["input_vintage"], "a_future_input_as_of": "2026-08-15 00:00:00"})
+    with pytest.raises(SystemExit) as e:
+        DB.assert_vintages_match(con=object())
+    assert "a_future_input_as_of: served 2026-09-01 00:00:00, local 2026-08-15" in str(e.value)
+
+
+def test_the_fingerprint_tables_are_not_empty():
+    """A table-driven check over an empty table checks nothing."""
+    assert DB._ADP_WINDOW_FIELDS and DB._ECR_FINGERPRINT_FIELDS
+    assert {"window_start", "window_end", "drafts"} == {k for k, _ in DB._ADP_WINDOW_FIELDS}
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The D3 capture stamp is MACHINE-LOCAL STATE and must never ship in the image
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 🧨 THE FINDING (2026-09-03, box run). `nf_inj2c_capture.json` was git-TRACKED, so the box's
+# `COPY . .` image arrived carrying the LAPTOP's 2026-09-01 stamp — an absolute
+# `/Users/charlesclark/...` source path, a sha256 of a board that container had never seen, and a
+# market vintage two days stale. `assert_capture_intact` REFUSED it, which is exactly why this is a
+# finding and not an incident; but a stale stamp that ships in every image is a trap set for the
+# next reader who trusts it instead of validating it. The audit trail is untouched — the run's
+# report embeds the stamp verbatim under `capture`, and the report is tracked.
+_GITIGNORE = _REPO / ".gitignore"
+_CAPTURE_REL = ("quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/"
+                "nf_inj2c_capture.json")
+
+
+def _git(*args: str) -> tuple[int, str]:
+    import subprocess
+    r = subprocess.run(["git", *args], cwd=_REPO, capture_output=True, text=True, timeout=30)
+    return r.returncode, r.stdout.strip()
+
+
+class TestTheCaptureStampNeverShipsInTheImage:
+
+    def test_gitignore_names_the_capture_stamp(self):
+        """Source-inspection half: always evaluable, no subprocess."""
+        lines = [ln.strip() for ln in _GITIGNORE.read_text().splitlines()
+                 if ln.strip() and not ln.lstrip().startswith("#")]
+        assert _CAPTURE_REL in lines, (
+            f"{_CAPTURE_REL} is not ignored — a machine-local capture stamp that ships in the "
+            "`COPY . .` image pre-seeds every container with one machine's study state")
+
+    def test_the_capture_stamp_is_not_tracked(self):
+        """⛔ RAISES rather than skips when git cannot answer — a check that did not run is not a
+        pass (NF1.7(a)). This is the assertion that actually binds: a `.gitignore` line does
+        nothing for a path that is ALREADY in the index.
+
+        RED-proven 2026-09-03 by INDEX MUTATION (`git add -f` the stamp -> this test FAILS;
+        `git rm --cached` -> passes). The `nf_inj2c_red_proof` harness is text-replacement only and
+        cannot express an index change, so this one break is proven by hand and recorded here
+        rather than left unproven."""
+        rc, _ = _git("rev-parse", "--git-dir")
+        assert rc == 0, "cannot reach git — this guard is UNEVALUABLE, which is never a pass"
+        rc, _ = _git("ls-files", "--error-unmatch", _CAPTURE_REL)
+        assert rc != 0, (
+            f"{_CAPTURE_REL} is still TRACKED. `.gitignore` does not untrack an indexed path — it "
+            "needs `git rm --cached`, or every image keeps shipping the stamp.")
+
+    def test_the_reports_carry_the_stamp_so_untracking_loses_no_audit_trail(self):
+        """The provenance record moved, it did not disappear — pin that it actually moved."""
+        src = Path(DB.__file__).read_text()
+        src = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+        assert '"capture": stamp' in src, (
+            "the report no longer embeds the capture stamp — with the file untracked, the pinned "
+            "board's provenance would then be recorded nowhere")
+
+    def test_the_validation_that_refused_the_stale_stamp_is_still_wired(self):
+        """Keep the guard that made this a finding rather than an incident."""
+        src = Path(DB.__file__).read_text()
+        src = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+        # ⚠️ matched as an ASSIGNMENT call, not a bare name: `assert_capture_intact(con` also
+        # matches the function's own `def` line, so the looser form stays green with every CALL
+        # deleted (NF-C0e wired != invoked). The RED proof caught exactly that.
+        assert "= assert_capture_intact(" in src, (
+            "the run no longer asserts the capture is intact — a shipped or moved stamp would go "
+            "unchallenged")
