@@ -513,3 +513,70 @@ def test_the_fingerprint_tables_are_not_empty():
     """A table-driven check over an empty table checks nothing."""
     assert DB._ADP_WINDOW_FIELDS and DB._ECR_FINGERPRINT_FIELDS
     assert {"window_start", "window_end", "drafts"} == {k for k, _ in DB._ADP_WINDOW_FIELDS}
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The D3 capture stamp is MACHINE-LOCAL STATE and must never ship in the image
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 🧨 THE FINDING (2026-09-03, box run). `nf_inj2c_capture.json` was git-TRACKED, so the box's
+# `COPY . .` image arrived carrying the LAPTOP's 2026-09-01 stamp — an absolute
+# `/Users/charlesclark/...` source path, a sha256 of a board that container had never seen, and a
+# market vintage two days stale. `assert_capture_intact` REFUSED it, which is exactly why this is a
+# finding and not an incident; but a stale stamp that ships in every image is a trap set for the
+# next reader who trusts it instead of validating it. The audit trail is untouched — the run's
+# report embeds the stamp verbatim under `capture`, and the report is tracked.
+_GITIGNORE = _REPO / ".gitignore"
+_CAPTURE_REL = ("quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/"
+                "nf_inj2c_capture.json")
+
+
+def _git(*args: str) -> tuple[int, str]:
+    import subprocess
+    r = subprocess.run(["git", *args], cwd=_REPO, capture_output=True, text=True, timeout=30)
+    return r.returncode, r.stdout.strip()
+
+
+class TestTheCaptureStampNeverShipsInTheImage:
+
+    def test_gitignore_names_the_capture_stamp(self):
+        """Source-inspection half: always evaluable, no subprocess."""
+        lines = [ln.strip() for ln in _GITIGNORE.read_text().splitlines()
+                 if ln.strip() and not ln.lstrip().startswith("#")]
+        assert _CAPTURE_REL in lines, (
+            f"{_CAPTURE_REL} is not ignored — a machine-local capture stamp that ships in the "
+            "`COPY . .` image pre-seeds every container with one machine's study state")
+
+    def test_the_capture_stamp_is_not_tracked(self):
+        """⛔ RAISES rather than skips when git cannot answer — a check that did not run is not a
+        pass (NF1.7(a)). This is the assertion that actually binds: a `.gitignore` line does
+        nothing for a path that is ALREADY in the index.
+
+        RED-proven 2026-09-03 by INDEX MUTATION (`git add -f` the stamp -> this test FAILS;
+        `git rm --cached` -> passes). The `nf_inj2c_red_proof` harness is text-replacement only and
+        cannot express an index change, so this one break is proven by hand and recorded here
+        rather than left unproven."""
+        rc, _ = _git("rev-parse", "--git-dir")
+        assert rc == 0, "cannot reach git — this guard is UNEVALUABLE, which is never a pass"
+        rc, _ = _git("ls-files", "--error-unmatch", _CAPTURE_REL)
+        assert rc != 0, (
+            f"{_CAPTURE_REL} is still TRACKED. `.gitignore` does not untrack an indexed path — it "
+            "needs `git rm --cached`, or every image keeps shipping the stamp.")
+
+    def test_the_reports_carry_the_stamp_so_untracking_loses_no_audit_trail(self):
+        """The provenance record moved, it did not disappear — pin that it actually moved."""
+        src = Path(DB.__file__).read_text()
+        src = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+        assert '"capture": stamp' in src, (
+            "the report no longer embeds the capture stamp — with the file untracked, the pinned "
+            "board's provenance would then be recorded nowhere")
+
+    def test_the_validation_that_refused_the_stale_stamp_is_still_wired(self):
+        """Keep the guard that made this a finding rather than an incident."""
+        src = Path(DB.__file__).read_text()
+        src = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+        # ⚠️ matched as an ASSIGNMENT call, not a bare name: `assert_capture_intact(con` also
+        # matches the function's own `def` line, so the looser form stays green with every CALL
+        # deleted (NF-C0e wired != invoked). The RED proof caught exactly that.
+        assert "= assert_capture_intact(" in src, (
+            "the run no longer asserts the capture is intact — a shipped or moved stamp would go "
+            "unchallenged")

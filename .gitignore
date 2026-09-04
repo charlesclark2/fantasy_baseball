@@ -174,6 +174,15 @@ quant_sports_intel_models/football/nfl/fantasy/artifacts/served_board_snapshots/
 # it is the vintage/provenance record the report cites.
 quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_*.json
 quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/board_2026_*.parquet
+# NF-INJ2c (PM ruling, decision request #5): the D3 CAPTURE STAMP is machine-local operational
+# state, not a record — it names an absolute `source` path and stamps the market vintage of the
+# machine that captured. Tracking it meant the `COPY . .` image carried ONE machine's stamp into
+# EVERY container, so a fresh box container arrived pre-seeded with a laptop capture pointing at a
+# /Users/... path and a different board. The guard REFUSED it (which is why this is a finding and
+# not an incident) — but a stamp that ships in the image is a trap waiting for the next reader who
+# does not validate it. The audit trail is NOT lost: the run's report embeds the stamp verbatim
+# under `capture`, and the report IS tracked.
+quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/nf_inj2c_capture.json
 .nf_c8_red_proof_backup/
 
 # NF-INJ3b-M (PM ruling D4): the neutral "latest run" stems that
