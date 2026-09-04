@@ -7,7 +7,7 @@ metadata:
   name: mlb-inc-0904
   vertical: mlb
   card: https://trello.com/c/PENDING   # PM links at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Two CRITICAL alerts in the past day, possibly one cause. (A) The
