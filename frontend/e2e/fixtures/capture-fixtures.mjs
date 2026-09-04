@@ -110,6 +110,35 @@ const TARGETS = [
     path: `/ncaaf/games?game_day=${NCAAF_CAPTURED_GAME_DAY}`,
     note: "NCAAF-P3.3 — THE REALISTIC SATURDAY, and it replaces a GENERATED fixture with a captured one. The same URL as the frozen target above, taken 2026-09-01 once NCAAF-ODDS-LIVE's ahead-of-kickoff feed had landed: seven games carry a real `odds_api_live` line and one is genuinely without one. That mix is what a real in-season Saturday looks like, and it is why the synthetic `ncaaf-slate-2026-08-29-market.synthetic.json` was retired — a fixture built by feeding 2025 closes to the shipping builder can only ever confirm the shape we already assumed (E9.64b: a fixture derived from the transform cannot disconfirm it). ⚠️ THE ABSENT GAME IS A REFUSAL, not an uncaptured kickoff: `reason = market_snapshot_not_pre_kickoff`, i.e. the leakage guard declined a line it could not prove was taken before kickoff. KEEP IT on any re-capture — it is the only fixture in the tree that reaches that branch.",
   },
+  // ── NCAAF-P3.3 — the team stats page ──────────────────────────────────────────────────────────
+  //
+  // ⭐ CAPTURED THE MORNING THE ROUTE WENT LIVE (2026-09-03), once the box serving-write, the
+  // Lambda deploy and the API-Gateway `NONE` route had all landed. Two teams, chosen because they
+  // differ in the ways the page has to handle, not because they were convenient:
+  //
+  //   68   Boise State — a 2026 REALIGNMENT MOVER (Mountain West → Pac-12). Its whole schedule is
+  //        still upcoming, so every scoring field is null and the record is 0-0 with nothing
+  //        played: the state in which a component that defaulted a score to 0 would be visibly
+  //        wrong, and the one a page opening in early September is mostly in.
+  //   2449 North Dakota State — NEW TO FBS for 2026 (`is_new_to_fbs: true`) AND carrying a
+  //        completed game, so the played/upcoming split is REALIZED on one payload rather than
+  //        asserted from two.
+  //
+  // ⚠️ BOTH CARRY `efficiency` AND `splits` AS STATED ABSENCES (`no_row_for_this_team_and_season`)
+  // — the P1.1 rollups hold no 2026 rows yet. That is the REAL state of the wire, not a capture
+  // gap, and it is why `ncaaf-team-populated.synthetic.json` exists beside these: the available
+  // branch of those two blocks has nothing to capture today, exactly as the market panel's
+  // available branch had nothing to capture in P3.2.
+  {
+    file: "ncaaf-team-68.json",
+    path: "/ncaaf/teams/68",
+    note: "NCAAF-P3.3 — a 2026 conference mover with a wholly-upcoming schedule. ⚠️ ON RE-CAPTURE: keep a team whose `conference` differs from its prior season and whose `conference_source` is `scd2_dim` — the realignment clause reads this payload's own values, and a fixture whose conference never moved could not tell a point-in-time read from a `is_current` one.",
+  },
+  {
+    file: "ncaaf-team-2449.json",
+    path: "/ncaaf/teams/2449",
+    note: "NCAAF-P3.3 — a first-year FBS program with one game played. ⚠️ ON RE-CAPTURE: keep BOTH a completed game and an upcoming one in the schedule. A fixture where every game is played (or none is) cannot tell a component that renders a result from one that renders whatever it is handed — the same argument the mixed market slate rests on.",
+  },
   {
     file: "subscription-public-pricing.json",
     path: "/subscription/public-pricing",
