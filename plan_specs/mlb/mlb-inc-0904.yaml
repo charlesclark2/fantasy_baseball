@@ -1,0 +1,120 @@
+# Plan spec — MLB-INC-0904 (MINI tier, incident: intraday lakehouse timeout + stg_ref_players SLA breach)
+# Authored by PM 2026-09-04 from the two CRITICAL alerts (operator-relayed). Restore first, then root-cause.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: mlb-inc-0904
+  vertical: mlb
+  card: https://trello.com/c/PENDING   # PM links at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    Two CRITICAL alerts in the past day, possibly one cause. (A) The
+    intraday lakehouse refresh (run_w1_lakehouse --w3pre-only) exceeded
+    its 480s hard timeout (E11.26 tick budget) and was KILLED mid-build
+    of stg_statsapi_games — so the S3 parquet the lineup monitor and
+    --s3 serving read is FROZEN; unfixed, post_lineup predictions
+    silently stop for the slate (the INC-41 shape: 6.5h, no page —
+    except this time the alert FIRED, which is INC-41's monitoring
+    working). (B) stg_ref_players breached its freshness SLA at 1817
+    active-min vs 1800 — the E5.10 silent-rot dimension, ~11 direct
+    consumers. Diagnose both to root cause, restore freshness, and fix
+    so the alerts go quiet because the system is healthy — never by
+    silencing, widening, or raising a bar without measurement.
+    best_alpha=0; box operations are OPERATOR-RUN paste-ready; fixes
+    land via PR -> dev; no deploy/schedule/.env change without the
+    operator.
+  acceptanceCriteria:
+    - description: >
+        RESTORE BEFORE ROOT-CAUSING (games run today): hand the
+        operator, first, paste-ready LAPTOP-vs-BOX steps to (1) re-run
+        the failed intraday leg manually (outside the tick budget) so
+        lineups/game-state unfreeze, and (2) rebuild stg_ref_players
+        via the runbook (uv run python scripts/build_ref_players_dimension.py)
+        — and if that rebuild REFUSES on the current-season coverage
+        floor, that is the guard working: the next step is checking
+        player_profiles_raw / stg_batter_pitches currency and the
+        archive prefix, not overriding the guard. Verify restoration
+        the way the alerts measure: the CONTENT timestamp inside each
+        parquet, never S3 mtime.
+    - description: >
+        ALERT A ROOT CAUSE with timing evidence, not assumption. The
+        output tail shows the kill during stg_statsapi_games — but
+        stg_oddsapi_odds (158.8s) + stg_derivative_odds (211.4s) had
+        already consumed ~370s of the 480s budget. Competing
+        hypotheses to separate by measurement: (i) the odds tables
+        have OUTGROWN the tick budget (September = season-max data;
+        pull per-table build times from recent run logs and plot the
+        trend), (ii) stg_statsapi_games specifically hung or slowed
+        (one bad build vs a trend), (iii) a box resource condition
+        (concurrent jobs). The remedy menu is ordered: make the heavy
+        tables cheaper (incremental/pruned builds, or move slow-
+        changing odds staging OUT of the intraday leg to a slower
+        cadence) BEFORE any budget raise; if a raise is genuinely the
+        fix, it is proposed to the PM with the measured trend and the
+        tick-cadence implication stated (E11.26's budget exists so a
+        tick cannot overlap the next one) — never applied unilaterally.
+    - description: >
+        ALERT B ROOT CAUSE distinguishes the fork the 17-minute
+        overshoot creates: (i) the writer actually stopped advancing
+        (which daily_ingestion_job leaf / weekly_player_profiles_job
+        run failed or skipped, and why), vs (ii) the writer is healthy
+        and the 1800-min SLA is merely tighter than the writer's real
+        cadence plus jitter (in which case the finding is an SLA-vs-
+        cadence mismatch, and any SLA change is a PM-dispositioned
+        proposal WITH the measured cadence distribution, not a quiet
+        widening). Check whether A and B share a cause (same box, same
+        window, same resource) before treating them as two incidents.
+    - description: >
+        Any code fix ships with guards RED-proven both ways (a build
+        exceeding its per-table budget must surface; the freshness
+        check must still fire on a frozen artifact — do NOT weaken the
+        content-timestamp/active-hours semantics, they are the INC-41
+        lesson); baseline-pass + NOT-SELECTED controls in any Python
+        red-proof harness. Incident write-up in
+        ablation_results/ (or the incident log location the repo
+        uses): timeline, cause, fix, and what would have caught it
+        earlier — findings to closeout.followUps for PM triage.
+        Roadmap files frozen; no Trello; >2-min commands operator-run.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: mlb-inc-0904
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "INC-41" / "lakehouse" / "freshness" (board Credence Sports, 2026-09-04)'
+    duplicates: []
+    adjacent:
+      - "INC-41 record (2026-08-06) — the ancestor incident; its freshness SLA machinery is what fired here and must not be weakened."
+      - "E5.10 record — stg_ref_players' silent-rot history; the coverage-floor guard on the rebuild is its legacy and stands."
+      - "E11.26 — the tick hard-timeout; a budget change is a PM decision with evidence, not a fix."
+      - "NF-INJ4 / NCAAF-P3.3 / NF-INJ2c (IN FLIGHT) — disjoint verticals and files; no shared surfaces."
+      - "MLB served-row helper card (HTG77WvQ, Backlog) — different layer (study population vs serving freshness); not folded in."
+  triedLedger:
+    files:
+      - "The two alert bodies (operator-relayed, 2026-09-03/04) incl. the run_w1_lakehouse output tail"
+      - "run_w1_lakehouse.py + the intraday schedule/job wrapper (the 480s enforcement point)"
+      - "scripts/build_ref_players_dimension.py + the freshness-SLA checker (INC-41 lineage)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "post_lineup predictions staying live through September slates; the E5.10 dimension staying fresh for its ~11 consumers"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: mlb-inc-0904-plan
+spec:
+  goalRef: { name: mlb-inc-0904 }
+  graph:
+    nodes: []   # MINI tier — restore -> diagnose A -> diagnose B -> fix + guards -> write-up
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
