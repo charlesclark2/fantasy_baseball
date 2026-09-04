@@ -94,6 +94,29 @@ export interface NcaafTeamStrengthWeek {
   strength_defense_sd: number | null
 }
 
+/** Where a rating places a team in a population, WITH how uncertain that placement is.
+ *
+ * ⭐⭐ THE RANGE IS NOT OPTIONAL AND THE RENDER MUST NEVER DROP IT. A rank is the most quotable,
+ * most screenshot-able number this page can publish, and it reads as exact in a way "+3.1" with a
+ * visible band does not. Measured on the live 2026 week-1 board (138 teams, every sd ≈ 7.3): the
+ * MEDIAN team's 80% rank range spans 77 of 138 places; 130 of 138 span more than 40. Boise State
+ * ranks 42nd on the point estimate and 18th–97th once its own published spread is respected.
+ *
+ * ⏳ The width shrinks as games are played, so these get sharper on their own — which is exactly
+ * why the honest answer was a RANGE rather than a refusal to rank. */
+export interface NcaafTeamStanding {
+  scope: string
+  scope_label: string | null
+  rank: number | null
+  /** The BETTER (numerically smaller) end. */
+  rank_lo: number | null
+  rank_hi: number | null
+  /** ⚠️ The size of the population that HAD a posterior, not the size of the conference. */
+  n_ranked: number | null
+  interval_lo_level: number | null
+  interval_hi_level: number | null
+}
+
 export interface NcaafTeamStrength {
   status: NcaafBlockStatus
   reason: string | null
@@ -105,6 +128,9 @@ export interface NcaafTeamStrength {
   residual_sigma: number | null
   model_version: string | null
   hyper_n_prior_seasons: number | null
+  /** Null when the population was too small to rank within, or this team had no posterior. */
+  standing_fbs: NcaafTeamStanding | null
+  standing_conference: NcaafTeamStanding | null
 }
 
 export interface NcaafTeamEfficiency {
@@ -320,3 +346,67 @@ export function formatRecord(schedule: NcaafTeamSchedule): string | null {
 /** Does this payload still describe what the page was written to describe? Re-exported from the
  *  game board's own owner so the two surfaces cannot drift on the posture check (E9.61). */
 export { isMarketBlindProjection } from "@/lib/ncaaf"
+
+// ══ standings — the rank, and the range that keeps it honest ═════════════════════════════════
+
+/** "1st", "2nd", "3rd", "11th"… ⚠️ 11/12/13 are the trap every naive implementation ships. */
+export function ordinal(n: number): string {
+  const abs = Math.abs(Math.trunc(n))
+  if (abs % 100 >= 11 && abs % 100 <= 13) return `${abs}th`
+  switch (abs % 10) {
+    case 1:
+      return `${abs}st`
+    case 2:
+      return `${abs}nd`
+    case 3:
+      return `${abs}rd`
+    default:
+      return `${abs}th`
+  }
+}
+
+export interface StandingText {
+  /** "42nd of 138 in FBS" — the placement itself. */
+  placement: string
+  /** "18th to 97th" — ⛔ NEVER rendered without it; see `NcaafTeamStanding`. */
+  range: string | null
+  /** "80%", from the SERVED levels, so a ladder change cannot silently relabel it. */
+  confidence: string | null
+}
+
+/**
+ * A standing's three strings, or null when there is nothing honest to say.
+ *
+ * ⛔ RETURNS NULL RATHER THAN A BARE RANK WHEN THE RANGE IS MISSING. That is the whole contract of
+ * this surface: a rank without its range is the most over-precise thing the page could publish, so
+ * a payload that carries one and not the other renders NOTHING rather than the half that looks
+ * most authoritative. Degrading toward the confident half is exactly the failure mode.
+ */
+export function standingText(
+  standing: NcaafTeamStanding | null | undefined,
+): StandingText | null {
+  if (!standing) return null
+  const { rank, rank_lo: lo, rank_hi: hi, n_ranked: n } = standing
+  if (typeof rank !== "number" || !Number.isFinite(rank)) return null
+  if (typeof lo !== "number" || typeof hi !== "number") return null
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null
+  // ⚠️ "in FBS", but "in the Pac-12". Keyed on SCOPE rather than on the label's spelling, so a
+  // conference whose name happens to read like an acronym does not lose its article.
+  const where = !standing.scope_label
+    ? ""
+    : standing.scope === "conference"
+      ? ` in the ${standing.scope_label}`
+      : ` in ${standing.scope_label}`
+  const outOf = typeof n === "number" && Number.isFinite(n) ? ` of ${n}` : ""
+  const loLevel = standing.interval_lo_level
+  const hiLevel = standing.interval_hi_level
+  const confidence =
+    typeof loLevel === "number" && typeof hiLevel === "number"
+      ? `${Math.round((hiLevel - loLevel) * 100)}%`
+      : null
+  return {
+    placement: `${ordinal(rank)}${outOf}${where}`,
+    range: lo === hi ? null : `${ordinal(lo)} to ${ordinal(hi)}`,
+    confidence,
+  }
+}

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { collectPageErrors, mockApi, type MockOptions } from "../support/api-mock"
+import { API_PREFIX, collectPageErrors, mockApi, type MockOptions } from "../support/api-mock"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors, internalHrefs } from "../support/assertions"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
 
@@ -551,12 +551,104 @@ test("a payload whose framing flags change makes the page stop asserting the pos
   await expect(page.getByTestId("ncaaf-team-disclosure")).toHaveAttribute("data-posture", "changed")
 })
 
-test("nothing on the page ranks this team against another", async ({ page }) => {
-  // ⛔ A RANK IS THE SHAPE A READER MOST EASILY CONVERTS INTO A PICK, and `best_alpha = 0`. There is
-  // no "Nth in the country", no percentile and no ordering anywhere on this surface.
+test("no ranking renders without the range that makes it honest", async ({ page }) => {
+  // ⭐⭐ RE-ANCHORED, NOT RETIRED, and the reason is worth keeping because the original guard was
+  // RIGHT FOR THE WRONG REASON. It banned every ranking outright, on the ground that "a rank is
+  // the shape a reader most easily converts into a pick". That reasoning does not survive contact
+  // with the numbers: a rating in POINTS is far closer to a wagerable quantity than an ordinal is,
+  // and the page publishes the rating.
+  //
+  // The real hazard is PRECISION, and it is measurable. On the live 2026 week-1 board (138 teams,
+  // every sd ≈ 7.3) the MEDIAN team's 80% rank range spans 77 of 138 places and 130 of 138 span
+  // more than 40 — Boise State is 42nd on the point estimate and 18th–97th on its own spread. So a
+  // bare rank is the most over-precise thing this page could print, and a rank WITH its range is
+  // the single most interpretable thing on it. The guard therefore moves from "no rank" to "no
+  // rank without its range", which is the claim the surface can actually defend (MH2.7 —
+  // re-anchor onto the new implementation, never weaken or delete).
+  //
+  // ⏳ And the hazard EXPIRES: the width is a function of a posterior sd that shrinks as games are
+  // played, so this clause protects a September reader and costs a November one nothing.
   await open(page, 68, { ncaafTeam: "populated" })
+
+  // NON-VACUITY: this fixture genuinely renders a ranking, so the assertions below have something
+  // to bite on. Without it the loop would pass on a page that had stopped ranking entirely.
+  const fbs = page.getByTestId("ncaaf-standing-fbs")
+  await expect(fbs).toBeVisible()
+
+  for (const testId of ["ncaaf-standing-fbs", "ncaaf-standing-conference"]) {
+    const el = page.getByTestId(testId)
+    if ((await el.count()) === 0) continue
+    await expect(
+      el.getByTestId(`${testId}-range`),
+      `${testId} rendered a rank with no range`,
+    ).toBeVisible()
+    const range = ((await el.getByTestId(`${testId}-range`).innerText()) ?? "").trim()
+    expect(range.length, `${testId}'s range is empty`).toBeGreaterThan(0)
+  }
+
+  // ⛔ The half of the original guard that STILL BINDS: an ordinal is admissible, the language of
+  // a recommendation is not.
   const text = (await page.evaluate(() => document.body.innerText)).toLowerCase()
-  for (const banned of ["rank", "ranked", "percentile", "nationally", "out of 136"]) {
+  for (const banned of ["should back", "best bet", "value pick", "our pick", "edge"]) {
     expect(text, `the page rendered "${banned}"`).not.toContain(banned)
   }
+})
+
+test("a rank whose range is missing renders nothing at all", async ({ page }) => {
+  // ⭐ THE DEGRADE DIRECTION IS THE WHOLE POINT. Handed a rank with no bounds, the tempting
+  // fallback is to show the rank — which is degrading toward the half that LOOKS most
+  // authoritative and is least defensible. The surface shows neither, and says so.
+  // ⚠️ `mockApi` FIRST so the rest of the page's calls are still served, THEN the override — a bare
+  // `page.route` on one path leaves every other request unmocked and the page never renders at all,
+  // which would have made this clause fail for a reason unrelated to what it tests.
+  await mockApi(page, { ncaafTeam: "populated" })
+  // ⚠️ SCOPED TO THE API PREFIX. `**/ncaaf/teams/**` also matches the PAGE's own navigation URL, so
+  // an unscoped glob fulfils the DOCUMENT request with JSON and the browser renders the payload as
+  // text — a failure that looks exactly like "the section did not render".
+  await page.route(`**${API_PREFIX}/ncaaf/teams/**`, async (route) => {
+    const blob = JSON.parse(JSON.stringify(TEAM_POPULATED))
+    blob.strength.standing_fbs = { ...blob.strength.standing_fbs, rank_lo: null, rank_hi: null }
+    blob.strength.standing_conference = null
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(blob) })
+  })
+  await page.goto(path(68))
+  await expect(page.getByTestId("ncaaf-team-standing")).toBeVisible()
+  await expect(page.getByTestId("ncaaf-standing-fbs")).toHaveCount(0)
+  // ...and the absence is NAMED rather than left as a blank heading (NF-C6b).
+  await expect(page.getByTestId("ncaaf-team-standing-absent")).toBeVisible()
+  // ⛔ Non-vacuity from the other side: the rank itself must not have leaked out anywhere.
+  const text = await page.evaluate(() => document.body.innerText)
+  expect(text).not.toContain(`${TEAM_POPULATED.strength.standing_fbs.rank}th of`)
+})
+
+test("a ranking states its population and its confidence, both from the payload", async ({ page }) => {
+  await open(page, 68, { ncaafTeam: "populated" })
+  const fbs = TEAM_POPULATED.strength.standing_fbs
+  const el = page.getByTestId("ncaaf-standing-fbs")
+  // The count is the SERVED `n_ranked` — the population that had a posterior, not a constant and
+  // not the size of FBS.
+  await expect(el).toContainText(`of ${fbs.n_ranked}`)
+  // ⛔ "80%" is DERIVED from the served levels, so a later ladder change cannot silently relabel a
+  // range it did not recompute.
+  const pct = Math.round((fbs.interval_hi_level - fbs.interval_lo_level) * 100)
+  await expect(el.getByTestId("ncaaf-standing-fbs-range")).toContainText(`${pct}%`)
+})
+
+test("the page says what the rating MEANS, not only what its unit is", async ({ page }) => {
+  // The operator's actual complaint: "I have no clue as an end user how to interpret these
+  // numbers." Naming the unit was not enough — what makes the scale usable is that the DIFFERENCE
+  // between two ratings is the expected margin, which is the sentence this clause pins.
+  await open(page, 68)
+  await expect(page.getByTestId("ncaaf-strength-meaning")).toContainText("gap between two teams")
+})
+
+test("a deployed payload with no standings renders the named absence, not a blank", async ({ page }) => {
+  // ⭐ THE CAPTURED FIXTURES ARE PRE-STANDINGS BY CONSTRUCTION — they were taken off the live API
+  // before this shipped, and they are kept that way on purpose: they are exactly what a client
+  // sees during the deploy skew between `frontend/` (auto) and the API Lambda (manual). That
+  // window must render a named absence, never a blank heading (NF-C0 / NF-C6b).
+  await open(page, 68)
+  expect(TEAM_68.strength.standing_fbs ?? null, "the capture has acquired standings — re-check this clause").toBeNull()
+  await expect(page.getByTestId("ncaaf-team-standing")).toBeVisible()
+  await expect(page.getByTestId("ncaaf-team-standing-absent")).toBeVisible()
 })

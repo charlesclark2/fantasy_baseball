@@ -405,3 +405,33 @@ export const TEAM_PROVENANCE_LABEL = "How this was produced"
  *  the rule is drawn at all is to give the reader the one comparison that makes the number mean
  *  something. Labelling it with the game surface's noun answers the wrong question. */
 export const STRENGTH_ZERO_LABEL = "average FBS team"
+
+// ── what the rating MEANS, and where it sits ──────────────────────────────────────────────────
+//
+// ⭐ THE GAP THIS FILLS, IN THE OPERATOR'S OWN WORDS: "I have no clue as an end user how to
+// interpret these numbers." `STRENGTH_UNIT_HINT` already named the unit, and naming the unit was
+// not enough — a reader who knows "+3.1 points against an average team" still has no way to turn
+// that into a judgement about a team. Two things do: the arithmetic that makes the scale usable
+// (the DIFFERENCE between two ratings is the expected margin between those teams), and a placement
+// among the teams they already have opinions about.
+
+/** ⭐ THE ONE SENTENCE THAT MAKES THE SCALE USABLE. A rating means little on its own; the
+ *  DIFFERENCE between two ratings is a quantity a college-football reader already understands,
+ *  because it is the same unit a spread is quoted in. */
+export const STRENGTH_MEANING_HINT =
+  "The gap between two teams' ratings is roughly the margin the model would expect between them on a neutral field — so a +10 team playing a −4 team projects to win by about 14."
+
+export const STANDING_LABEL = "Where this sits"
+/** ⚠️ Rendered ALWAYS, not only when the range is wide. A reader who meets a tight November range
+ *  needs to know it is the same measurement as the wide September one, or the narrowing reads as a
+ *  change of method rather than as the model learning. */
+export const STANDING_HINT =
+  "Its place among the teams the model rates, and how sure it is of that place. Early in the season that range is very wide, because every team's rating is still mostly a pre-season guess."
+/** The connective before the rank range. Deliberately not "±" or a bare parenthesis: the range is
+ *  a claim about how little we know, and it should read as one. */
+export const STANDING_RANGE_PREFIX = "plausibly anywhere from"
+/** Shown when a rank exists but its range does not, which the contract says should not happen —
+ *  ⛔ and the surface renders NOTHING rather than the bare rank, because the bare rank is the half
+ *  that looks most authoritative. This names the omission instead of leaving a silent gap. */
+export const STANDING_UNAVAILABLE =
+  "We are not showing a ranking for this team right now."

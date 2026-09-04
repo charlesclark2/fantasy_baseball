@@ -157,6 +157,53 @@ spec:
       with nothing in it — are three different sentences, and a reason we have no
       sentence for still says something. 9/9 deliberate breaks RED; full frontend E2E
       679 passed / 0 failed; football 2132, guards 734.
+    postMergeFindings: >
+      ⚠️ TWO DEFECTS FOUND BY THE OPERATOR ON THE LIVE PREVIEW, AFTER THIS SPEC WAS
+      MARKED DONE — recorded here rather than folded into the verdict above, because
+      the verdict was accurate about what shipped and the point is that it shipped
+      with these in it. Both were fixed in PR #1075 (frontend-only, no redeploy).
+      ⓐ THE STRENGTH CURVE BORROWED THE GAME BOARD'S DEGRADATION WARNING. `DistributionCurve`
+      renders an amber "this game's simulated quantiles were not published" whenever
+      its source is parametric. On a game card that is a true degradation; on a strength
+      posterior, whose served form IS a mean and a spread, there are no simulated
+      quantiles that could be missing — so it announced a defect that does not exist,
+      in a warning colour, with the wrong noun, one line under a hint that already said
+      the right thing. THE LESSON IS ABOUT REUSE: "reuse the component, do not fork it"
+      was the right call and is why the fix was three lines, but reuse imports the
+      component's DEFAULTS, and a default is an assertion about the surface it was
+      written for. The parametric note, the "even" zero label and the 320x96 aspect
+      were all game-surface assumptions that arrived silently with the import. When
+      reusing a renderer on a new surface, enumerate its defaults and ask of each
+      whether it is still TRUE here — none of these was visible in the diff.
+      ⓑ THE CURVE WAS STRETCHED ~2.8x. `preserveAspectRatio="none"` deforms the drawing
+      to whatever box it is given; a game card gives it ~320px, this page's `max-w-4xl`
+      gave it ~896x96. NOTHING IN THE SUITE COULD HAVE CAUGHT THIS — every clause reads
+      the `<path d>` geometry, which is correct in viewBox units at any rendered size,
+      so the drawn shape was right and the BOX was wrong. A rendered-output assertion
+      is not automatically a visual one (NF-C4 has a blind spot here).
+    postMergeAdditions: >
+      ⭐ STANDINGS, ADDED ON THE OPERATOR'S REVIEW OF THE LIVE PAGE ("I have no clue as
+      an end user how to interpret these numbers"). The page now serves and renders an
+      FBS and a conference placement, each WITH a rank range, plus the one sentence that
+      makes the scale usable (the gap between two ratings is the expected margin).
+      ⚠️ THIS REVERSES A GUARD THIS STORY SHIPPED, deliberately and with the reasoning
+      recorded. `nothing on the page ranks this team against another` banned every
+      ranking on the ground that "a rank is the shape a reader most easily converts into
+      a pick". That reasoning does not survive measurement: a rating in POINTS is far
+      closer to a wagerable quantity than an ordinal, and the page publishes the rating.
+      The real hazard is PRECISION, and it is measurable — on the live 2026 week-1 board
+      the MEDIAN team's 80% rank range spans 77 of 138 places, and 130 of 138 span more
+      than 40 (Boise State: 42nd on the point estimate, 18th-97th on its own spread). So
+      the guard was RE-ANCHORED (MH2.7) from "no rank" to "no rank without its range",
+      which is the claim the surface can defend, and the hazard EXPIRES on its own as
+      the posterior sd shrinks through the season.
+      ⭐ AND A GUARD-VACUITY FINDING WORTH CARRYING: the determinism clause on the seeded
+      Monte Carlo passed with the seed DELETED, because its 40-team evenly-spaced board
+      left every percentile far from a rounding boundary. Measured on the real 138-team
+      board, a reseed moves 29.65% of published bounds. RANK-RANGE SENSITIVITY IS A
+      PROPERTY OF HOW TIGHTLY THE POPULATION IS PACKED, so a guard on it is vacuous
+      unless run at the packing the board actually has — found only by the RED proof,
+      never by the green suite.
     followUps: >
       ⚠️ ① IS A CORRECTION TO THIS STORY'S OWN EARLIER FINDING, recorded rather than
       quietly replaced. The Phase A closeout reported that

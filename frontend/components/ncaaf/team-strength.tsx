@@ -34,12 +34,19 @@ import {
   STRENGTH_SIDES_LABEL,
   STRENGTH_TREND_HINT,
   STRENGTH_TREND_LABEL,
+  STRENGTH_MEANING_HINT,
   STRENGTH_UNIT_HINT,
   STRENGTH_ZERO_LABEL,
+  STANDING_HINT,
+  STANDING_LABEL,
+  STANDING_RANGE_PREFIX,
+  STANDING_UNAVAILABLE,
 } from "@/lib/ncaaf-copy"
 import {
   formatSignedPoints,
+  standingText,
   strengthDistribution,
+  type NcaafTeamStanding,
   type NcaafTeamStrength,
   type NcaafTeamStrengthWeek,
 } from "@/lib/ncaaf-team"
@@ -146,6 +153,33 @@ function StrengthTrend({ weeks }: { weeks: NcaafTeamStrengthWeek[] }) {
   )
 }
 
+/**
+ * One placement — "42nd of 138 in FBS", and the range that keeps it honest.
+ *
+ * ⛔⛔ THE RANGE RENDERS OR THE RANK DOES NOT. `standingText` returns null when a payload carries a
+ * rank without its bounds, and this component honours that by rendering nothing at all. Degrading
+ * to the bare rank would be degrading toward the half that LOOKS most authoritative and is least
+ * defensible: on the live 2026 week-1 board the median team's 80% rank range spans 77 of 138
+ * places, so "42nd" alone is close to noise presented as a fact.
+ */
+function Standing({ standing, testId }: { standing: NcaafTeamStanding | null; testId: string }) {
+  const text = standingText(standing)
+  if (!text || !text.range) return null
+  return (
+    <div
+      data-testid={testId}
+      data-standing-rank={standing?.rank ?? ""}
+      className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-[#1e1e1e] px-2.5 py-1.5"
+    >
+      <span className="text-sm tabular-nums text-gray-200">{text.placement}</span>
+      <span data-testid={`${testId}-range`} className="text-[11px] tabular-nums text-gray-500">
+        {STANDING_RANGE_PREFIX} {text.range}
+        {text.confidence ? ` (${text.confidence})` : ""}
+      </span>
+    </div>
+  )
+}
+
 export function NcaafTeamStrengthBlock({ strength }: { strength: NcaafTeamStrength }) {
   if (strength.status !== "available" || !strength.current) {
     return (
@@ -166,6 +200,17 @@ export function NcaafTeamStrengthBlock({ strength }: { strength: NcaafTeamStreng
   // index is a calendar fact; "no games are behind this number" is the fact that actually explains
   // the width, and it stays true for a team on a bye or one whose opener was cancelled.
   const preseason = week.games_in_window === 0
+  // ⚠️ FILTERED ON THE DATA, not on rendered nodes. `standingText` is the ONE place that decides
+  // whether a standing is publishable (it returns null for a rank with no range), so the section's
+  // "is there anything to show" question and the component's "should I render" question go through
+  // the same function and cannot disagree — the E9.61 two-renderers shape, avoided rather than
+  // fixed later. An empty list falls to the NAMED absence below, never to a blank heading.
+  const standings = (
+    [
+      ["fbs", strength.standing_fbs],
+      ["conference", strength.standing_conference],
+    ] as const
+  ).filter(([, standing]) => standingText(standing)?.range)
 
   return (
     <section data-testid="ncaaf-team-strength" data-block-status="available" className="space-y-4">
@@ -195,6 +240,35 @@ export function NcaafTeamStrengthBlock({ strength }: { strength: NcaafTeamStreng
           {week.games_in_window === 1 ? "" : "s"}
         </span>
       </div>
+
+      {/* ⭐ WHAT THE NUMBER MEANS, before where it places. A reader who cannot convert the rating
+          into a judgement cannot use the rank either — the placement is only legible once the
+          scale is. */}
+      <p data-testid="ncaaf-strength-meaning" className="max-w-2xl text-[11px] leading-relaxed text-gray-500">
+        {STRENGTH_MEANING_HINT}
+      </p>
+
+      <section data-testid="ncaaf-team-standing" className="space-y-1.5">
+        <h3 className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          {STANDING_LABEL}
+        </h3>
+        {standings.length > 0 ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {standings.map(([scope, standing]) => (
+                <Standing key={scope} standing={standing} testId={`ncaaf-standing-${scope}`} />
+              ))}
+            </div>
+            <p className="max-w-2xl text-[11px] leading-relaxed text-gray-500">{STANDING_HINT}</p>
+          </>
+        ) : (
+          // ⛔ Named, not blank. An absent ranking and a ranking we chose not to show read the
+          // same to a reader unless one of them says so (NF-C6b).
+          <p data-testid="ncaaf-team-standing-absent" className="text-[11px] text-gray-500">
+            {STANDING_UNAVAILABLE}
+          </p>
+        )}
+      </section>
 
       {preseason && (
         <p

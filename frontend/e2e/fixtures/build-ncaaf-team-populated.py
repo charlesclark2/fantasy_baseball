@@ -175,6 +175,20 @@ _SCHEDULE = [
 ]
 
 
+#: `(team_id, rating, spread, conference)` for the synthetic board our team is ranked within.
+#: Ratings are spread across a realistic FBS range (−26 to +21 on the live 2026 board) and the
+#: spreads are the ~7.3 that board actually carries at week 1.
+_STANDING_FOILS = (
+    (900001, 20.4, 7.44, "Big Ten"),
+    (900002, 12.1, 7.31, "SEC"),
+    (900003, 6.8, 7.29, "Pac-12"),
+    (900004, 1.2, 7.36, "Pac-12"),
+    (900005, -5.7, 7.41, "Mountain West"),
+    (900006, -14.9, 7.52, "Conference USA"),
+    (900007, -23.8, 7.61, "MAC"),
+)
+
+
 def main() -> int:
     blob = team_payloads.build_team_payload(
         team_id=TEAM_ID, season=SEASON,
@@ -186,8 +200,32 @@ def main() -> int:
         prior_season_dim_row=_DIM,
         marts_available=True,
     )
+    # ⭐ THE STANDING IS A PROPERTY OF THE WHOLE BOARD, so it cannot come from a one-team build —
+    # `attach_standings` is what the writer runs, and it needs a population to rank within. Rather
+    # than hand-writing the block (a fixture that asserts what its author believed), we run the
+    # SHIPPING function over a small synthetic board and keep our team's blob out of it.
+    #
+    # ⚠️ THE FOILS ARE DELIBERATELY SHAPED. Two share our conference (so a conference standing
+    # exists and is not 1-of-1), and their spreads are wide enough that the rank RANGE is genuinely
+    # wider than the point rank — which is the property every clause on this page turns on.
+    board = {TEAM_ID: blob}
+    for i, (tid, mu, sd, conf) in enumerate(_STANDING_FOILS):
+        board[tid] = {
+            "team": {"team_id": tid, "team": f"Foil {i + 1}", "conference": conf},
+            "strength": {"status": "available",
+                         "current": {"strength_margin": mu, "strength_margin_sd": sd}},
+        }
+    team_payloads.attach_standings(board)
+
+    fbs = blob["strength"]["standing_fbs"]
+    conference = blob["strength"]["standing_conference"]
+    assert fbs and fbs["rank_lo"] < fbs["rank_hi"], (
+        "the FBS standing must carry a real RANGE — a fixture with rank_lo == rank_hi would let a "
+        "render that drops the range pass (the clause exists precisely to catch that)")
+    assert conference and conference["n_ranked"] >= 2, "the conference standing must rank >1 team"
+
     # A generated fixture must be REPRODUCIBLE, so the one non-deterministic field is pinned. Every
-    # other value is the builder's own output.
+    # other value is the builder's own output. (`attach_standings` is seeded, so it is already.)
     blob["generated_at"] = "2026-09-03T05:20:22.000Z"
 
     for block in ("strength", "efficiency", "splits", "schedule"):
