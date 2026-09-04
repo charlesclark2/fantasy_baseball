@@ -2864,6 +2864,20 @@ const CASES = [
   },
   // ── NCAAF-P3.3 — the team stats page ─────────────────────────────────────────────────────────
   {
+    id: "ncaaf-team-preseason-note-contradicts-the-schedule",
+    shipped: "NCAAF-P3.3 — the pre-season note claiming the season had not started",
+    // ⭐ THIS SHIPPED AND WAS LIVE. The note is keyed on `games_in_window === 0` (what the
+    // POSTERIOR absorbed) but claimed "No games have been played yet" (a fact about the SEASON).
+    // The P1.2 fit rolls forward weekly, so from Saturday to Monday every team that played carries
+    // a week-1 rating — putting that sentence directly above its own "Played" section.
+    // The mutation RESTORES the shipped wording, so this proves the clause catches the regression.
+    detail: "Restores the season-wide claim above a schedule that shows a played game.",
+    file: "lib/ncaaf-copy.ts",
+    from: '  "This rating does not take in any of this season\'s games yet, so it is still the model\'s pre-season estimate:',
+    to: '  "No games have been played yet, so this is the model\'s pre-season estimate:',
+    grep: "never contradicts the schedule",
+  },
+  {
     id: "ncaaf-team-borrows-the-game-warning",
     shipped: "NCAAF-P3.3 — the game board's degradation warning on a team page",
     // ⭐ THIS ONE ACTUALLY SHIPPED AND THE OPERATOR HIT IT ON THE FIRST PAGE THEY OPENED. The

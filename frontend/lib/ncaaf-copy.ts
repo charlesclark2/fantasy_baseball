@@ -263,12 +263,22 @@ export const STRENGTH_LABEL = "Team strength"
 export const STRENGTH_UNIT_HINT =
   "Points better than an average FBS team on a neutral field, with the range the model considers plausible."
 export const STRENGTH_BAND_PREFIX = "Plausible range"
-/** ⚠️ THE WEEK-1 SENTENCE, AND IT IS A MEASUREMENT RATHER THAN AN APOLOGY. Before a game is played
- *  the posterior IS the prior — the conference level plus the pre-season covariates — so the rating
- *  is real and the range is wide. Saying so stops a reader treating an early number as settled, and
- *  stops them reading an honest width as a broken model. */
+/** ⚠️ THE WEEK-1 SENTENCE, AND IT IS A MEASUREMENT RATHER THAN AN APOLOGY. Before a game is taken
+ *  in, the posterior IS the prior — the conference level plus the pre-season covariates — so the
+ *  rating is real and the range is wide. Saying so stops a reader treating an early number as
+ *  settled, and stops them reading an honest width as a broken model.
+ *
+ *  ⛔⛔ IT MAKES A CLAIM ABOUT THE *RATING*, NEVER ABOUT THE SEASON, AND THE FIRST VERSION GOT THAT
+ *  WRONG ON THE LIVE PAGE. It read "No games have been played yet" — an absolute claim about the
+ *  season — while the note is keyed (correctly) on `games_in_window === 0`, which is a claim about
+ *  what THIS POSTERIOR has absorbed. Those two come apart by design: the P1.2 strength fit rolls
+ *  forward WEEKLY (`NCAAF_ROLL_FORWARD_CRON = "0 6 * 2-12,1 1"` — 06:00 Monday), so from the first
+ *  Saturday until the next Monday every team that has played carries a week-1 rating. On 2026-09-04
+ *  that made the sentence sit directly above a "Played" section showing North Dakota State 1-0 with
+ *  a 33-7 win — the page contradicting itself, in the one block whose whole job is to be careful
+ *  about what it claims. The keying was right; the WORDING overstated it. */
 export const STRENGTH_PRESEASON_NOTE =
-  "No games have been played yet, so this is the model's pre-season estimate: the conference it plays in plus what its roster and recruiting suggest. The range is wide because that is genuinely how much is unknown."
+  "This rating does not take in any of this season's games yet, so it is still the model's pre-season estimate: the conference the team plays in plus what its roster and recruiting suggest. The range is wide because that is genuinely how much is unknown."
 /** Shown under the curve. The strength posterior carries no simulated quantiles — its served form
  *  IS a mean and a spread — so the shape is drawn from those, and the reader is told. */
 export const STRENGTH_CURVE_NOTE =
