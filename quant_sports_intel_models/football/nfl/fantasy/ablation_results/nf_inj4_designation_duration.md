@@ -1,0 +1,472 @@
+# NF-INJ4 — designation → games-missed duration model (§0.5 bake-off)
+
+Generated 2026-09-03T06:14:31+00:00. Pre-registration: `ablation_results/nf_inj4_preregistration.md` (committed before any scoring). Census: `ablation_results/nf_inj4_data_census.md`.
+
+**Verdict: NULL — `CONSTRAINT_REFUSED`. Winner `desig_x_practice`. Served arm `always_zero` UNCHANGED; deploy-held; `best_alpha = 0`.**
+
+Frame: 1309 rows / 398 players / 18 weeks / 1 season. Design: grouped 10-fold by gsis_id.
+
+## Gates
+
+| gate              | class     | passes   |
+|:------------------|:----------|:---------|
+| beats_incumbent   | metric    | True     |
+| beats_foil        | metric    | True     |
+| fold_consistency  | metric    | True     |
+| bh_ok             | metric    | True     |
+| oracle_respected  | metric    | False    |
+| beats_permutation | metric    | True     |
+| dsr_ok            | deflation | True     |
+| degenerates_lose  | invariant | True     |
+
+## Pooled scores (CRPS selects; MAE is disclosed and selects nothing)
+
+|                   |     crps |      mae |   mean_lift_vs_incumbent |
+|:------------------|---------:|---------:|-------------------------:|
+| desig_empirical   | 0.517235 | 0.793315 |                 0.282197 |
+| desig_x_posgroup  | 0.52012  | 0.793136 |                 0.279311 |
+| desig_x_practice  | 0.498677 | 0.754407 |                 0.300755 |
+| fixed_penalty     | 0.633486 | 0.633486 |                 0.165946 |
+| status_blind_foil | 0.639443 | 1.00826  |                 0.159989 |
+| always_zero       | 0.799431 | 0.799431 |                 0        |
+| always_max        | 8.26571  | 8.26571  |                -7.46628  |
+
+## Winner vs the matched status-blind foil
+
+```json
+{
+  "mean_lift_crps": 0.140766,
+  "fold_wins": 10,
+  "n_folds": 10,
+  "fold_consistency_wins_required": 7,
+  "fold_consistency_false_fire": 0.1719,
+  "p_one_sided": 0.0,
+  "bh_cutoff_binding": 0.05,
+  "bh_cutoff_conservative_reported": 0.007143,
+  "clears_conservative_reading": true
+}
+```
+
+## Deflation
+
+```json
+{
+  "pbo_declared_field": 0.0,
+  "pbo_eligible_set": 0.0,
+  "pbo_application": "field",
+  "pbo_binding": "eligible_set (NF1.8: compute PBO over the search the selection ran)",
+  "dsr_conv": 0.9999,
+  "dsr_whole_field": 0.0,
+  "trial_sharpes": {
+    "fixed_penalty": 4.5754,
+    "desig_x_posgroup": 4.4135,
+    "desig_empirical": 4.3161,
+    "desig_x_practice": 4.0558,
+    "status_blind_foil": 2.8705,
+    "always_zero": 0.0,
+    "always_max": -10.5328
+  },
+  "V_declared_excl_degenerates": 0.467506,
+  "V_whole_field": 30.20556,
+  "degenerates_excluded_from_v": true,
+  "n_trials": 7,
+  "leave_one_fold_out_flip_distribution": {
+    "desig_x_practice": 10
+  },
+  "bailey_performance_degradation": 0.0,
+  "whole_field_spread_pct": 1557.53,
+  "contender_spread_pct": 3.72,
+  "note": "\u26a0\ufe0f The degenerate exclusion is NON-MONOTONE and is therefore not a lever: dropping a NEAR-MEAN arm WIDENS the sample variance and RAISES the bar. It applies to the two arms named degenerate before any score, and to nothing else (DSR-CONV). \u26d4 No post-hoc trim of any kind (MH2.2), and no menu of per-candidate-family DSRs."
+}
+```
+
+## Anchors
+
+|                   | evaluable   |   arm_crps |   own_form_oracle_crps |   matched_n_control_crps | anchor_pair_active   | respects_oracle   | reading                                                                                                                                  |
+|:------------------|:------------|-----------:|-----------------------:|-------------------------:|:---------------------|:------------------|:-----------------------------------------------------------------------------------------------------------------------------------------|
+| desig_empirical   | True        |   0.517235 |               0.606835 |                 0.64056  | True                 | False             | ACTIVE — the peek is measurably better than an honest fit at the same n, so the floor is informative                                     |
+| desig_x_posgroup  | True        |   0.52012  |               0.603648 |                 0.638254 | True                 | False             | ACTIVE — the peek is measurably better than an honest fit at the same n, so the floor is informative                                     |
+| desig_x_practice  | True        |   0.498677 |               0.601456 |                 0.642016 | True                 | False             | ACTIVE — the peek is measurably better than an honest fit at the same n, so the floor is informative                                     |
+| fixed_penalty     | True        |   0.633486 |               0.633486 |                 0.633486 | False                | True              | INACTIVE — the peek ties its matched-n control, so the pair could not act; UNINFORMATIVE, neither a refusal nor a pass (NF-W6d / NF-D20) |
+| status_blind_foil | True        |   0.639443 |               0.625466 |                 0.640171 | True                 | True              | ACTIVE — the peek is measurably better than an honest fit at the same n, so the floor is informative                                     |
+| always_zero       | True        |   0.799431 |               0.799431 |                 0.799431 | False                | True              | INACTIVE — the peek ties its matched-n control, so the pair could not act; UNINFORMATIVE, neither a refusal nor a pass (NF-W6d / NF-D20) |
+| always_max        | True        |   8.26571  |               8.26571  |                 8.26571  | False                | True              | INACTIVE — the peek ties its matched-n control, so the pair could not act; UNINFORMATIVE, neither a refusal nor a pass (NF-W6d / NF-D20) |
+
+```json
+{
+  "_permutation": {
+    "evaluable": true,
+    "winner_crps": 0.498677,
+    "permuted_crps": 0.592637,
+    "beats_permutation": true
+  },
+  "_degenerates": {
+    "always_zero": {
+      "crps": 0.799431,
+      "loses_to_winner": true
+    },
+    "always_max": {
+      "crps": 8.265713,
+      "loses_to_winner": true
+    }
+  }
+}
+```
+
+## Positive control (PLAT-CVP2)
+
+```json
+{
+  "verdict": "BLIND",
+  "effect_games": 1.0,
+  "injected_designations": [
+    "out",
+    "doubtful"
+  ],
+  "survivors": [],
+  "metric_survivors": [],
+  "deflation_blocked": [],
+  "constraint_blocked": [],
+  "blocking_gates": {
+    "desig_empirical": [
+      "oracle_respected"
+    ],
+    "desig_x_posgroup": [
+      "oracle_respected"
+    ],
+    "desig_x_practice": [
+      "oracle_respected"
+    ]
+  },
+  "partition_source": "gate_classes",
+  "partition_verified": true,
+  "gate_classes_resolved": {
+    "beats_foil": "metric",
+    "beats_incumbent": "metric",
+    "beats_permutation": "metric",
+    "bh_ok": "metric",
+    "degenerates_lose": "invariant",
+    "dsr_ok": "deflation",
+    "fold_consistency": "metric",
+    "oracle_respected": "metric"
+  },
+  "invariant_gates": [
+    "degenerates_lose"
+  ],
+  "field_level_gates_applied_per_arm": [],
+  "null_control_checked": true,
+  "null_control_survivors": [],
+  "reason": "not one arm clears even the MOVABLE METRIC gates at an injected effect of 1 \u2014 this family would return a null for a real, large effect, so a null from it is free (NF1.7 (a): a check that cannot fire is not a check that passed). \u26a0\ufe0f 1 gate(s) are DECLARED injection-invariant (`degenerates_lose`) and were excluded from that reading, so BLIND here means the MOVABLE half genuinely failed to fire."
+}
+```
+
+## Null classification
+
+```json
+{
+  "state": "CONSTRAINT_REFUSED",
+  "binding_half": "anchor",
+  "why": "every STATISTICAL gate passes decisively and the study is refused by ONE pre-registered ANCHOR clause. That clause fails on a ratio fixed by the CV design (an arm's training rows to its own-form oracle's peek), so no fold count and no season count can move it \u2014 the remedy is a DIFFERENT ANCHOR DESIGN registered forward, or a PM decision. NEVER more data.",
+  "retest_trigger": null,
+  "publishes_a_data_trigger": false,
+  "instrument_verdict_verbatim": {
+    "state": "POWER_LIMITED",
+    "reason": "`crps_spell`: insufficient recorded statistics to certify the null as powered. Absent a detectability figure the honest default is POWER-LIMITED \u2014 a null is trustworthy only when something was computed to make it so.",
+    "retest_trigger": null,
+    "pbo_application_admissible": true,
+    "field_remedy_admissible": null,
+    "detail": {
+      "n_folds": 10,
+      "n_arms": 7,
+      "observed_sr": 3.9025,
+      "sr0": 0.9482,
+      "var_trials_sr": 0.4675426430000001,
+      "degenerates_excluded_from_v": true,
+      "lockstep_closed": false,
+      "lockstep_gap": 2.9542890686875274,
+      "lockstep_sign_invariant": true,
+      "declared_field_size": 7,
+      "declared_field_size_source": "stated",
+      "field_remedy_admissible": true,
+      "pbo": 0.0,
+      "pbo_gate": 0.2,
+      "pbo_pass": true,
+      "pbo_application": "field",
+      "pbo_application_admissible": true,
+      "sign_floor": 0.0009765625,
+      "bh_cutoff": 0.05
+    }
+  },
+  "instrument_note": "`classify_null` has no state for a deterministic-constraint refusal (NF-D18), so its output above is a statement about the STATISTICAL reading and is preserved rather than overwritten."
+}
+```
+
+## Serving counterfactual
+
+| designation   | position   | practice_level   |   games_remaining |   expected_games_missed |   rate_multiplier |
+|:--------------|:-----------|:-----------------|------------------:|------------------------:|------------------:|
+| out           | QB         | unknown          |                17 |                  2.3145 |            0.8639 |
+| doubtful      | QB         | unknown          |                17 |                  0.8052 |            0.9526 |
+| questionable  | QB         | unknown          |                17 |                  0.6301 |            0.9629 |
+| none_listed   | QB         | unknown          |                17 |                  0.159  |            0.9906 |
+| out           | RB         | unknown          |                17 |                  2.3145 |            0.8639 |
+| doubtful      | RB         | unknown          |                17 |                  0.8052 |            0.9526 |
+| questionable  | RB         | unknown          |                17 |                  0.6301 |            0.9629 |
+| none_listed   | RB         | unknown          |                17 |                  0.159  |            0.9906 |
+| out           | WR         | unknown          |                17 |                  2.3145 |            0.8639 |
+| doubtful      | WR         | unknown          |                17 |                  0.8052 |            0.9526 |
+| questionable  | WR         | unknown          |                17 |                  0.6301 |            0.9629 |
+| none_listed   | WR         | unknown          |                17 |                  0.159  |            0.9906 |
+| out           | TE         | unknown          |                17 |                  2.3145 |            0.8639 |
+| doubtful      | TE         | unknown          |                17 |                  0.8052 |            0.9526 |
+| questionable  | TE         | unknown          |                17 |                  0.6301 |            0.9629 |
+| none_listed   | TE         | unknown          |                17 |                  0.159  |            0.9906 |
+
+## Declared diagnostics (reported, never gates)
+
+```json
+{
+  "secondary_week_design": {
+    "design": "forward-chained purged week blocks",
+    "blocks": [
+      [
+        7,
+        8
+      ],
+      [
+        9,
+        10
+      ],
+      [
+        11,
+        12
+      ],
+      [
+        13,
+        14
+      ],
+      [
+        15,
+        16
+      ],
+      [
+        17,
+        18
+      ]
+    ],
+    "per_arm": {
+      "desig_empirical": {
+        "mean_lift_vs_foil": 0.107894,
+        "folds_positive": 5,
+        "n_folds": 6,
+        "sign_matches_primary": null
+      },
+      "desig_x_posgroup": {
+        "mean_lift_vs_foil": 0.107636,
+        "folds_positive": 6,
+        "n_folds": 6,
+        "sign_matches_primary": null
+      },
+      "desig_x_practice": {
+        "mean_lift_vs_foil": 0.120774,
+        "folds_positive": 5,
+        "n_folds": 6,
+        "sign_matches_primary": null
+      }
+    },
+    "pooled_crps": {
+      "desig_empirical": 0.45265,
+      "desig_x_posgroup": 0.452909,
+      "desig_x_practice": 0.43977,
+      "fixed_penalty": 0.543799,
+      "status_blind_foil": 0.560544,
+      "always_zero": 0.703281,
+      "always_max": 5.62525
+    },
+    "why_not_primary": "at 6 folds the one-sided sign floor is 0.0156, which `validate_sign_certifiability` REFUSES against the conservative BH cutoff 0.00714 \u2014 a design no effect of any size could certify",
+    "gate": false
+  },
+  "censoring_sensitivity": {
+    "rows": 1232,
+    "rows_dropped": 77,
+    "pooled_crps": {
+      "desig_empirical": 0.443293,
+      "desig_x_posgroup": 0.446994,
+      "desig_x_practice": 0.430563,
+      "fixed_penalty": 0.538405,
+      "status_blind_foil": 0.552573,
+      "always_zero": 0.682726,
+      "always_max": 8.825663
+    },
+    "winner": "desig_x_practice",
+    "gate": false
+  },
+  "resolution_sensitivity": {
+    "rule": "most severe designation wins, recency breaks ties",
+    "active": false,
+    "reading": "INACTIVE \u2014 all 18 player-weeks whose captures carry more than one distinct designation resolve IDENTICALLY under both rules, because in this population a designation only ever escalates (questionable \u2192 out) and never de-escalates. Its agreement carries NO information and is not scored as a pass (NF-D20). It stays registered so the 2026 re-test inherits it.",
+    "gate": false
+  },
+  "oracle_floor_decomposition": {
+    "registered_clause": "no arm beats its OWN-FORM oracle; matched-n control evaluable",
+    "registered_clause_result": "FAILED",
+    "per_arm": [
+      {
+        "arm": "desig_empirical",
+        "arm_crps": 0.517235,
+        "own_form_oracle_crps": 0.606835,
+        "matched_n_control_crps": 0.64056,
+        "naive_clause_arm_ge_oracle": false,
+        "nf1_9f_clause_oracle_le_matched_n": true,
+        "anchor_pair_active": true
+      },
+      {
+        "arm": "desig_x_posgroup",
+        "arm_crps": 0.52012,
+        "own_form_oracle_crps": 0.603648,
+        "matched_n_control_crps": 0.638254,
+        "naive_clause_arm_ge_oracle": false,
+        "nf1_9f_clause_oracle_le_matched_n": true,
+        "anchor_pair_active": true
+      },
+      {
+        "arm": "desig_x_practice",
+        "arm_crps": 0.498677,
+        "own_form_oracle_crps": 0.601456,
+        "matched_n_control_crps": 0.642016,
+        "naive_clause_arm_ge_oracle": false,
+        "nf1_9f_clause_oracle_le_matched_n": true,
+        "anchor_pair_active": true
+      }
+    ],
+    "mean_train_rows": 1178.1,
+    "mean_oracle_peek_rows": 130.9,
+    "resolution_ratio_train_over_peek": 9.0,
+    "min_cell_n": 30,
+    "reading": "the naive clause is UNPASSABLE BY CONSTRUCTION in this design: the peek is fitted on a test fold of ~131 rows against arms trained on ~1178, and a cell below MIN_CELL_N=30 backs off, so at peek resolution most of the conditioning collapses to the pooled distribution. An arm beating a label-seeing oracle here is CAPACITY, never leakage (the arms are fitted strictly on training rows disjoint by player). \u26d4 The gate stays FAILED as registered.",
+    "gate": false
+  },
+  "gate_effect_sweep": {
+    "post_hoc": true,
+    "gate": false,
+    "arm": "desig_empirical",
+    "ladder": [
+      0.0,
+      0.5,
+      1.0,
+      2.0,
+      4.0
+    ],
+    "per_effect": [
+      {
+        "effect_games": 0.0,
+        "beats_incumbent": true,
+        "beats_foil": true,
+        "fold_consistency": true,
+        "bh_ok": true,
+        "oracle_respected": false,
+        "beats_permutation": true,
+        "dsr_ok": true,
+        "degenerates_lose": true
+      },
+      {
+        "effect_games": 0.5,
+        "beats_incumbent": true,
+        "beats_foil": true,
+        "fold_consistency": true,
+        "bh_ok": true,
+        "oracle_respected": false,
+        "beats_permutation": true,
+        "dsr_ok": true,
+        "degenerates_lose": true
+      },
+      {
+        "effect_games": 1.0,
+        "beats_incumbent": true,
+        "beats_foil": true,
+        "fold_consistency": true,
+        "bh_ok": true,
+        "oracle_respected": false,
+        "beats_permutation": true,
+        "dsr_ok": true,
+        "degenerates_lose": true
+      },
+      {
+        "effect_games": 2.0,
+        "beats_incumbent": true,
+        "beats_foil": true,
+        "fold_consistency": true,
+        "bh_ok": true,
+        "oracle_respected": false,
+        "beats_permutation": true,
+        "dsr_ok": true,
+        "degenerates_lose": true
+      },
+      {
+        "effect_games": 4.0,
+        "beats_incumbent": true,
+        "beats_foil": true,
+        "fold_consistency": true,
+        "bh_ok": true,
+        "oracle_respected": false,
+        "beats_permutation": true,
+        "dsr_ok": true,
+        "degenerates_lose": true
+      }
+    ],
+    "gate_state_across_the_ladder": {
+      "beats_incumbent": "always_passes",
+      "beats_foil": "always_passes",
+      "fold_consistency": "always_passes",
+      "bh_ok": "always_passes",
+      "oracle_respected": "always_fails",
+      "beats_permutation": "always_passes",
+      "dsr_ok": "always_passes",
+      "degenerates_lose": "always_passes"
+    },
+    "uninformative_because_already_passing_at_effect_zero": [
+      "beats_incumbent",
+      "beats_foil",
+      "fold_consistency",
+      "bh_ok",
+      "beats_permutation",
+      "dsr_ok",
+      "degenerates_lose"
+    ],
+    "blocking_and_unmovable_by_a_planted_effect": [
+      "oracle_respected"
+    ],
+    "reading": "a gate that is FALSE at every rung \u2014 including a planted effect four times the registered size \u2014 cannot be made to fire by the injection, so an arm blocked by it ALONE cleared everything the control could move: the SUBSTANCE of CONSTRAINT_BLOCKED. \u26d4 The BLIND badge STANDS as the instrument returned it, because this registration did not declare that gate invariant in advance (E2.1-r, and this study's own \u00a76 says so verbatim); the reclassification is a FINDING for the successor, never applied here. \u26a0\ufe0f Gates listed as `always_passes` say nothing in this sweep \u2014 a satisfied boolean has nowhere to move."
+  },
+  "mae_is_disclosed_never_selects": {
+    "desig_empirical": {
+      "crps": 0.517235,
+      "mae": 0.793315
+    },
+    "desig_x_posgroup": {
+      "crps": 0.52012,
+      "mae": 0.793136
+    },
+    "desig_x_practice": {
+      "crps": 0.498677,
+      "mae": 0.754407
+    },
+    "fixed_penalty": {
+      "crps": 0.633486,
+      "mae": 0.633486
+    },
+    "status_blind_foil": {
+      "crps": 0.639443,
+      "mae": 1.008262
+    },
+    "always_zero": {
+      "crps": 0.799431,
+      "mae": 0.799431
+    },
+    "always_max": {
+      "crps": 8.265713,
+      "mae": 8.265713
+    }
+  }
+}
+```
