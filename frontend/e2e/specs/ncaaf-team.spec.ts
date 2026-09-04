@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { API_PREFIX, collectPageErrors, mockApi, type MockOptions } from "../support/api-mock"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors, internalHrefs } from "../support/assertions"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
+import { SCHEDULE_PLAYED_HEADING } from "@/lib/ncaaf-copy"
 
 /**
  * NCAAF-P3.3 — THE TEAM STATS PAGE, AT THE RENDER LEVEL.
@@ -632,6 +633,42 @@ test("a ranking states its population and its confidence, both from the payload"
   // range it did not recompute.
   const pct = Math.round((fbs.interval_hi_level - fbs.interval_lo_level) * 100)
   await expect(el.getByTestId("ncaaf-standing-fbs-range")).toContainText(`${pct}%`)
+})
+
+test("the pre-season note never contradicts the schedule below it", async ({ page }) => {
+  // ⭐⭐ A CROSS-BLOCK CONSISTENCY CLAUSE, and it exists because the page DID contradict itself in
+  // production. The note is keyed on `games_in_window === 0` — a fact about what THIS POSTERIOR has
+  // absorbed — but its first wording claimed "No games have been played yet", a fact about the
+  // SEASON. Those come apart BY DESIGN: the P1.2 strength fit rolls forward weekly (06:00 Monday),
+  // so from the first Saturday until the next Monday every team that has played carries a week-1
+  // rating. On 2026-09-04 that put the sentence directly above a "Played" section showing North
+  // Dakota State 1-0 with a 33-7 win.
+  //
+  // ⚠️ NO BLOCK ON THIS PAGE IS SAFE TO WORD IN ISOLATION. Four independently-sourced blocks are
+  // stacked on one screen, and a reader reads them as one statement — so a claim that is true of
+  // its own block can still be false ON THE PAGE. That is not something a per-block guard can see,
+  // which is why this one spans two.
+  await mockApi(page, { ncaafTeam: "populated" })
+  await page.route(`**${API_PREFIX}/ncaaf/teams/**`, async (route) => {
+    // The exact live shape: a posterior that has absorbed nothing, over a schedule that has games.
+    const blob = JSON.parse(JSON.stringify(TEAM_POPULATED))
+    blob.strength.current.games_in_window = 0
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(blob) })
+  })
+  await page.goto(path(68))
+
+  // NON-VACUITY: both halves must actually be on screen, or this asserts nothing.
+  const note = page.getByTestId("ncaaf-strength-preseason-note")
+  await expect(note).toBeVisible()
+  expect(TEAM_POPULATED.schedule.n_completed, "the fixture must have a played game").toBeGreaterThan(0)
+  await expect(page.getByTestId("ncaaf-team-schedule")).toContainText(SCHEDULE_PLAYED_HEADING)
+
+  // ⛔ The note may say the RATING has taken nothing in. It may NOT say the season has not started.
+  const text = (await note.innerText()).toLowerCase()
+  for (const claim of ["no games have been played", "nobody has played", "the season has not"]) {
+    expect(text, `the note claims "${claim}" while the schedule below shows a played game`)
+      .not.toContain(claim)
+  }
 })
 
 test("the page says what the rating MEANS, not only what its unit is", async ({ page }) => {
