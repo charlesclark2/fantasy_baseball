@@ -111,7 +111,8 @@ STRATIFIED_N_STRATA = 3
 #: a hard floor on the games divisor. It exists so a degenerate row can never produce an infinite
 #: rate — NOT as a tuning knob. It is MEASURED to be inert: the minimum `proj_games` is 0.795 on the
 #: 2026 board (794 rows) and 0.8145 across the 11,885-row 2007–2025 veteran panel, i.e. ~3× the floor,
-#: and `games_floor_binding()` reports the count so "inert" stays a measurement rather than a comment.
+#: and `games_floor_binding()` reports the count so "inert" stays a measurement rather than a
+#: comment — counting `games_floored_mask()`, the same predicate the kernel applies (PLAT-CVP2 d4).
 GAMES_FLOOR = 0.25
 
 
@@ -144,11 +145,39 @@ def max_feasible_scale(line: pd.DataFrame, positions, games, *,
     return out
 
 
+def games_floored_mask(games) -> np.ndarray:
+    """⭐ **THE ONE PREDICATE — "which rows does the `GAMES_FLOOR` actually MOVE?"** — read by the
+    kernel that applies the floor AND by every census that reports it.
+
+    **PLAT-CVP2 defect 4 (NF-INJ2c §6.3).** These were two predicates. `games_floor_binding()`
+    counted `isfinite(g) & (g < FLOOR)`; the kernel substituted on `~(isfinite(g) & (g > FLOOR))`.
+    They agree on a healthy column and diverge on a NON-FINITE row — which the kernel floors and the
+    census could not see. Nothing was mis-scored (measured inert on every fold of every arm), but a
+    census that cannot see one of the two ways its own mechanism acts cannot support the claim it is
+    printed to support: "the floor is inert" would have been read off the narrower of two counts
+    (NF1.7 (a)). A defect corrected at the point of reading is a defect in the instrument (MH2.7), so
+    there is now one predicate with one owner.
+
+    ⭐ THE DEFINITION IS BY **VALUE**, NOT BY BRANCH, and that choice is NF-INJ2c's, kept: a row at
+    exactly `g == FLOOR` takes the kernel's substitution branch but is substituted with `FLOOR`, so
+    its divisor does not move and it cannot make the assignment and the check disagree. Counting it
+    would answer a question about control flow instead of the hypothesis's question — did the
+    divisor change? Hence `~isfinite(g) | (g < FLOOR)`, which is exactly `gsafe != g`.
+
+    The kernel's output is UNCHANGED to the last bit: `np.where(mask, FLOOR, g)` and the previous
+    `np.where(isfinite(g) & (g > FLOOR), g, FLOOR)` agree on every input, the boundary row included
+    (both yield `FLOOR`, which is what it already held)."""
+    g = pd.to_numeric(pd.Series(games), errors="coerce").to_numpy(dtype=float)
+    return ~np.isfinite(g) | (g < GAMES_FLOOR)
+
+
 def games_floor_binding(games) -> int:
     """How many rows the `GAMES_FLOOR` guard actually moved. Reported so "the floor is inert" is a
-    measurement on this population, not a claim inherited from the docstring."""
-    g = pd.to_numeric(pd.Series(games), errors="coerce").to_numpy(dtype=float)
-    return int(np.sum(np.isfinite(g) & (g < GAMES_FLOOR)))
+    measurement on this population, not a claim inherited from the docstring.
+
+    ⭐ Counts `games_floored_mask()` — the SAME predicate the kernel applies (PLAT-CVP2 defect 4).
+    It previously required `isfinite(g)` and so could not see a non-finite row the kernel floors."""
+    return int(np.sum(games_floored_mask(games)))
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -196,7 +225,9 @@ def assign_targets(*, base, games, score, positions, eligible, arm: str,
             raise ValueError("feasibility_clamp needs the counting line to bound the rescale")
 
     rng = np.random.default_rng(seed)
-    gsafe = np.where(np.isfinite(g) & (g > GAMES_FLOOR), g, GAMES_FLOOR)
+    # ⭐ PLAT-CVP2 defect 4 — ONE predicate, shared with `games_floor_binding`. Byte-identical to
+    # the previous `np.where(isfinite(g) & (g > GAMES_FLOOR), g, GAMES_FLOOR)` on every input.
+    gsafe = np.where(games_floored_mask(g), GAMES_FLOOR, g)
 
     for p in learn_positions:
         idx = np.where((pos == p) & elig)[0]

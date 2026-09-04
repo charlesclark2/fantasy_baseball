@@ -36,7 +36,14 @@ SCHEMA = "baseball_data.lakehouse_ext"
 STAGE = f"{SCHEMA}.s3_lakehouse"
 FILE_FORMAT = f"{SCHEMA}.parquet_snappy"
 
-# Mirror run_w1_lakehouse.W3PRE_STG_MODELS.
+# Mirrors the MEMBERSHIP of run_w1_lakehouse.W3PRE_STG_MODELS — ⛔ NOT its ORDER.
+# MLB-INC-0904: over there the order is a BUILD PRIORITY (the serving-critical table goes first so
+# an intraday leg timeout can never starve it); here it only decides the order DDL blocks are
+# emitted, which is cosmetic. Syncing the order "to match the mirror" would churn the generated
+# SQL for nothing, and syncing the other way would silently undo the incident fix — so the two
+# are deliberately allowed to differ in order. Membership must NOT drift (a flattened table with
+# no external table, or an external table over a parquet nothing builds, are both real defects);
+# that is pinned by test_mlb_inc_0904_w3pre_priority.py.
 W3PRE_STG_MODELS = [
     "stg_oddsapi_odds",
     "stg_oddsapi_events",

@@ -27,11 +27,29 @@ def _flat(text: str) -> str:
 
 
 def _default_deflation_gates(cv_power) -> frozenset:
-    """The SHIPPED deflation-class default, read off the instrument rather than transcribed."""
-    import inspect
+    """The SHIPPED deflation-class default, read off the instrument rather than transcribed.
 
-    return inspect.signature(
-        cv_power.injected_effect_positive_control).parameters["deflation_gates"].default
+    RE-ANCHORED by PLAT-CVP2 (2026-09-02) onto the same property, measured a strictly stronger way.
+    The default used to be readable off the signature; PLAT-CVP2 changed `deflation_gates` to
+    default to `None` so the instrument can tell "this caller DECLARED a vocabulary" from "this
+    caller took the default" — the distinction its defect-2 fix turns on. Reading a signature
+    default would now report `None` for a default that is very much still shipped, so this DRIVES
+    the control over a gate table containing each candidate name and reports which ones it actually
+    files as deflation-class. That answers the prereg's question ("does the shipped default still
+    partition the way this document quotes?") against BEHAVIOUR rather than against an argument
+    default, so it cannot be satisfied by a signature that merely looks right."""
+    probe = ("cscv", "deflated_sharpe", "dsr", "pbo", "beats_incumbent", "coherence_restored")
+
+    def run_gates(payload):
+        # one arm, every probe gate FAILING on the injected payload: the partition is read off the
+        # report's own `deflation_gates`, which is what every verdict below it is computed from.
+        return {"probe": {g: False for g in probe}}
+
+    rep = cv_power.injected_effect_positive_control(
+        inject=lambda e: e, run_gates=run_gates, effect=1.0, check_null_control=False)
+    assert set(rep.deflation_gates) | set(rep.metric_gates) == set(probe), (
+        "the control did not classify every probe gate — this helper is measuring nothing")
+    return frozenset(rep.deflation_gates)
 
 
 @pytest.fixture(scope="module")
@@ -257,24 +275,53 @@ def test_the_injection_invariant_partition_is_declared_forward(prereg: str) -> N
         "re-running the control without the blocker to get a nicer badge is the E2.1-r inversion")
 
 
-def test_the_plat_cvp2_claim_is_true_of_the_installed_instrument(prereg: str) -> None:
-    """⭐ The document asserts PLAT-CVP2 has not landed. Check the instrument, not the prose.
+def test_the_plat_cvp2_status_claim_is_checked_against_the_installed_instrument(prereg: str) -> None:
+    """⭐ The document states a PLAT-CVP2 status. Check the instrument, not the prose.
 
-    If the fix DOES land later this turns red, which is the correct outcome: the annotation-around
-    would then be stale and the registration should consume the real verdict instead.
+    ⚠️ **RE-ANCHORED 2026-09-02 BY PLAT-CVP2 — WHICH IS THIS CLAUSE FIRING, AS DESIGNED.** The
+    original form asserted the fix was ABSENT and recorded that landing it "turns red, which is the
+    correct outcome". It landed, and it did. What that firing is FOR is the handoff, so the clause
+    is re-anchored onto the property that is still falsifiable in the world it detected rather than
+    deleted or relaxed: **NF-INJ2c's §7 partition, declared FORWARD, must be CONSUMABLE by the
+    installed instrument** — the invariant-gate input exists and `CONSTRAINT_BLOCKED` is reachable.
+    Delete either and this goes red, so it owns a real property rather than restating a status.
+
+    ⛔ The prereg is NOT edited (E2.1-r; and PLAT-CVP2 is forbidden from coordinating mid-study).
+    Its "has not landed" is a PROVENANCE claim scoped to the commit it names, true when written and
+    true of that commit; it is now HISTORICAL, and whether NF-INJ2c consumes `CONSTRAINT_BLOCKED`
+    at its classify step or keeps carrying the 2b annotation is that study's call, recorded as a
+    handoff in PLAT-CVP2's closeout. The status-claim assertion below stays: a prereg that quietly
+    DROPS its PLAT-CVP2 status still goes red, which is the half of the original that survives.
     """
     import inspect
 
     from betting_ml.utils import cv_power
 
-    claims_absent = _flat("**has not landed**") in _flat(prereg)
-    assert claims_absent, "the prereg no longer states PLAT-CVP2's status — it must state one"
-    src = inspect.getsource(cv_power)
-    assert "CONSTRAINT_BLOCKED" not in src, (
-        "PLAT-CVP2 appears to have LANDED — the prereg's annotation-around is now stale and the "
-        "registration must consume the real CONSTRAINT_BLOCKED verdict")
+    assert _flat("**has not landed**") in _flat(prereg), (
+        "the prereg no longer states PLAT-CVP2's status — it must state one, and the state it "
+        "states is the thing this clause exists to check")
+
     params = inspect.signature(cv_power.injected_effect_positive_control).parameters
-    assert "injection_invariant_gates" not in params
+    assert "invariant_gates" in params, (
+        "the instrument no longer accepts a FORWARD-DECLARED injection-invariant gate set, so "
+        "NF-INJ2c's §7 partition cannot be handed to the control at all")
+    assert "CONSTRAINT_BLOCKED" in cv_power.POSITIVE_CONTROL_VERDICTS, (
+        "`CONSTRAINT_BLOCKED` is not a reachable verdict — the §7 declaration would be accepted "
+        "and then have nowhere to land, which is worse than not accepting it")
+
+    # ⭐ and it must actually FIRE on §7's own shape: an arm stopped by an invariant gate ALONE,
+    # every movable gate passing. A parameter the instrument accepts and ignores is the NF-C0e
+    # wired-but-never-invoked class, which is precisely what an existence check cannot see.
+    def run_gates(payload):
+        fired = float(payload) != 0.0          # the movable gates respond to the injection
+        return {"arm": {"crps_lift": fired, "dsr": fired, "coherence_restored": False}}
+
+    rep = cv_power.injected_effect_positive_control(
+        inject=lambda e: e, run_gates=run_gates, effect=1.0, check_null_control=False,
+        invariant_gates=("coherence_restored",))
+    assert rep.verdict == "CONSTRAINT_BLOCKED" and rep.constraint_blocked == ("arm",), (
+        f"the declared partition was accepted and did not change the reading (got {rep.verdict}) "
+        f"— NF-INJ2c would be handed a badge it still has to annotate around")
 
 
 def test_the_deflation_gate_partition_takes_the_shipped_defaults(prereg: str) -> None:
@@ -287,6 +334,9 @@ def test_the_deflation_gate_partition_takes_the_shipped_defaults(prereg: str) ->
     assert default == {"deflated_sharpe", "pbo", "dsr", "cscv"}, (
         f"the shipped deflation-class default moved to {sorted(default)} — the prereg quotes the "
         "old set and must be re-read against the instrument")
+    assert set(cv_power.DEFLATION_CLASS_GATES) == default, (
+        "the constant and the behaviour have drifted apart — the prereg quotes the constant and "
+        "the control computes with the behaviour, which is the E9.61 two-renderers shape")
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

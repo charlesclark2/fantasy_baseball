@@ -63,6 +63,8 @@ runs to 1800 s and takes the whole tick past its cadence.
 """
 from __future__ import annotations
 
+from typing import NamedTuple
+
 __all__ = [
     "TICK_CADENCE_SECONDS",
     "MAX_RUNTIME_SECONDS",
@@ -70,6 +72,9 @@ __all__ = [
     "LIVE_LEGS",
     "RETIRED_LEGS",
     "invariant_failures",
+    "W3PRE_TIER_WARN_FRACTION",
+    "W3preTierVerdict",
+    "w3pre_tier_verdict",
 ]
 
 # From the cron in pipeline/schedules/intraday_schedules.py (`*/30 14-23` and `0,30 0-3` UTC).
@@ -127,3 +132,90 @@ def invariant_failures() -> list[str]:
             f"in-op in the configuration that is actually deployed"
         )
     return failures
+
+
+# ── MLB-INC-0904: is the W3pre tier still INSIDE the leg cap it has to fit in? ────────────
+#
+# WHY THIS EXISTS. The per-model build times were ALREADY printed (`_build_marts` has logged
+# "✔ <model>: written → … (N.Ns)" since it was written) — the incident's own 158.8 s / 211.4 s
+# figures were read straight off that log. Nothing was MISSING; nothing was COMPARED. The tier
+# grew past its 480 s leg cap over a season and the only thing that noticed was the kill, then
+# the INC-41 freshness SLA 90 minutes later. That is the E11.30 shape exactly — the detection
+# existed, the notification did not — so the cure is not more logging, it is a THRESHOLD.
+#
+# The growth is structural, not accidental: the odds flattens bind the FULL-HISTORY raw glob and
+# DuckDB's bind cost is ~linear in FILE COUNT (INC-42, measured), while both raw stores are
+# append-only. So tier time only ever rises, and a fixed cap is only ever crossed once.
+#
+# ⛔ THIS NEVER RAISES. It is an observation emitted by a BUILD script: turning a slow-but-
+# succeeding build into a hard failure would manufacture the outage it exists to predict.
+
+#: Warn at 60% of the leg cap. A DESIGN quantity, chosen so the warning fires with ~190 s of
+#: headroom still in hand — days-to-weeks of lead time at the growth actually measured here
+#: (stg_derivative_odds went 211.4 s → 299.0 s inside this incident) rather than minutes. It is
+#: deliberately NOT reverse-engineered from the observed 459 s: a threshold set just under the
+#: number that broke would fire only once, on the way past.
+W3PRE_TIER_WARN_FRACTION = 0.60
+
+
+class W3preTierVerdict(NamedTuple):
+    """How the W3pre tier's measured build time sits against the intraday leg cap."""
+
+    verdict: str            # "OK" | "WARN" | "OVER" | "UNEVALUATED"
+    total_seconds: float
+    fraction: float         # total / leg cap
+    worst_model: str | None
+    worst_seconds: float
+    message: str
+
+
+def w3pre_tier_verdict(
+    timings: dict[str, float] | None,
+    *,
+    leg_timeout_seconds: int = LEG_TIMEOUT_SECONDS,
+    warn_fraction: float = W3PRE_TIER_WARN_FRACTION,
+) -> W3preTierVerdict:
+    """Grade one W3pre tier build against the intraday tick's per-leg cap.
+
+    ``timings`` maps model name -> wall-clock seconds for the models that ACTUALLY BUILT.
+
+    ⚠️ An empty/absent mapping is ``UNEVALUATED``, never ``OK`` (NF1.7 (a)): every model being
+    skipped is precisely the state in which no timing evidence exists, and scoring "we measured
+    nothing" as healthy is the vacuous-anchor bug this repo keeps re-learning.
+    """
+    if not timings:
+        return W3preTierVerdict(
+            "UNEVALUATED", 0.0, 0.0, None, 0.0,
+            "W3pre tier build time UNEVALUATED — no model reported a build time (all skipped?). "
+            "Not scored healthy: absence of measurement is not evidence of fit.",
+        )
+
+    total = float(sum(timings.values()))
+    fraction = total / float(leg_timeout_seconds)
+    worst_model, worst_seconds = max(timings.items(), key=lambda kv: kv[1])
+    worst_seconds = float(worst_seconds)
+    share = worst_seconds / total if total else 0.0
+
+    tail = (
+        f"tier={total:.1f}s vs the {leg_timeout_seconds}s intraday leg cap "
+        f"({fraction:.0%}); slowest={worst_model} at {worst_seconds:.1f}s "
+        f"({share:.0%} of the tier)."
+    )
+    if fraction >= 1.0:
+        return W3preTierVerdict(
+            "OVER", total, fraction, worst_model, worst_seconds,
+            f"⚠️ W3pre tier is OVER its intraday leg cap — {tail} A 30-min tick running this "
+            f"tier WILL be killed mid-build. Make the tier cheaper (compact the raw store its "
+            f"slowest model binds, or move a daily-cadence model out of the tick) — a budget "
+            f"raise is bounded by the E11.26 invariants and cannot outrun an append-only store.",
+        )
+    if fraction >= warn_fraction:
+        return W3preTierVerdict(
+            "WARN", total, fraction, worst_model, worst_seconds,
+            f"⚠️ W3pre tier is approaching its intraday leg cap — {tail} Act before it crosses: "
+            f"the raw stores are append-only, so this only ever rises.",
+        )
+    return W3preTierVerdict(
+        "OK", total, fraction, worst_model, worst_seconds,
+        f"W3pre tier within budget — {tail}",
+    )
