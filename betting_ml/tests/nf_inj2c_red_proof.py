@@ -38,6 +38,8 @@ _PREREG = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_resu
 _SPEC = _REPO / "plan_specs/nfl_fantasy/nf-inj2c.yaml"
 _N12 = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_nf1_2.py"
 _N15 = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_nf1_5.py"
+_RB = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/run_nf_inj2b_rate_ordering.py")
+_GITIGNORE = _REPO / ".gitignore"
 _SUITE = "betting_ml/tests/test_nf_inj2c_coherence_diagnosis.py"
 #: nodes 3a/3b/3c live in their own suite; the harness routes each break to the suite that owns it.
 _SUITE_BY_NODE = {}
@@ -476,6 +478,85 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      '    return {k: {"served": served.get(k), "local": local.get(k)}\n            for k in ("depth_chart_as_of", "sleeper_status_as_of")}',
      'for k in served}',
      'test_the_input_vintage_leg_is_TABLE_DRIVEN_over_the_manifests_own_keys'),
+
+    # ── PM ruling, decision request #5: the pin is evaluated at the PUBLISHED artifact's own
+    # resolution. Both directions are RED-proven — a correct reproduction must PASS, a genuinely
+    # wrong row must still REFUSE — because a fix in either direction alone is the defect.
+    ("the pin compares a DECIMAL bar with raw BINARY `<=` again (the defect)", _RB,
+     'return bool(w <= PUBLISHED_ROUNDING_TOL + PUBLISHED_TOL_REPR_EPS)',
+     'return bool(w <= PUBLISHED_ROUNDING_TOL)',
+     'PUBLISHED_ROUNDING_TOL + PUBLISHED_TOL_REPR_EPS',
+     "TestACorrectReproductionPasses::test_the_exact_measured_worst_passes"),
+
+    ("the representation epsilon is widened into SLACK", _RB,
+     'PUBLISHED_TOL_REPR_EPS = 1e-9',
+     'PUBLISHED_TOL_REPR_EPS = 1e-3',
+     'PUBLISHED_TOL_REPR_EPS = 1e-9',
+     "TestAWrongRowStillRefuses::test_the_epsilon_is_not_slack_at_any_material_scale"),
+
+    ("the epsilon shrinks until it no longer covers the error it exists for", _RB,
+     'PUBLISHED_TOL_REPR_EPS = 1e-9',
+     'PUBLISHED_TOL_REPR_EPS = 1e-15',
+     'PUBLISHED_TOL_REPR_EPS = 1e-9',
+     "TestTheRegisteredBarIsUnchanged::"
+     "test_the_epsilon_brackets_the_representation_error_without_reaching_the_data"),
+
+    # ⭐ the E2.1-r break: "fix" the pin by MOVING THE BAR instead of the comparison. This is the
+    # thing the PM ruling explicitly did NOT authorise, so a guard must refuse it.
+    ("the REGISTERED BAR is moved instead of the comparison being fixed", _RB,
+     'PUBLISHED_ROUNDING_TOL = 0.05',
+     'PUBLISHED_ROUNDING_TOL = 0.06',
+     'PUBLISHED_ROUNDING_TOL = 0.05',
+     "TestTheRegisteredBarIsUnchanged::test_the_tolerance_is_still_half_the_published_quantum"),
+
+    ("the comparison stops failing closed on an unevaluable worst", _RB,
+     '    if not math.isfinite(w):\n        return False\n',
+     '    if math.isinf(w) and w > 0:\n        return False\n',
+     'if not math.isfinite(w):',
+     "TestAWrongRowStillRefuses::test_an_unevaluable_worst_refuses"),
+
+    ("the pin stops routing through the helper (wired != invoked)", _RB,
+     '"reproduces": reproduces_at_published_resolution(worst),',
+     '"reproduces": bool(worst <= PUBLISHED_ROUNDING_TOL),',
+     'reproduces_at_published_resolution(worst)',
+     "TestThePinUsesIt::test_the_pin_calls_the_helper_rather_than_comparing_raw"),
+
+    ("the pin folds the epsilon into the reported tolerance, hiding that the bar did not move", _RB,
+     '            "representation_epsilon": PUBLISHED_TOL_REPR_EPS,\n',
+     '',
+     '"representation_epsilon": PUBLISHED_TOL_REPR_EPS',
+     "TestThePinUsesIt::test_the_pin_reports_the_bar_and_the_epsilon_SEPARATELY"),
+
+    ("the comparison site stops saying the epsilon is not slack", _RB,
+     '⛔ `PUBLISHED_TOL_REPR_EPS` IS NOT slack',
+     'The epsilon is applied here',
+     'IS NOT slack',
+     "TestTheRegisteredBarIsUnchanged::"
+     "test_the_source_documents_the_epsilon_as_representation_not_slack"),
+
+    # ── PM ruling, decision request #5 (second half): the D3 capture stamp is machine-local state
+    # and must not ship in the `COPY . .` image. The TRACKING half is RED-proven by index mutation
+    # in the suite's own docstring — this harness cannot express a `git add`.
+    ("the capture stamp is un-ignored, so the image ships one machine's study state", _GITIGNORE,
+     'quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/'
+     'nf_inj2c_capture.json\n',
+     '',
+     'nf_inj2b_baseline/nf_inj2c_capture.json',
+     "TestTheCaptureStampNeverShipsInTheImage::test_gitignore_names_the_capture_stamp"),
+
+    ("the report stops embedding the stamp, so untracking WOULD lose the provenance", _BASE,
+     '"capture": stamp,',
+     '"capture_note": "see the stamp file",',
+     '"capture": stamp',
+     "TestTheCaptureStampNeverShipsInTheImage::"
+     "test_the_reports_carry_the_stamp_so_untracking_loses_no_audit_trail"),
+
+    ("the run stops asserting the capture is intact (the guard that made this a finding)", _BASE,
+     '    stamp = assert_capture_intact(con, schema=args.schema)',
+     '    stamp = json.loads(_CAPTURE_STAMP.read_text())',
+     '= assert_capture_intact(',
+     "TestTheCaptureStampNeverShipsInTheImage::"
+     "test_the_validation_that_refused_the_stale_stamp_is_still_wired"),
 ]
 
 
@@ -509,6 +590,7 @@ _OTHER_SUITES = (
     "betting_ml/tests/test_nf_inj2c_dominance_baseline.py",
     "betting_ml/tests/test_nf_inj2c_preregistration.py",
     "betting_ml/tests/test_nf_inj2c_cache_guard.py",
+    "betting_ml/tests/test_nf_inj2c_published_resolution_pin.py",
 )
 
 
