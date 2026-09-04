@@ -141,6 +141,51 @@ test("the strength curve is drawn from the served parameters, and it is a real s
   expect((d ?? "").split("L").length, "the curve is a straight line, not a distribution").toBeGreaterThan(10)
 })
 
+test("the curve does not borrow the game board's degradation warning", async ({ page }) => {
+  // ⭐⭐ THE POINT OF THIS CLAUSE IS THAT ONE RENDERING MEANT TWO DIFFERENT FACTS (NF-C6b).
+  //
+  // `DistributionCurve` shows an AMBER note when its source is parametric, because on a game card
+  // that IS a degradation: the simulator publishes a quantile ladder and we did not get it. The
+  // strength posterior's served form is a mean and a spread — there are no simulated quantiles to
+  // be missing — so the identical note announced a defect that does not exist, in a warning colour,
+  // and its noun ("this game's") is wrong on a page that is not about a game. It shipped, and the
+  // operator read it as a broken chart on the first page they opened.
+  //
+  // ⚠️ NON-VACUITY FIRST, and it is load-bearing here: this curve IS parametric, so the branch
+  // under test genuinely executes. Without that assertion the two below would pass on a curve that
+  // never reached the code path at all (NF1.7 (a)).
+  await open(page, 68)
+  const curve = page.getByTestId("ncaaf-strength-curve")
+  await expect(curve).toHaveAttribute("data-curve-source", "parametric")
+
+  await expect(
+    page.getByTestId("ncaaf-strength-curve-parametric-note"),
+    "the team page is rendering the game card's parametric warning",
+  ).toHaveCount(0)
+  // ⛔ And not merely under a different testid: the game surface's wording must not be on this
+  // page by ANY route. Matched on the distinctive noun rather than the whole sentence, so a reword
+  // of the game copy does not silently retire this guard.
+  await expect(page.locator("body")).not.toContainText("this game's simulated quantiles")
+
+  // ⭐ THE PROVENANCE IS STILL STATED — suppressing the warning is only admissible because the
+  // hint says the same true thing in this surface's own words. A clause that checked only the
+  // absence would be satisfied by a page that had quietly stopped explaining the curve at all.
+  await expect(page.getByTestId("ncaaf-strength-curve-hint")).toContainText("mean and spread")
+})
+
+test("the zero rule on a rating axis is named for a rating, not for a game", async ({ page }) => {
+  // "even" is what zero means on a game MARGIN — a tied game — and it is the shared component's
+  // default. Zero on a rating axis is an AVERAGE FBS TEAM. The rule is drawn precisely to give the
+  // reader the comparison that makes the number mean something, so carrying the game surface's
+  // noun across answers the wrong question in the one place the page is trying to orient them.
+  await open(page, 68)
+  const svg = page.getByTestId("ncaaf-strength-curve").locator("svg")
+  await expect(svg).toContainText("average FBS team")
+  await expect(svg, "the rating axis is labelled with the game board's word").not.toContainText(
+    /\beven\b/,
+  )
+})
+
 test("the week-by-week trend appears only when there is more than one week to draw", async ({ page }) => {
   // ⭐ TWO-SIDED, and the negative half is the ordinary September state. One point is not a trend,
   // and a component that drew one anyway would render a picture of nothing that looks like data.

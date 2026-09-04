@@ -35,6 +35,7 @@ import {
   STRENGTH_TREND_HINT,
   STRENGTH_TREND_LABEL,
   STRENGTH_UNIT_HINT,
+  STRENGTH_ZERO_LABEL,
 } from "@/lib/ncaaf-copy"
 import {
   formatSignedPoints,
@@ -204,13 +205,29 @@ export function NcaafTeamStrengthBlock({ strength }: { strength: NcaafTeamStreng
         </p>
       )}
 
-      <DistributionCurve
-        testId="ncaaf-strength-curve"
-        distribution={dist}
-        label={STRENGTH_LABEL}
-        hint={STRENGTH_CURVE_NOTE}
-        zeroReference
-      />
+      {/* ⚠️ THE WIDTH CONSTRAINT IS PART OF THE DRAWING, NOT DECORATION. `DistributionCurve` uses
+          `preserveAspectRatio="none"`, so it stretches to whatever box it is handed — at this
+          page's full `max-w-4xl` the 320×96 viewBox was rendered ~896×96 and the bell came out
+          flattened into something a reader reads as a broken chart. The pair below keeps the drawn
+          box near the 320:96 ≈ 3.3:1 it was designed at, at both widths. */}
+      <div className="max-w-xl">
+        <DistributionCurve
+          testId="ncaaf-strength-curve"
+          distribution={dist}
+          label={STRENGTH_LABEL}
+          hint={STRENGTH_CURVE_NOTE}
+          zeroReference
+          zeroLabel={STRENGTH_ZERO_LABEL}
+          heightClass="h-28 sm:h-40"
+          // ⭐ SUPPRESSED, AND ONLY BECAUSE THE HINT ABOVE ALREADY SAYS IT. `STRENGTH_CURVE_NOTE`
+          // states this curve's provenance in the words this surface needs. The default note is a
+          // DEGRADATION warning written for a game card ("this game's simulated quantiles were not
+          // published") — on a posterior whose served form IS a mean and a spread there are no
+          // simulated quantiles to be missing, so it announced a defect that does not exist, in
+          // amber, under a page about a team and not a game.
+          parametricNote={null}
+        />
+      </div>
 
       <StrengthTrend weeks={strength.weeks} />
 

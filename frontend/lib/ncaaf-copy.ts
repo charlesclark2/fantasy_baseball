@@ -399,3 +399,9 @@ export const CONFERENCE_MISMATCH_NOTE =
   "Our records place this team in a different conference from the one the rating was calculated against, so read the rating with that in mind."
 
 export const TEAM_PROVENANCE_LABEL = "How this was produced"
+
+/** The zero rule on the strength curve. ⚠️ NOT "even" — that is what zero means on a game margin,
+ *  and it is the P3.2 default. Zero on a RATING axis is an average FBS team, and the whole reason
+ *  the rule is drawn at all is to give the reader the one comparison that makes the number mean
+ *  something. Labelling it with the game surface's noun answers the wrong question. */
+export const STRENGTH_ZERO_LABEL = "average FBS team"
