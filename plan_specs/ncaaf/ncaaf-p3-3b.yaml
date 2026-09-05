@@ -162,6 +162,40 @@ spec:
       the roll-forward chain is alive (measured), and the stamp does not cite it
       either way, so a dead chain could not make the stamp print a schedule that
       is not firing. The 9/7 check still matters for the `talent` leg (NCAAF-RF1).
+      ⑦ ⭐ THE DEPLOY ITSELF PRODUCED A FINDING, AND THREE AFFORDANCES WERE BUILT FROM
+      IT — THIS IS THE JUSTIFICATION FOR THAT WORK, RECORDED SO THE PM DOES NOT HAVE
+      TO TAKE IT ON TRUST. On 2026-09-05 the story deployed correctly (box CD, box
+      writer, Lambda, frontend) and the acceptance nevertheless took three rounds and
+      one WRONG diagnosis. Cause: every `/ncaaf/*` route answers
+      `cache-control: public, s-maxage=900, stale-while-revalidate=3600` (G100-D1's
+      public cache rule — the single biggest lever on the cost of a Saturday, so it is
+      correct and is not going away). A single plain read of a team payload showed the
+      new fields absent; that read as "the Lambda was not deployed", which was FALSE —
+      the deploy was fine and the shared cache had not turned over. Isolating it needed
+      a direct S3 read of the served blob to prove the writer had produced the field.
+      ⇒ A CACHED READ AND A FAILED DEPLOY ARE BYTE-IDENTICAL, which is the repo's
+      standing "a check whose failure state is indistinguishable from its healthy state
+      has not verified anything" (G100-D1), arriving through the verification path
+      rather than the product. Three gaps were measured, not supposed, and each is now
+      closed: (a) the box run report was SILENT on the ratings vintage the run existed
+      to gate — the writer computed it and only logged it, so a clean-looking
+      acceptance JSON could not answer the question and the operator read S3 instead
+      (E11.30 in miniature); (b) the `@live` suite — the ONE place that asks "does the
+      SERVER still send X" — used plain, cacheable reads and had NO team-page clause at
+      all, so the contract that had just shipped was the one thing it could not check;
+      (c) "is the deployed build the one I think it is?" had no cheap answer, because
+      this Lambda has no CD and `deploy.sh` packages the CURRENT WORKING TREE with no
+      ref pin — G100-C0-MFA recorded that exact lesson once already, so this is its
+      SECOND instance and now a permanent affordance rather than a per-story one.
+      ⛔ The build marker is deliberately NOT a Lambda env var: that needs
+      `update-function-configuration --environment`, which REPLACES the whole Variables
+      map while `deploy.sh` only calls `update-function-code` — the E9.8-P2 wipe, on the
+      day money started moving. It is baked into the package instead, and a guard
+      refuses the env-var form by name. All three shipped in ONE follow-up PR with 11
+      clauses and a 10/10 RED proof; that proof caught one of its own guards VACUOUS
+      (the team-payload clause matched a substring that also appears inside an
+      assertion's failure message), which is the fourth instance of that family in this
+      story and the reason the harness exists.
       ⑥ NOT APPLICABLE, stated rather than silently omitted: the acceptance
       criteria ask for "baseline-pass/NOT-SELECTED in any Python harness". There is
       no §0.5 selection harness in this story (no model, no bake-off, no arms), so

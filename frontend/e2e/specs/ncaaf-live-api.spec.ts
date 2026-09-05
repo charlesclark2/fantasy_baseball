@@ -32,9 +32,33 @@ import { expect, test } from "@playwright/test"
 
 const API = process.env.NCAAF_LIVE_API_URL ?? "https://api.credencesports.com"
 
+/**
+ * A CACHE-BUSTED URL, and it is load-bearing rather than tidy.
+ *
+ * ⭐ MEASURED 2026-09-05: every `/ncaaf/*` route answers
+ * `cache-control: public, s-maxage=900, stale-while-revalidate=3600` (the G100-D1 public cache
+ * rule — the single biggest lever on the cost of a Saturday, so it is not going away). A shared
+ * cache therefore serves a response up to 15 minutes old, and up to an hour older while it
+ * revalidates behind the scenes.
+ *
+ * ⛔ THAT MAKES A PLAIN READ UNABLE TO ANSWER THIS SPEC'S OWN QUESTION. "The deployed API no
+ * longer sends X" and "the cache has not turned over since the deploy" produce a byte-identical
+ * response, and on 2026-09-05 exactly that read as a failed deploy: a field was reported missing,
+ * the deploy was blamed, and the Lambda turned out to be fine — the diagnosis needed a direct S3
+ * read of the served blob to isolate. A check whose failure state is indistinguishable from its
+ * healthy state has not verified anything (G100-D1's own lesson, arriving through the harness).
+ *
+ * ⚠️ A unique param per call, NOT a fixed one: a fixed `?cb=1` is itself cacheable and would go
+ * stale the same way, one indirection later.
+ */
+const bust = (path: string) => {
+  const sep = path.includes("?") ? "&" : "?"
+  return `${API}${path}${sep}_cb=${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 test.describe("@live", () => {
   test("the deployed NCAAF API still serves what the games surface reads", async ({ request }) => {
-    const manifestRes = await request.get(`${API}/ncaaf/manifest`)
+    const manifestRes = await request.get(bust("/ncaaf/manifest"))
     // A 401 here means the API-Gateway authorizer is back in front of the route (NF3.2) — the
     // failure mode that is invisible in the FastAPI source, because the route is genuinely public
     // in code and refused before the Lambda is ever invoked.
@@ -61,7 +85,7 @@ test.describe("@live", () => {
     )
 
     const day = manifest.game_days[0].game_day
-    const slateRes = await request.get(`${API}/ncaaf/games?game_day=${day}`)
+    const slateRes = await request.get(bust(`/ncaaf/games?game_day=${day}`))
     expect(slateRes.status(), `GET /ncaaf/games?game_day=${day}`).toBe(200)
     const slate = await slateRes.json()
     expect(slate.games.length).toBeGreaterThan(0)
@@ -96,5 +120,62 @@ test.describe("@live", () => {
         expect(flat.includes(token), `${where} carries a ${token} field`).toBe(false)
       }
     }
+  })
+
+  test("the deployed NCAAF API still serves what the TEAM page reads", async ({ request }) => {
+    // ⭐ ADDED AFTER THE 2026-09-05 DEPLOY (NCAAF-P3.3b follow-up), and it is the clause that would
+    // have made that morning a one-liner. The team page gained two fields the client renders, and
+    // this suite covered only the games surface — so "did the contract reach production?" had no
+    // automated answer and was settled by hand, wrongly at first.
+    //
+    // ⚠️ THE FAILURE MODE IT WATCHES IS E9.41: `NcaafTeamStrength` declares these, and a Lambda
+    // built before that declaration STRIPS them on serialize. The store is right the whole time and
+    // the page renders a stated absence — no error anywhere, and nothing else in the repo asks.
+    const res = await request.get(bust("/ncaaf/teams/68"))
+    expect(
+      res.status(),
+      `GET /ncaaf/teams/68 → ${res.status()}. 401 = the API-Gateway authorizer is in front of this ` +
+        `route again (NF3.2); 404 = nothing published for the clock-derived season.`,
+    ).toBe(200)
+    const team = await res.json()
+    const s = team.strength
+
+    // The stamp's two halves. Both KEYS must exist — their absence is the deploy-skew signature —
+    // and each value must be an ISO instant or null, never a fabricated or malformed string.
+    for (const key of ["ratings_as_of", "ratings_next_update"]) {
+      expect(s, `strength.${key} is missing — the Lambda predates the P3.3b contract, so it is ` +
+        `STRIPPING a field the store carries (E9.41). Re-run infrastructure/lambda/deploy.sh from ` +
+        `a checkout at origin/main, then confirm GET /health reports that SHA.`).toHaveProperty(key)
+      const v = s[key]
+      if (v !== null) {
+        expect(typeof v, `strength.${key}`).toBe("string")
+        expect(Number.isNaN(Date.parse(v)), `strength.${key} = ${v} is not a parseable instant`)
+          .toBe(false)
+      }
+    }
+    // ⛔ `ratings_as_of` is asserted NON-NULL, `ratings_next_update` deliberately is NOT. Null there
+    // is the MEASURED state (no schedule rewrites the ratings — the P1.2 re-fit is an operator
+    // step), so requiring a value would make this clause fail on a correct payload; whereas a null
+    // vintage means the box could not read the ratings artifact, which IS worth failing on.
+    expect(s.ratings_as_of, "the served ratings carry no vintage — the box writer's lake read " +
+      "failed, or the serving write has not run since the P3.3b deploy").not.toBeNull()
+    // And it must not have quietly become the write clock: they are different instants by design,
+    // and reading the wrong one would look completely normal (P3.3b).
+    expect(String(s.ratings_as_of).slice(0, 10)).not.toBe(String(team.generated_at).slice(0, 10))
+  })
+
+  test("GET /health reports WHICH BUILD is answering", async ({ request }) => {
+    // The affordance that turns "did deploy.sh take?" into one request. `/health` is deliberately
+    // NOT in `_PUBLIC_CACHE_RULES`, so unlike every `/ncaaf/*` route it cannot be served stale.
+    const res = await request.get(bust("/health"))
+    expect(res.status(), "GET /health").toBe(200)
+    const body = await res.json()
+    expect(body.status).toBe("ok")
+    expect(body, "no build marker — the deployed Lambda predates the P3.3b follow-up")
+      .toHaveProperty("build")
+    expect(body.build.packaged, "the deployed Lambda reports itself UNPACKAGED, which means it was " +
+      "not built by deploy.sh — its `sha` cannot be trusted").toBe(true)
+    expect(String(body.build.sha)).toMatch(/^[0-9a-f]{40}(\+dirty)?$/)
+    expect(body.build.built_at, "a packaged build must carry its build instant").not.toBeNull()
   })
 })

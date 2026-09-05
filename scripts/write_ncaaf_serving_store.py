@@ -494,6 +494,19 @@ def build_team_blobs(season: int, *, now: datetime | None = None) -> tuple[list[
         "n_teams": len(blobs),
         "marts_available": marts_available,
         "strength_read_ok": strength is not None,
+        # ⭐ THE RATINGS' OWN VINTAGE, IN THE REPORT AND NOT ONLY IN A LOG LINE (NCAAF-P3.3b
+        # follow-up). It shipped as a `log.info` and the run report was SILENT on it — so the
+        # 2026-09-05 acceptance run returned a clean-looking JSON that could not answer the one
+        # question the run existed to gate, and the operator had to read the served S3 blob to find
+        # out whether the stamp had been populated at all. A figure the writer already computes and
+        # the report does not carry is the E11.30 shape in miniature: detected, but not reported.
+        #
+        # ⚠️ `null` here is a REAL state, not a gap: `ratings_next_update` is null whenever no
+        # schedule rewrites the ratings (measured empty — the P1.2 re-fit is an operator step), and
+        # `ratings_as_of` is null only when the lake read failed, which is the ALERT the operator
+        # most needs to see in this JSON rather than infer from a missing key.
+        "ratings_as_of": stamp["ratings_as_of"],
+        "ratings_next_update": stamp["ratings_next_update"],
         # ⭐ PER-BLOCK, NEVER POOLED (MH2.1 (c)). "82% coverage" cannot tell a week-1 slate whose
         # efficiency blocks are correctly empty from a mart build that did not run, and those are
         # the two states an operator most needs to distinguish here.
