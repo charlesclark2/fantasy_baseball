@@ -38,6 +38,12 @@ def _strip_comments(src: str) -> str:
     return "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
 
 
+def _flat(text: str) -> str:
+    """Markdown wraps a sentence across lines, so a raw substring check on prose is a coin flip on
+    where the author's editor broke the line — not on what the document says."""
+    return " ".join(text.split())
+
+
 def _stub(monkeypatch, **fields):
     """Stub `cv_power.injected_effect_positive_control` with a report carrying EVERY field the
     reader unpacks — so a field the instrument adds later fails loudly here rather than silently
@@ -48,7 +54,8 @@ def _stub(monkeypatch, **fields):
             "null_control_checked": True, "null_control_survivors": []}
     base.update(fields)
     monkeypatch.setattr(RB, "build_payload", lambda *a, **k: {})
-    monkeypatch.setattr(RB, "make_injector", lambda p: (lambda e: {}))
+    monkeypatch.setattr(RB, "make_injector",
+                        lambda p, field=None: (lambda e: {}))
     monkeypatch.setattr(D.cv_power, "injected_effect_positive_control",
                         lambda **k: type("R", (), base)())
 
@@ -358,29 +365,34 @@ class TestTheVerdict:
 
     def test_dominance_plus_clear_gates_is_DOMINATES(self):
         v = D.verdict(dominance={"state": "DOMINATES"}, defl=self._defl(),
+                      control_binding={"state": "PASSES"},
                       control={}, fold_wins=7, folds=7)
         assert v["state"] == "DOMINATES" and v["deploy_held"] is True and v["best_alpha"] == 0
 
     def test_a_regression_is_a_NULL_even_when_every_gate_passes(self):
         """PM ruling 3, verbatim: 'that is a NULL, not a margin to adjust.'"""
         v = D.verdict(dominance={"state": "REGRESSES"}, defl=self._defl(),
+                      control_binding={"state": "PASSES"},
                       control={}, fold_wins=7, folds=7)
         assert v["state"] == "NULL"
 
     def test_dominance_with_a_failing_DSR_is_DEFLATION_REFUSED(self):
         v = D.verdict(dominance={"state": "DOMINATES"}, defl=self._defl(dsr=0.40),
+                      control_binding={"state": "PASSES"},
                       control={}, fold_wins=7, folds=7)
         assert v["state"] == "DEFLATION_REFUSED" and v["gates_failed"] == ["dsr"]
 
     def test_an_UNCOMPUTABLE_gate_is_UNDEFINED_never_FAILED(self):
         """MH2: a statistic that could not be computed is UNDEFINED, ⛔ never a failure."""
         v = D.verdict(dominance={"state": "DOMINATES"}, defl=self._defl(dsr=None),
+                      control_binding={"state": "PASSES"},
                       control={}, fold_wins=7, folds=7)
         assert v["state"] == "UNEVALUABLE" and v["gates_undefined"] == ["dsr"]
 
     def test_the_fold_consistency_clause_is_the_CALIBRATED_one(self):
         """⛔ Never the raw 0.60 rate (MH2 H8) — at seven folds the calibrated clause needs 6."""
         v = D.verdict(dominance={"state": "DOMINATES"}, defl=self._defl(),
+                      control_binding={"state": "PASSES"},
                       control={}, fold_wins=5, folds=7)
         assert v["fold_consistency_required_wins"] == 6
         assert v["state"] == "DEFLATION_REFUSED" and "fold_consistency" in v["gates_failed"]
@@ -493,7 +505,7 @@ class TestAnUndefinedFoldClauseIsNotAPass:
     def test_two_folds_make_the_clause_UNDEFINED_and_the_verdict_UNEVALUABLE(self):
         from betting_ml.utils import cv_power
         assert cv_power.fold_consistency_clause(2).wins_required is None
-        v = D.verdict(dominance={"state": "DOMINATES"},
+        v = D.verdict(dominance={"state": "DOMINATES"}, control_binding={"state": "PASSES"},
                       defl={"binding": {"dsr_binding": 0.99, "dsr_min": 0.95, "pbo": 0.05,
                                         "pbo_max": 0.2, "trial_sharpes": {}, "v_members": []},
                             "lockstep_variance_lever": {}},
@@ -538,17 +550,32 @@ class TestAVacuousBadgeIsRecordedNotReinterpreted:
     measured on real data — where H1 asserts exactly that. The instrument reads it as "the family
     certifies noise"; on a DOMINANCE disposition it is also what a TRUE hypothesis looks like.
 
-    ⛔ The record must state both readings and choose NEITHER, and must never re-run the control
-    with the null check disabled to obtain a nicer badge (§7 forbids it by name; E2.1-r)."""
+    ⚠️ **RE-ANCHORED 2026-09-05 BY PRE-REGISTRATION AMENDMENT 1 (PM ruling #6 D1).** The original
+    form required the record to choose NEITHER reading, which was correct while the question was
+    open and is FALSE now that the PM has ruled: a record still saying nobody chose would misstate
+    its own authority. ⛔ The clause is re-anchored onto what survives and is still falsifiable —
+    BOTH readings stay recorded, the survivors are named, and which one BINDS must be traceable to
+    the AMENDMENT rather than picked at the point of reading (MH2.7: re-anchor a guard onto the new
+    implementation, never weaken or delete it).
+
+    ⛔ The ban the original carried is untouched: the control is never re-run with the null check
+    disabled to obtain a nicer badge (§7 forbids it by name; E2.1-r)."""
 
     def test_a_VACUOUS_verdict_states_both_readings_and_names_the_survivors(self, monkeypatch):
         _stub(monkeypatch, verdict="VACUOUS", null_control_survivors=["stratified"])
         out = D.positive_control({}, (2019,), {}, {}, board={})
         r = out["reading"] or ""
         assert "stratified" in r, "the surviving arm is not named"
-        assert "chooses NEITHER" in r and "(a)" in r and "(b)" in r, (
-            "a VACUOUS badge must carry BOTH readings; picking one is the E2.1-r inversion")
-        assert "PM decision" in r
+        assert "BOTH READINGS STAY ON THE RECORD" in r and "(a)" in r and "(b)" in r, (
+            "a VACUOUS badge must carry BOTH readings; deleting one is the E2.1-r inversion")
+
+    def test_which_reading_binds_is_traceable_to_the_amendment_not_to_this_call_site(
+            self, monkeypatch):
+        """⭐ The distinction the PM's ruling turns on: a FORWARD DECLARATION, not an annotation
+        applied after the fact. The reading must cite the amendment that authorises it."""
+        _stub(monkeypatch, verdict="VACUOUS", null_control_survivors=["stratified"])
+        r = D.positive_control({}, (2019,), {}, {}, board={})["reading"] or ""
+        assert "AMENDMENT 1" in r and "DECLARED" in r
 
     def test_the_null_control_is_never_disabled(self):
         src = _strip_comments(_RUNNER.read_text())
@@ -556,3 +583,329 @@ class TestAVacuousBadgeIsRecordedNotReinterpreted:
         assert "check_null_control=False" not in src, (
             "the null check is disabled — that is re-running the control to obtain a nicer badge, "
             "which the pre-registration §7 forbids by name (E2.1-r)")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# PRE-REGISTRATION AMENDMENT 1 (PM ruling #6 D1) — the control's null leg
+#
+# ⛔ These certify no verdict. They pin that the amendment is EXECUTED rather than described: the
+# badge is recorded and does not bind, the INJECTED leg does, the declaration is SCOPED to a
+# survivor set free of degenerates, and a control failure BLOCKS the disposition.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+_AMENDMENT = (Path(RB.__file__).parent / "ablation_results"
+              / "nf_inj2c_preregistration_amendment_1.md")
+_PREREG_DOC = (Path(RB.__file__).parent / "ablation_results" / "nf_inj2c_preregistration.md")
+
+
+def _control(**over) -> dict:
+    """A control record carrying every key the binding verdict reads."""
+    base = {"verdict": "VACUOUS", "effect_injected_crps": 0.75,
+            "survivors": ["stratified"], "metric_survivors": ["stratified"],
+            "null_control_checked": True, "null_control_survivors": ["stratified"]}
+    base.update(over)
+    return base
+
+
+class TestTheControlsBindingSubstanceIsTheInjectedLeg:
+    """Amendment 1 §4 (b) — 'the declaration re-scopes the control, it never waives it'."""
+
+    def test_a_detected_effect_with_no_degenerate_survivor_passes(self) -> None:
+        got = D.control_binding_verdict(_control())
+        assert got["state"] == "PASSES"
+        assert got["checks"]["F1_effect_detected"] is True
+
+    def test_f1_an_undetected_planted_effect_fails_however_good_the_badge_is(self) -> None:
+        """The half of the re-scope that CUTS AGAINST the study: no metric survivor is a FAIL even
+        when the instrument's own badge is the one the amendment declares inapplicable."""
+        got = D.control_binding_verdict(_control(metric_survivors=[], survivors=[]))
+        assert got["state"] == "FAILS" and got["failures"] == ["F1"]
+        assert "did not detect" in got["why"]
+
+    def test_f2_a_degenerate_surviving_the_injected_leg_fails(self) -> None:
+        got = D.control_binding_verdict(
+            _control(survivors=["stratified", "random_order"],
+                     metric_survivors=["stratified", "random_order"]))
+        assert got["state"] == "FAILS" and "F2" in got["failures"]
+        assert got["checks"]["degenerate_injected_survivors"] == ["random_order"]
+
+    def test_f3_a_degenerate_surviving_the_null_leg_is_carved_out_of_the_declaration(self) -> None:
+        """⭐ Amendment 1 §3. The entailment (ship => VACUOUS) covers arms H1 predicts will clear.
+        A DEGENERATE clearing every gate on the real payload is not entailed by H1, so the
+        declaration must not reach it — this is what keeps the amendment from being a waiver."""
+        got = D.control_binding_verdict(_control(null_control_survivors=["stratified",
+                                                                        "mvp1_null"]))
+        assert got["state"] == "FAILS" and "F3" in got["failures"]
+        assert "not entailed by" in got["why"] or "genuine alarm" in got["why"]
+
+    def test_f4_a_control_that_did_not_run_is_never_a_pass(self) -> None:
+        assert D.control_binding_verdict({})["state"] == "UNEVALUABLE"
+        assert D.control_binding_verdict(
+            _control(null_control_checked=False))["state"] == "UNEVALUABLE"
+
+    def test_f1_reads_metric_survivors_not_survivors(self) -> None:
+        """⭐ PLAT-CVP2 defect 1: an arm stopped ONLY by an INJECTION-INVARIANT gate has still
+        demonstrated the family detected the effect. Charging that to the family's SENSITIVITY is
+        the defect NF-INJ2b's BLIND badge was earned by."""
+        got = D.control_binding_verdict(_control(survivors=[],
+                                                 metric_survivors=["stratified"]))
+        assert got["state"] == "PASSES", (
+            "an arm blocked only by a gate the injection cannot MOVE was charged to the family's "
+            "sensitivity — the reading amendment 1 §4 names explicitly")
+
+
+class TestTheDeclarationIsScopedAndRecordedRatherThanChosen:
+
+    def test_the_declaration_applies_only_when_no_degenerate_survived(self, monkeypatch) -> None:
+        _stub(monkeypatch, verdict="VACUOUS", null_control_survivors=["stratified"])
+        ok = D.positive_control({}, (2019,), {}, {})
+        _stub(monkeypatch, verdict="VACUOUS", null_control_survivors=["stratified", "mvp1_null"])
+        carved = D.positive_control({}, (2019,), {}, {})
+        assert ok["null_leg_declaration_applies"] is True
+        assert carved["null_leg_declaration_applies"] is False
+        assert carved["degenerate_null_survivors"] == ["mvp1_null"]
+
+    def test_a_non_vacuous_badge_is_not_declared_inapplicable(self, monkeypatch) -> None:
+        """The declaration names ONE badge. A BLIND or DEFLATION_BLOCKED reading is untouched by
+        it — declaring a badge inapplicable that the amendment never mentions would be the waiver
+        the PM ruled against."""
+        _stub(monkeypatch, verdict="BLIND", null_control_survivors=[])
+        assert D.positive_control({}, (2019,), {}, {})["null_leg_declaration_applies"] is False
+
+    def test_both_readings_stay_on_the_record_and_the_binding_one_is_named(self, monkeypatch):
+        """Amendment 1 §5 (c): the badge is recorded VERBATIM, both readings survive, and which
+        one BINDS is DECLARED rather than chosen at the point of reading."""
+        _stub(monkeypatch, verdict="VACUOUS", null_control_survivors=["stratified"])
+        reading = D.positive_control({}, (2019,), {}, {})["reading"]
+        assert "BOTH READINGS STAY ON THE RECORD" in reading
+        assert "AMENDMENT 1" in reading and "INAPPLICABLE" in reading
+        assert "chooses NEITHER" not in reading, (
+            "the pre-amendment wording refused to choose; the PM has now ruled, and a record that "
+            "still says nobody chose is false")
+
+    def test_the_null_leg_still_runs_every_time(self) -> None:
+        """§5 (2): disabling the null check to obtain a nicer badge stays forbidden — and it is
+        what makes §3's degenerate carve-out enforceable rather than decorative."""
+        src = _strip_comments(_RUNNER.read_text())
+        assert "check_null_control=True" in src
+        assert "check_null_control=False" not in src
+
+
+class TestAControlFailureBlocksTheDisposition:
+
+    def _v(self, control_binding, dominance_state="DOMINATES"):
+        dom = {"state": dominance_state, "by_measure": {}, "regressed_measures": [],
+               "unevaluable_measures": []}
+        defl = {"binding": {"dsr_binding": 0.99, "dsr_min": 0.95, "pbo": 0.01, "pbo_max": 0.2}}
+        return D.verdict(dominance=dom, defl=defl, control={"verdict": "VACUOUS"},
+                         control_binding=control_binding, fold_wins=7, folds=7)
+
+    def test_a_failing_control_refuses_an_otherwise_dominant_run(self) -> None:
+        assert self._v({"state": "PASSES"})["state"] == "DOMINATES"
+        assert self._v({"state": "FAILS", "failures": ["F1"]})["state"] == "CONTROL_REFUSED"
+        assert self._v({"state": "UNEVALUABLE"})["state"] == "CONTROL_REFUSED"
+
+    def test_a_regression_still_reads_null_ahead_of_the_control(self) -> None:
+        """A measured regression against the incumbent is a direct comparison the control's
+        sensitivity cannot manufacture, so NULL stays prior."""
+        assert self._v({"state": "FAILS", "failures": ["F1"]}, "REGRESSES")["state"] == "NULL"
+
+    def test_the_badge_alone_can_never_refuse_or_rescue(self) -> None:
+        """⭐ The amendment's admissibility rests on this: it can only REFUSE. A VACUOUS badge with
+        a PASSING injected leg reaches DOMINATES, and a PASSING badge with a FAILING injected leg
+        does not — so the badge is inert in BOTH directions and the injected leg is what binds."""
+        dom = {"state": "DOMINATES", "by_measure": {}, "regressed_measures": [],
+               "unevaluable_measures": []}
+        defl = {"binding": {"dsr_binding": 0.99, "dsr_min": 0.95, "pbo": 0.01, "pbo_max": 0.2}}
+        for badge in ("VACUOUS", "DETECTED", "BLIND", "CONSTRAINT_BLOCKED"):
+            passes = D.verdict(dominance=dom, defl=defl, control={"verdict": badge},
+                               control_binding={"state": "PASSES"}, fold_wins=7, folds=7)
+            fails = D.verdict(dominance=dom, defl=defl, control={"verdict": badge},
+                              control_binding={"state": "FAILS", "failures": ["F1"]},
+                              fold_wins=7, folds=7)
+            assert passes["state"] == "DOMINATES" and fails["state"] == "CONTROL_REFUSED", badge
+
+    def test_the_badge_is_still_recorded_verbatim_beside_the_binding_verdict(self) -> None:
+        got = self._v({"state": "PASSES"})
+        assert got["positive_control"] == "VACUOUS"
+        assert got["control_binding"]["state"] == "PASSES"
+
+
+class TestTheInjectorCannotTreatThisStorysDegenerates:
+    """⭐ F2/F3 charge a degenerate that survives. That reading is only sound if the injection never
+    IMPROVED it — otherwise the control manufactures the failure it then reports."""
+
+    def test_the_decisive_runner_hands_the_injector_its_own_field(self) -> None:
+        src = _strip_comments(_RUNNER.read_text())
+        assert "RB.make_injector(payload, field=BINDING_FIELD)" in src, (
+            "the injector is taking NF-INJ2b's field; this story's degenerates would be treated "
+            "only by the coincidence that the two registrations declare the same ones")
+
+    def test_no_declared_degenerate_or_reference_is_ever_injected(self) -> None:
+        base = {"folds": [2019], "coherence": {},
+                "per_fold": {a: {2019: {"crps": 1.0}} for a in C.ARMS},
+                "tier_rho": {a: {2019: dict.fromkeys(_POS, 0.5)} for a in C.ARMS},
+                "scored": {a: {"crps": 1.0} for a in C.ARMS}}
+        inject = RB.make_injector(base, field=D.BINDING_FIELD)
+        out = inject(0.75)
+        for arm in tuple(C.DEGENERATE_ARMS) + tuple(C.REFERENCE_ARMS):
+            assert out["per_fold"][arm][2019]["crps"] == 1.0, f"{arm} was injected"
+        assert out["per_fold"]["stratified"][2019]["crps"] == pytest.approx(0.25), (
+            "the PRIMARY arm was NOT injected — the control would then be probing nothing")
+
+    def test_a_field_with_different_degenerates_treats_different_arms(self) -> None:
+        """Non-vacuity: the parameter must CHANGE the treated set, or passing it proves nothing."""
+        base = {"folds": [2019], "coherence": {},
+                "per_fold": {a: {2019: {"crps": 1.0}} for a in C.ARMS},
+                "tier_rho": {a: {2019: dict.fromkeys(_POS, 0.5)} for a in C.ARMS},
+                "scored": {a: {"crps": 1.0} for a in C.ARMS}}
+        other = RB.FieldSpec(arms=tuple(C.ARMS), degenerates=("stratified",),
+                             reference=(C.INCUMBENT_ARM,), declared_field_size=len(C.ARMS),
+                             label="a field that declares the primary a degenerate")
+        out = RB.make_injector(base, field=other)(0.75)
+        assert out["per_fold"]["stratified"][2019]["crps"] == 1.0
+        assert out["per_fold"]["mvp1_null"][2019]["crps"] == pytest.approx(0.25)
+
+
+class TestTheAmendmentDocumentSaysWhatTheCodeDoes:
+
+    def test_the_amendment_exists_and_the_prereg_points_at_it(self) -> None:
+        assert _AMENDMENT.exists()
+        prereg = _PREREG_DOC.read_text()
+        assert "AMENDMENT LOG" in prereg and "nf_inj2c_preregistration_amendment_1.md" in prereg, (
+            "a reader can reach §7 without learning the amendment exists")
+
+    def test_section_7_is_left_verbatim_including_its_measured_false_premise(self) -> None:
+        """NF-W7f: a premise a measurement refutes is part of the record, ⛔ not tidied away."""
+        assert "**has not landed**" in _PREREG_DOC.read_text()
+
+    def test_the_amendment_declares_itself_refuse_only(self) -> None:
+        txt = _AMENDMENT.read_text()
+        assert "can only REFUSE, never RESCUE" in txt
+        assert "REFUSE-ONLY" in _PREREG_DOC.read_text()
+
+    def test_the_amendment_states_the_entailment_it_rests_on(self) -> None:
+        txt = _AMENDMENT.read_text()
+        assert "SHIPS" in txt and "VACUOUS" in txt and "entailed" in txt
+
+    def test_the_amendment_does_not_claim_the_blindness_it_cannot_have(self) -> None:
+        """⭐ It was written AFTER node 3b ran. It must say so — a provenance claim it cannot
+        support is worse than none."""
+        flat = _flat(_AMENDMENT.read_text())
+        assert _flat("cannot claim that, and does not") in flat
+        assert _flat("Node 3b has run") in flat
+
+    def test_the_amendment_quotes_no_figure_from_the_node_3b_remeasure(self) -> None:
+        """The same provenance property the base prereg carries, applied to the amendment: it may
+        be written after the board numbers exist, but it must not be SHAPED by them."""
+        report = _AMENDMENT.parent / "nf_inj2c_dominance_baseline.json"
+        if not report.exists():
+            pytest.skip("node 3b's report is absent in this checkout")
+        rep = json.loads(report.read_text())
+        figures: set[str] = set()
+
+        def _collect(node) -> None:
+            if isinstance(node, dict):
+                for v in node.values():
+                    _collect(v)
+            elif isinstance(node, list):
+                for v in node:
+                    _collect(v)
+            elif isinstance(node, float) and abs(node) >= 0.01:
+                for text in (f"{node:.2f}", f"{node:.3f}", f"{node:.4f}", repr(node)):
+                    if len(text.split(".")[-1]) >= 2:
+                        figures.add(text)
+            elif isinstance(node, int) and abs(node) >= 1000:
+                figures.add(str(node))
+
+        dominance = dict(rep.get("dominance") or {})
+        dominance.pop("bands", None)
+        _collect(dominance)
+        assert figures, "no distinctive figure could be extracted — the guard would pass on nothing"
+        txt = _AMENDMENT.read_text()
+        assert not sorted(f for f in figures if f in txt)
+
+    def test_the_decisive_run_has_not_happened_at_this_commit(self) -> None:
+        """The blindness that MATTERS here: this document fixes how a control verdict is read, and
+        that verdict has not been computed."""
+        assert not (_AMENDMENT.parent / "nf_inj2c_decisive.json").exists()
+        assert not (_AMENDMENT.parent / "nf_inj2c_decisive.md").exists()
+
+    def test_the_rejected_option_is_recorded_with_its_reason(self) -> None:
+        """'The stricter option' is the one a later reader assumes was safe."""
+        txt = _AMENDMENT.read_text()
+        assert "vacuity pointed in the punishing direction" in txt
+        assert "gates that cannot FAIL" in txt and "gates that cannot PASS" in txt
+
+    def test_plat_cvp3_is_named_as_the_true_fix(self) -> None:
+        assert "PLAT-CVP3" in _AMENDMENT.read_text()
+
+
+class TestTheControlGlueOverTheREALInstrument:
+    """⭐ ONE test drives the REAL `cv_power.injected_effect_positive_control` — no stub — through
+    the real `gate_table`, the real injector and the real binding verdict.
+
+    Every other test in this file stubs the instrument, which means they assert against a report
+    shape a TEST AUTHOR wrote. That is the INC-39 unexercised-middle: the reader and the instrument
+    could drift apart and the suite would stay green. The 3-fold code-path smoke found exactly three
+    such bugs (the fold clause returns a report; `blocking_gates` is a MAPPING; the control returns
+    a DATACLASS), and a fresh worktree cannot run that smoke because `sports.duckdb` is gitignored
+    (NF-INFRA1). This closes the gap the smoke cannot reach from here.
+
+    ⛔ Certifies no verdict — the numbers are synthetic and no arm ordering here means anything.
+    """
+
+    def _payload(self, *, primary_better: bool):
+        folds = (2019, 2020, 2021)
+        per_fold: dict = {}
+        for arm in C.ARMS:
+            better = primary_better and arm in ("stratified", "feasibility_clamp")
+            for i, y in enumerate(folds):
+                per_fold.setdefault(arm, {})[y] = {
+                    "crps": 10.0 - (0.5 if better else 0.0) + 0.01 * i,
+                    "tier_rho_by_position": dict.fromkeys(
+                        _POS, 0.60 if better else 0.50),
+                    "coverage80_by_position": dict.fromkeys(_POS, 0.82),
+                    "coverage_n_by_position": dict.fromkeys(_POS, 80),
+                    "n": 400,
+                }
+        scored = {a: {"crps": 10.0} for a in C.ARMS}
+        return per_fold, folds, scored, {a: 5 for a in C.ARMS}
+
+    def test_the_reader_and_the_instrument_agree_on_every_key_the_verdict_reads(self) -> None:
+        per_fold, folds, scored, coh = self._payload(primary_better=True)
+        out = D.positive_control(per_fold, folds, scored, coh, board={})
+        # the keys `control_binding_verdict` and the report reach for, produced by the REAL library
+        for key in ("verdict", "survivors", "metric_survivors", "null_control_checked",
+                    "null_control_survivors", "blocking_gates", "deflation_gates",
+                    "metric_gates", "field_level_gates_applied_per_arm"):
+            assert key in out, f"the instrument no longer returns {key!r}"
+        assert isinstance(out["blocking_gates"], dict), (
+            "`blocking_gates` stopped being a {arm -> [gate]} MAPPING — iterating it would yield "
+            "ARM names and make the declared partition look broken (found by the smoke)")
+        binding = D.control_binding_verdict(out)
+        assert binding["state"] in ("PASSES", "FAILS", "UNEVALUABLE")
+        assert binding["state"] != "UNEVALUABLE", (
+            "the real instrument's report is missing a key the binding verdict needs — F4 fired "
+            "on a control that actually ran, which is the reader/instrument drift this test exists "
+            f"to catch: {binding.get('why')}")
+
+    def test_the_declared_partition_covers_every_gate_the_real_table_emits(self) -> None:
+        """⛔ An unclassified blocker means the §7 partition no longer covers the gate set, and the
+        control could not be read against it at all (NF1.7 (a))."""
+        per_fold, folds, scored, coh = self._payload(primary_better=False)
+        out = D.positive_control(per_fold, folds, scored, coh, board={})
+        assert out["blockers_unclassified"] == [], (
+            f"gate(s) {out['blockers_unclassified']} are in NEITHER declared half")
+        table = D.gate_table(RB.build_payload(per_fold, folds, scored, coh))
+        emitted = set(table["stratified"])
+        declared = set(C.INJECTION_SENSITIVE_GATES) | set(C.INJECTION_INVARIANT_GATES)
+        assert emitted <= declared, f"undeclared gates: {sorted(emitted - declared)}"
+
+    def test_the_real_injector_leaves_this_storys_degenerates_untouched(self) -> None:
+        """The premise F2/F3 rest on, proven against the REAL injector rather than a stub."""
+        per_fold, folds, scored, coh = self._payload(primary_better=True)
+        payload = RB.build_payload(per_fold, folds, scored, coh)
+        out = RB.make_injector(payload, field=D.BINDING_FIELD)(RB.INJECTED_EFFECT)
+        for arm in tuple(C.DEGENERATE_ARMS) + tuple(C.REFERENCE_ARMS):
+            assert out["per_fold"][arm][2019]["crps"] == per_fold[arm][2019]["crps"], (
+                f"{arm} was injected — F2/F3 would charge it for a survival the control MANUFACTURED")

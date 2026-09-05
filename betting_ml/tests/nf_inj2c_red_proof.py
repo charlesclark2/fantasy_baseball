@@ -650,6 +650,106 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "\n\n_SKIPPED = assert_coherent\n",
      "\nassert_coherent()\n",
      "TestTheRegistration::test_assert_coherent_runs_at_import"),
+
+    # ── PRE-REGISTRATION AMENDMENT 1 (PM ruling #6 D1) — the control's null leg ────────────────
+    ("the control's binding verdict charges an INVARIANT-blocked arm to the family's sensitivity",
+     _DEC,
+     "    f1 = not metric_survivors",
+     "    f1 = not injected_survivors",
+     "f1 = not metric_survivors",
+     "TestTheControlsBindingSubstanceIsTheInjectedLeg::test_f1_reads_metric_survivors_not_survivors"),
+
+    ("an UNDETECTED planted effect stops failing the control (the re-scope loses its teeth)", _DEC,
+     '    failures = (["F1"] if f1 else [])',
+     '    failures = ([] if f1 else [])',
+     '(["F1"] if f1 else [])',
+     "TestTheControlsBindingSubstanceIsTheInjectedLeg::"
+     "test_f1_an_undetected_planted_effect_fails_however_good_the_badge_is"),
+
+    ("a DEGENERATE surviving the INJECTED leg stops failing the control", _DEC,
+     "    f2 = sorted(a for a in injected_survivors if a in degen)",
+     "    f2 = []",
+     "f2 = sorted(a for a in injected_survivors if a in degen)",
+     "TestTheControlsBindingSubstanceIsTheInjectedLeg::"
+     "test_f2_a_degenerate_surviving_the_injected_leg_fails"),
+
+    ("amendment 1 SS3's degenerate carve-out is dropped, making the declaration a blanket waiver",
+     _DEC,
+     "    f3 = sorted(a for a in null_survivors if a in degen)",
+     "    f3 = []",
+     "f3 = sorted(a for a in null_survivors if a in degen)",
+     "TestTheControlsBindingSubstanceIsTheInjectedLeg::"
+     "test_f3_a_degenerate_surviving_the_null_leg_is_carved_out_of_the_declaration"),
+
+    ("a control that never ran is scored as a pass (NF1.7 (a))", _DEC,
+     '    if not control.get("null_control_checked"):',
+     "    if False:",
+     'if not control.get("null_control_checked"):',
+     "TestTheControlsBindingSubstanceIsTheInjectedLeg::"
+     "test_f4_a_control_that_did_not_run_is_never_a_pass"),
+
+    ("a FAILING control stops blocking the disposition (the badge becomes the whole control)",
+     _DEC,
+     '    control_failed = str(control_binding.get("state")) in ("FAILS", "UNEVALUABLE")',
+     "    control_failed = False",
+     'str(control_binding.get("state")) in ("FAILS", "UNEVALUABLE")',
+     "TestAControlFailureBlocksTheDisposition::"
+     "test_a_failing_control_refuses_an_otherwise_dominant_run"),
+
+    ("a REGRESSION is reported as a control refusal instead of the NULL PM ruling 3 requires",
+     _DEC,
+     '    elif dominance["state"] == "REGRESSES":\n        state = "NULL"\n    elif control_failed:',
+     '    elif control_failed:\n        state = "CONTROL_REFUSED"\n    elif dominance["state"] == "REGRESSES":',
+     '"REGRESSES":\n        state = "NULL"\n    elif control_failed:',
+     "TestAControlFailureBlocksTheDisposition::"
+     "test_a_regression_still_reads_null_ahead_of_the_control"),
+
+    ("the injector is handed NF-INJ2b's field again, so this story's degenerates may be treated",
+     _DEC,
+     "    inject = RB.make_injector(payload, field=BINDING_FIELD)",
+     "    inject = RB.make_injector(payload)",
+     "RB.make_injector(payload, field=BINDING_FIELD)",
+     "TestTheInjectorCannotTreatThisStorysDegenerates::"
+     "test_the_decisive_runner_hands_the_injector_its_own_field"),
+
+    ("`make_injector` reverts to a HARDCODED field, so the caller's declaration is ignored", _RB,
+     "    f = field or NF_INJ2B_FIELD\n    treated = [a for a in f.arms\n"
+     "               if a not in f.degenerates and a not in f.reference]",
+     "    treated = [a for a in B.ARMS\n"
+     "               if a not in B.DEGENERATE_ARMS and a not in B.REFERENCE_ARMS]",
+     # ⛔ NOT `f = field or NF_INJ2B_FIELD` — three SIBLING functions share that idiom, so it
+     # survives this break and the harness correctly reports the break malformed (#815).
+     "treated = [a for a in f.arms",
+     "TestTheInjectorCannotTreatThisStorysDegenerates::"
+     "test_a_field_with_different_degenerates_treats_different_arms"),
+
+    ("the declaration is applied to a badge with a DEGENERATE among the survivors", _DEC,
+     "    declaration_applies = (str(rep.get(\"verdict\")) == \"VACUOUS\"\n"
+     "                           and not degenerate_null_survivors)",
+     '    declaration_applies = str(rep.get("verdict")) == "VACUOUS"',
+     "and not degenerate_null_survivors)",
+     "TestTheDeclarationIsScopedAndRecordedRatherThanChosen::"
+     "test_the_declaration_applies_only_when_no_degenerate_survived"),
+
+    ("the record reverts to refusing to choose, after the PM has ruled", _DEC,
+     "⚠️ BOTH READINGS STAY ON ",
+     "⚠️ this record chooses NEITHER of ",
+     "BOTH READINGS STAY ON",
+     "TestAVacuousBadgeIsRecordedNotReinterpreted::"
+     "test_a_VACUOUS_verdict_states_both_readings_and_names_the_survivors"),
+
+    ("the reading stops citing the amendment that authorises it", _DEC,
+     '"pre-registration AMENDMENT 1 (PM ruling #6 D1) declares (b) — the badge is "',
+     '"this session declares (b) — the badge is "',
+     "pre-registration AMENDMENT 1 (PM ruling #6 D1) declares",
+     "TestAVacuousBadgeIsRecordedNotReinterpreted::"
+     "test_which_reading_binds_is_traceable_to_the_amendment_not_to_this_call_site"),
+
+    ("the pre-registration stops pointing at its own amendment", _PREREG,
+     "> **AMENDMENT LOG", "> **Amendment history",
+     "AMENDMENT LOG",
+     "TestTheAmendmentDocumentSaysWhatTheCodeDoes::"
+     "test_the_amendment_exists_and_the_prereg_points_at_it"),
 ]
 
 

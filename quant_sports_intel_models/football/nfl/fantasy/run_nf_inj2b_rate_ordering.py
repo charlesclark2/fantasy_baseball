@@ -494,8 +494,11 @@ def build_payload(per_fold: dict, folds: tuple[int, ...], scored: dict,
 INJECTED_TIER_RHO = 0.05
 
 
-def make_injector(base_payload: dict):
+def make_injector(base_payload: dict, field: "FieldSpec | None" = None):
     """`inject(effect) -> payload` for `cv_power.injected_effect_positive_control`.
+
+    `field=` names WHOSE registration decides which arms are treated; it defaults to NF-INJ2b's, so
+    every existing caller is byte-identical.
 
     Plants an effect of KNOWN size into THIS study's own population: every non-degenerate,
     non-reference arm gets its per-fold CRPS improved by `effect` and its per-fold draftable-tier ρ
@@ -508,8 +511,16 @@ def make_injector(base_payload: dict):
     simultaneously strong — the geometry that drives PBO up (NF1.8: a high PBO over near-clones is a
     TIE, not overfitting) and collapses DSR through cross-trial dispersion (MH2.5 / NF-W6b-C). A
     control that planted a DIFFERENT effect per arm would dodge the very shape it exists to probe."""
-    treated = [a for a in B.ARMS
-               if a not in B.DEGENERATE_ARMS and a not in B.REFERENCE_ARMS]
+    # ⭐ PARAMETERISED, ⛔ not hardcoded to NF-INJ2b's field (MH2.7: a shared instrument takes the
+    # caller's declaration). Until 2026-09-05 this read `B.ARMS` / `B.DEGENERATE_ARMS` directly and
+    # happened to be right for NF-INJ2c only because the two registrations declare the SAME
+    # degenerates and reference — a coincidence, not a guarantee. It is LOAD-BEARING now:
+    # amendment 1's clause (b) F2/F3 read "a degenerate survived" as a control FAILURE, and that
+    # reading presumes the injection never TREATED the degenerate. A field whose degenerate set
+    # differed would have had its degenerates injected, improved, and then charged for surviving.
+    f = field or NF_INJ2B_FIELD
+    treated = [a for a in f.arms
+               if a not in f.degenerates and a not in f.reference]
 
     def inject(effect: float) -> dict:
         eff = float(effect)

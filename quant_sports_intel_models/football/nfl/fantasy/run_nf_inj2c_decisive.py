@@ -424,8 +424,8 @@ def dominance_verdict(measures: dict[str, dict]) -> dict:
     }
 
 
-def verdict(*, dominance: dict, defl: dict, control: dict, fold_wins: int,
-            folds: int) -> dict:
+def verdict(*, dominance: dict, defl: dict, control: dict, control_binding: dict,
+            fold_wins: int, folds: int) -> dict:
     """The pre-committed outcome, selected — ⛔ never composed after the numbers are visible.
 
     The four branches are node 3a §5 / pre-registration §11, transcribed."""
@@ -451,10 +451,19 @@ def verdict(*, dominance: dict, defl: dict, control: dict, fold_wins: int,
     failed = sorted(k for k, v in gates.items() if v is False)
     undefined = sorted(k for k, v in gates.items() if v is None)
 
+    # ⭐ AMENDMENT 1 §4 — the control is read BEFORE any gate result, and a control failure blocks
+    # the disposition regardless of any badge. A family that cannot certify a planted effect makes
+    # every gate reading downstream of it moot, so it is prior. ⛔ Nothing is lost by the ordering:
+    # the deflation gates are computed and recorded in FULL either way, so a run that fails both
+    # shows both. ⛔ A REGRESSION still reads NULL ahead of it — a measured regression against the
+    # incumbent is a direct comparison the control's sensitivity cannot manufacture.
+    control_failed = str(control_binding.get("state")) in ("FAILS", "UNEVALUABLE")
     if dominance["state"] == "UNEVALUABLE":
         state = "UNEVALUABLE"
     elif dominance["state"] == "REGRESSES":
         state = "NULL"
+    elif control_failed:
+        state = "CONTROL_REFUSED"
     elif failed:
         state = "DEFLATION_REFUSED"
     elif undefined:
@@ -477,6 +486,11 @@ def verdict(*, dominance: dict, defl: dict, control: dict, fold_wins: int,
                          "recorded successor.",
             "NULL": "a measure regressed beyond its own band → NULL. PM ruling 3, verbatim: "
                     "'that is a NULL, not a margin to adjust.'",
+            "CONTROL_REFUSED": "M1–M6 dominate but the POSITIVE CONTROL's binding substance "
+                               "(amendment 1 §4: the INJECTED leg) failed or could not be "
+                               "evaluated → the gate family has not been shown able to certify a "
+                               "planted effect, so no disposition it reaches is supported. ⛔ NOT "
+                               "a statement about the arm.",
             "DEFLATION_REFUSED": "M1–M6 dominate but a binding deflation gate refuses → read "
                                  "against §7's control, with the lockstep check FIRST and §2.3(b)'s "
                                  "structural unavailability stated. The diagnostic field publishes "
@@ -484,8 +498,12 @@ def verdict(*, dominance: dict, defl: dict, control: dict, fold_wins: int,
             "UNEVALUABLE": "a measure or gate could not be computed — ⛔ never scored as a pass "
                            "(NF1.7 (a)).",
         }[state],
+        # ⛔ the instrument's BADGE, recorded VERBATIM (amendment 1 §5 (c)) — it does NOT bind.
         "positive_control": control.get("verdict"),
         "control_reading": control.get("reading"),
+        # ⭐ what BINDS (amendment 1 §4 (b)) — the injected leg's content, as a verdict.
+        "control_binding": control_binding,
+        "null_leg_declaration_applies": control.get("null_leg_declaration_applies"),
         "best_alpha": 0,
         "served_arm": B.resolve_served_arm(),
         "deploy_held": True,
@@ -571,7 +589,9 @@ def positive_control(per_fold: dict, folds: tuple[int, ...], scored: dict,
     ⛔ The control is NEVER re-run with a constraint removed to obtain a nicer badge (E2.1-r)."""
     payload = dict(RB.build_payload(per_fold, folds, scored, coherence))
     payload["board"] = board or {}
-    inject = RB.make_injector(payload)
+    # ⭐ THIS story's field, ⛔ not NF-INJ2b's. Amendment 1 clause (b) F2/F3 charge a
+    # DEGENERATE that survives, which is only sound if the injection never treated it.
+    inject = RB.make_injector(payload, field=BINDING_FIELD)
 
     def _inject(effect: float) -> dict:
         """The injected payload must carry the BOARD block through unchanged — M3/M4 are
@@ -618,27 +638,39 @@ def positive_control(per_fold: dict, folds: tuple[int, ...], scored: dict,
                     and g not in C.INJECTION_SENSITIVE_GATES]
     reading = None
     if str(rep.get("verdict")) == "VACUOUS":
-        # ⚠️⚠️ RECORDED, ⛔ NOT REINTERPRETED. `inject(0.0)` returns the REAL payload, so "an arm
-        # survives the NO-EFFECT payload" is measured on real data — and on real data H1 asserts
-        # precisely that `stratified` clears every measure. The instrument reads that as "the family
-        # certifies noise"; on a DOMINANCE disposition it is also exactly what a TRUE hypothesis
-        # looks like. Those are DIFFERENT readings and this module chooses NEITHER.
+        # ⚠️⚠️ RECORDED VERBATIM, THEN READ THROUGH A FORWARD DECLARATION — ⛔ never re-labelled.
+        # `inject(0.0)` returns the REAL payload, so "an arm survives the NO-EFFECT payload" is
+        # measured on real data, and on real data H1 asserts precisely that `stratified` clears
+        # every measure. This study's gate table IS the ship condition, so:
+        #     ship ⇒ a non-degenerate arm survives the null leg ⇒ VACUOUS.
+        # A verdict ENTAILED by the outcome it exists to inform carries no information about it.
         #
-        # ⭐ It is the mirror of §7's own lesson. §7 anticipated a badge being wrong in ONE direction
-        # (NF-INJ2b's `BLIND`, earned because `coherence_restored` — a gate an injected effect cannot
-        # move — blocked every arm). That same blocking is why 2b never reached this branch, so the
-        # OTHER direction went unanticipated. ⛔ Re-running the control with the null check disabled
-        # to obtain a nicer badge is the E2.1-r inversion (§7 forbids it by name), so it is not done.
+        # ⭐ PRE-REGISTRATION AMENDMENT 1 (PM ruling, decision request #6 D1, 2026-09-05) declares
+        # this badge INAPPLICABLE to this family — declared BEFORE the number existed, on the
+        # instrument's SOURCE rather than on any score. ⛔ The declaration is SCOPED: it does not
+        # reach a DEGENERATE survivor (§3), and it re-scopes the control WITHOUT waiving it — the
+        # INJECTED leg binds instead (§4), and can still FAIL the study. ⛔ Re-running the control
+        # with the null check disabled to obtain a nicer badge stays forbidden (§7, E2.1-r), so the
+        # null leg RUNS every time and its survivor set is recorded — which is what makes §3's
+        # carve-out enforceable rather than decorative.
+        _surv = list(rep.get("null_control_survivors") or [])
+        _degen = [a for a in _surv if a in C.DEGENERATE_ARMS]
         reading = (
-            "VACUOUS fired because arm(s) "
-            f"{list(rep.get('null_control_survivors') or [])} clear every gate on the NO-EFFECT "
-            "payload — which IS the real data (`inject(0.0)` returns it unchanged). ⚠️ TWO READINGS, "
-            "and this record chooses NEITHER: (a) the instrument's — the family certifies noise, so "
-            "the injected run says nothing; (b) the null control assumes the real payload contains "
-            "NO effect, which is the negation of H1, so on a DOMINANCE disposition a TRUE hypothesis "
-            "produces this badge BY CONSTRUCTION. NF-INJ2b never reached this branch because "
-            "`coherence_restored` blocked every arm — the gate PM ruling 2 removed here. ⛔ A PM "
-            "decision, ⛔ never resolved by re-running the control without the null check (E2.1-r).")
+            f"VACUOUS fired because arm(s) {_surv} clear every gate on the NO-EFFECT payload — "
+            "which IS the real data (`inject(0.0)` returns it unchanged). ⚠️ BOTH READINGS STAY ON "
+            "THE RECORD: (a) the instrument's — the family certifies noise, so the injected run "
+            "says nothing; (b) the null leg assumes the real payload contains NO effect, which is "
+            "the negation of H1, so on a DOMINANCE disposition a TRUE hypothesis produces this "
+            "badge BY CONSTRUCTION. ⭐ WHICH ONE BINDS IS DECLARED, ⛔ not chosen here: "
+            "pre-registration AMENDMENT 1 (PM ruling #6 D1) declares (b) — the badge is "
+            "INAPPLICABLE to this family — and makes the INJECTED leg the control's binding "
+            "substance. NF-INJ2b never reached this branch because `coherence_restored` blocked "
+            "every arm, the gate PM ruling 2 removed here."
+            + (f" ⛔⛔ THE DECLARATION DOES NOT APPLY TO THIS RUN: degenerate(s) {_degen} are among "
+               "the null-leg survivors, which §3 carves out explicitly — an arm registered to LOSE "
+               "clearing every gate is not entailed by H1 and is a genuine alarm about the family. "
+               "The control FAILS (§4 F3)." if _degen else
+               " The declaration APPLIES: no declared degenerate is among the survivors."))
     elif str(rep.get("verdict")) == "BLIND" and blockers and not sensitive and not unclassified:
         reading = ("BLIND fired, and EVERY blocker is on the declared INJECTION-INVARIANT side — a "
                    "gate an injected CRPS effect cannot move. The honest statement is: the family's "
@@ -648,10 +680,20 @@ def positive_control(per_fold: dict, folds: tuple[int, ...], scored: dict,
         reading = (f"blocking gate(s) {unclassified!r} are in NEITHER declared half — the partition "
                    "in `nf_inj2c_assignment_rule` no longer covers this gate set, so the control "
                    "cannot be read against it (NF1.7 (a): an unevaluable reading is not a pass).")
+    # ⭐ AMENDMENT 1 §3 — the declaration is SCOPED, ⛔ not a blanket waiver. The §2 entailment
+    # (ship ⇒ null-leg survivor ⇒ VACUOUS) covers a survivor set of NON-DEGENERATE arms: those are
+    # the arms H1 predicts will clear. A DEGENERATE clearing every gate on the real payload is not
+    # entailed by H1 and is a genuine alarm about the family, so the declaration does not reach it.
+    null_survivors = list(rep.get("null_control_survivors") or [])
+    degenerate_null_survivors = [a for a in null_survivors if a in C.DEGENERATE_ARMS]
+    declaration_applies = (str(rep.get("verdict")) == "VACUOUS"
+                           and not degenerate_null_survivors)
     return {
         **rep,
         "declared_partition": {"injection_sensitive": list(C.INJECTION_SENSITIVE_GATES),
                                "injection_invariant": list(C.INJECTION_INVARIANT_GATES)},
+        "null_leg_declaration_applies": declaration_applies,
+        "degenerate_null_survivors": degenerate_null_survivors,
         "blockers_on_invariant_side": invariant,
         "blockers_on_sensitive_side": sensitive,
         "blockers_unclassified": unclassified,
@@ -668,6 +710,81 @@ def positive_control(per_fold: dict, folds: tuple[int, ...], scored: dict,
             "(which §7 itself declares), ⛔ not by the instrument's name heuristic. Using the "
             "parameter is not a relaxation: the partition is unchanged and was declared BEFORE the "
             "control ran, which is exactly the anti-laundering condition the instrument names."),
+    }
+
+
+def control_binding_verdict(control: dict) -> dict:
+    """PRE-REGISTRATION AMENDMENT 1 §4 (b) — the control's BINDING substance, as a verdict.
+
+    ⭐ THE DECLARATION RE-SCOPES THE CONTROL; IT NEVER WAIVES IT (PM ruling #6 D1, verbatim). The
+    null leg's `VACUOUS` is declared inapplicable to this family, and the INJECTED leg becomes what
+    binds — which cuts BOTH ways. Four ways the control FAILS, and a failure blocks the disposition
+    regardless of any badge:
+
+      F1  no arm clears every injection-MOVABLE gate (`metric_survivors` empty) — the planted effect
+          was not detected, so a null from this family would be free.
+      F2  a declared DEGENERATE is among the INJECTED leg's survivors — the family passes an arm
+          registered to lose.
+      F3  a declared DEGENERATE is among the NULL leg's survivors — amendment 1 §3's carve-out; an
+          alarm H1 does not entail and the declaration does not reach.
+      F4  the control did not run, or its record lacks the keys above — ⛔ never a pass (NF1.7 (a)).
+
+    ⭐ `metric_survivors`, ⛔ not `survivors`, is the F1 reading: charging an arm stopped by an
+    INJECTION-INVARIANT gate to the family's SENSITIVITY is PLAT-CVP2 defect 1 — the defect that
+    earned NF-INJ2b's `BLIND` badge. An arm blocked only by a gate the injection cannot move has
+    still demonstrated the family detected the effect.
+
+    ⛔ This function can only REFUSE. There is no return value that makes a disposition easier to
+    reach than the base registration made it, which is the property that makes an amendment written
+    after a measurement admissible (amendment 1 §0).
+    """
+    required = ("metric_survivors", "survivors", "null_control_checked")
+    missing = [k for k in required if k not in control]
+    if missing:
+        return {"state": "UNEVALUABLE", "failures": ["F4"], "why":
+                f"the control record is missing {missing!r} — an unevaluable control is never a "
+                "pass (NF1.7 (a) / amendment 1 §4 F4)", "checks": {}}
+    if not control.get("null_control_checked"):
+        return {"state": "UNEVALUABLE", "failures": ["F4"], "why":
+                "the null leg did NOT run, so amendment 1 §3's degenerate carve-out could not be "
+                "evaluated — and §5 forbids disabling it (E2.1-r). Never a pass (NF1.7 (a)).",
+                "checks": {}}
+
+    degen = set(C.DEGENERATE_ARMS)
+    metric_survivors = list(control.get("metric_survivors") or [])
+    injected_survivors = list(control.get("survivors") or [])
+    null_survivors = list(control.get("null_control_survivors") or [])
+    f1 = not metric_survivors
+    f2 = sorted(a for a in injected_survivors if a in degen)
+    f3 = sorted(a for a in null_survivors if a in degen)
+
+    failures = (["F1"] if f1 else []) + (["F2"] if f2 else []) + (["F3"] if f3 else [])
+    checks = {
+        "F1_effect_detected": not f1,
+        "F2_no_degenerate_survived_injection": not f2,
+        "F3_no_degenerate_survived_null_leg": not f3,
+        "metric_survivors": metric_survivors,
+        "degenerate_injected_survivors": f2,
+        "degenerate_null_survivors": f3,
+    }
+    if failures:
+        why = "; ".join(filter(None, [
+            ("F1 — NO arm cleared every injection-MOVABLE gate at an injected effect of "
+             f"{control.get('effect_injected_crps')!r}: the family did not detect a planted effect "
+             "of this size, so a null from it would be free (BLIND)." if f1 else ""),
+            (f"F2 — degenerate(s) {f2} cleared EVERY gate on the INJECTED payload: the family "
+             "passes an arm registered to lose." if f2 else ""),
+            (f"F3 — degenerate(s) {f3} cleared EVERY gate on the NULL leg (the real payload). "
+             "Amendment 1 §3 carves this out of the declaration explicitly: it is not entailed by "
+             "H1 and is a genuine alarm about the gate family." if f3 else ""),
+        ]))
+        return {"state": "FAILS", "failures": failures, "why": why, "checks": checks}
+    return {
+        "state": "PASSES", "failures": [], "checks": checks,
+        "why": (f"the injected leg detected the planted effect ({metric_survivors} cleared every "
+                "injection-MOVABLE gate) and no declared degenerate survived either leg. ⛔ This is "
+                "the control's binding substance under amendment 1 §4; the instrument's own badge "
+                f"({control.get('verdict')!r}) is recorded verbatim beside it and does not bind."),
     }
 
 
@@ -717,8 +834,9 @@ def run(con, schema: str, folds: tuple[int, ...], selections: dict, *,
     defl = deflation_blocks(per_fold, folds, arm)
     coherence_counts = {a: int(scored[a]["coherence_violating_players"] or 0) for a in B.ARMS}
     control = positive_control(per_fold, folds, scored, coherence_counts, board=brd)
+    control_binding = control_binding_verdict(control)
     dom = dominance_verdict(measures)
-    vdt = verdict(dominance=dom, defl=defl, control=control,
+    vdt = verdict(dominance=dom, defl=defl, control=control, control_binding=control_binding,
                   fold_wins=int((measures["M1"] or {}).get("folds_won") or 0), folds=len(folds))
 
     return {
@@ -745,6 +863,7 @@ def run(con, schema: str, folds: tuple[int, ...], selections: dict, *,
         "deflation": defl,
         "anchors": RB.anchor_audit(scored, arm),
         "positive_control": control,
+        "control_binding": control_binding,
         "verdict": vdt,
     }
 
@@ -807,11 +926,23 @@ def write_report_md(rep: dict, path: Path) -> None:
               f"- 2026 fold trigger publishable: **{ls.get('fold_trigger_publishable')}** — "
               f"{ls.get('why')}", ""]
     pc = rep["positive_control"]
+    cb = rep["control_binding"]
     L += ["## 3. The injected-effect positive control", "",
-          f"- verdict **{pc.get('verdict')}**; blockers on the declared INVARIANT side: "
-          f"{pc.get('blockers_on_invariant_side')}; on the SENSITIVE side: "
-          f"{pc.get('blockers_on_sensitive_side')}",
-          f"- PLAT-CVP2 landed: **{pc.get('plat_cvp2_landed')}**"]
+          "⭐ Read under **pre-registration amendment 1** (PM ruling #6 D1, 2026-09-05): the "
+          "instrument's badge is recorded VERBATIM and does ⛔ NOT bind; the **INJECTED leg** is the "
+          "control's binding substance, and it can still FAIL the study.", "",
+          f"- **BINDING (amendment 1 §4): {cb.get('state')}**"
+          + (f" — failures {cb.get('failures')}" if cb.get("failures") else ""),
+          f"  - {cb.get('why')}",
+          f"- instrument badge (recorded, ⛔ non-binding): **{pc.get('verdict')}**",
+          f"- amendment 1 §3 declaration applies to this badge: "
+          f"**{pc.get('null_leg_declaration_applies')}**"
+          + (f" — degenerate null-leg survivors {pc.get('degenerate_null_survivors')} carve it out"
+             if pc.get("degenerate_null_survivors") else ""),
+          f"- blockers on the declared INVARIANT side: {pc.get('blockers_on_invariant_side')}; on "
+          f"the SENSITIVE side: {pc.get('blockers_on_sensitive_side')}",
+          f"- PLAT-CVP2 landed: **{pc.get('plat_cvp2_landed')}** · PLAT-CVP3 (the advantage-removed "
+          "null construction) is the CARDED true fix; this study does not wait for it"]
     if pc.get("reading"):
         L += ["", f"⭐ {pc['reading']}"]
     L += ["", "## 4. The node-3b baseline this run reads", "",
