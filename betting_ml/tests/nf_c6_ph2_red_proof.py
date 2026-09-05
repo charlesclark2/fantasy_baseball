@@ -144,6 +144,12 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "    same_week = train",
      f"{_G_SERVING}::test_the_coverage_report_separates_a_serve_only_null_from_a_structural_one"),
 
+    ("the builder stops emitting the paid quantile vector (a declared-null leak from the writer)",
+     _SERVING,
+     "            \"histWeeks\": int(hist_weeks.get(gid, 0)),\n            \"q\": [round(float(v), 4) for v in vec],",
+     "            \"histWeeks\": int(hist_weeks.get(gid, 0)),",
+     f"{_G_SERVING}::test_the_builder_emits_every_field_the_contract_declares"),
+
     ("the freshness monitor stops distinguishing a WRONG WEEK from a healthy one",
      _FRESH,
      "    if reading.week != expected_week:",

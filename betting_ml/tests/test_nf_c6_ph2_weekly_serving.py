@@ -518,3 +518,45 @@ def test_a_projection_not_refreshed_into_its_own_kickoff_is_flagged():
     v = F.classify(F.reading_from_manifest(2026, _manifest(generated_at="2026-09-20T12:00:00+00:00")),
                    expected_week=3, now=_now("2026-09-26T12:00:00+00:00"))
     assert v["verdict"] == "STALE_INTO_KICKOFF" and v["severity"] == "ERROR"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 9. The builder must populate every field the contract declares
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+def test_the_builder_emits_every_field_the_contract_declares():
+    """⭐ ONE LOGICAL THING, TWO OWNERS — and the deploy trigger cannot referee them.
+
+    The box builder imports `app/backend/models/nfl_weekly.py`, but `app/**` deliberately does NOT
+    trigger the box CD: it ships via `deploy.sh`, and listing it there would read as though merging
+    deployed the API (the NF-C0 skew misconception, pinned by
+    `test_orchestration_cd_paths.py::test_the_lambda_and_frontend_are_not_wired_to_the_box_deploy`).
+    So a contract-only change can merge without the box image moving.
+
+    A REQUIRED field added that way fails loudly — the builder validates every blob before writing.
+    An OPTIONAL one does not: `q` and the component fields all default to `None`, so a builder that
+    stopped populating them would keep validating while the paid route served nulls. That is the
+    E9.41 silently-dropped-field class arriving from the WRITER side instead of the serializer side.
+
+    This closes it in CI rather than in the deploy trigger: set equality, both directions, so a
+    field added to either owner and not the other goes red before merge.
+    """
+    universe = pd.DataFrame([{"gsis_id": "a", "position": "RB", "team": "AAA",
+                              "is_bye": False, "opponent": "BBB", "is_home": 1.0}])
+    qmap = {"a": np.linspace(0.0, 20.0, len(WP.Q_LEVELS))}
+    comps = pd.DataFrame([{"gsis_id": "a", **{f"proj_{c}": 1.0
+                                              for c in WS.C.WEEKLY_COMPONENT_STAT_KEY}}])
+    ros = pd.DataFrame([{"gsis_id": "a", "ros_mean": 100.0, "ros_q10": 80.0, "ros_q90": 120.0,
+                         "n_weeks": 17}]).set_index("gsis_id")
+    rows = WS.build_players(universe, qmap, comps, ros, names={"a": "A Back"},
+                            hist_weeks={"a": 40})
+    assert len(rows) == 1
+    declared = set(WS.C.declared_field_names(WS.C.NflWeeklyPlayer))
+    assert set(rows[0]) == declared, (
+        "the builder and the contract disagree about the served player row: "
+        f"builder-only={sorted(set(rows[0]) - declared)} "
+        f"contract-only={sorted(declared - set(rows[0]))}"
+    )
+    # …and every PAID field is actually populated, not merely present as a declared null.
+    assert all(rows[0][f] is not None for f in WS.C.PAID_WEEKLY_PLAYER_FIELDS)
+    WS.C.NflWeeklyPlayer.model_validate(rows[0])

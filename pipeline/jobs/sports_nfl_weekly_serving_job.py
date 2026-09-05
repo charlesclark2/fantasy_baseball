@@ -177,3 +177,84 @@ def _verify_published(context, started: datetime) -> None:
 def sports_nfl_weekly_serving_job():
     """Rebuild + publish the NFL weekly projection for the next unplayed week, then verify it."""
     nfl_weekly_serving_op()
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The OFF-CYCLE freshness reader — INC-41's shape, and it must not live inside the build job
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⛔ WHY THIS IS A SEPARATE JOB. The failure INC-41 exists to catch is a producer that SUCCEEDS
+# while writing nothing — `sports_nfl_sleeper_injuries_job`'s 19 consecutive green runs against one
+# 19-day-old commit. A freshness check that runs inside the build it judges is structurally
+# incapable of seeing that: it reads an artifact the same run just wrote, so it can only ever agree
+# with itself. The check has to run on a DIFFERENT cadence from the writer or it is decoration.
+#
+# ⭐ AND IT READS THE PUBLISHED BLOB, NOT THE STAGED ONE. What matters is what the routes serve;
+# a staged file the publish never uploaded is exactly the gap this is looking for. ⛔ Never an S3
+# `LastModified` (INC-41): an mtime is refreshed by a server-side rewrite that changes no data, and
+# `aws s3 ls` prints SHELL-LOCAL time. The timestamps come from INSIDE the manifest.
+#
+# ALERT-tier, never HALT: it judges, it does not gate. A stale weekly projection is a real finding
+# and never a reason to withhold anything else.
+@op(out=Out(None))
+def nfl_weekly_freshness_op(context):
+    """Classify the PUBLISHED weekly artifact and page on a real finding."""
+    import boto3
+    from botocore.exceptions import ClientError
+
+    from app.backend.models import nfl_weekly as C
+    from betting_ml.monitoring import nfl_weekly_freshness as WF
+    from quant_sports_intel_models.football.nfl.fantasy import weekly_serving as WS
+
+    season = int(os.environ.get("NFL_FANTASY_SEASON", "2026"))
+    s3 = boto3.client("s3", region_name="us-east-1")
+
+    def read(rel: str):
+        try:
+            return json.loads(s3.get_object(Bucket=NFL_WEEKLY_CACHE_BUCKET,
+                                            Key=f"fantasy/nfl/{rel}")["Body"].read())
+        except ClientError as exc:
+            context.log.warning("[nfl weekly freshness] could not read %s: %s", rel, exc)
+            return None
+
+    # ⭐ THE EXPECTED WEEK COMES FROM THE SCHEDULE, NOT FROM THE ARTIFACT. Reading it off the thing
+    # being judged would make the wrong-week check circular — and wrong-week is the one finding no
+    # staleness bar can make, because a build that runs fine on last week's slate has every
+    # timestamp healthy while serving a played game.
+    expected_week = None
+    try:
+        from quant_sports_intel_models.football.nfl.ingest.query_lake import delta, q
+
+        sched = q(f"select season, week, gameday from {delta('schedules')} "
+                  f"where season = {season} and game_type = 'REG'")
+        expected_week = WS.resolve_target_week(sched).week
+    except WS.WeeklyServingError:
+        # No upcoming REG week: the artifact is correctly static and no SLA applies.
+        expected_week = None
+    except Exception as exc:  # noqa: BLE001
+        # ⚠️ UNEVALUABLE IS WARN, NEVER HEALTHY (NF1.7(a)) — and it must be distinguishable from the
+        # off-season, which is why this branch pages while the one above does not.
+        _page(context, "NFL weekly freshness: could not resolve the expected week",
+              f"{type(exc).__name__}: {exc}. The published artifact was NOT judged — reported "
+              "UNVERIFIED rather than healthy.",
+              severity="WARN", dedup_key="nfl_weekly_freshness:unresolvable")
+        return
+
+    cur = read(C.weekly_current_key(season))
+    week = (cur or {}).get("week", expected_week)
+    blob = read(C.weekly_manifest_key(season, week)) if week is not None else None
+    verdict = WF.classify(WF.reading_from_manifest(season, blob), expected_week=expected_week)
+
+    context.log.info("[METRIC] nfl_weekly_freshness=%s lag_hours=%s",
+                     verdict["verdict"], verdict["lag_hours"])
+    context.log.info("[nfl weekly freshness] %s", verdict["detail"])
+    if WF.is_problem(verdict):
+        _page(context, f"NFL weekly projection is {verdict['verdict']}", verdict["detail"],
+              severity=verdict["severity"],
+              dedup_key=f"nfl_weekly_freshness:{verdict['verdict']}")
+
+
+@job(executor_def=in_process_executor)
+def sports_nfl_weekly_freshness_job():
+    """Off-cycle: is the PUBLISHED weekly projection advancing, and is it for the right week?"""
+    nfl_weekly_freshness_op()

@@ -163,8 +163,54 @@ spec:
       - id: 6-closeout
         desc: "Verdict + findings into closeout.followUps; operator summary with LAPTOP-vs-BOX steps; the frontend story's consumed contract stated."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED (code) / DEPLOY-HELD (serving). The weekly serving path exists end to end and the
+      NF-G0 review ran: 6 gates passed, 0 failed, 4 unevaluable, ready_to_promote = FALSE with the
+      strict default (nothing named in `allow_unevaluable`). NOTHING was promoted and nothing was
+      published — w2b/w6c/w6d stay CHALLENGERS. The build runs in 81-88s on the laptop over
+      2026 wk 1: 503 players (QB 87 / RB 112 / WR 182 / TE 122), 95 rookies, train 84,553 rows
+      against a purged-equivalent 83,521. Gate 3 untouched: no fourth scoring implementation, and
+      fantasy_engine / the browser TS scorer / the Lambda scorer are all unmodified.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      PM triage. (1) ⭐ E7.9 TRAIN/SERVE GAP FOUND AND CLOSED — `opponent_matchup__dvp_ppr_index_l8`
+      and `__def_ppr_allowed_l8` are derived from a defence-vs-position table built out of the
+      REALIZED stat feed, so a week with no stat rows has no group key: training coverage 0.9580 /
+      0.9847 (1.000 on the analogous week-1 rows) against serving 0.0000 / 0.0000. Without the fix
+      the served board moves within-position ranks by mean 5.4, p95 17.9, MAX 43 places. Closed by
+      supplying the missing grid keys as zero-valued stat rows and letting the certified
+      `engineer_features` compute its own block — no forked arithmetic. (2) ⭐ AND THE RESIDUAL IT
+      EXPOSED, which is a property of NF-W1's FEATURE rather than of the fix: training's grid
+      MEMBERSHIP is itself outcome-dependent (a cell exists only if some player of that position
+      recorded a line against that defence), so an exact pre-game reproduction is impossible in
+      principle. Measured: bit-identical on 5 of 6 held-out weeks; the 6th differs because no TE
+      recorded a line against BUF in 2025 wk18, giving 127 certified cells where the schedule
+      implies 128. Small (~0.8% of cells) and now recorded rather than latent. (3) ⭐
+      `prior_week_box__ppr_sum_s2d` is computed as `cumsum() - own` — the target week's value is
+      ADDED then SUBTRACTED rather than excluded. Exact in real arithmetic, ~1e-13 off in floating
+      point from week 2 onward, and EXACT in week 1 because the group holds only the target row —
+      so the outcome-independence proof passed a bit-exact bar on this build by luck of the week
+      number and would have false-fired every week after. Tolerance now derived from
+      floating-point precision (1e-9), two-sided-pinned, with max_abs_drift reported every build.
+      (4) COMPONENT COHERENCE: over 503 rows the component-derived PPR sits 0.77 BELOW the points
+      head (median |d| 0.60, p95 3.71, max 7.92). Two independent heads, so a diagnostic and never
+      a gate — but the weekly FRONTEND story must decide how to present both before it renders
+      them side by side. (5) TWO GATE-APPLICABILITY QUESTIONS for the registry, both named in the
+      review rather than worked around: `model_stamp_consistency` reconciles six lineage fields of
+      which this family populates ONE (the rest name a level / ordering / rookie leg the weekly
+      stack does not have), and `interval_floors`' population loop reads ZERO populations because
+      it scans rookies/veterans/kdst and this family is per-POSITION. Both are shared cross-vertical
+      instruments, so changing either means sweeping every guard that pins its output (MH2.7) — a
+      story of its own, not a rider on this one. (6) `scoring_parity` is structurally NOT
+      APPLICABLE to a family whose point and line come from independent heads; a fabricated 0.0
+      would have passed it. Worth a registry-level notion of gate applicability per family. (7) CD
+      PATH GAP, mitigated not closed: the box builder imports `app/backend/models/nfl_weekly.py`,
+      but `app/**` is DELIBERATELY excluded from the box CD trigger (adding it would read as though
+      merging deployed the API — pinned by `test_orchestration_cd_paths`). A required-field change
+      fails loudly on the box; an OPTIONAL one would not, so a CI guard now pins the builder's row
+      against the contract's declared fields in both directions. The residual is a contract-only
+      change merging without the box image moving. (8) The weekly point is PPR-NATIVE, so no
+      config/size dimension exists yet — other presets are blocked on GATE 3, not on entitlement.
+      Worth saying on the pricing surface so "one free format" does not read as 13 withheld ones.
+      (9) w2b now has 1 of its 3 blockers cleared (the serving path); the other two are a LIVE
+      stamped injury forward-capture and pre-flip snapshots. w6c/w6d remain blocked solely on
+      gate 3.
