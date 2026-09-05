@@ -10,7 +10,7 @@ metadata:
   name: nf-c6-ph2
   vertical: nfl_fantasy
   card: https://trello.com/c/HvVAWD9f
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Serve the weekly model. NF-W1's champion (lgbm_hurdle — P(zero) x
