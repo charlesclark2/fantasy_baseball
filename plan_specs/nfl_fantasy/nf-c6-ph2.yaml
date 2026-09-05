@@ -1,0 +1,170 @@
+# Plan spec — NF-C6-PH2 (FULL tier: the weekly serving path + the NF-G0 promotion review —
+# gates 1+2 of the per-stat distribution consumer chain; gate 3 explicitly deferred)
+# Authored by PM 2026-09-05. Sequencing basis: the card's own "POST-LAUNCH" hold has expired —
+# launch happened, drafts are done, Week 1 is 2026-09-09, and NF-W1's certified weekly champion
+# serves NOTHING (no weekly endpoint exists; the deployed surface is the season board).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-c6-ph2
+  vertical: nfl_fantasy
+  card: https://trello.com/c/HvVAWD9f
+  status: ACCEPTED
+spec:
+  description: >
+    Serve the weekly model. NF-W1's champion (lgbm_hurdle — P(zero) x
+    conditional quantiles, SHIP x4 positions, 8/8 folds vs the honest
+    foil, PBO 0.0, coverage >=0.80) has been deploy-held since 08-07
+    with no weekly endpoint to land on; the NF-G0 registry holds the
+    per-stat cells as CHALLENGERS invisible to serving. This story is
+    gates 1+2 of the consumer chain: (1) the WEEKLY SERVING PATH — a
+    box build job writing weekly player payloads (point + honest
+    interval from the quantile vector, weekly ROS = sum of remaining
+    weeks) + the Lambda endpoint(s) + contracts; (2) the NF-G0
+    PROMOTION REVIEW — the 10-gate review over the weekly champion +
+    staged cells, with operator sign-off; likely the registry's FIRST
+    real promotion (NF-D21's was gate-refused), so the pipeline's
+    dry-run proof meets reality here. ⛔ GATE 3 (the arbitrary-league
+    re-scoring consumer) IS DEFERRED — it triggers the
+    3-implementation parity tax and is its own story; NOTHING in this
+    story adds a fourth scoring implementation or touches
+    fantasy_engine/browser-TS/Lambda scoring. best_alpha=0;
+    DEPLOY-HELD at every ship point: a registry change ships with the
+    box image ON MERGE TO MAIN (MH2.1 — merging IS the deploy), so
+    main-merges, promote, deploy.sh, and schedule enablement are all
+    operator steps on explicit instruction.
+  acceptanceCriteria:
+    - description: >
+        CONTRACT FIRST, entitlement declared BEFORE building (the G100
+        handoff rules bind): the PM ruling, overridable by the
+        operator, is MIRROR THE SEASON FREEMIUM EXACTLY — free tier =
+        a generic weekly board on the free preset (full_ppr/12), point
+        + interval only, no scorable per-stat components (STAT_FIELD
+        is the paywall — NF-EPIC1); paid = per-stat components, other
+        configs, and anything personalized. Every new endpoint DECIDES
+        WHICH SIDE of the byte-identity invariant it is on before it
+        is written (free URLs byte-identical for every caller — CDN,
+        cache_control_for, and the entitled-keyed cache all rest on
+        it); the free weekly URL joins the CDN allowlist pattern with
+        the config/size pinned; API-GW authorizer stays NONE where the
+        gate is inside the Lambda (the /board precedent); paid routes
+        401 anon. Pydantic-declared fields only (E9.41), additive
+        (NF-C0).
+    - description: >
+        THE WEEKLY BUILD is a pipeline job on the box (the
+        sports_nfl_*_job pattern): builds the weekly payloads from the
+        champion spec through the lake, stamps content timestamps +
+        input vintages in the artifact (the INC-41 lesson: freshness
+        is read from CONTENT, and the artifact gets a freshness SLA
+        entry sized to its cadence with active-hours semantics), and
+        serving-writes to S3/DynamoDB per the existing pattern. PIT
+        discipline: assert_point_in_time invoked on the serving frame
+        (NF-W1's guard gets its serving-side caller); no current-week
+        outcome enters a prediction. Honest absent states: a player
+        with no projection (rookie edge, K/DST — NOT in the champion,
+        excluded by design and stated) renders a machine-readable
+        absence, never a fabricated row.
+    - description: >
+        THE NF-G0 PROMOTION REVIEW runs the registry's own 10 gates
+        over the weekly champion (+ the staged per-stat cells if their
+        promotion is in scope of the review — promote only what this
+        story SERVES; cells with no consumer yet stay CHALLENGERS,
+        promotion is not a rubber stamp for the whole shelf): stamp/
+        source consistency, universe count, interval floors, scoring
+        parity where applicable, rollback artifact, live-payload==
+        staged, frontend/backend same version. The review's verdict +
+        the operator sign-off are recorded; a gate refusal is a valid
+        outcome that holds serving (declaration never outruns
+        production). Composite lineage stamped per the registry
+        contract.
+    - description: >
+        RUNTIME GATE (CI mocks all IO): the real box build + serving
+        write + deployed-Lambda curls (a real player-week payload with
+        interval + ROS; the free URL byte-identity check; a paid route
+        401 anon) are OPERATOR-RUN paste-ready steps; deploy.sh is the
+        only Lambda deploy path; the weekly job's schedule enablement
+        is an operator step; merged never means served. Positive
+        control per key shape (the P3.1 lesson): prove the
+        week-keyed read specifically.
+    - description: >
+        GTM/claims constraint carried from NF-W1's record, enforced
+        not narrated: the weekly edge is USAGE/SNAP conditioning — the
+        matchup foil LOST at all four positions — so no copy, field
+        name, docstring, or changelog line may claim "matchup-based";
+        a guard pins the claim-copy surface if one is added. All
+        interval language honest (a coverage floor, not a promise).
+        Changelog entry only when a user can actually see something —
+        which is NOT this story (the frontend surface is the next
+        story); if nothing user-visible ships, no changelog entry.
+    - description: >
+        Standing disciplines: guards RED-proven with unique anchors +
+        baseline-pass + NOT-SELECTED + the resolve-every-node baseline
+        check (the NF-INJ4b lesson); run the owning CI shard for any
+        shared guard; >2-min commands operator paste-ready (the first
+        full weekly build almost certainly qualifies — time it);
+        reproduction pins 1e-9 where numeric; worktree; PR -> dev;
+        roadmap files frozen; no Trello. NF-INJ4b's designation
+        channel is NOT wired here (its ship path is its own,
+        deploy-held); NF-W2b/K-DST/conformal queue behind this as
+        matched-pair stories once serving exists.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-c6-ph2
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "weekly serving" / "NF-G0" / "NF-C6" (board Credence Sports, 2026-09-05)'
+    duplicates: []
+    adjacent:
+      - "NF-W1 / NF-EPIC 6 (Done) — the champion spec this serves; its record (incl. the matchup-claim ban and the 39-level vector) is the substance; no re-fit, no re-read."
+      - "NF-G0+D21 (Done, gate-refused publish) — the governance pipeline; this is likely its first REAL promotion; its 10 gates bind unweakened."
+      - "NF-EPIC1 entitlement standard + G100 freemium (Done, live) — the six handoff rules bind verbatim (authorizer NONE, byte-identity sides, CDN pins, gate-the-renderers, quota seam, deploy tails)."
+      - "Gate 3 / NF-W6d / NF-OPT1 (deferred) — the re-scoring consumer + optimizer substrate; OUT of scope; this story's contract is what they will consume."
+      - "NF-INJ4b (SHIP_CANDIDATE, held) — disjoint; its Week-1 counterfactual/ship path runs on the SEASON board; only the changelog week-block is shared (rebase)."
+      - "NF-INJ2c (IN FLIGHT) — season-board ordering; disjoint files."
+      - "NF-INFRA1 (Done) — the ingest schedules this build reads through; freshness is already paged."
+  triedLedger:
+    files:
+      - "ablation_results/nf_w1_weekly_bakeoff.md (the champion, the quantile vector, the coverage floors, the matchup-foil null)"
+      - "the NF-G0 registry module + its 10-gate review + the NF-D21 refused-publish record (the pipeline's only prior real exercise)"
+      - "app/backend entitlement.py + the G100 handoff rules; the season serving-write/publish jobs (the pattern this extends)"
+    recordedNulls:
+      - "NF-W1's matchup-foil null — carried as a CLAIMS constraint, not re-tested."
+      - "NF-D21 publish gate-refusal — stands; this promotion is a fresh review, not a retry of that artifact."
+  supersedes: []
+  dependsOn:
+    - "NF-W1 champion spec merged (dev); NF-G0 pipeline merged; NF-INFRA1 schedules RUNNING (all verified Done)"
+  feedsInto:
+    - "The weekly frontend surface (next frontend story after NCAAF-P3.3b); NF-W2b/K-DST/conformal matched-pairs; gate 3's re-scoring consumer; NF-OPT1; NF-INJ4b's weekly consumer (later)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-c6-ph2-plan
+spec:
+  goalRef: { name: nf-c6-ph2 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-contract
+        desc: "Weekly payload contract + entitlement boundary (mirror-G100 ruling) + byte-identity side declared, BEFORE any build code."
+      - id: 2-build-job
+        desc: "The box weekly build + serving-write with content stamps, SLA entry, PIT assertion, honest absences."
+      - id: 3-endpoints
+        desc: "Lambda routes on the declared contract; free URL byte-identical; paid 401 anon; CDN pins."
+      - id: 4-promotion-review
+        desc: "NF-G0 10-gate review over what this story SERVES; operator sign-off recorded; refusal holds serving."
+      - id: 5-runtime-gate
+        desc: "⛔ Operator: box build run + deploy.sh + curls (week-keyed positive control; byte-identity; 401s). Merged never means served."
+      - id: 6-closeout
+        desc: "Verdict + findings into closeout.followUps; operator summary with LAPTOP-vs-BOX steps; the frontend story's consumed contract stated."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
