@@ -445,3 +445,39 @@ export const STANDING_RANGE_PREFIX = "plausibly anywhere from"
  *  that looks most authoritative. This names the omission instead of leaving a silent gap. */
 export const STANDING_UNAVAILABLE =
   "We are not showing a ranking for this team right now."
+
+// ══ NCAAF-P3.3b — WHEN THE RATINGS LAST TOOK IN GAMES ═════════════════════════════════════════
+//
+// ⭐ THE FIFTH VOICE ON A FOUR-BLOCK SCREEN, AND #1081 IS THE REASON IT IS WORDED THIS SHORT.
+// That fix landed because a note true of its OWN block ("no games have been played yet", keyed on
+// what the posterior had absorbed) was false ON THE PAGE, directly above a schedule showing a
+// 33-7 win. The general lesson it recorded is that no block here is safe to word in isolation, so
+// these strings deliberately state only a DATE and say nothing about the season, the schedule, or
+// what the next update will contain. `STRENGTH_PRESEASON_NOTE` already says WHAT is behind the
+// number; this says WHEN, and the two compose rather than restate.
+//
+// ⛔ AND IT PROMISES NOTHING. "Next update" names when the ratings are next REWRITTEN, never that
+// the rewrite will MOVE them — a team on a bye or with a cancelled opener is re-fit into the same
+// number, and a stamp that had promised movement would then be wrong through no fault of the data.
+
+/** The prefix before the vintage date. The date itself is read off the payload — never typed. */
+export const RATINGS_AS_OF_PREFIX = "Ratings as of"
+/** The prefix before the next-update date. Lower case: it is the second half of one line. */
+export const RATINGS_NEXT_UPDATE_PREFIX = "next update"
+/** ⛔ Shown when the payload carries no next-update instant, which is the state measured on
+ *  2026-09-04: the P1.2 re-fit is an operator step, on no schedule. A STATED absence, because the
+ *  alternative a surface reaches for is a date it made up (NF1.7(a) — and the fabricated date is
+ *  the one a reader would act on). */
+export const RATINGS_NEXT_UPDATE_UNSCHEDULED = "next update not scheduled"
+/** ⛔ Shown when the payload carries no vintage at all — the lake read failed. Distinct from the
+ *  line above, because "we cannot tell you when" and "there is no next one" are different facts
+ *  and rendering them the same makes every recurrence re-investigate from scratch (NF-C6b). */
+export const RATINGS_AS_OF_UNAVAILABLE = "We are not showing when these ratings were last updated."
+/** ⭐ THE SENTENCE THAT ACTUALLY CLOSES THE P3.3 GAP, and it is a statement about our CADENCE, not
+ *  about this team. Rendered ALWAYS rather than only when a result is waiting — the same argument
+ *  `STANDING_HINT` records: a reader who meets a fresh stamp needs to know it is the same
+ *  measurement as a stale one, or the staleness reads as a fault the one time they see it.
+ *  ⚠️ No positional word ("above"/"below"): this line belongs to a shared component, and a surface
+ *  that renders it in another position would then be describing its own layout wrongly. */
+export const RATINGS_VINTAGE_HINT =
+  "Ratings take in completed games only when the model is re-fit, so a recent result can appear on this page before it has reached the rating."

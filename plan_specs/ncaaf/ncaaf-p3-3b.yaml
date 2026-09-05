@@ -9,7 +9,7 @@ metadata:
   name: ncaaf-p3-3b
   vertical: ncaaf
   card: https://trello.com/c/dpQKTbYd   # P3.3 record; P3.3b card linked at kickoff
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Close the product-expectation gap P3.3 measured and flagged: the
@@ -103,8 +103,70 @@ spec:
   graph:
     nodes: []   # MINI tier — verify vintage field -> (optional additive echo + runtime gate) -> stamp component -> fixtures -> guards -> live verify
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED_WITH_ONE_HALF_REFUSED. The "as of" half is delivered in full and is
+      data-derived end to end: an ADDITIVE Pydantic field on `NcaafTeamStrength`,
+      echoed by the serving write from the strength artifact's own Delta commit
+      timestamp (INC-41 — content, never an mtime), rendered by ONE shared
+      component beside the strength/rank block. The fixture re-capture is done and
+      the self-announcing standings clause was retired BY RE-CAPTURING.
+      ⛔ THE "NEXT UPDATE" HALF IS REFUSED AS SPECIFIED, because its premise is
+      false: `NCAAF_ROLL_FORWARD_CRON` does not re-fit P1.2, so printing its next
+      fire would promise a ratings refresh that job cannot deliver — the exact
+      overclaim criterion (a) forbids. The surface states the absence instead, and
+      per this spec's own coordination rule that decision goes to the PM.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      ① ⭐⭐ THE SPEC'S PREMISE IS FALSE, AND SO IS THE CLAIM IN #1081's COMMIT
+      MESSAGE ("the P1.2 strength fit rolls forward weekly"). Measured 2026-09-04,
+      three ways that agree. (a) STRUCTURALLY IMPOSSIBLE: the roll-forward job
+      ingests `ROLL_FORWARD_SOURCES` and rebuilds the dbt marts;
+      `team_strength_week` is not in that list and CANNOT be, because
+      `ingest/sources.py` asserts at import that every entry is a free CFBD source
+      and the ratings table is a derived model output written by
+      `run_team_strength`. (b) STATED IN THREE PLACES: the roll-forward job's own
+      docstring ("P1.2 must be re-fit ... those are the OPERATOR steps ... not
+      wired here, because P1.2 is a once-per-season refit, not a weekly one"), the
+      snapshot job's ("THE ONE QUALITY PREREQUISITE (operator, not code)"), and
+      BOX_OPERATIONS §10 ("the season's ONE-TIME P1.2 re-fit ... operator laptop
+      steps"); `grep run_team_strength pipeline/` returns docstrings and no call.
+      (c) MEASURED ON THE LAKE, TWO-SIDED: `ncaaf/derived/team_strength_week` last
+      committed 2026-08-18T06:16:36Z (v67), while `ncaaf/raw/games` and
+      `ncaaf/raw/talent` last committed 2026-08-31T13:00:51Z / 13:01:13Z — Monday
+      06:00 PT. THE ROLL-FORWARD FIRED AND THE RATINGS DID NOT MOVE: the chain is
+      alive AND it does not touch them. ⇒ PM DECISION: either schedule a P1.2
+      re-fit (then add its schedule NAME to
+      `ncaaf_ratings_vintage.RATINGS_REFRESH_SCHEDULES` — one line, and the stamp
+      starts printing the date with no frontend change), or ratify the stated
+      absence. ⛔ Do NOT register the roll-forward: a guard refuses it by name,
+      because every surface signal (weekly, Monday 06:00, NCAAF-named) points at
+      it and the false claim is still in the git history.
+      ② 🚨 BIGGER THAN THE STAMP, AND THE REAL FIX FOR THE P3.3 GAP: the served
+      2026 ratings are FROZEN at the pre-season prior and nothing scheduled will
+      move them. Both captured teams serve `as_of_week 1` with ONE week in the
+      series on 2026-09-04 — six days after the 08-29 opener, one of them beside a
+      completed game. So the Saturday-to-Monday staleness P3.3 measured is not a
+      weekend gap; absent an operator re-fit it is the whole season, and the ranks
+      and bands are the pre-season ones too. The stamp makes that VISIBLE and
+      honest, which is what this story could do; it does not make the ratings
+      current. Recommend carding "schedule the in-season P1.2 re-fit" as its own
+      spec — it is a model fit, which this spec explicitly refused to change.
+      ③ #1081's commit message will mislead the next reader (it is where this
+      spec's premise came from). Not editable; the correction is recorded in
+      `ncaaf_ratings_vintage.py`, in `test_ncaaf_p3_3b_ratings_stamp.py`, and in
+      this file. A doc-level note on the parent card would help.
+      ④ ⏭️ OPERATOR RUNTIME GATE (Phase-A leg, required before the page consumes
+      it) + the dependsOn note: #1081 is merged to `dev` but NOT to `main`, so
+      this PR stacks behind an unpromoted frontend change. The dev→main promotion
+      will carry both; verify BOTH strings on main by content.
+      ⑤ The Mon 9/7 coordination hazard this spec named is MOOT for this story:
+      the roll-forward chain is alive (measured), and the stamp does not cite it
+      either way, so a dead chain could not make the stamp print a schedule that
+      is not firing. The 9/7 check still matters for the `talent` leg (NCAAF-RF1).
+      ⑥ NOT APPLICABLE, stated rather than silently omitted: the acceptance
+      criteria ask for "baseline-pass/NOT-SELECTED in any Python harness". There is
+      no §0.5 selection harness in this story (no model, no bake-off, no arms), so
+      there is no baseline or NOT-SELECTED verdict to report about a SELECTION.
+      The two controls of that name ARE implemented, in the sense that applies
+      here: `ncaaf_p3_3b_red_proof.py` proves every named clause green on unbroken
+      source before breaking it, and refuses to score a clause pytest did not
+      select. 9/9 RED; the frontend harness 5/5 RED.

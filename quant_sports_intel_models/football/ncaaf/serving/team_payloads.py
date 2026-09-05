@@ -212,7 +212,9 @@ def _strength_week(row: Mapping[str, Any]) -> dict:
     }
 
 
-def build_strength(rows: Sequence[Mapping[str, Any]], *, strength_available: bool = True) -> dict:
+def build_strength(rows: Sequence[Mapping[str, Any]], *, strength_available: bool = True,
+                   ratings_as_of: str | None = None,
+                   ratings_next_update: str | None = None) -> dict:
     """The P1.2 block: the current week's posterior plus the season's week-by-week series.
 
     ⚠️ THE BAND IS NOT OPTIONAL. At `as_of_week` 1 nothing has been played and the posterior IS the
@@ -234,6 +236,10 @@ def build_strength(rows: Sequence[Mapping[str, Any]], *, strength_available: boo
             "as_of_week": None, "current": None, "weeks": [],
             "league_base_points": None, "home_field_advantage": None, "residual_sigma": None,
             "model_version": None, "hyper_n_prior_seasons": None,
+            # ⭐ CARRIED ON THE UNAVAILABLE BRANCH TOO (NCAAF-P3.3b). "when were the ratings last
+            # written" has an answer even on a page whose posterior could not be read, and the two
+            # absences are different facts: a block with no rating still has a lake behind it.
+            "ratings_as_of": ratings_as_of, "ratings_next_update": ratings_next_update,
         }
     weeks = [_strength_week(r) for r in rows if _i(r.get("as_of_week")) is not None]
     weeks.sort(key=lambda w: w["as_of_week"])
@@ -250,6 +256,12 @@ def build_strength(rows: Sequence[Mapping[str, Any]], *, strength_available: boo
         "residual_sigma": _f(latest_raw.get("residual_sigma")),
         "model_version": _s(latest_raw.get("model_version")),
         "hyper_n_prior_seasons": _i(latest_raw.get("hyper_n_prior_seasons")),
+        # ⚠️ NOT read off `latest_raw`. The vintage is a property of the ARTIFACT, not of a row —
+        # the posterior carries no timestamp column, and inventing one from `as_of_week` would turn
+        # a week index into a date it does not mean. It is passed in from the writer, which reads
+        # the Delta commit log (`ncaaf_ratings_vintage`).
+        "ratings_as_of": ratings_as_of,
+        "ratings_next_update": ratings_next_update,
     }
 
 
@@ -443,6 +455,8 @@ def build_team_payload(*, team_id: int, season: int,
                        prior_season_dim_row: Mapping[str, Any] | None = None,
                        marts_available: bool = True,
                        strength_available: bool = True,
+                       ratings_as_of: str | None = None,
+                       ratings_next_update: str | None = None,
                        now: datetime | None = None) -> dict:
     """One team's served page (a plain dict, validated through the Pydantic contract).
 
@@ -458,7 +472,9 @@ def build_team_payload(*, team_id: int, season: int,
         "team": build_identity(team_id=team_id, season=season, dim_row=dim_row,
                                prior_season_dim_row=prior_season_dim_row,
                                strength_row=strength_latest),
-        "strength": build_strength(strength_rows, strength_available=strength_available),
+        "strength": build_strength(strength_rows, strength_available=strength_available,
+                                   ratings_as_of=ratings_as_of,
+                                   ratings_next_update=ratings_next_update),
         "efficiency": build_efficiency(efficiency_rows, marts_available=marts_available),
         "splits": build_splits(splits_rows, marts_available=marts_available),
         "schedule": build_schedule(schedule_rows, team_id=team_id,
@@ -618,6 +634,8 @@ def build_team_payloads(*, season: int,
                         team_dim: "pd.DataFrame | None" = None,
                         prior_team_dim: "pd.DataFrame | None" = None,
                         marts_available: bool = True,
+                        ratings_as_of: str | None = None,
+                        ratings_next_update: str | None = None,
                         now: datetime | None = None) -> dict[int, dict]:
     """`{team_id: blob}` for every FBS team the season knows about.
 
@@ -672,6 +690,8 @@ def build_team_payloads(*, season: int,
             prior_season_dim_row=prior_by_team.get(tid),
             marts_available=marts_available,
             strength_available=strength is not None,
+            ratings_as_of=ratings_as_of,
+            ratings_next_update=ratings_next_update,
             now=now,
         )
         for tid in universe

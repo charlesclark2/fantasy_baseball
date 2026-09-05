@@ -117,7 +117,26 @@ export interface NcaafTeamStanding {
   interval_hi_level: number | null
 }
 
-export interface NcaafTeamStrength {
+/** NCAAF-P3.3b — the two served halves of the ratings-update stamp.
+ *
+ * ⭐ ITS OWN INTERFACE so the pair has ONE declaration, and so a second surface that starts
+ * printing a rating can accept exactly these two fields without depending on the whole strength
+ * block. (⛔ Deliberately NOT `Pick<NcaafTeamStrength, …>`: the NCAAF identifier guard forbids the
+ * token `pick` anywhere in this tree's identifiers — it cannot tell TypeScript's builtin from a
+ * betting claim, and the right answer is to not need the word, not to carve an exemption.)
+ */
+export interface RatingsVintageFields {
+  /** ISO-8601 UTC, when the ratings artifact was last written. Null = we could not read it, which
+   *  the surface STATES rather than papering over with `generated_at` — that is when the hourly
+   *  serving write ran, i.e. the number that makes a five-week-old rating look fresh. */
+  ratings_as_of: string | null
+  /** ISO-8601 UTC, the next SCHEDULED rewrite. ⛔ Null today and that is a MEASUREMENT: the P1.2
+   *  re-fit is an operator step on no schedule (`ncaaf_ratings_vintage.RATINGS_REFRESH_SCHEDULES`
+   *  is empty by measurement, not by omission). Rendered as a stated absence, never a guess. */
+  ratings_next_update: string | null
+}
+
+export interface NcaafTeamStrength extends RatingsVintageFields {
   status: NcaafBlockStatus
   reason: string | null
   as_of_week: number | null
@@ -408,5 +427,56 @@ export function standingText(
     placement: `${ordinal(rank)}${outOf}${where}`,
     range: lo === hi ? null : `${ordinal(lo)} to ${ordinal(hi)}`,
     confidence,
+  }
+}
+
+// ══ NCAAF-P3.3b — the ratings-update stamp ════════════════════════════════════════════════════
+
+/** The two halves of the stamp, already reduced to what a surface prints. */
+export interface RatingsStamp {
+  /** `YYYY-MM-DD`, or null when the payload carried no readable instant. */
+  asOf: string | null
+  /** `YYYY-MM-DD`, or null when no rewrite is scheduled (the state measured 2026-09-04). */
+  nextUpdate: string | null
+}
+
+/**
+ * The calendar date inside an ISO-8601 instant, or null.
+ *
+ * ⭐ A SLICE, NOT A `Date`. Three reasons, and the third is the one that bites. (1) `new Date(...)`
+ * plus `toLocaleDateString` renders in the RUNTIME's zone, so the server and the browser can
+ * disagree and Next hydration mismatches. (2) A vintage rendered in a reader's local zone would
+ * shift the date by a day either side of midnight for no informational gain — the fact being
+ * published is "which day was this written", and the serving write emits UTC. (3) It matches how
+ * the page footer already renders `generated_at`, so two dates on one screen cannot be in two
+ * different calendars.
+ *
+ * ⛔ VALIDATED RATHER THAN TRUSTED. A short or malformed string must produce null — which renders
+ * as a STATED absence — instead of a truncated fragment that still looks like a date.
+ */
+export function isoDateOf(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[T ]|$)/.exec(value.trim())
+  return match ? match[1] : null
+}
+
+/**
+ * What the stamp says, decided in ONE place.
+ *
+ * The `standingText` pattern, and for the same reason: the component's "should I render this half"
+ * question and a guard's "what should be on screen" question go through the same function, so they
+ * cannot disagree (the E9.61 two-renderers shape, avoided rather than fixed later).
+ *
+ * ⛔ IT INVENTS NOTHING. There is no branch in which a missing instant becomes a date — not "now",
+ * not the next weekday, not the serving write's own `generated_at`. A stamp is only worth printing
+ * if a reader can trust that it came from the artifact (NF1.7(a): a value that could not be read
+ * is not a value that may be guessed).
+ */
+export function ratingsStamp(
+  strength: RatingsVintageFields | null | undefined,
+): RatingsStamp {
+  return {
+    asOf: isoDateOf(strength?.ratings_as_of),
+    nextUpdate: isoDateOf(strength?.ratings_next_update),
   }
 }

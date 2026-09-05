@@ -545,6 +545,36 @@ class NcaafTeamStrength(BaseModel):
     #: one-team conference is not a standing) or when this team has no posterior to place.
     standing_fbs: NcaafTeamStanding | None = None
     standing_conference: NcaafTeamStanding | None = None
+    # ── NCAAF-P3.3b — WHEN this rating last took in games, and when it next will ──────────────
+    #
+    # ⭐ THE RATING'S DATE IS PART OF THE RATING, for the same reason the band is. P3.3 measured
+    # the gap: the posterior moves only when P1.2 is re-fit, so between fits a team can win by 26
+    # while its rating, band and both ranks sit unchanged beside that win in its own schedule.
+    # Every number above is then correct and the PAGE is still misleading, because a reader reads
+    # a rating printed today as a rating computed today. `generated_at` cannot answer it — that is
+    # when the SERVING WRITE ran (hourly), which is precisely the number that makes a five-week-old
+    # rating look fresh.
+    #
+    # ⚠️ BOTH ARE ISO-8601 UTC INSTANTS OR NULL, AND NULL IS A STATED ABSENCE THE SURFACE RENDERS
+    # — never a date the client invents, and never a silently-dropped field (E9.41: an undeclared
+    # field is stripped on serialize, which is how a store that had the value right the whole time
+    # serves a page that never shows it).
+    #
+    #: When `ncaaf/derived/team_strength_week` was last WRITTEN — read from inside its Delta
+    #: transaction log, never an S3 `LastModified` (INC-41). `run_team_strength` is its only
+    #: writer, so a newer value here means a re-fit actually landed.
+    ratings_as_of: str | None = None
+    #: The next scheduled REWRITE of that artifact.
+    #:
+    #: ⛔ NULL TODAY, AND THAT IS A MEASUREMENT RATHER THAN AN OMISSION (2026-09-04): no Dagster
+    #: schedule re-fits P1.2 — it is an operator laptop step, stated in the roll-forward job, the
+    #: snapshot job and `BOX_OPERATIONS.md §10`, and confirmed on the lake (the ratings table last
+    #: committed 2026-08-18 while the roll-forward's own tables committed 2026-08-31 13:00Z, i.e.
+    #: it fired and moved nothing here). Deriving this from `NCAAF_ROLL_FORWARD_CRON` — which
+    #: P3.3b was specified to do, on a premise recorded in #1081's commit message — would promise a
+    #: refresh that job cannot deliver. `betting_ml/monitoring/ncaaf_ratings_vintage.py` owns the
+    #: registry this comes from and refuses that entry by name.
+    ratings_next_update: str | None = None
 
 
 class NcaafTeamEfficiency(BaseModel):

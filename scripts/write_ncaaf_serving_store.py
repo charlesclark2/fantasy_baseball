@@ -449,6 +449,25 @@ def build_team_blobs(season: int, *, now: datetime | None = None) -> tuple[list[
     frames, marts_reason = read_team_marts(season)
     marts_available = marts_reason is None
 
+    # ⭐ THE RATING'S OWN DATE (NCAAF-P3.3b). Read from the strength artifact's Delta commit log,
+    # NOT from `generated_at` — that is when THIS write ran (hourly), so a page whose posterior was
+    # last fit in August would print today's date beside it and read as fresh. That is the exact
+    # misread P3.3 measured, and the fix is a date the reader can see.
+    #
+    # ⚠️ ALERT TIER, LIKE EVERY OTHER READ HERE: an unreadable lake costs the page its STAMP, never
+    # its ratings, so the failure is logged and both halves go out as null (which the surface
+    # renders as a stated absence, never as a fabricated date — NF1.7(a)).
+    try:
+        from betting_ml.monitoring import ncaaf_ratings_vintage as vintage
+
+        stamp = vintage.ratings_vintage_fields(now=now)
+    except Exception as exc:  # noqa: BLE001 — ALERT tier
+        log.warning("[ALERT] NCAAF team pages: the ratings VINTAGE read FAILED (%s) — the pages are "
+                    "served without the update stamp; every rating and rank is unaffected.", exc)
+        stamp = {"ratings_as_of": None, "ratings_next_update": None}
+    log.info("NCAAF team pages: ratings_as_of=%s next_update=%s",
+             stamp["ratings_as_of"], stamp["ratings_next_update"] or "(none scheduled)")
+
     payloads_by_team = team_payloads.build_team_payloads(
         season=season,
         strength=strength,
@@ -458,6 +477,8 @@ def build_team_blobs(season: int, *, now: datetime | None = None) -> tuple[list[
         team_dim=frames.get("team_dim"),
         prior_team_dim=frames.get("prior_team_dim"),
         marts_available=marts_available,
+        ratings_as_of=stamp["ratings_as_of"],
+        ratings_next_update=stamp["ratings_next_update"],
         now=now,
     )
     blobs = [payloads_by_team[t] for t in sorted(payloads_by_team)]
