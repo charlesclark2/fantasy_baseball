@@ -42,12 +42,15 @@ _RB = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/run_nf_inj2b_rate
 _GITIGNORE = _REPO / ".gitignore"
 _DEC = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/run_nf_inj2c_decisive.py")
 _REG2C = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/nf_inj2c_assignment_rule.py")
+_AMEND = _REPO / ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
+                  "nf_inj2c_preregistration_amendment_1.md")
 _SUITE = "betting_ml/tests/test_nf_inj2c_coherence_diagnosis.py"
 #: nodes 3a/3b/3c live in their own suite; the harness routes each break to the suite that owns it.
 _SUITE_BY_NODE = {}
 
 #: (label, file, anchor, replacement, token that must be GONE afterwards, the guard(s) it must break)
-BREAKS: list[tuple[str, Path, str, str, str, str]] = [
+#: ⭐ the 5th element is `None` for an INSERTION break — see the two shapes in `main()`.
+BREAKS: list[tuple[str, Path, str, str, str | None, str]] = [
     ("the kernel-floor count silently narrows to the recorded definition", _DIAG,
      'floored = np.where(np.isfinite(g), gsafe != g, True)',
      'floored = np.where(np.isfinite(g), gsafe != g, False)',
@@ -791,6 +794,58 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      '("FAILS", "UNEVALUABLE")',
      "TestF1IsInactiveNotFailedWhenAGateCannotBeFormed::"
      "test_an_inactive_F1_still_blocks_the_disposition"),
+
+    # ── NODE 5 — the null classification ───────────────────────────────────────────────────────
+    ("a GENUINE_ABSENCE null publishes a fold trigger (the NF-D18 misleading direction)", _DEC,
+     '    reachable_states = {"POWER_LIMITED"}',
+     '    reachable_states = {"POWER_LIMITED", "GENUINE_ABSENCE", "DSR_UNREACHABLE"}',
+     'reachable_states = {"POWER_LIMITED"}',
+     "TestTheRetestTriggerIsWithheldWhereItWouldMislead::"
+     "test_a_genuine_absence_never_publishes_a_fold_trigger"),
+
+    ("a CLOSED lockstep lever stops withholding the trigger (NF-W8-0d)", _DEC,
+     '    open_lever = bool(lockstep.get("sr_gt_sr0")) and not lockstep.get("lever_closed")',
+     "    open_lever = True",
+     'open_lever = bool(lockstep.get("sr_gt_sr0"))',
+     "TestTheRetestTriggerIsWithheldWhereItWouldMislead::"
+     "test_a_CLOSED_lockstep_lever_withholds_the_trigger_however_good_the_state"),
+
+    ("an UNCOMPUTED fold requirement renders as a bare 'more data' trigger", _DEC,
+     "    if needed is None:",
+     "    if False:",
+     "if needed is None:",
+     "TestTheRetestTriggerIsWithheldWhereItWouldMislead::"
+     "test_an_uncomputed_fold_requirement_is_withheld_not_rendered_as_more_data"),
+
+    ("the published trigger stops saying the shortfall is not reachable now", _DEC,
+     '        "reachable_now": False,',
+     '        "reachable_now": True,',
+     '"reachable_now": False',
+     "TestTheRetestTriggerIsWithheldWhereItWouldMislead::"
+     "test_the_published_trigger_says_it_is_not_reachable_now"),
+
+    ("node 5 classifies a SMOKE artifact as though it were the registered run", _DEC,
+     '        if "⚠️ SMOKE" in rep:',
+     "        if False:",
+     'if "⚠️ SMOKE" in rep:',
+     "TestTheClassificationReadsARecordedResult::test_it_refuses_a_SMOKE_artifact"),
+
+    ("an UNUSABLE record is classified as a clean null instead of refused", _DEC,
+     '    if not srs or len(vmem) < 2 or not m1.get("evaluable"):',
+     "    if False:",
+     'if not srs or len(vmem) < 2 or not m1.get("evaluable"):',
+     "TestTheClassificationReadsARecordedResult::"
+     "test_an_unusable_record_is_UNCLASSIFIABLE_never_a_clean_null"),
+
+    # ⛔ mutates the AMENDMENT, ⛔ not the guard: a break that edits the test proves nothing about
+    # the property. Injecting a figure that exists ONLY in the decisive run is what the provenance
+    # claim forbids, so it is what the guard must catch.
+    ("the amendment quotes a figure that exists only in the decisive run it predates", _AMEND,
+     "## 7. WHY (A)",
+     "The measured DSR was 0.9306.\n\n## 7. WHY (A)",
+     None,          # INSERTION break — nothing is removed, so there is no `gone` token
+     "TestTheAmendmentDocumentSaysWhatTheCodeDoes::"
+     "test_the_amendment_quotes_no_figure_from_the_decisive_run"),
 ]
 
 
@@ -858,7 +913,20 @@ def main() -> int:
                 print(f"  ✗ MALFORMED BREAK — the mutation for {label!r} did not LAND (#682)")
                 greens.append(label)
                 continue
-            if gone in after:
+            # ⭐ TWO BREAK SHAPES, and the distinction keeps #815 sharp rather than weakening it.
+            #   · REMOVAL (`gone` is a string) — the mutation must make that token DISAPPEAR, or it
+            #     landed without moving the predicate the guard reads (#815).
+            #   · INSERTION (`gone` is None) — a DOCUMENT-provenance guard ("this file quotes no
+            #     figure from a run it predates") can only be broken by ADDING text, so nothing
+            #     disappears. The observable is then that the INJECTED text is present. Still a real
+            #     check: a mutation that silently failed to write leaves it absent (#682).
+            if gone is None:
+                if repl.split("\n")[0] not in after:
+                    print(f"  ✗ MALFORMED BREAK — {label!r} is an INSERTION break and its injected "
+                          f"text is not present afterwards (#682)")
+                    greens.append(label)
+                    continue
+            elif gone in after:
                 print(f"  ✗ MALFORMED BREAK — {label!r} landed but {gone!r} SURVIVED, so it cannot "
                       f"move the predicate the guard reads (#815)")
                 greens.append(label)

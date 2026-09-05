@@ -77,6 +77,7 @@ from quant_sports_intel_models.football.nfl.fantasy import run_nf_inj2b_rate_ord
 log = logging.getLogger("nfl.fantasy.nf_inj2c_decisive")
 
 _STEM = "nf_inj2c_decisive"
+_STEM_N5 = "nf_inj2c_null_classification"
 _REPORT_DIR = RB._REPORT_DIR
 _BASELINE_REPORT = _REPORT_DIR / "nf_inj2c_dominance_baseline.json"
 
@@ -1055,6 +1056,165 @@ def write_report_md(rep: dict, path: Path) -> None:
     path.write_text("\n".join(L))
 
 
+def classify(rep: dict) -> dict:
+    """NODE 5 — classify the recorded null with `cv_power.classify_null`, from the DECISIVE
+    artifact's own stored record. ⛔ Re-scores nothing; ⛔ certifies nothing.
+
+    ⭐ DERIVED AT READ TIME, ⛔ NOT STORED AT SCORING TIME (NF-W2e, raised to the null STATE): a
+    verdict computed inside the scoring run cannot be corrected without a full refit, which is the
+    pressure that leaves a known-wrong label in a published record. This reads the committed
+    artifact, so a correction costs a re-render.
+
+    ⛔ `declared_field_size=` is passed (MH2.7) and `field_remedy_admissible` is READ rather than
+    the prose: the five-arm field IS this study's declared minimum, so a "use a smaller field"
+    remedy would re-commit the exact selection bias DSR exists to deflate (MH2.2). The instrument
+    refuses it in code; this function records the refusal rather than restating it."""
+    from scipy import stats as _st
+
+    b = (rep.get("deflation") or {}).get("binding") or {}
+    m1 = (rep.get("measures") or {}).get("M1") or {}
+    srs = dict(b.get("trial_sharpes") or {})
+    vmem = list(b.get("v_members") or [])
+    if not srs or len(vmem) < 2 or not m1.get("evaluable"):
+        return {"evaluable": False,
+                "why": "the decisive artifact carries no usable trial-Sharpe record or no M1 — an "
+                       "unclassifiable null is ⛔ never reported as a clean one (NF1.7 (a))"}
+    lifts = np.array(list((m1.get("per_fold_lift") or {}).values()), dtype=float)
+    v = float(np.var([srs[a] for a in vmem], ddof=1))
+    v_all = float(np.var(list(srs.values()), ddof=1))
+    nv = cv_power.classify_null(
+        metric="crps", n_folds=int(m1["n_folds"]), n_arms=int(b["declared_field_size"]),
+        beats_foil=True, observed_sr=float(srs[C.PRIMARY_ARM]),
+        var_trials_sr=v, fold_wins=int(m1["folds_won"]),
+        p_one_sided=float(m1["one_sided_p"]),
+        pbo=b.get("pbo"), pbo_application=b.get("pbo_application"),
+        skew=float(_st.skew(lifts)), kurt=float(_st.kurtosis(lifts, fisher=False)),
+        # ⭐ DSR-CONV provenance, stated: `V` was measured EXCLUDING the pre-registered degenerates
+        # (which stay in `n_trials`) and the reference arm (MH2.1 (a)). Both exclusions are
+        # FORWARD-declared in `nf_inj2c_assignment_rule`; ⛔ neither was chosen after a score.
+        degenerates_excluded_from_v=True, var_trials_sr_with_degenerates=v_all,
+        declared_field_size=int(b["declared_field_size"]))
+    detail = dict(getattr(nv, "detail", {}) or {})
+    ls = (rep.get("deflation") or {}).get("lockstep_variance_lever") or {}
+    return {
+        "evaluable": True,
+        "state": nv.state, "reason": nv.reason, "detail": detail,
+        "v_declared": round(v, 6), "v_whole_field": round(v_all, 6),
+        # ⭐ MH2.7 — READ the machine flag, ⛔ never the prose. False here means the instrument
+        # REFUSES to prescribe a smaller field because five IS the declared minimum.
+        # ⛔ the TOP-LEVEL dataclass field, ⛔ not `detail` — the machine flag MH2.7 shipped for a
+        # report table to gate on. Reading the prose instead is the defect that rule exists to close.
+        "field_remedy_admissible": nv.field_remedy_admissible,
+        "pbo_application_admissible": nv.pbo_application_admissible,
+        "folds_have": nv.folds_have, "folds_needed": nv.folds_needed,
+        "extra_seasons": nv.extra_seasons, "max_field_size": nv.max_field_size,
+        "instrument_retest_trigger": nv.retest_trigger,
+        "retest_trigger": _retest_trigger(nv, ls, int(m1["n_folds"])),
+        "control_makes_this_null_informative": (
+            (rep.get("control_binding") or {}).get("state") == "PASSES"),
+        "diagnostic_field_does_not_rescue": (
+            "the inherited NF-INJ2b 10-arm field was declared NON-BINDING in advance and its DSR "
+            "publishes either way; it is recorded beside the binding figure and ⛔ cannot rescue a "
+            "binding refusal (pre-registration §2.4)."),
+    }
+
+
+def _retest_trigger(nv, lockstep: dict, n_folds: int) -> dict:
+    """The re-test trigger, stated in the unit that GROWS — and ⛔ WITHHELD where it would mislead.
+
+    Three things have to be true before a fold trigger may be published, and all three are checked
+    rather than assumed:
+      1. the state must be one `n` can move (⛔ never `GENUINE_ABSENCE`, ⛔ never `DSR_UNREACHABLE`
+         — for those, "come back with more seasons" is the actively-misleading NF-D18 direction);
+      2. the lockstep lever must be OPEN, i.e. `SR > SR0` — `n` enters DSR only through `√(n−1)`,
+         which scales a positive gap and can never CREATE one (NF-W8-0d);
+      3. it must say whether the shortfall is reachable NOW. Here it is ⛔ NOT: node 3c established
+         on three independent legs that 2018 is not data-honest and the PM SETTLED the window at
+         seven folds, so the window cannot be WIDENED — every additional fold is a future SEASON.
+    """
+    reachable_states = {"POWER_LIMITED"}
+    open_lever = bool(lockstep.get("sr_gt_sr0")) and not lockstep.get("lever_closed")
+    if nv.state not in reachable_states or not open_lever:
+        return {"published": False,
+                "why": (f"state={nv.state}, lockstep lever open={open_lever} — a fold trigger is "
+                        "WITHHELD with the reason stated rather than published (NF-D18 / PM "
+                        "ruling D3, 2026-09-05)")}
+    needed = nv.folds_needed
+    if needed is None:
+        return {"published": False,
+                "why": ("the instrument computed no fold requirement, so there is no shortfall to "
+                        "state in the unit that grows — ⛔ never published as a bare 'more data' "
+                        "(NF1.7 (a): an unevaluable trigger is not a trigger)")}
+    return {
+        "published": True,
+        "folds_held": n_folds, "folds_needed_for_dsr": int(needed),
+        "additional_folds": max(0, int(needed) - n_folds),
+        "instrument_extra_seasons": nv.extra_seasons,
+        "reachable_now": False,
+        "why": ("SR > SR0, so `n` scales a POSITIVE gap and the trigger is meaningful (NF-W8-0d) — "
+                "PM ruling D3, 2026-09-05, permits publishing it on exactly this condition. ⛔ It "
+                "is CALENDAR-BOUND, ⛔ not reachable now: the window is settled at seven folds (PM "
+                "ruling 2026-09-01; node 3c ruled 2018 out on data-fidelity grounds), so each "
+                "further fold is a future SEASON — 2026 is the 8th, 2027 the 9th. ⚠️ The fold "
+                "count is an ESTIMATE AT THIS DESIGN'S CURRENT `SR` and `V`; both move with new "
+                "data, so it is a horizon, ⛔ not a promise."),
+    }
+
+
+def write_classification_md(out: dict, path: Path) -> None:
+    c = out["classification"]
+    if not c.get("evaluable"):
+        path.write_text(f"# NF-INJ2c node 5 — UNCLASSIFIABLE\n\n{c.get('why')}\n")
+        return
+    t = c["retest_trigger"]
+    L = [
+        "# NF-INJ2c node 5 — the null classification",
+        "",
+        "> ⛔ `best_alpha = 0`. Nothing serves; DEPLOY-HELD; `SERVED_ARM` stays `incumbent`. This "
+        "document CLASSIFIES a recorded result. ⛔ It re-scores nothing, certifies nothing, and "
+        "never opens the marts.",
+        "",
+        f"Classifies `{Path(out['classifies']['artifact']).name}` "
+        f"(generated {out['classifies']['generated_at']}, verdict "
+        f"**{out['classifies']['verdict_state']}**).",
+        "",
+        "## The state",
+        "",
+        f"**{c['state']}**",
+        "",
+        f"> {c['reason']}",
+        "",
+        "## What that does and does not license",
+        "",
+        f"- **field-size remedy admissible: {c['field_remedy_admissible']}** — ⭐ the MH2.7 machine "
+        "flag, ⛔ not the prose. `False` means the arithmetic-implied field sits BELOW this study's "
+        "DECLARED five, so acting on it would mean dropping pre-registered arms because they lost "
+        "— the selection bias DSR exists to deflate (MH2.2).",
+        f"- **PBO application admissible: {c['pbo_application_admissible']}** — PBO was applied at "
+        "the FIELD level, which is the only level CSCV defines.",
+        f"- `V` (declared: degenerates ∉ `V` per DSR-CONV, reference ∉ `V` per MH2.1 (a)) = "
+        f"**{c['v_declared']}**; over the WHOLE field it is **{c['v_whole_field']}** — an inflation "
+        f"factor of {c['detail'].get('v_inflation_factor_from_degenerates')}×. ⛔ That is why the "
+        "whole-field figure is a diagnostic and never the gate: a deflation statistic computed over "
+        "a field containing its own nulls measures the nulls (NF1.8).",
+        f"- **the positive control makes this null informative: "
+        f"{c['control_makes_this_null_informative']}** — the family DETECTED a planted effect over "
+        "this same field, so a refusal from it is evidence about the effect rather than about a "
+        "blind gate family.",
+        "",
+        "## The re-test trigger",
+        "",
+    ]
+    if t.get("published"):
+        L += [f"- **PUBLISHED.** Folds held **{t['folds_held']}**; DSR needs "
+              f"**{t['folds_needed_for_dsr']}** ⇒ **{t['additional_folds']} more**.",
+              f"- reachable now: **{t['reachable_now']}**", "", f"⭐ {t['why']}"]
+    else:
+        L += [f"- **WITHHELD.** {t['why']}"]
+    L += ["", "## The diagnostic field", "", f"⛔ {c['diagnostic_field_does_not_rescue']}", ""]
+    path.write_text("\n".join(L))
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="NF-INJ2c node 4 — the decisive run")
     ap.add_argument("--duckdb", default="quant_sports_intel_models/sports_dbt/sports.duckdb")
@@ -1064,11 +1224,42 @@ def main(argv: list[str] | None = None) -> int:
                          "window is refused (PM ruling 2026-09-01) — this exists for a SMOKE only, "
                          "and a non-default value is stamped in the report as NOT the registration.")
     ap.add_argument("--base-from", type=int, default=C.BASE_FROM)
+    ap.add_argument("--classify", action="store_true",
+                    help="NODE 5 — READ the committed decisive artifact and classify its null. "
+                         "⛔ Re-scores nothing and never opens the marts; a classification is a "
+                         "reading of a recorded result, not a second answer to it.")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(message)s")
     logging.getLogger("nfl").setLevel(logging.INFO)
+
+    if args.classify:
+        src = _REPORT_DIR / f"{_STEM}.json"
+        if not src.exists():
+            raise SystemExit(
+                f"no decisive artifact at {src} — node 5 classifies the RECORDED run; it does not "
+                "produce one. Run the decisive run first (⛔ a classification with no result to "
+                "classify would be a verdict about nothing).")
+        rep = json.loads(src.read_text())
+        if str((rep.get("verdict") or {}).get("state")) == "":
+            raise SystemExit("the decisive artifact carries no verdict state")
+        if "⚠️ SMOKE" in rep:
+            raise SystemExit(
+                "that artifact is a SMOKE (its folds are not the registered seven) — ⛔ a smoke "
+                "reaches no verdict the record may quote, so it may not be classified either")
+        out = {
+            "story": "NF-INJ2c node 5 — the null classification",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "best_alpha": 0, "deploy_held": True,
+            "classifies": {"artifact": str(src), "generated_at": rep.get("generated_at"),
+                           "verdict_state": (rep.get("verdict") or {}).get("state")},
+            "classification": classify(rep),
+        }
+        (_REPORT_DIR / f"{_STEM_N5}.json").write_text(json.dumps(out, indent=2, default=str))
+        write_classification_md(out, _REPORT_DIR / f"{_STEM_N5}.md")
+        log.info("node 5 complete — %s", out["classification"].get("state"))
+        return 0
 
     import duckdb
     if not Path(args.duckdb).is_absolute() and not Path(args.duckdb).exists():
