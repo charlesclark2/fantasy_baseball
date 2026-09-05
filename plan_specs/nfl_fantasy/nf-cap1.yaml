@@ -1,0 +1,128 @@
+# Plan spec — NF-CAP1 (MINI tier, deadline-bound: make the NFL PIT captures actually RUN —
+# injuries weekly leg + props leg + the never-again detector; credits verification rides along)
+# Authored by PM 2026-09-05. Consumes the PIT-capture Sprint card (DFZDxfRZ) + the W0a
+# injuries findings measured by NF-INJ4 and re-measured by NF-INJ4b (zero 2026 rows, both).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-cap1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/DFZDxfRZ
+  status: ACCEPTED
+spec:
+  description: >
+    Two forward-only PIT captures are not running, and every un-captured
+    week is PERMANENTLY unrecoverable (The Odds API history holds
+    closing lines only; injury designations have no as-of archive).
+    (A) INJURIES: nfl/pit/injuries has fired ONCE in its life — 12,136
+    rows, all season 2025, one capture date (2026-08-05, a post-season
+    backfill, PIT-inadmissible for its own gamedays), ZERO 2026 rows —
+    measured by NF-INJ4 (09-04) and unchanged at NF-INJ4b (09-05). It
+    gates every future injury re-test including NF-INJ4b's registered
+    2026 trigger and the duration model's in-season monitoring.
+    (B) PROPS: NFL_PIT_CAPTURE_PROPS was operator-flipped IN on 08-05;
+    the card's first scheduled real capture was Sept 4 — verify whether
+    it fired; if not, the pre-opener capture window is already eroding.
+    First game 2026-09-09. This story diagnoses WHY each leg is not
+    running (a leaf that never executes is silent — the E11.23/INC-0904
+    class; "enabled" is a claim, a captured 2026 row is evidence),
+    hands the operator the enable steps, verifies from ARTIFACT CONTENT,
+    and wires the detector so a stopped capture pages instead of
+    silently costing a season. best_alpha=0; data-infra; no model,
+    board, or serving change; changelog untouched.
+  acceptanceCriteria:
+    - description: >
+        DIAGNOSE BEFORE ENABLING, each leg separately: why has the
+        injuries capture fired once? (schedule ships STOPPED and was
+        never enabled / schedule enabled but never ticked / the one
+        firing was a manual backfill run and no schedule exists —
+        name which, from the Dagster definitions + the operator's
+        Dagit read, paste-ready.) Same question for the props leg
+        against its four flag owners (env.required + .env.example +
+        BOX_OPERATIONS §10 + the box's LIVE services/dagster/aws/.env
+        — a git pull never touches the box .env) and its Tue/Fri
+        schedule. State plainly which weeks are already permanently
+        lost for each leg — the record must carry the honest cost, not
+        bury it.
+    - description: >
+        SOURCE-SHAPE CHECK before trusting a first live run: the
+        injuries leg was built and exercised against 2025-era shapes;
+        prove the parser/lander handles the CURRENT 2026 feed (a real
+        row round-trip, not a fixture round-trip), with the NF-W2c
+        lesson in force (a bare regex reused across sources matched 0
+        rows SILENTLY — per-source patterns, and a zero-row landing on
+        a slate day must be a loud failure, never a quiet success).
+    - description: >
+        OPERATOR ENABLEMENT, paste-ready per leg: schedule ON +
+        first supervised run + VERIFICATION FROM THE ARTIFACT'S
+        CONTENT — 2026 rows in nfl/pit/injuries with capture instants
+        this week; per-event props under nfl/pit/props/ — never
+        "the schedule shows enabled" (INC-41: content timestamps,
+        not surface signals). ⭐ CREDITS: read the live
+        x-requests-remaining header on a real NFL props pull and
+        settle the suspected 10x error (NCAAF measured 3 credits/pull
+        vs §10's implied ~30; if it holds for NFL the season budget is
+        ~130 not ~1,300) — then correct BOX_OPERATIONS §10 and the
+        Sprint card's arithmetic IN THE SAME CHANGE, from the
+        measured number.
+    - description: >
+        THE NEVER-AGAIN DETECTOR: both capture artifacts get freshness
+        coverage keyed to their cadence (weekly/Tue-Fri, active-hours
+        semantics, content-timestamp lag — the INC-41 machinery, not a
+        new monitor species), and the schedules join the
+        check_monitors_healthy heartbeat so STOPPED-drift pages (the
+        NF-INFRA1 pattern; the same gap MLB-INC-0904 item ③ is closing
+        on the MLB side — mirror, don't fork, if a shared shape
+        exists). Guards RED-proven both ways: a frozen capture
+        artifact must page; a healthy cadence must not; baseline-pass
+        + NOT-SELECTED + resolve-every-node controls in the harness.
+    - description: >
+        Boundaries: capture legs and monitoring ONLY — no consumer,
+        no model, no serving surface; NF-C6-PH2's new weekly job and
+        NF-INJ2c's lane untouched (disjoint files; rebase pipeline/
+        if needed); the paid-spend decision is already made (operator
+        flipped props IN on 08-05) — this story spends nothing new
+        without flagging it; >2-min commands operator paste-ready;
+        worktree; PR -> dev; no Trello; roadmap files frozen.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-cap1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "PIT" / "capture" / "props" (board Credence Sports, 2026-09-05)'
+    duplicates: []
+    adjacent:
+      - "PIT-capture Sprint card (DFZDxfRZ) — CONSUMED as this story's card; the 09-04 comment (injuries leg) and 09-01 comment (10x credits) are its scope additions."
+      - "NF-W0a (Done) — built the legs; this story makes them RUN; no leg logic rewritten unless the 2026 source-shape check forces a fix."
+      - "NF-INJ4/4b (Done/SHIP_CANDIDATE) — the named consumers of the injuries stream; their records cite the zero-2026-rows measurement this story retires."
+      - "MLB-INC-0904 item ③ (leaf-run detector card, ZPmBj8PF) — the same silent-non-execution class on the MLB side; mirror the shape where shared."
+      - "NF-C6-PH2 / NF-INJ2c (IN FLIGHT) — disjoint files (new weekly serving job vs pit capture legs); rebase discipline on pipeline/."
+  triedLedger:
+    files:
+      - "nfl/pit/injuries census (12,136 rows / one capture date / zero 2026 — the NF-INJ4 data-census record)"
+      - "The Sprint card DFZDxfRZ + its two PM comments (props flags x4, Tue/Fri schedule, Sept-4 first capture, the 10x credits measurement path)"
+      - "NF-INFRA1 record (the STOPPED-schedule class + the heartbeat pattern); INC-41/INC-0904 records (content freshness; leaf silence)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "NF-INJ4b's 2026 monitoring + calendar-bound trigger; every future injury/props §0.5 study's substrate; prop-derived market features ever being backtestable"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-cap1-plan
+spec:
+  goalRef: { name: nf-cap1 }
+  graph:
+    nodes: []   # MINI tier — diagnose per leg -> source-shape check -> operator enable + verify -> detector + guards -> closeout with the honest lost-weeks statement
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
