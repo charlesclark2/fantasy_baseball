@@ -9,7 +9,7 @@ metadata:
   name: nf-cap1
   vertical: nfl_fantasy
   card: https://trello.com/c/DFZDxfRZ
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Two forward-only PIT captures are not running, and every un-captured
