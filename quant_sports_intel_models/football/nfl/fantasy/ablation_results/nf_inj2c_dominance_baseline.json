@@ -1,23 +1,61 @@
 {
   "story": "NF-INJ2c node 3b \u2014 capture-pinned dominance baseline (PM re-scope ruling 3)",
-  "generated_at": "2026-09-01T06:47:21.260981+00:00",
+  "generated_at": "2026-09-04T06:07:26.316035+00:00",
   "best_alpha": 0,
   "capture": {
-    "captured_at": "2026-09-01T06:25:40.433554+00:00",
-    "sha256": "817e3b5dbf469577f2079f7492eb2cfc6da48c19b711db7b4f2c48521508a81a",
-    "served_generated_at": "2026-09-01T06:04:18.984355+00:00",
+    "captured_at": "2026-09-04T06:04:16.905208+00:00",
+    "sha256": "89bbbd5b5d3018636b1d640c85520f4884872aa52b6e3412d86507b7c0e9cdc6",
+    "served_generated_at": "2026-09-04T06:03:38.723266+00:00",
     "n_players": 871,
-    "source": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_2026.json",
+    "source": "/app/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_2026.json",
     "market_vintage": {
-      "adp": {
-        "served_as_of": "2026-08-31",
-        "local_as_of": "2026-08-31",
-        "local_label": null
+      "market": {
+        "adp": {
+          "served_as_of": "2026-09-03",
+          "local_as_of": "2026-09-03",
+          "local_label": null
+        },
+        "ecr": {
+          "served_as_of": "2026-09-04",
+          "local_as_of": "2026-09-04",
+          "local_label": "9/04"
+        }
       },
-      "ecr": {
-        "served_as_of": "2026-09-01",
-        "local_as_of": "2026-09-01",
-        "local_label": "9/01"
+      "fingerprint": {
+        "adp": {
+          "window_start": {
+            "served": "2026-08-27",
+            "local": "2026-08-27"
+          },
+          "window_end": {
+            "served": "2026-09-03",
+            "local": "2026-09-03"
+          },
+          "drafts": {
+            "served": 7848,
+            "local": 7848
+          }
+        },
+        "ecr": {
+          "experts": {
+            "served": 117,
+            "local": 117
+          },
+          "last_updated_ts": {
+            "local": 1788487838,
+            "board_generated_at": "2026-09-04T06:03:38.749305+00:00"
+          }
+        }
+      },
+      "input_vintage": {
+        "depth_chart_as_of": {
+          "served": "2026-09-03 11:53:47",
+          "local": "2026-09-03 11:53:47"
+        },
+        "sleeper_status_as_of": {
+          "served": "2026-09-03T13:30:19.959888+00:00",
+          "local": "2026-09-03T13:30:19.959888+00:00"
+        }
       }
     },
     "convention": "D3 \u2014 a reproduction pin over a live-snapshot-fed surface binds a CAPTURED artifact, never a re-pull; --market-refresh moves the ADP/ECR consensus that feeds the ordering, so a later pull is a different board. The MARKET VINTAGE is recorded here and re-checked on every run, because the board's bytes matching is not sufficient \u2014 the ORDERING is built from the on-disk ADP/ECR caches, which move independently of it."
@@ -34,21 +72,21 @@
   ],
   "application_2026": {
     "cohort_source": "load_forward_roster_status(2026).proj_status \u2208 ['NFI', 'PUP', 'RES', 'SUS'] \u2014 the cap's own input",
-    "n_capped": 41,
-    "board_generated_at": "2026-09-01T06:25:35.95858",
+    "n_capped": 53,
+    "board_generated_at": "2026-09-04T06:06:10.62193",
     "served_vintage": {
-      "projections_generated_at": "2026-09-01T06:04:18.984355+00:00",
+      "projections_generated_at": "2026-09-04T06:03:38.723266+00:00",
       "n_rows": 871,
-      "source": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_2026.json",
-      "manifest_generated_at": "2026-09-01T06:04:19.009664+00:00",
+      "source": "/app/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/served_projections_2026.json",
+      "manifest_generated_at": "2026-09-04T06:03:38.749305+00:00",
       "input_vintage": {
-        "depth_chart_as_of": "2026-08-31 14:44:50",
-        "sleeper_status_as_of": "2026-08-31T13:30:16.880706+00:00"
+        "depth_chart_as_of": "2026-09-03 11:53:47",
+        "sleeper_status_as_of": "2026-09-03T13:30:19.959888+00:00"
       },
       "injury_input": {
         "verdict": "OK",
         "lag_hours": 16.6,
-        "as_of": "2026-08-31T13:30:16.880706+00:00",
+        "as_of": "2026-09-03T13:30:19.959888+00:00",
         "max_lag_hours": 72.0,
         "detail": "injury status 16.6h old, within the 72h bar"
       },
@@ -60,24 +98,24 @@
         "claims_fitted": true,
         "fitted_model_version": "nfl_fantasy_nf_inj3b_injury_games_v1",
         "incumbent_model_version": "nfl_fantasy_injury_cap_incumbent_v1",
-        "n_certified": 36,
-        "n_fitted": 36,
-        "n_moved": 36,
-        "max_abs_move": 3.9997523670390134,
+        "n_certified": 46,
+        "n_fitted": 46,
+        "n_moved": 46,
+        "max_abs_move": 4.572044743024871,
         "material_atol": 1e-09,
-        "detail": "36 of 36 fitted row(s) differ materially from the incumbent cap (largest move 4 games) under the fitted stamp nfl_fantasy_nf_inj3b_injury_games_v1."
+        "detail": "46 of 46 fitted row(s) differ materially from the incumbent cap (largest move 4.57 games) under the fitted stamp nfl_fantasy_nf_inj3b_injury_games_v1."
       },
       "reported_absence_count": 0
     },
     "baseline_freshness": {
       "max_lag_hours": 48.0,
-      "local_mvp1_generated_at": "2026-09-01 06:25:35.958588+00:00",
-      "served_generated_at": "2026-09-01T06:04:18.984355+00:00",
-      "lag_hours": 0.35,
+      "local_mvp1_generated_at": "2026-09-04 06:06:10.621932+00:00",
+      "served_generated_at": "2026-09-04T06:03:38.723266+00:00",
+      "lag_hours": 0.04,
       "served_injury_input": {
         "verdict": "OK",
         "lag_hours": 16.6,
-        "as_of": "2026-08-31T13:30:16.880706+00:00",
+        "as_of": "2026-09-03T13:30:19.959888+00:00",
         "max_lag_hours": 72.0,
         "detail": "injury status 16.6h old, within the 72h bar"
       }
@@ -102,14 +140,14 @@
           }
         ],
         "injury_giveback": {
-          "n": 41,
-          "mvp1_total": 493.1,
-          "arm_total": 493.1,
+          "n": 53,
+          "mvp1_total": 629.3,
+          "arm_total": 629.3,
           "giveback_pct": 0.0,
           "median_point_ratio": 1.0,
           "n_scaled_up": 0,
           "n_scaled_down": 0,
-          "served_giveback_pct": 88.49
+          "served_giveback_pct": 89.28
         },
         "availability_gradient": {
           "n": 716,
@@ -187,14 +225,14 @@
           {
             "name": "CASE KEENUM",
             "stat": "passAtt",
-            "implied_per_game": 87.78,
+            "implied_per_game": 90.64,
             "max_ever_per_game": 45.44,
             "expected_games": 1.06
           },
           {
             "name": "EASTON STICK",
             "stat": "passAtt",
-            "implied_per_game": 84.84,
+            "implied_per_game": 84.87,
             "max_ever_per_game": 45.44,
             "expected_games": 1.86
           },
@@ -206,39 +244,39 @@
             "expected_games": 0.8
           },
           {
-            "name": "SAM HOWELL",
-            "stat": "passAtt",
-            "implied_per_game": 80.8,
-            "max_ever_per_game": 45.44,
+            "name": "CASE KEENUM",
+            "stat": "passYds",
+            "implied_per_game": 611.55,
+            "max_ever_per_game": 371.2,
             "expected_games": 1.06
           },
           {
             "name": "SAM EHLINGER",
             "stat": "passAtt",
-            "implied_per_game": 74.74,
+            "implied_per_game": 74.99,
             "max_ever_per_game": 45.44,
             "expected_games": 0.8
           }
         ],
         "injury_giveback": {
-          "n": 41,
-          "mvp1_total": 493.1,
-          "arm_total": 928.8,
-          "giveback_pct": 88.34,
-          "median_point_ratio": 1.9982,
-          "n_scaled_up": 36,
-          "n_scaled_down": 4,
-          "served_giveback_pct": 88.49
+          "n": 53,
+          "mvp1_total": 629.3,
+          "arm_total": 1191.0,
+          "giveback_pct": 89.26,
+          "median_point_ratio": 2.0472,
+          "n_scaled_up": 45,
+          "n_scaled_down": 6,
+          "served_giveback_pct": 89.28
         },
         "availability_gradient": {
           "n": 716,
-          "rho": -0.2389,
-          "p": 9.468215536689419e-11,
+          "rho": -0.2456,
+          "p": 2.6813342193048306e-11,
           "evaluable": true,
           "max_abs_ratio_move": 2.513129
         },
-        "clamp_saturation_high": 14,
-        "clamp_saturation_low": 21,
+        "clamp_saturation_high": 18,
+        "clamp_saturation_low": 25,
         "n_rows": 797,
         "placement": {
           "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
@@ -263,27 +301,27 @@
           },
           "cross_position_movement_top100": {
             "n_board": 797,
-            "median_abs_rank_move": 37.0,
-            "p90_abs_rank_move": 202.4,
-            "max_abs_rank_move": 351.0,
-            "n_moved": 751,
-            "top100_churn": 13,
+            "median_abs_rank_move": 39.0,
+            "p90_abs_rank_move": 214.8,
+            "max_abs_rank_move": 344.0,
+            "n_moved": 757,
+            "top100_churn": 12,
             "top100_membership_stable": false,
             "top10_order_stable": false
           },
           "within_position_movement": {
             "max_rank_move_by_pos": {
-              "QB": 55.0,
-              "RB": 90.0,
-              "WR": 138.0,
-              "TE": 74.0
+              "QB": 56.0,
+              "RB": 91.0,
+              "WR": 141.0,
+              "TE": 75.0
             },
-            "worst_rank_move": 138.0,
+            "worst_rank_move": 141.0,
             "within_position_rho": {
-              "QB": 0.7791067335063103,
-              "RB": 0.8410721874810271,
-              "WR": 0.8906889340396774,
-              "TE": 0.8818507486622187
+              "QB": 0.7557195757865834,
+              "RB": 0.829554975411329,
+              "WR": 0.8780236763169477,
+              "TE": 0.8807069427837639
             }
           }
         },
@@ -294,10 +332,10 @@
       },
       "stratified": {
         "score_target": "points",
-        "coherence_violating_players": 8,
-        "coherence_violations": 12,
+        "coherence_violating_players": 7,
+        "coherence_violations": 10,
         "coherence_by_position": {
-          "QB": 8
+          "QB": 7
         },
         "coherence_applicable": true,
         "coherence_unevaluable": 0,
@@ -305,58 +343,58 @@
           {
             "name": "BAILEY ZAPPE",
             "stat": "passAtt",
-            "implied_per_game": 81.67,
+            "implied_per_game": 79.37,
             "max_ever_per_game": 45.44,
             "expected_games": 0.8
           },
           {
             "name": "BAILEY ZAPPE",
             "stat": "passYds",
-            "implied_per_game": 574.64,
+            "implied_per_game": 558.45,
             "max_ever_per_game": 371.2,
             "expected_games": 0.8
           },
           {
             "name": "CASE KEENUM",
             "stat": "passAtt",
-            "implied_per_game": 65.59,
+            "implied_per_game": 65.61,
             "max_ever_per_game": 45.44,
             "expected_games": 1.06
           },
           {
             "name": "SAM EHLINGER",
             "stat": "passAtt",
-            "implied_per_game": 62.59,
+            "implied_per_game": 61.74,
             "max_ever_per_game": 45.44,
             "expected_games": 0.8
           },
           {
-            "name": "SAM HOWELL",
-            "stat": "passAtt",
-            "implied_per_game": 58.12,
-            "max_ever_per_game": 45.44,
-            "expected_games": 1.06
+            "name": "SAM EHLINGER",
+            "stat": "passYds",
+            "implied_per_game": 445.68,
+            "max_ever_per_game": 371.2,
+            "expected_games": 0.8
           }
         ],
         "injury_giveback": {
-          "n": 41,
-          "mvp1_total": 493.1,
-          "arm_total": 618.3,
-          "giveback_pct": 25.39,
-          "median_point_ratio": 1.3903,
-          "n_scaled_up": 28,
-          "n_scaled_down": 10,
-          "served_giveback_pct": 88.49
+          "n": 53,
+          "mvp1_total": 629.3,
+          "arm_total": 818.2,
+          "giveback_pct": 30.02,
+          "median_point_ratio": 1.4505,
+          "n_scaled_up": 38,
+          "n_scaled_down": 12,
+          "served_giveback_pct": 89.28
         },
         "availability_gradient": {
           "n": 716,
-          "rho": -0.086,
-          "p": 0.021300002767620424,
+          "rho": -0.087,
+          "p": 0.019933787758448094,
           "evaluable": true,
           "max_abs_ratio_move": 2.512626
         },
-        "clamp_saturation_high": 6,
-        "clamp_saturation_low": 14,
+        "clamp_saturation_high": 5,
+        "clamp_saturation_low": 11,
         "n_rows": 797,
         "placement": {
           "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
@@ -382,9 +420,9 @@
           "cross_position_movement_top100": {
             "n_board": 797,
             "median_abs_rank_move": 36.0,
-            "p90_abs_rank_move": 159.8,
-            "max_abs_rank_move": 343.0,
-            "n_moved": 685,
+            "p90_abs_rank_move": 164.4,
+            "max_abs_rank_move": 340.0,
+            "n_moved": 698,
             "top100_churn": 12,
             "top100_membership_stable": false,
             "top10_order_stable": false
@@ -392,30 +430,30 @@
           "within_position_movement": {
             "max_rank_move_by_pos": {
               "QB": 40.0,
-              "RB": 82.0,
-              "WR": 132.0,
-              "TE": 74.0
+              "RB": 84.0,
+              "WR": 142.0,
+              "TE": 73.0
             },
-            "worst_rank_move": 132.0,
+            "worst_rank_move": 142.0,
             "within_position_rho": {
-              "QB": 0.9022293876111546,
-              "RB": 0.8839940906239249,
-              "WR": 0.9196035764718554,
-              "TE": 0.9133018727757692
+              "QB": 0.9030556465224072,
+              "RB": 0.8816849816849817,
+              "WR": 0.912694000759531,
+              "TE": 0.9103727863818707
             }
           }
         },
         "coherence_violations_also_present_with_ordering_OFF": [
           "MEN516487|Fernando Mendoza"
         ],
-        "coherence_violating_players_attributable": 7
+        "coherence_violating_players_attributable": 6
       },
       "feasibility_clamp": {
         "score_target": "points",
-        "coherence_violating_players": 4,
-        "coherence_violations": 4,
+        "coherence_violating_players": 5,
+        "coherence_violations": 5,
         "coherence_by_position": {
-          "QB": 4
+          "QB": 5
         },
         "coherence_applicable": true,
         "coherence_unevaluable": 0,
@@ -435,6 +473,13 @@
             "expected_games": 6.5
           },
           {
+            "name": "SAM HOWELL",
+            "stat": "passAtt",
+            "implied_per_game": 45.44,
+            "max_ever_per_game": 45.44,
+            "expected_games": 1.59
+          },
+          {
             "name": "SAM EHLINGER",
             "stat": "passAtt",
             "implied_per_game": 45.44,
@@ -450,24 +495,24 @@
           }
         ],
         "injury_giveback": {
-          "n": 41,
-          "mvp1_total": 493.1,
-          "arm_total": 926.7,
-          "giveback_pct": 87.93,
-          "median_point_ratio": 1.9982,
-          "n_scaled_up": 36,
-          "n_scaled_down": 4,
-          "served_giveback_pct": 88.49
+          "n": 53,
+          "mvp1_total": 629.3,
+          "arm_total": 1182.3,
+          "giveback_pct": 87.88,
+          "median_point_ratio": 2.0472,
+          "n_scaled_up": 45,
+          "n_scaled_down": 6,
+          "served_giveback_pct": 89.28
         },
         "availability_gradient": {
           "n": 716,
-          "rho": -0.2369,
-          "p": 1.3729745170407583e-10,
+          "rho": -0.2427,
+          "p": 4.62147666669177e-11,
           "evaluable": true,
           "max_abs_ratio_move": 2.513129
         },
-        "clamp_saturation_high": 13,
-        "clamp_saturation_low": 21,
+        "clamp_saturation_high": 16,
+        "clamp_saturation_low": 25,
         "n_rows": 797,
         "placement": {
           "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
@@ -492,34 +537,34 @@
           },
           "cross_position_movement_top100": {
             "n_board": 797,
-            "median_abs_rank_move": 37.0,
-            "p90_abs_rank_move": 196.2,
-            "max_abs_rank_move": 352.0,
-            "n_moved": 764,
+            "median_abs_rank_move": 38.0,
+            "p90_abs_rank_move": 205.2,
+            "max_abs_rank_move": 344.0,
+            "n_moved": 772,
             "top100_churn": 12,
             "top100_membership_stable": false,
             "top10_order_stable": false
           },
           "within_position_movement": {
             "max_rank_move_by_pos": {
-              "QB": 55.0,
-              "RB": 90.0,
-              "WR": 138.0,
-              "TE": 74.0
+              "QB": 56.0,
+              "RB": 91.0,
+              "WR": 141.0,
+              "TE": 75.0
             },
-            "worst_rank_move": 138.0,
+            "worst_rank_move": 141.0,
             "within_position_rho": {
-              "QB": 0.8161674685744515,
-              "RB": 0.8410721874810271,
-              "WR": 0.8906889340396774,
-              "TE": 0.8818507486622187
+              "QB": 0.7905030606846866,
+              "RB": 0.829554975411329,
+              "WR": 0.8780236763169477,
+              "TE": 0.8807069427837639
             }
           }
         },
         "coherence_violations_also_present_with_ordering_OFF": [
           "MEN516487|Fernando Mendoza"
         ],
-        "coherence_violating_players_attributable": 3
+        "coherence_violating_players_attributable": 4
       },
       "points_rate_permute": {
         "score_target": "points",
@@ -540,24 +585,24 @@
           }
         ],
         "injury_giveback": {
-          "n": 41,
-          "mvp1_total": 493.1,
-          "arm_total": 437.8,
-          "giveback_pct": -11.23,
-          "median_point_ratio": 0.9327,
-          "n_scaled_up": 13,
-          "n_scaled_down": 26,
-          "served_giveback_pct": 88.49
+          "n": 53,
+          "mvp1_total": 629.3,
+          "arm_total": 564.9,
+          "giveback_pct": -10.24,
+          "median_point_ratio": 0.9276,
+          "n_scaled_up": 18,
+          "n_scaled_down": 32,
+          "served_giveback_pct": 89.28
         },
         "availability_gradient": {
           "n": 716,
-          "rho": 0.1946,
-          "p": 1.526287035745124e-07,
+          "rho": 0.1984,
+          "p": 8.65249912455206e-08,
           "evaluable": true,
           "max_abs_ratio_move": 2.5
         },
         "clamp_saturation_high": 1,
-        "clamp_saturation_low": 3,
+        "clamp_saturation_low": 6,
         "n_rows": 797,
         "placement": {
           "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
@@ -582,27 +627,27 @@
           },
           "cross_position_movement_top100": {
             "n_board": 797,
-            "median_abs_rank_move": 24.0,
-            "p90_abs_rank_move": 135.0,
+            "median_abs_rank_move": 26.0,
+            "p90_abs_rank_move": 136.0,
             "max_abs_rank_move": 330.0,
-            "n_moved": 779,
+            "n_moved": 782,
             "top100_churn": 8,
             "top100_membership_stable": false,
             "top10_order_stable": false
           },
           "within_position_movement": {
             "max_rank_move_by_pos": {
-              "QB": 25.0,
-              "RB": 75.0,
+              "QB": 32.0,
+              "RB": 82.0,
               "WR": 131.0,
-              "TE": 68.0
+              "TE": 67.0
             },
             "worst_rank_move": 131.0,
             "within_position_rho": {
-              "QB": 0.9696097941909968,
-              "RB": 0.9124501649363528,
-              "WR": 0.9425412273013719,
-              "TE": 0.9354256726639827
+              "QB": 0.9676852155074691,
+              "RB": 0.9025600550462429,
+              "WR": 0.9373442613107608,
+              "TE": 0.9342299828075362
             }
           }
         },
@@ -630,24 +675,24 @@
           }
         ],
         "injury_giveback": {
-          "n": 41,
-          "mvp1_total": 493.1,
-          "arm_total": 469.4,
-          "giveback_pct": -4.81,
-          "median_point_ratio": 0.9916,
-          "n_scaled_up": 19,
-          "n_scaled_down": 21,
-          "served_giveback_pct": 88.49
+          "n": 53,
+          "mvp1_total": 629.3,
+          "arm_total": 603.8,
+          "giveback_pct": -4.05,
+          "median_point_ratio": 0.9923,
+          "n_scaled_up": 24,
+          "n_scaled_down": 27,
+          "served_giveback_pct": 89.28
         },
         "availability_gradient": {
           "n": 716,
-          "rho": 0.1815,
-          "p": 1.0092914549647887e-06,
+          "rho": 0.1791,
+          "p": 1.4208843624815885e-06,
           "evaluable": true,
-          "max_abs_ratio_move": 2.21867
+          "max_abs_ratio_move": 2.272905
         },
         "clamp_saturation_high": 0,
-        "clamp_saturation_low": 3,
+        "clamp_saturation_low": 5,
         "n_rows": 797,
         "placement": {
           "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
@@ -672,27 +717,27 @@
           },
           "cross_position_movement_top100": {
             "n_board": 797,
-            "median_abs_rank_move": 24.0,
-            "p90_abs_rank_move": 127.0,
-            "max_abs_rank_move": 327.0,
-            "n_moved": 780,
-            "top100_churn": 9,
+            "median_abs_rank_move": 25.0,
+            "p90_abs_rank_move": 130.6,
+            "max_abs_rank_move": 330.0,
+            "n_moved": 776,
+            "top100_churn": 8,
             "top100_membership_stable": false,
             "top10_order_stable": false
           },
           "within_position_movement": {
             "max_rank_move_by_pos": {
-              "QB": 22.0,
-              "RB": 75.0,
-              "WR": 125.0,
-              "TE": 67.0
+              "QB": 24.0,
+              "RB": 82.0,
+              "WR": 123.0,
+              "TE": 65.0
             },
-            "worst_rank_move": 125.0,
+            "worst_rank_move": 123.0,
             "within_position_rho": {
-              "QB": 0.9783157417437086,
-              "RB": 0.9124501649363528,
-              "WR": 0.9487311840362539,
-              "TE": 0.9410409341002729
+              "QB": 0.9745875003148854,
+              "RB": 0.9025600550462429,
+              "WR": 0.9441176046429339,
+              "TE": 0.937548199036373
             }
           }
         },
@@ -720,24 +765,24 @@
           }
         ],
         "injury_giveback": {
-          "n": 41,
-          "mvp1_total": 493.1,
-          "arm_total": 490.3,
-          "giveback_pct": -0.57,
-          "median_point_ratio": 1.0,
-          "n_scaled_up": 20,
-          "n_scaled_down": 19,
-          "served_giveback_pct": 88.49
+          "n": 53,
+          "mvp1_total": 629.3,
+          "arm_total": 651.8,
+          "giveback_pct": 3.58,
+          "median_point_ratio": 1.0604,
+          "n_scaled_up": 28,
+          "n_scaled_down": 20,
+          "served_giveback_pct": 89.28
         },
         "availability_gradient": {
           "n": 716,
-          "rho": 0.0591,
-          "p": 0.1139324356417924,
+          "rho": 0.0607,
+          "p": 0.10449209010296709,
           "evaluable": true,
-          "max_abs_ratio_move": 2.042921
+          "max_abs_ratio_move": 2.110617
         },
         "clamp_saturation_high": 0,
-        "clamp_saturation_low": 3,
+        "clamp_saturation_low": 5,
         "n_rows": 797,
         "placement": {
           "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
@@ -762,10 +807,10 @@
           },
           "cross_position_movement_top100": {
             "n_board": 797,
-            "median_abs_rank_move": 22.0,
-            "p90_abs_rank_move": 135.0,
-            "max_abs_rank_move": 341.0,
-            "n_moved": 767,
+            "median_abs_rank_move": 24.0,
+            "p90_abs_rank_move": 132.0,
+            "max_abs_rank_move": 333.0,
+            "n_moved": 776,
             "top100_churn": 7,
             "top100_membership_stable": false,
             "top10_order_stable": false
@@ -773,16 +818,16 @@
           "within_position_movement": {
             "max_rank_move_by_pos": {
               "QB": 30.0,
-              "RB": 82.0,
-              "WR": 120.0,
-              "TE": 69.0
+              "RB": 81.0,
+              "WR": 136.0,
+              "TE": 67.0
             },
-            "worst_rank_move": 120.0,
+            "worst_rank_move": 136.0,
             "within_position_rho": {
-              "QB": 0.9648537672872005,
-              "RB": 0.9036771699755125,
-              "WR": 0.9401585211585161,
-              "TE": 0.93818495694809
+              "QB": 0.9660226213567775,
+              "RB": 0.8931515997814339,
+              "WR": 0.936459929948262,
+              "TE": 0.9387556807059994
             }
           }
         },
@@ -810,24 +855,24 @@
           }
         ],
         "injury_giveback": {
-          "n": 41,
-          "mvp1_total": 493.1,
-          "arm_total": 520.2,
-          "giveback_pct": 5.49,
-          "median_point_ratio": 1.0973,
-          "n_scaled_up": 23,
-          "n_scaled_down": 16,
-          "served_giveback_pct": 88.49
+          "n": 53,
+          "mvp1_total": 629.3,
+          "arm_total": 677.3,
+          "giveback_pct": 7.63,
+          "median_point_ratio": 1.0844,
+          "n_scaled_up": 29,
+          "n_scaled_down": 19,
+          "served_giveback_pct": 89.28
         },
         "availability_gradient": {
           "n": 716,
-          "rho": 0.0679,
-          "p": 0.06919863157617769,
+          "rho": 0.0712,
+          "p": 0.05672824951387066,
           "evaluable": true,
-          "max_abs_ratio_move": 2.06435
+          "max_abs_ratio_move": 2.110617
         },
         "clamp_saturation_high": 0,
-        "clamp_saturation_low": 3,
+        "clamp_saturation_low": 4,
         "n_rows": 797,
         "placement": {
           "reading": "BUILD FRAME, ranked by PPR \u2014 \u26d4 NOT the served per-config VOR read (NF-TR2b)",
@@ -852,9 +897,9 @@
           },
           "cross_position_movement_top100": {
             "n_board": 797,
-            "median_abs_rank_move": 22.0,
-            "p90_abs_rank_move": 125.4,
-            "max_abs_rank_move": 333.0,
+            "median_abs_rank_move": 23.0,
+            "p90_abs_rank_move": 129.4,
+            "max_abs_rank_move": 331.0,
             "n_moved": 773,
             "top100_churn": 7,
             "top100_membership_stable": false,
@@ -863,16 +908,16 @@
           "within_position_movement": {
             "max_rank_move_by_pos": {
               "QB": 24.0,
-              "RB": 82.0,
-              "WR": 122.0,
-              "TE": 72.0
+              "RB": 81.0,
+              "WR": 121.0,
+              "TE": 71.0
             },
-            "worst_rank_move": 122.0,
+            "worst_rank_move": 121.0,
             "within_position_rho": {
-              "QB": 0.9748192558631635,
-              "RB": 0.9036771699755125,
-              "WR": 0.948072515897334,
-              "TE": 0.9412272447485158
+              "QB": 0.9731365090560999,
+              "RB": 0.8931515997814339,
+              "WR": 0.9465560009864642,
+              "TE": 0.9396471417824032
             }
           }
         },
@@ -885,20 +930,22 @@
     "attribution_control": "violations also produced by `mvp1_null` (the ordering step OFF) are subtracted \u2014 a defect present with the mechanism disabled is not caused by the mechanism",
     "reproduction_pin": {
       "n": 797,
-      "worst_abs_diff": 1.8163546006541402,
+      "worst_abs_diff": 0.05000000000000071,
       "tolerance": 0.05,
+      "representation_epsilon": 1e-09,
       "story_tolerance_for_local_diffs": 1e-09,
-      "reproduces": false,
+      "reproduces": true,
       "note": "the incumbent arm rebuilt through this story's code vs the PUBLISHED 2026 artifact. If this does not hold, every arm delta is measured against a board nobody is served (the CLV / NF-INJ1 stale-vintage trap).",
-      "tolerance_note": "the published board is rounded to ONE decimal, so the pin runs at half that rounding unit \u2014 a 1e-9 bar against a 1dp artifact is UNACHIEVABLE, not strict (E9.61)."
+      "tolerance_note": "the published board is rounded to ONE decimal, so the pin runs at half that rounding unit \u2014 a 1e-9 bar against a 1dp artifact is UNACHIEVABLE, not strict (E9.61).",
+      "representation_note": "the registered bar is UNCHANGED at 0.05; it is a DECIMAL bar evaluated in BINARY, so it is compared with a 1e-09 representation epsilon \u2014 \u26d4 NOT slack. `proj_games` is quantised on a 0.05 grid, so a `.x5` value against its 1dp publication differs by exactly the bar and lands ONE ULP over it in binary; without the epsilon this pin cannot pass a CORRECT reproduction (the unachievable-gate family, E9.61). A row wrong by any amount a 1-decimal artifact can express still REFUSES."
     }
   },
   "dominance": {
     "served_incumbent_baseline": {
       "M2_violations_attributable": 10,
-      "M3_worst_times_over": 1.9318,
-      "M4_giveback_measure": 88.34,
-      "M4_giveback_signed": 88.34
+      "M3_worst_times_over": 1.9947,
+      "M4_giveback_measure": 89.26,
+      "M4_giveback_signed": 89.26
     },
     "bands": {
       "M2": "SE of the per-fold PAIRED difference \u2014 a FOLD quantity computed by the decisive run, \u26d4 not on a single board; the board figure here is the BASELINE the pre-registration quotes",
@@ -927,49 +974,49 @@
       "incumbent": {
         "M2_violations_attributable": 10,
         "M2_delta_vs_incumbent": 0,
-        "M3_worst_times_over": 1.9318,
-        "M4_giveback_measure": 88.34,
-        "M4_giveback_signed": 88.34,
+        "M3_worst_times_over": 1.9947,
+        "M4_giveback_measure": 89.26,
+        "M4_giveback_signed": 89.26,
         "coherence_violating_players_raw": 11,
         "coherence_by_position": {
           "QB": 11
         },
-        "clamp_hi": 14,
-        "clamp_lo": 21,
+        "clamp_hi": 18,
+        "clamp_lo": 25,
         "M3_verdict": "TIES",
         "M4_verdict": "TIES",
         "M2_verdict": "TIES",
         "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
       },
       "stratified": {
-        "M2_violations_attributable": 7,
-        "M2_delta_vs_incumbent": -3,
-        "M3_worst_times_over": 1.7973,
-        "M4_giveback_measure": 25.39,
-        "M4_giveback_signed": 25.39,
-        "coherence_violating_players_raw": 8,
+        "M2_violations_attributable": 6,
+        "M2_delta_vs_incumbent": -4,
+        "M3_worst_times_over": 1.7467,
+        "M4_giveback_measure": 30.02,
+        "M4_giveback_signed": 30.02,
+        "coherence_violating_players_raw": 7,
         "coherence_by_position": {
-          "QB": 8
+          "QB": 7
         },
-        "clamp_hi": 6,
-        "clamp_lo": 14,
+        "clamp_hi": 5,
+        "clamp_lo": 11,
         "M3_verdict": "IMPROVES",
         "M4_verdict": "IMPROVES",
         "M2_verdict": "IMPROVES",
         "M1_M5_M6": "UNEVALUATED HERE \u2014 fold measures, owned by the decisive run (node 4)"
       },
       "feasibility_clamp": {
-        "M2_violations_attributable": 3,
-        "M2_delta_vs_incumbent": -7,
+        "M2_violations_attributable": 4,
+        "M2_delta_vs_incumbent": -6,
         "M3_worst_times_over": 1.0924,
-        "M4_giveback_measure": 87.93,
-        "M4_giveback_signed": 87.93,
-        "coherence_violating_players_raw": 4,
+        "M4_giveback_measure": 87.88,
+        "M4_giveback_signed": 87.88,
+        "coherence_violating_players_raw": 5,
         "coherence_by_position": {
-          "QB": 4
+          "QB": 5
         },
-        "clamp_hi": 13,
-        "clamp_lo": 21,
+        "clamp_hi": 16,
+        "clamp_lo": 25,
         "M3_verdict": "IMPROVES",
         "M4_verdict": "IMPROVES",
         "M2_verdict": "IMPROVES",
@@ -980,13 +1027,13 @@
         "M2_delta_vs_incumbent": -10,
         "M3_worst_times_over": 1.0924,
         "M4_giveback_measure": 0.0,
-        "M4_giveback_signed": -11.23,
+        "M4_giveback_signed": -10.24,
         "coherence_violating_players_raw": 1,
         "coherence_by_position": {
           "QB": 1
         },
         "clamp_hi": 1,
-        "clamp_lo": 3,
+        "clamp_lo": 6,
         "M3_verdict": "IMPROVES",
         "M4_verdict": "IMPROVES",
         "M2_verdict": "IMPROVES",
@@ -997,13 +1044,13 @@
         "M2_delta_vs_incumbent": -10,
         "M3_worst_times_over": 1.0924,
         "M4_giveback_measure": 0.0,
-        "M4_giveback_signed": -4.81,
+        "M4_giveback_signed": -4.05,
         "coherence_violating_players_raw": 1,
         "coherence_by_position": {
           "QB": 1
         },
         "clamp_hi": 0,
-        "clamp_lo": 3,
+        "clamp_lo": 5,
         "M3_verdict": "IMPROVES",
         "M4_verdict": "IMPROVES",
         "M2_verdict": "IMPROVES",
@@ -1013,14 +1060,14 @@
         "M2_violations_attributable": 0,
         "M2_delta_vs_incumbent": -10,
         "M3_worst_times_over": 1.0924,
-        "M4_giveback_measure": 0.0,
-        "M4_giveback_signed": -0.57,
+        "M4_giveback_measure": 3.58,
+        "M4_giveback_signed": 3.58,
         "coherence_violating_players_raw": 1,
         "coherence_by_position": {
           "QB": 1
         },
         "clamp_hi": 0,
-        "clamp_lo": 3,
+        "clamp_lo": 5,
         "M3_verdict": "IMPROVES",
         "M4_verdict": "IMPROVES",
         "M2_verdict": "IMPROVES",
@@ -1030,14 +1077,14 @@
         "M2_violations_attributable": 0,
         "M2_delta_vs_incumbent": -10,
         "M3_worst_times_over": 1.0924,
-        "M4_giveback_measure": 5.49,
-        "M4_giveback_signed": 5.49,
+        "M4_giveback_measure": 7.63,
+        "M4_giveback_signed": 7.63,
         "coherence_violating_players_raw": 1,
         "coherence_by_position": {
           "QB": 1
         },
         "clamp_hi": 0,
-        "clamp_lo": 3,
+        "clamp_lo": 4,
         "M3_verdict": "IMPROVES",
         "M4_verdict": "IMPROVES",
         "M2_verdict": "IMPROVES",

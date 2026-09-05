@@ -1,0 +1,110 @@
+# Plan spec — NCAAF-P3.3b (MINI tier: the update-cadence stamp — data-derived, never copy;
+# + the team-fixture re-capture)
+# Authored by PM 2026-09-04 per the P3.3 closeout ruling ①. Frontend-only unless the vintage
+# field is missing from the payload (then a small additive Phase-A echo, same P3.3 pattern).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-p3-3b
+  vertical: ncaaf
+  card: https://trello.com/c/dpQKTbYd   # P3.3 record; P3.3b card linked at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    Close the product-expectation gap P3.3 measured and flagged: the
+    ratings, bands, and ranks move only on the Monday 06:00 roll-forward
+    (NCAAF_ROLL_FORWARD_CRON), so from Saturday kickoff to Monday
+    morning a team can win by 26 while its rating and ranks sit
+    unchanged beside the win in its own schedule — which reads as a
+    broken product rather than a weekly one. RULED FIX: a stamp on the
+    team page (and any surface printing the rating/rank), DERIVED FROM
+    DATA — "ratings as of <the served artifact's rating vintage> · next
+    update <the roll-forward's next fire>" — never hand-written copy.
+    A stamp computed from the artifact and the schedule survives bye
+    weeks, cancelled openers, and a cadence change by construction; a
+    sentence does not. Cadence CHANGE is refused for now (a
+    roll-forward is a model fit, not a copy job). best_alpha=0; no
+    rating, rank, band, or serving-value change; NCAAF stays free.
+  acceptanceCriteria:
+    - description: >
+        THE STAMP'S TWO HALVES ARE BOTH DATA: (a) "as of" reads the
+        rating VINTAGE carried in (or derivable from) the served team
+        payload — if the payload does not carry it, add it as an
+        ADDITIVE field echoed by the serving-write from the artifact's
+        own content timestamp (the INC-41 lesson: content, never
+        mtime), Pydantic-declared (E9.41), with the operator box-run +
+        curl runtime gate for that small Phase-A leg before the page
+        consumes it; (b) "next update" derives from the roll-forward
+        schedule, not a hardcoded weekday string. NO OVERCLAIM: the
+        stamp states when the ratings last absorbed games and when they
+        next will — it never promises the next update will move them
+        (a bye week moves nothing and the stamp stays true).
+    - description: >
+        PLACEMENT: beside the strength/rank block on the team page —
+        the surface where the staleness misread happens — using the
+        claim-copy conventions (no forecast language; the
+        rank-with-range guard and the recommendation-language ban are
+        untouched and stay green). If the game-board or standings
+        surfaces print the same rating, they carry the same stamp
+        through ONE shared component/owner — never a second wording.
+    - description: >
+        FIXTURE RE-CAPTURE (P3.3 open item, folded in): re-capture
+        ncaaf-team-68.json / ncaaf-team-2449.json now that standings
+        exist (the self-announcing clause "the capture has acquired
+        standings" is expected to fire — retire it by re-capturing,
+        never by weakening); capture RAW from the live API per the
+        Task-0 pattern. The pair stays a played/unplayed contrast so
+        the stamp renders under E2E in both states.
+    - description: >
+        Guards: E2E asserts the RENDERED stamp on both fixture states
+        (a real vintage prints; a missing vintage renders a stated
+        absence, never a fabricated date — absent-vs-null discipline);
+        RED-proven with unique mutation anchors (a hardcoded date
+        string must go red; a stamp surviving a vintage change must go
+        red) + baseline-pass/NOT-SELECTED in any Python harness.
+        Changelog entry (user-facing). Frontend auto-deploys on main —
+        verify the LIVE page post-promotion by content (the E9.60/#1075
+        stale-head lesson: merge status and green CI are not evidence;
+        the string on main is).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-p3-3b
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "cadence" / "team stats" / "P3.3" (board Credence Sports, 2026-09-04)'
+    duplicates: []
+    adjacent:
+      - "NCAAF-P3.3 (Done, live) — the parent; its rank-with-range guard, block wordings, and the #1081 cross-block guard stay green; this adds a stamp, it re-words nothing."
+      - "Odds :00-collision card (lEgL0V5D, To Do) — market lane; disjoint; not touched."
+      - "Operator Follow Ups card (Wyu3qZ80) — the Mon 9/7 roll-forward check; if that check FAILS, this story's 'next update' half is printing a schedule that isn't firing — coordinate through the PM, don't ship a stamp against a dead chain."
+      - "NF-INJ4b / NF-INJ2c (IN FLIGHT) — disjoint verticals; changelog week-block shared (rebase)."
+  triedLedger:
+    files:
+      - "P3.3 closeout (the Monday-cadence flag, the no-overclaim warning, the four-blocks-one-screen lesson — the stamp is a fifth voice on that screen; word it to compose)"
+      - "frontend/components/ncaaf/team-page.tsx + the serving payload contract (does a rating vintage field exist? verify, don't assume — the spec-premise rule)"
+      - "NCAAF_ROLL_FORWARD_CRON (the schedule the 'next update' half derives from)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn:
+    - "dev→main merged (#1081 live) — do not stack a new frontend change behind an unpromoted one"
+  feedsInto:
+    - "The Sunday-morning reader seeing a weekly product behaving as designed, not a broken one; every future rating surface inheriting the stamp owner"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-p3-3b-plan
+spec:
+  goalRef: { name: ncaaf-p3-3b }
+  graph:
+    nodes: []   # MINI tier — verify vintage field -> (optional additive echo + runtime gate) -> stamp component -> fixtures -> guards -> live verify
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
