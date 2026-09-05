@@ -28,6 +28,7 @@ if _SENTRY_DSN:
         traces_sample_rate=0.1,
     )
 
+from app.backend.build_info import build_marker
 from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, email_otp, fantasy, fantasy_import, fantasy_mlb_league, fantasy_public, feedback, finances, ncaaf, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
 from app.backend.routers.auth import require_subscriber_mfa
 from app.backend.services import cost_guardrails
@@ -191,7 +192,19 @@ app.include_router(ncaaf.router)
 
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])
 def health() -> dict:
-    return {"status": "ok", "environment": _TARGET_ENV}
+    """Liveness, plus WHICH BUILD is answering.
+
+    ⭐ `build` is here rather than on a new route for two reasons. A new public route would need its
+    API-Gateway per-route authorizer set to NONE or it 401s before the Lambda is ever invoked
+    (NF3.2) — an operator step outside this repo, for a diagnostic. And `/health` is deliberately
+    NOT in `cost_guardrails._PUBLIC_CACHE_RULES`, so it carries no `Cache-Control` and a shared
+    cache cannot serve a stale marker: measured 2026-09-05, `/ncaaf/*` answers
+    `s-maxage=900, stale-while-revalidate=3600`, and a marker behind that would report the previous
+    build for up to 15 minutes — which is precisely the confusion it exists to end.
+
+    ADDITIVE (NF-C0): `status` and `environment` keep their meaning and their place.
+    """
+    return {"status": "ok", "environment": _TARGET_ENV, "build": build_marker()}
 
 
 # Lambda handler — Mangum wraps the ASGI app for API Gateway HTTP API (payload v2).

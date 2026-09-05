@@ -387,6 +387,73 @@ spec:
         * ⛔ No arm figure from the VOID run is quoted, compared or carried anywhere. VOID is a
           statement about the measurement, never about the arm.
 
+      ⚖️ PM RULING 2026-09-05 (decision request #6: the control's null leg) — RECORDED.
+        * D1 RULED. The session's diagnosis was adopted on both halves. The null leg's "no effect"
+          hands back the REAL payload, so it is a noise test only for a study EXPECTING a null;
+          this study's gate table IS its ship condition, hence `ship => a non-degenerate arm
+          survives the null leg => VACUOUS` — the badge is ENTAILED by the outcome it exists to
+          inform. THE TRUE FIX (an advantage-removed null construction + a declared study-shape
+          input under which the current leg reports its own NULL_LEG_INAPPLICABLE) is CARDED as
+          PLAT-CVP3, defect 5 of the instrument family. ⛔ THIS STORY DOES NOT WAIT FOR IT.
+        * THE INTERIM IS A FORWARD DECLARATION, ⛔ NOT AN AFTER-THE-FACT ANNOTATION — committed as
+          `ablation_results/nf_inj2c_preregistration_amendment_1.md` BEFORE PR #1084 merged and
+          BEFORE the decisive run: (a) the VACUOUS badge is declared INAPPLICABLE to this family on
+          the source-measured entailment, SCOPED so it never reaches a DEGENERATE survivor; (b) the
+          control's BINDING substance is the INJECTED leg, and it CUTS BOTH WAYS — an undetected
+          planted effect or a degenerate surviving either leg FAILS the control regardless of any
+          badge, yielding `CONTROL_REFUSED`; (c) the badge is recorded VERBATIM beside it and §7's
+          ban on re-running with `check_null_control=False` is untouched.
+        * ⛔ (A) — "VACUOUS is disqualifying" — WAS REJECTED, and the reason is recorded so a later
+          reader does not mistake it for the safe option: a control that structurally cannot
+          support any shipping study of this shape is the UNACHIEVABLE-GATE family (E9.61's
+          strict-pin boundary; NF-INJ4's oracle). The program refuses gates that cannot FAIL and
+          gates that cannot PASS.
+        * ⭐ THE AMENDMENT IS REFUSE-ONLY, and that is what makes an amendment written after a
+          measurement admissible: every clause either leaves the disposition where it was or blocks
+          it. It TIGHTENS node 3a §5 outcome 1 (which conditions SHIP on M1-M6 + the deflation
+          gates and never mentions the control); §5 is ⛔ NOT edited.
+        * D2 CONFIRMED. Passing `gate_classes=` carrying the partition §7 itself declared FORWARD
+          is a change of DELIVERY, not substance. §7 stays VERBATIM with its measured-false
+          PLAT-CVP2 premise beside it (NF-W7f). This also completes, with NF-INJ4b's registration,
+          the two-caller trigger for retiring `cv_power`'s name-heuristic default (PLAT-CVP2's
+          checklist item — ⛔ not this story's to build).
+        * D3 CONFIRMED as standing, no overrule: the 2026 fold trigger publishes only where
+          `SR > SR0` makes `n` a lever; `DSR_UNREACHABLE` WITHHOLDS it with the reason stated.
+        * TRIAGE PLACED: the market-cache 5th NF-INFRA1 instance, the `market_refresh=False`
+          live-pull fall-through on a cache MISS, and the two-scope `--market-refresh` flag are
+          appended to the PLATFORM REPRODUCIBILITY card as accumulating evidence. The `parents[5]`
+          off-by-one stays in this story's closeout followUps — the remaining flagged modules are
+          swept by whichever story next touches them.
+        * ⛔ The interim node-3b board figures stay UNCARRIED until the registered run produces
+          them properly (PM, verbatim).
+
+      🔴 NODE-4 PRECONDITION, MEASURED 2026-09-05 — THE DECISIVE RUN'S NUMBERS DEPEND ON WHICH
+      CHECKOUT'S NF1.5 POOL CACHE IT READS, AND THE TWO ON THIS LAPTOP DISAGREE.
+        * `artifacts/nf1_5_feature_cache/pool_base{b}.parquet` is GITIGNORED and `build_nf1_2_pool`
+          REBUILDS a missing file from a live upstream with no error — so a checkout is scored on
+          whatever vintage it happens to hold (the node-1 51-of-55 mechanism, and CLAUDE.md's
+          "a cache keyed on the RANGE, not the query TEXT, serves a stale column set").
+        * MEASURED: the worktree's cache (2026-07-31) and the main `dev` checkout's (2026-09-01)
+          hold IDENTICAL ROW COUNTS for every base the seven folds need (2017-2024) and differ by
+          FIVE COLUMNS the newer one has — `injury_games_served`, `injury_games_incumbent`,
+          `fp_ppr_pg_sd`, `games_sd_raw`, `_formal_discount_applied`. Two of those are the
+          NF-INJ3 / NF-INJ-NEWS-1 injury-cap columns, i.e. this story's own subject matter.
+        * IT MOVES THE ARMS. Re-scoring folds 2023-2025 on each cache: the three SCORE-USING arms
+          shift by up to 0.028 CRPS and the M1 margin by up to 0.032, while BOTH DEGENERATES are
+          BYTE-IDENTICAL on all three folds (they ignore the fitted score) — which is what locates
+          the difference in the scored arms rather than in the harness.
+        * ⇒ THE DECISIVE RUN USES THE CACHE THAT MATCHES THE CODE THAT WRITES IT — the main `dev`
+          checkout's. ⭐ The criterion is CORRECTNESS (the newer cache carries the columns the
+          current `season_projection` emits; the older one predates them), ⛔ NOT the result: it
+          happens to give `stratified` a LARGER margin on 2 of 3 folds, which is exactly why the
+          criterion is stated first and independently (E2.1-r).
+        * ⛔ NO number above is a finding about any arm — three folds, not the registered seven,
+          and the run that produced them is a CODE-PATH smoke that wrote `_smoke` and was deleted.
+        * NOW SELF-RECORDING: node 4's artifact carries a `feature_vintage` block with a CONTENT
+          FINGERPRINT (row/column structure per file), ⛔ not an mtime — INC-41's lesson on a local
+          file, and the difference above is invisible to an mtime by construction. RECORDED, ⛔
+          never gated: node 3a §1 admits no band for it, and a guard pins it out of the verdict.
+
       REMAINING FINDINGS from nodes 3-7 land here. PM triages into: checklist item on the
       parent card | merge into an existing card (name it) | a new spec. Worker sessions
       never create Trello cards.

@@ -198,3 +198,7 @@ quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj2b_baseline/nf_in
 # ⛔ Do NOT ignore the decided stems themselves.
 quant_sports_intel_models/football/nfl/fantasy/ablation_results/*_latest.json
 quant_sports_intel_models/football/nfl/fantasy/ablation_results/*_latest.md
+# NF-INJ2c node 4: a `--folds` SMOKE writes its own stem so a code-path proof can never clobber the
+# decided artifact (NF-INJ3b-M D4). The smoke output is scratch and is not a record.
+quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj2c_decisive_smoke.json
+quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj2c_decisive_smoke.md
