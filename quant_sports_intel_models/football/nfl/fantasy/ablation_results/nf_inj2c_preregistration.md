@@ -8,6 +8,16 @@ its report does not exist, and the guard suite pins that it did not exist at thi
 `best_alpha = 0`. Nothing here serves. `SERVED_ARM` stays `None`; `assert_coherent()` refuses a flag
 flip the record does not support. DEPLOY-HELD throughout.
 
+> **AMENDMENT LOG — this document has been amended. ⛔ No section below is edited.**
+>
+> | # | date | authority | what it declares | where |
+> |---|---|---|---|---|
+> | 1 | 2026-09-05 | PM ruling, decision request #6 (D1) | how §7's positive control is READ: the null leg's `VACUOUS` is declared INAPPLICABLE to this family on a source-measured entailment, the INJECTED leg becomes the control's binding substance, and a degenerate surviving EITHER leg is a control failure the declaration does not cover | `nf_inj2c_preregistration_amendment_1.md` |
+>
+> ⭐ The pointer is here so no reader can reach §7 without learning the amendment exists. Every
+> amendment in this log is **REFUSE-ONLY**: it may block a disposition, ⛔ never make one easier to
+> reach than this registration made it.
+
 ---
 
 ## 0. What this registration rests on, and what it is not allowed to touch
