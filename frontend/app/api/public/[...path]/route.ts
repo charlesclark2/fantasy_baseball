@@ -118,6 +118,32 @@ const ROUTES: Record<
     sMaxAge: 900,
     swr: 3600,
   },
+  // NF-C6-PH2 — the FREE weekly reads. Both upstreams are byte-identical for every caller (neither
+  // handler takes a `Request`), so they are cacheable here for the same reason the season blobs
+  // are, and they are rewritten once per weekly build rather than intraday.
+  //
+  // ⛔ `/fantasy/nfl/weekly/projections-full` IS DELIBERATELY ABSENT and must stay absent. It is
+  // the PAID substrate: this handler strips `Authorization` (property 1), so fetching it here would
+  // be an anonymous request whose 403 got written into a public CDN entry and served to subscribers
+  // for the rest of the window. Pinned by
+  // `test_nf_c6_ph2_weekly_contract.py::test_the_cdn_route_proxies_the_free_weekly_reads_and_never_the_paid_one`.
+  //
+  // ⚠️ `week` is OPTIONAL upstream — omitted, the API resolves it through the published pointer.
+  // The regex still has to be here, because an unvalidated param is dropped rather than forwarded,
+  // and a week that failed validation must fall through to the pointer rather than reach the
+  // upstream as junk. Two digits: NFL REG weeks are 1–18.
+  "weekly-manifest": {
+    upstream: "/fantasy/nfl/weekly/manifest",
+    params: { season: /^\d{4}$/, week: /^\d{1,2}$/ },
+    sMaxAge: 900,
+    swr: 3600,
+  },
+  "weekly-projections": {
+    upstream: "/fantasy/nfl/weekly/projections",
+    params: { season: /^\d{4}$/, week: /^\d{1,2}$/ },
+    sMaxAge: 900,
+    swr: 3600,
+  },
 }
 
 /** Past seasons are immutable, so they get a much longer window than the live board. */

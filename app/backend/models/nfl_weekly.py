@@ -201,20 +201,30 @@ WEEKLY_COMPONENT_STAT_KEY: dict[str, str] = {
     "receiving_tds": "rec_td",
 }
 
-#: component name → the payload field it is served under, RESOLVED THROUGH `STAT_FIELD`.
-WEEKLY_COMPONENT_FIELD: dict[str, str] = {}
-_unmapped = sorted(k for k in WEEKLY_COMPONENT_STAT_KEY.values() if k not in STAT_FIELD)
-if _unmapped:
-    # Import-time, because both the router and the builder import this module: a component the
-    # paywall does not know about must not be servable on a day CI was skipped.
-    raise ValueError(
-        f"weekly components map onto stat key(s) {_unmapped} that are absent from "
-        "projection_fields.STAT_FIELD. The paid set is DERIVED from that map — an unmapped "
-        "component would be served PUBLIC by default (the NF-EPIC 1 denylist hazard). Add the key "
-        "to STAT_FIELD (and its two mirrors) or drop the component."
-    )
-for _comp, _key in WEEKLY_COMPONENT_STAT_KEY.items():
-    WEEKLY_COMPONENT_FIELD[_comp] = STAT_FIELD[_key]
+def resolve_component_fields(stat_field: dict[str, str],
+                             component_stat_key: dict[str, str] | None = None) -> dict[str, str]:
+    """component name → the payload field it is served under, RESOLVED THROUGH `STAT_FIELD`.
+
+    RAISES on a component whose stat key the scorer does not know about. A pure function rather
+    than inline module code so the refusal itself is directly testable: a guard that can only be
+    exercised by reloading a module is a guard nobody drives, and it would leave the one branch
+    that keeps the paid set safe untested (the NF1.7(a) family).
+    """
+    keys = component_stat_key if component_stat_key is not None else WEEKLY_COMPONENT_STAT_KEY
+    unmapped = sorted(k for k in keys.values() if k not in stat_field)
+    if unmapped:
+        raise ValueError(
+            f"weekly components map onto stat key(s) {unmapped} that are absent from "
+            "projection_fields.STAT_FIELD. The paid set is DERIVED from that map — an unmapped "
+            "component would be served PUBLIC by default (the NF-EPIC 1 denylist hazard). Add the "
+            "key to STAT_FIELD (and its two mirrors) or drop the component."
+        )
+    return {comp: stat_field[key] for comp, key in keys.items()}
+
+
+#: Resolved at IMPORT, because both the router and the builder import this module: a component the
+#: paywall does not know about must not be servable on a day CI was skipped.
+WEEKLY_COMPONENT_FIELD: dict[str, str] = resolve_component_fields(STAT_FIELD)
 
 #: The 39-level predictive vector. Paid: the free band is 2 of its levels, so it is strictly more.
 QUANTILE_VECTOR_FIELD = "q"
