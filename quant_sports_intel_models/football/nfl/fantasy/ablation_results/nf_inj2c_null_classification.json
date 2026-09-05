@@ -1,0 +1,57 @@
+{
+  "story": "NF-INJ2c node 5 \u2014 the null classification",
+  "generated_at": "2026-09-05T18:59:31.096922+00:00",
+  "best_alpha": 0,
+  "deploy_held": true,
+  "classifies": {
+    "artifact": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-inj2c/quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj2c_decisive.json",
+    "generated_at": "2026-09-05T18:53:02.582956+00:00",
+    "verdict_state": "DEFLATION_REFUSED"
+  },
+  "classification": {
+    "evaluable": true,
+    "state": "POWER_LIMITED",
+    "reason": "`crps`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 9 folds against 7 (the BH-FDR requirement is separate and may be larger). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+    "detail": {
+      "n_folds": 7,
+      "n_arms": 5,
+      "observed_sr": 1.908,
+      "sr0": 0.8771,
+      "var_trials_sr": 0.5409040049999999,
+      "degenerates_excluded_from_v": true,
+      "var_trials_sr_with_degenerates": 26.189099432999996,
+      "v_inflation_factor_from_degenerates": 48.4173,
+      "lockstep_closed": false,
+      "lockstep_gap": 1.030892713336716,
+      "lockstep_sign_invariant": true,
+      "declared_field_size": 5,
+      "declared_field_size_source": "stated",
+      "field_remedy_admissible": false,
+      "pbo": 0.0,
+      "pbo_gate": 0.2,
+      "pbo_pass": true,
+      "pbo_application": "field",
+      "pbo_application_admissible": true
+    },
+    "v_declared": 0.540904,
+    "v_whole_field": 26.189099,
+    "field_remedy_admissible": false,
+    "pbo_application_admissible": true,
+    "folds_have": 7,
+    "folds_needed": 9,
+    "extra_seasons": 2,
+    "max_field_size": 3,
+    "instrument_retest_trigger": "+2 folds for the DSR gate. On field size \u2014 \u26d4 **NOT A REMEDY \u2014 ARITHMETIC ONLY.** The effect clears only in a field of \u22643 arm(s), which is BELOW the declared family of 5. Shrinking a field below what was pre-registered means dropping arms BECAUSE THEY LOST \u2014 the very selection bias DSR exists to deflate, and on MH2.2's `bb_pct` that move bought its whole apparent gain through a 19,938\u00d7 collapse in the cross-trial dispersion `V`, not through honest multiplicity. A smaller field is a legitimate remedy ONLY if that smaller family was itself declared in advance on MECHANISTIC grounds. \u21d2 the \u22643 figure is reported as a DESIGN QUANTITY, never as advice.",
+    "retest_trigger": {
+      "published": true,
+      "folds_held": 7,
+      "folds_needed_for_dsr": 9,
+      "additional_folds": 2,
+      "instrument_extra_seasons": 2,
+      "reachable_now": false,
+      "why": "SR > SR0, so `n` scales a POSITIVE gap and the trigger is meaningful (NF-W8-0d) \u2014 PM ruling D3, 2026-09-05, permits publishing it on exactly this condition. \u26d4 It is CALENDAR-BOUND, \u26d4 not reachable now: the window is settled at seven folds (PM ruling 2026-09-01; node 3c ruled 2018 out on data-fidelity grounds), so each further fold is a future SEASON \u2014 2026 is the 8th, 2027 the 9th. \u26a0\ufe0f The fold count is an ESTIMATE AT THIS DESIGN'S CURRENT `SR` and `V`; both move with new data, so it is a horizon, \u26d4 not a promise."
+    },
+    "control_makes_this_null_informative": true,
+    "diagnostic_field_does_not_rescue": "the inherited NF-INJ2b 10-arm field was declared NON-BINDING in advance and its DSR publishes either way; it is recorded beside the binding figure and \u26d4 cannot rescue a binding refusal (pre-registration \u00a72.4)."
+  }
+}
