@@ -9,7 +9,7 @@ metadata:
   name: nf-cap1
   vertical: nfl_fantasy
   card: https://trello.com/c/DFZDxfRZ
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Two forward-only PIT captures are not running, and every un-captured
@@ -121,8 +121,97 @@ spec:
   graph:
     nodes: []   # MINI tier — diagnose per leg -> source-shape check -> operator enable + verify -> detector + guards -> closeout with the honest lost-weeks statement
   closeout:
-    verdict: null
+    verdict: >
+      DIAGNOSED — AND THE PREMISE WAS WRONG ON BOTH LEGS, IN OPPOSITE DIRECTIONS.
+      All three NFL point-in-time schedules are RUNNING on the box and firing on
+      their exact crons; the one real defect is that PROPS have never been
+      captured. PR #1091 -> dev, CI green, fast gate 12,397 passed locally.
+      best_alpha=0; no model, board or serving change; changelog untouched.
+
+      (A) INJURIES — RUNNING, HEALTHY, NOTHING LOST. The schedule ships
+      default_status=RUNNING, and the lone 2026-08-05 capture CANNOT have been a
+      cron fire (August is outside the 9-12,1-2 month gate) — it was the NF-W0a
+      verification run, and its 12,136 rows are 2 x 6,068 (one release, two
+      checkpoint hours). Zero 2026 rows is the HEALTHY state: injuries_2026.parquet
+      returns HTTP 404 (measured live), looks_like_missing_asset matches DuckDB's
+      actual error text, and data_expected_from(2026) is ~09-17, so the leg records
+      expected_absent and writes nothing BY DESIGN. The artifact is therefore
+      structurally incapable of distinguishing "fired and captured nothing" from
+      "never fired" — the story's own warning arriving from the other side.
+      The discriminator needed no Dagit read: nfl_pit_metadata_capture_op runs
+      injuries and schema in ONE op, so nfl/pit/schema_snapshot's captures at
+      2026-09-01T16:00:34Z and 2026-09-04T16:00:41Z prove both fires landed to the
+      second. Check the sibling, never the silence.
+
+      (B) MARKET — SCHEDULE RUNNING, GAME LINES FINE, PROPS NEVER CAPTURED. Both
+      in-season fires landed (272 events each at 16:15:19Z, its cron exactly), and
+      BOX_OPERATIONS §10's "STOPPED -> turn on before the opener" was STALE and is
+      corrected. But market_tier is 'game_lines' on all 816 rows. Silent because
+      three things stacked: props_enabled() collapsed UNSET and "0" into False; the
+      leg escalates only when it captures nothing AT ALL (the game-line tier fills
+      that check); and the artifact records no props decision anywhere. Leading
+      cause is the flag not reaching the job-executing container (absent from
+      env.required and every .env.example — the bite env.required documents
+      verbatim). Two alternatives are NOT excluded from here and need the box's
+      Dagster event log: the flag IS set and the props fetch raised, or every
+      per-event fetch failed. Both are equally silent today; all three are now loud.
+
+      PERMANENTLY LOST — the honest cost, per leg:
+        injuries: ZERO weeks. nflverse has published no 2026 injury row for anyone
+          to capture. First capturable fire Fri 2026-09-11 (or Tue 09-15).
+        market game lines: ZERO. Captured on both in-season fires.
+        market PROPS: TWO point-in-time boards, 2026-09-01 and 2026-09-04.
+          Unrecoverable — the live /odds endpoint has no history and /historical
+          retains closing lines only. Next fire Tue 2026-09-08 16:15 UTC, which is
+          the LAST capture before the 09-09 opener.
+
+      CREDITS — the suspected 10x error is REAL and now measured, bracketed by free
+      /sports reads whose zero delta CERTIFIES the brackets rather than assuming
+      them. Game lines 3 credits/snapshot (not ~30) => ~132/season (not ~1,300);
+      props 10 credits/EVENT (not ~120), billed per market RETURNED. The 10x
+      multiplier applies to /historical; both legs use the LIVE endpoint. BUT
+      correcting the unit price alone would UNDERSTATE props ~10x: the leg fans out
+      over the WHOLE 272-event board (odds_max_events is None), so a props snapshot
+      is ~2,720 credits and a season ~60,000 — the old ~75,000 was right BY ACCIDENT
+      (per-event price 12x too high, event count ~19x too low). §10, both code
+      docstrings and .env.example corrected from the measured numbers in this change.
+      New spend incurred: 23 credits (3 + 10 + 10, two events). No other paid call.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      1. OPERATOR, BEFORE Tue 2026-09-08 16:15 UTC — THE LAST PRE-OPENER CAPTURE.
+         Order matters: the box .env key must exist BEFORE the next deploy, because
+         NFL_PIT_CAPTURE_PROPS is now in env.required and a missing key FAILS the
+         deploy (a git pull never touches the box .env).
+         (a) READ the flag in the container that RUNS jobs (not a throwaway exec —
+             FU-1): docker compose -f services/dagster/aws/docker-compose.yml exec
+             -T dagster-codeloc printenv NFL_PIT_CAPTURE_PROPS
+         (b) SET it in ${APP_DIR}/services/dagster/aws/.env (the file deploy.sh
+             validates), then RECREATE dagster-codeloc — an env change does not
+             reach an already-running container.
+         (c) VERIFY FROM CONTENT after Tuesday's fire, on the LAPTOP:
+             AWS_DEFAULT_REGION=us-east-2 uv run python
+             scripts/check_nfl_pit_capture.py --expect-props
+             (exit 1 until a market_tier='props' row exists; verified two-sided
+             against the live store).
+         (d) If props still do not land, the Dagster event log for
+             sports_nfl_pit_market_job carries the manifest, whose props_state and
+             errors separate the three causes.
+      2. PM DECISION — should sports_nfl_pit_market_schedule flip to
+         default_status=RUNNING? Its ON state lives only in the Dagster Postgres, so
+         a volume reset silently reverts it and the season's market boards stop. The
+         nfl_pit_market freshness contract DETECTS that within ~36 active hours but
+         cannot PREVENT it; only default_status=RUNNING self-heals. Cost of flipping:
+         a PAID capture auto-starts on every fresh deployment. Deliberately not taken
+         here. NOTE the finding behind it: a CRITICAL_SCHEDULES entry would have been
+         VACUOUS — stopped_critical_instigators flags only a PERSISTED STOPPED row,
+         and a reverted default-STOPPED schedule has no row at all, so the entry would
+         have read as coverage while detecting nothing.
+      3. PM DECISION — the props leg captures ALL 272 events every fire, so a week-17
+         game four months out is re-captured ~40 times. A commence-time horizon would
+         cut the props season from ~60,000 credits to a small fraction. Left alone:
+         it is inside the already-authorised envelope and narrowing it is a scope
+         change, not a defect fix.
+      4. CARRY FORWARD (retires the NF-INJ4/4b citation): "nfl/pit/injuries has zero
+         2026 rows" must no longer be read as a dead capture. It is the expected
+         state until nflverse publishes the season asset; the leg's health is read
+         from schema_snapshot, and from ~09-17 the leg pages on its own if the asset
+         is still absent or lands zero rows.

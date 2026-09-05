@@ -56,6 +56,26 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
 
 
+def _register_pit_table(conn, contract: FreshnessContract) -> None:
+    """Register an NFL point-in-time Delta table under its contract name (NF-CAP1).
+
+    Read through `DeltaTable.to_pyarrow_dataset()` — the same channel `pit/store.py` reads
+    through, and deliberately NOT a DuckDB `delta_scan` URI. delta-rs has already resolved
+    credentials via `s3io.storage_options()`; `delta_scan` reads a DIFFERENT channel (a DuckDB
+    S3 SECRET) and, given nothing on it, resolves the region itself from the ambient env — which
+    on the box is us-east-1 while the lake is us-east-2, so the first `_delta_log` read 301s to
+    ZERO ROWS before a single data byte (INC-45). Reusing the resolved handle cannot hit that.
+    """
+    from deltalake import DeltaTable
+
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+    from quant_sports_intel_models.football.nfl.pit import store
+
+    uri = store.table_uri(contract.pit_source)
+    dataset = DeltaTable(uri, storage_options=s3io.storage_options()).to_pyarrow_dataset()
+    conn.register(contract.ts_table, dataset)
+
+
 def _read_content_ts(conn, contract: FreshnessContract) -> datetime | None:
     """The artifact's content timestamp, or None when it cannot be read.
 
@@ -66,9 +86,12 @@ def _read_content_ts(conn, contract: FreshnessContract) -> datetime | None:
     from betting_ml.utils.delta_lakehouse import register_lakehouse_views
 
     try:
-        # Route through the shared registry, never a hardcoded glob: under Delta cutover the
-        # legacy parquet path is frozen/absent and a hardcoded glob raises (E11.20 phase-1.5).
-        register_lakehouse_views(conn, [contract.ts_table])
+        if contract.pit_source:
+            _register_pit_table(conn, contract)
+        else:
+            # Route through the shared registry, never a hardcoded glob: under Delta cutover the
+            # legacy parquet path is frozen/absent and a hardcoded glob raises (E11.20 phase-1.5).
+            register_lakehouse_views(conn, [contract.ts_table])
         row = conn.execute(f"select {contract.ts_expr} from {contract.ts_table}").fetchone()
     except Exception as exc:  # noqa: BLE001 — per-artifact isolation, see the docstring
         log.warning("[ALERT] %s: could not read %s (%s): %s",

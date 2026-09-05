@@ -11,15 +11,20 @@ the **LIVE** endpoint on a Tue/Fri cadence and stamps `capture_timestamp` at the
 fetch. That stamp is the whole product: it is what makes an early-build market feature
 BACKTESTABLE later.
 
-CREDITS (the Odds API bills 10 × #markets × #regions per call):
-  • GAME LINES (default): one `/odds` call = 10 × 3 markets × 1 region = **30 credits** per
-    snapshot. Two snapshots a week × ~22 weeks ≈ **1,320 credits/season**. Negligible.
-  • PLAYER PROPS (opt-in, `NFL_PIT_CAPTURE_PROPS=1`): props are the PER-EVENT endpoint, so a
-    snapshot costs 10 × 12 markets × #events ≈ **120 cr/event ≈ 1,700 cr per slate snapshot**,
-    i.e. **~75,000 credits/season** at two snapshots a week. That is a real budget decision, so
-    it is OFF by default and must be turned on deliberately — the same `on_demand` discipline
-    `ingest/sources.py` applies to the paid `/historical` feeds so a routine run can never
-    silently burn the balance.
+CREDITS — MEASURED live 2026-09-05 (NF-CAP1) against x-requests-remaining, bracketed by free /sports reads. ⚠️ The figures here were previously 10× TOO HIGH: the Odds API's
+10× multiplier applies to the `/historical` endpoint, and BOTH tiers below use the LIVE one.
+  • GAME LINES (default): one `/odds` call = 3 markets × 1 region = **3 credits** per snapshot.
+    Two snapshots a week × ~22 weeks ≈ **132 credits/season**. Negligible.
+  • PLAYER PROPS (opt-in, `NFL_PIT_CAPTURE_PROPS=1`): the PER-EVENT endpoint, billed per market
+    actually RETURNED × regions = **10 credits/event** measured (10 of the 12 requested markets
+    are priced; ceiling 12). The `/events` list itself is FREE.
+    ⛔ THE UNIT PRICE IS ONLY HALF THE ARITHMETIC. `_odds_nfl_props` fans out over the WHOLE
+    `/events` board — `odds_max_events` is None on this path — which measured **272 events** on
+    2026-09-05, so ONE props snapshot is ≈ **2,720 credits** and a season ≈ **60,000**. Correcting
+    the unit price alone while assuming a ~14-event slate would UNDERSTATE the budget ~10×.
+    Still a real budget decision, so it is OFF by default and must be turned on deliberately —
+    the same `on_demand` discipline `ingest/sources.py` applies to the paid `/historical` feeds
+    so a routine run can never silently burn the balance.
 
 TIER: WARN. A missed snapshot loses that snapshot (it cannot be recovered), but it must never
 fail a job — and the next cadence fire still captures. A zero-event capture during the season is
@@ -48,8 +53,43 @@ PROPS_ENV_FLAG = "NFL_PIT_CAPTURE_PROPS"
 CLOSING_WINDOW_MINUTES = 240
 
 
+#: The three states `PROPS_ENV_FLAG` can be in. TWO is not enough, and the missing third state
+#: is what cost two point-in-time props boards (NF-CAP1, 2026-09-05).
+#:
+#: `props_enabled()` collapsed UNSET and "0" into False, so "the operator decided against props"
+#: and "the flag never reached the container that runs the job" were the SAME value — and the
+#: second one is a defect that is otherwise perfectly silent: the game-line tier still fills
+#: `rows`, so the leg's zero-capture escalation never fires, the artifact carries no record of
+#: the props decision at all, and the run is byte-identical to a healthy one in every signal it
+#: emits. Measured: `nfl/pit/market` holds 816 rows over three capture dates and `market_tier`
+#: is `game_lines` on every one of them, while the operator believed props had been on since
+#: 2026-08-05.
+#:
+#: Splitting the states lets the leg page on exactly the bad one. A deliberate "0" is silent
+#: (props are a real spend decision and a monitor that pages on a legitimate choice gets muted);
+#: an UNDECLARED flag pages, because `env.required` now demands the key be present, so undeclared
+#: is not a steady state anyone chose.
+PROPS_ON = "on"
+PROPS_OFF = "off"
+PROPS_UNDECLARED = "undeclared"
+
+
+def props_state(env: dict | None = None) -> str:
+    """PURE. `PROPS_ON` / `PROPS_OFF` / `PROPS_UNDECLARED` for the props opt-in.
+
+    Only the exact string "1" is ON — the same strictness `props_enabled()` always had. An
+    absent key (or one present but empty, which is how a `.env` line with no value arrives) is
+    UNDECLARED rather than OFF.
+    """
+    env = os.environ if env is None else env
+    raw = env.get(PROPS_ENV_FLAG)
+    if raw is None or not raw.strip():
+        return PROPS_UNDECLARED
+    return PROPS_ON if raw.strip() == "1" else PROPS_OFF
+
+
 def props_enabled() -> bool:
-    return os.environ.get(PROPS_ENV_FLAG, "0").strip() == "1"
+    return props_state() == PROPS_ON
 
 
 def classify_market_phase(capture_ts: datetime, kickoff_ts: datetime | None) -> str:
@@ -160,19 +200,35 @@ def run_market_capture(
     now = now or now_utc()
     season = season if season is not None else current_season(now)
     cadence_label = cadence_label or f"{now.strftime('%a').lower()}-{now.strftime('%Y-%m-%d')}"
+    # `props_state` is recorded even when the caller passes `capture_props` explicitly, so the
+    # manifest always says what the ENVIRONMENT declared as well as what this run did.
+    #
+    # ⚠️ But only an env-DECIDED run can be UNDECLARED. An explicit `capture_props=` argument IS
+    # a declaration — a hand-run that says what it wants must not be paged at about a flag it
+    # never consulted. The escalation below is for the leg silently inheriting an absent flag,
+    # which is the failure that actually happened, not for a caller who chose.
+    declared = props_state() if capture_props is None else (
+        PROPS_ON if capture_props else PROPS_OFF
+    )
     capture_props = props_enabled() if capture_props is None else capture_props
 
     manifest = {
         "season": season, "cadence_label": cadence_label, "now": now.isoformat(),
-        "capture_props": capture_props, "game_line_events": 0, "prop_events": 0,
+        "capture_props": capture_props, "props_state": declared,
+        "game_line_events": 0, "prop_events": 0,
         "written": 0, "skipped_duplicate": 0, "skipped_recapture": 0, "revisions": [],
         "errors": [], "escalate": False,
     }
 
     if dry_run:
+        # MEASURED 2026-09-05 (NF-CAP1), not the pre-correction 10x figures: the Odds-API 10x
+        # multiplier applies to /historical and this leg is LIVE. The props estimate uses the
+        # board size rather than a slate, because the fan-out is unbounded (`odds_max_events` is
+        # None) — quoting a per-slate number here understates it ~10x.
         manifest["note"] = (
-            "dry-run: would spend 30 credits (game lines)"
-            + (" + ~120 credits/event (props)" if capture_props else "")
+            "dry-run: would spend 3 credits (game lines)"
+            + (" + ~10 credits/event over the whole /events board (~272 events ≈ 2,720)"
+               if capture_props else "")
         )
         return manifest
 
@@ -221,6 +277,29 @@ def run_market_capture(
             "ALERT [nfl/pit/market] ZERO market events captured for the %s snapshot — this "
             "point-in-time board is LOST (only closing lines exist historically).", cadence_label,
         )
+
+    # ⭐ NF-CAP1 — THE PROPS TIER NEEDS ITS OWN ZERO-CHECK, because the game-line tier fills
+    # `rows` and therefore SATISFIES the check above on its own. That is precisely how two props
+    # boards were lost silently: the run captured 272 game-line events, took the healthy branch,
+    # and reported success while the props tier contributed nothing.
+    if declared == PROPS_UNDECLARED:
+        manifest["escalate"] = True
+        log.warning(
+            "ALERT [nfl/pit/market] %s is UNDECLARED in this container — props were NOT captured "
+            "for the %s snapshot and that board is LOST (the live endpoint has no history). This "
+            "is not the same as a deliberate '0', which is silent: an absent key is how the flag "
+            "silently failed to take effect before. Set it to '1' (capture props) or '0' "
+            "(deliberately skip) in the box's services/dagster/aws/.env and RECREATE "
+            "dagster-codeloc — an env change does not reach an already-running container.",
+            PROPS_ENV_FLAG, cadence_label,
+        )
+    elif capture_props and not manifest["prop_events"]:
+        manifest["escalate"] = True
+        log.warning(
+            "ALERT [nfl/pit/market] props are ENABLED but ZERO prop events were captured for the "
+            "%s snapshot — that props board is LOST. Check the errors in this manifest: %s",
+            cadence_label, manifest["errors"] or "(none recorded — the /events list came back empty)",
+        )
     return manifest
 
 
@@ -241,5 +320,7 @@ def upcoming_kickoffs(season: int, *, now: datetime | None = None, horizon_days:
 
 __all__ = [
     "CAPTURE_SOURCE", "CLOSING_WINDOW_MINUTES", "PROPS_ENV_FLAG",
-    "classify_market_phase", "props_enabled", "run_market_capture", "upcoming_kickoffs",
+    "PROPS_ON", "PROPS_OFF", "PROPS_UNDECLARED",
+    "classify_market_phase", "props_enabled", "props_state", "run_market_capture",
+    "upcoming_kickoffs",
 ]
