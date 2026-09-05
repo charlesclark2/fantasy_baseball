@@ -238,7 +238,7 @@ _WEEK_PLAYERS = {
 _WEEK_MANIFEST = {
     "season": 2026, "week": 1, "season_type": "REG", "scoring_system_id": "ppr",
     "generated_at": "2026-09-05T00:00:00+00:00", "projection_day": "2026-09-09T00:00:00+00:00",
-    "n_players": 1, "n_by_position": {"QB": 0, "RB": 1, "WR": 0, "TE": 0}, "n_bye": 0,
+    "n_players": 1, "n_by_position": {"QB": 0, "RB": 1, "WR": 0, "TE": 0}, "n_bye": 0, "n_rookies": 0,
     "absences": [{"reason": "position_not_projected", "n": 64, "detail": "K/DST are not projected"}],
     "pit_weeks_checked": 176, "pit_records_checked": 85056, "pit_rows_dropped": 0,
     "input_vintage": {"train_through_season": 2025, "train_through_week": 18},

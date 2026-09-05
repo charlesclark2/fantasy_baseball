@@ -34,7 +34,7 @@ SEASONS = (2024, 2025)
 WEEKS = tuple(range(1, 7))
 
 
-def _gameday(season: int, week: int) -> str:
+def _gameday(season: int, week: int, *, slot: int = 0) -> str:
     """Weeks a REAL week apart.
 
     ⚠️ NOT cosmetic. `assert_point_in_time`'s clause 9 requires every rolling window to end STRICTLY
@@ -42,8 +42,15 @@ def _gameday(season: int, week: int) -> str:
     last game. Weeks one calendar day apart therefore make window-end == target kickoff and the
     guard fail-closes on EVERY week but the first — which is the guard working correctly on an
     impossible schedule. A fixture that cannot pass the real gate tests nothing.
+
+    ⭐ AND `slot` SPREADS A WEEK'S GAMES ACROSS DAYS, which is equally load-bearing and was missing
+    on the first cut. With every game in a week sharing one gameday, `min` and `max` over that week
+    are the SAME NUMBER — so `resolve_target_week` choosing the LAST kickoff instead of the first
+    would have been completely invisible to this fixture, and the guard on it passed on nothing. The
+    RED proof is what surfaced that. A real week has a Thursday game and a Sunday game, and the
+    whole point of picking the FIRST kickoff is what happens between them.
     """
-    return str((date(season, 9, 1) + timedelta(days=7 * (week - 1))))
+    return str((date(season, 9, 1) + timedelta(days=7 * (week - 1) + slot)))
 
 
 def _schedule() -> pd.DataFrame:
@@ -59,9 +66,11 @@ def _schedule() -> pd.DataFrame:
         for w in WEEKS:
             a, b, c, d = TEAMS
             pairs = [(a, b)] if w == 5 else ([(a, b), (c, d)] if w % 2 else [(a, c), (b, d)])
-            for home, away in pairs:
+            for slot, (home, away) in enumerate(pairs):
                 rows.append({"season": s, "week": w, "home_team": home, "away_team": away,
-                             "gameday": _gameday(s, w), "div_game": 1})
+                             # slot 0 = the early game, slot 3 = three days later — a real week
+                             # spans days, and that is what makes first-vs-last kickoff a choice.
+                             "gameday": _gameday(s, w, slot=3 * slot), "div_game": 1})
     return pd.DataFrame(rows)
 
 
@@ -133,10 +142,15 @@ def test_the_target_is_the_first_week_whose_slate_has_not_started(world):
 def test_a_slate_that_has_already_started_is_not_the_target(world):
     """One second after the first kickoff, the week is no longer projectable."""
     sch = world["schedule"]
-    kickoff = pd.Timestamp(_gameday(2025, 3), tz="UTC").to_pydatetime()
-    assert WS.resolve_target_week(sch, now=kickoff - timedelta(seconds=1)).week == 3
-    just_after = kickoff + timedelta(seconds=1)
-    assert WS.resolve_target_week(sch, now=just_after).week == 4
+    first = pd.Timestamp(_gameday(2025, 3, slot=0), tz="UTC").to_pydatetime()
+    last = pd.Timestamp(_gameday(2025, 3, slot=3), tz="UTC").to_pydatetime()
+    assert last > first, "the fixture must span days, or first-vs-last kickoff is unobservable"
+    assert WS.resolve_target_week(sch, now=first - timedelta(seconds=1)).week == 3
+    # ⭐ THE DISCRIMINATING INSTANT: between week 3's first and last kickoff. Week 3 is under way,
+    # so the projectable week is 4 — and a `max`-based resolver would still answer 3 here, which is
+    # exactly the "serve a projection for games in progress" outcome this rules out.
+    assert WS.resolve_target_week(sch, now=first + timedelta(seconds=1)).week == 4
+    assert WS.resolve_target_week(sch, now=last + timedelta(seconds=1)).week == 4
 
 
 def test_no_upcoming_week_refuses_rather_than_projecting_a_played_slate(world):
@@ -411,3 +425,96 @@ def test_ros_counts_a_bye_as_a_remaining_week_worth_zero():
     assert int(ros.loc["a", "n_weeks"]) == 3
     # weeks 1 and 2 contribute the same mean; the bye contributes exactly zero.
     assert float(ros.loc["a", "ros_mean"]) == pytest.approx(2 * tq[0].mean(), rel=1e-9)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 7. The point-in-time gate must have examined something
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+def test_the_pit_gate_must_have_examined_something():
+    """⛔ BOTH counters. `weeks_checked > 0` alone is satisfied by a week that carried zero records,
+    so a gate that looked at one empty week would report itself as having run."""
+    assert WS.assert_pit_gate_non_vacuous(
+        {"weeks_checked": 3, "records_checked": 90, "rows_dropped": 0})["records_checked"] == 90
+    for bad in ({"weeks_checked": 0, "records_checked": 90},
+                {"weeks_checked": 3, "records_checked": 0},
+                {}):
+        with pytest.raises(WS.WeeklyServingError, match="VACUOUS"):
+            WS.assert_pit_gate_non_vacuous(bad)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 8. The freshness SLA — the WRONG-WEEK check is the one no staleness bar can make
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+def _manifest(**over):
+    base = {"season": 2026, "week": 3, "generated_at": "2026-09-22T12:00:00+00:00",
+            "projection_day": "2026-09-27T17:00:00+00:00", "n_players": 503}
+    return {**base, **over}
+
+
+def _now(iso: str) -> datetime:
+    return datetime.fromisoformat(iso)
+
+
+def test_a_healthy_weekly_artifact_reads_ok():
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(F.reading_from_manifest(2026, _manifest()), expected_week=3,
+                   now=_now("2026-09-22T18:00:00+00:00"))
+    assert v["verdict"] == "OK" and v["severity"] is None
+
+
+def test_a_build_running_fine_on_LAST_weeks_slate_is_CRITICAL():
+    """⭐ THE CHECK NO STALENESS BAR CAN MAKE. The build ran an hour ago, every timestamp is healthy,
+    and the number on the page is for a slate that has already been played — the INC-37 shape."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(F.reading_from_manifest(2026, _manifest(week=2)), expected_week=3,
+                   now=_now("2026-09-22T13:00:00+00:00"))
+    assert v["verdict"] == "WRONG_WEEK" and v["severity"] == "CRITICAL"
+    assert "already been played" in v["detail"]
+
+
+def test_a_stale_build_escalates_only_past_twice_the_sla():
+    """≤2× the SLA is a missed cycle; beyond it the build is dead. Conflating the two makes the
+    monitor either noisy or blind."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    r = F.reading_from_manifest(2026, _manifest())
+    # ⚠️ Both readings are taken MORE than STALE_BEFORE_KICKOFF_HOURS out from the 09-27 kickoff,
+    # so the earlier `STALE_INTO_KICKOFF` branch cannot fire and this test measures the escalation
+    # it names rather than a different branch that happens to be red.
+    missed = F.classify(r, expected_week=3, now=_now("2026-09-23T20:00:00+00:00"))   # 32h
+    dead = F.classify(r, expected_week=3, now=_now("2026-09-25T12:00:00+00:00"))     # 72h
+    assert missed["verdict"] == "STALE" and missed["severity"] == "WARN"
+    assert dead["verdict"] == "STALE" and dead["severity"] == "CRITICAL"
+
+
+def test_the_off_season_deactivates_the_sla_rather_than_paging_for_seven_months():
+    """INC-45: never put a freshness SLA on an artifact that SHOULD be static — it pages daily on a
+    healthy file and gets muted."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(F.reading_from_manifest(2026, _manifest()), expected_week=None,
+                   now=_now("2027-04-01T12:00:00+00:00"))
+    assert v["verdict"] == "OFF_SEASON" and v["severity"] is None
+    assert not F.is_problem(v)
+
+
+def test_an_unreadable_manifest_is_WARN_never_healthy():
+    """NF1.7(a): a check that could not run is not a check that passed."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    for blob in ({}, {"week": 3}, {"generated_at": "not-a-date", "week": 3}, [], "x"):
+        v = F.classify(F.reading_from_manifest(2026, blob), expected_week=3,
+                       now=_now("2026-09-22T18:00:00+00:00"))
+        assert v["verdict"] == "UNKNOWN" and v["severity"] == "WARN", blob
+
+
+def test_a_projection_not_refreshed_into_its_own_kickoff_is_flagged():
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(F.reading_from_manifest(2026, _manifest(generated_at="2026-09-20T12:00:00+00:00")),
+                   expected_week=3, now=_now("2026-09-26T12:00:00+00:00"))
+    assert v["verdict"] == "STALE_INTO_KICKOFF" and v["severity"] == "ERROR"

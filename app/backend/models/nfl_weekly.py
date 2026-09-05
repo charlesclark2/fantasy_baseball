@@ -412,6 +412,10 @@ class NflWeeklyManifest(BaseModel):
     n_players: int
     n_by_position: dict[str, int]
     n_bye: int
+    #: How many served players are ROOKIES (no prior NFL season in the frame). Stamped because
+    #: `gates.rookie_coverage` cannot see its subject without it — and a gate left UNEVALUABLE by an
+    #: omission is not "legitimately unresolvable", it is a check nobody ran (NF1.7(a)).
+    n_rookies: int
     absences: list[NflWeeklyAbsence]
     #: `assert_point_in_time` counts from the SERVING frame. `weeks_checked > 0` is what makes the
     #: gate non-vacuous — a guard that examined nothing has not passed (NF1.7(a)).

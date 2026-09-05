@@ -151,14 +151,8 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
              target.season, target.week, target.first_kickoff, target.last_reg_week)
 
     modeled, pit, frame = WS.build_serving_matrix(src, target=target)
-    # ⛔ NON-VACUITY FIRST. A gate that examined nothing has not passed (NF1.7(a)), and both counters
-    # must be positive: `weeks_checked > 0` alone would be satisfied by a week with zero records.
-    if pit["weeks_checked"] <= 0 or pit["records_checked"] <= 0:
-        raise WS.WeeklyServingError(
-            f"the PIT gate is VACUOUS: weeks_checked={pit['weeks_checked']} "
-            f"records_checked={pit['records_checked']}. Refusing to serve behind a guard that "
-            "examined nothing."
-        )
+    # ⛔ NON-VACUITY FIRST. A gate that examined nothing has not passed (NF1.7(a)).
+    WS.assert_pit_gate_non_vacuous(pit)
     log.info("PIT gate: %d weeks / %d records checked, %d rows dropped",
              pit["weeks_checked"], pit["records_checked"], pit["rows_dropped"])
 
@@ -206,6 +200,15 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
                                names=_names(src), hist_weeks=hist)
     served_ids = {p["id"] for p in players}
     n_bye = sum(1 for p in players if p["status"] == "bye")
+    # A ROOKIE is a served player the champion's own prior-season prior marks as having none — the
+    # same `prior_season_priors__rookie_flag` the model consumes, so the count cannot drift from the
+    # feature it describes.
+    rookie_ids = set(
+        target_rows.loc[
+            target_rows["prior_season_priors__rookie_flag"].astype(float) > 0.5, "gsis_id"
+        ].astype(str)
+    )
+    n_rookies = sum(1 for p in players if p["id"] in rookie_ids)
     by_pos = {p: sum(1 for r in players if r["pos"] == p) for p in C.PROJECTED_POSITIONS}
 
     # The certified purge-equivalent train, so the containment is a NUMBER (the NF-W6c precedent).
@@ -217,6 +220,7 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
         "generated_at": generated_at,
         "projection_day": str(pd.Timestamp(target.first_kickoff).isoformat()),
         "n_players": len(players), "n_by_position": by_pos, "n_bye": n_bye,
+        "n_rookies": n_rookies,
         "absences": _absences(frame, src, universe, served_ids, target),
         "pit_weeks_checked": int(pit["weeks_checked"]),
         "pit_records_checked": int(pit["records_checked"]),

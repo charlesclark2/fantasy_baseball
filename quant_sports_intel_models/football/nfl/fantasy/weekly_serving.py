@@ -269,6 +269,24 @@ def build_serving_matrix(src: dict[str, pd.DataFrame], *, target: TargetWeek,
     return modeled, audit, frame
 
 
+def assert_pit_gate_non_vacuous(audit: dict) -> dict:
+    """The point-in-time gate must have EXAMINED something.
+
+    ⛔ BOTH COUNTERS, and that is the point. `weeks_checked > 0` alone is satisfied by a week that
+    carried zero records, so a gate that looked at one empty week would report itself as having run.
+    A guard that cannot see its subject has examined nothing, and scoring that green is how a
+    governance layer becomes decoration (NF1.7(a)).
+    """
+    weeks, records = int(audit.get("weeks_checked", 0)), int(audit.get("records_checked", 0))
+    if weeks <= 0 or records <= 0:
+        raise WeeklyServingError(
+            f"the PIT gate is VACUOUS: weeks_checked={weeks} records_checked={records}. Refusing to "
+            "serve behind a guard that examined nothing."
+        )
+    return {"weeks_checked": weeks, "records_checked": records,
+            "rows_dropped": int(audit.get("rows_dropped", 0))}
+
+
 def assert_no_target_week_outcome(src: dict[str, pd.DataFrame], *, target: TargetWeek,
                                   clean: pd.DataFrame | None = None,
                                   features: tuple[str, ...] = WP.FEATURES) -> dict:
