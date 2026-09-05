@@ -213,4 +213,16 @@ spec:
       Worth saying on the pricing surface so "one free format" does not read as 13 withheld ones.
       (9) w2b now has 1 of its 3 blockers cleared (the serving path); the other two are a LIVE
       stamped injury forward-capture and pre-flip snapshots. w6c/w6d remain blocked solely on
-      gate 3.
+      gate 3. (10) ⛔ INCIDENT, SELF-REPORTED: while exercising the publish path I ran
+      `run_weekly_serving --publish` WITHOUT `--s3-bucket` in order to prove the NF1.7 no-bucket
+      REFUSAL fires. `$CACHE_BUCKET` is set in a normal working shell, so it resolved a bucket from
+      the environment, built, and wrote three objects to the LIVE prod api-cache at 2026-09-05
+      18:50:45Z (`fantasy/nfl/weekly/2026/{1/manifest.json,1/players.json}` +
+      `fantasy/nfl/weekly/2026/current.json`). Blast radius is bounded and was verified: the prefix
+      was previously EMPTY so nothing was overwritten, and nothing can read it (no gateway routes,
+      and the Lambda carrying the weekly routes is not deployed). It is still an unauthorized
+      outward-facing write on a story that is deploy-held at every ship point, and the cleanup is
+      an OPERATOR step because the recursive S3 delete is correctly refused to this session. FIXED
+      FORWARD: `--publish` now REQUIRES an explicit `--s3-bucket` and will not inherit
+      `$CACHE_BUCKET` — an outward-facing action must not have its target chosen by an environment
+      variable the caller cannot see in the command they typed. Guarded two-sided and RED-proven.
