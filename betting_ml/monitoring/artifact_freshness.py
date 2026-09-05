@@ -102,6 +102,30 @@ SCHEDULE_CAPTURE_HOURS = (0, 1, 2, 3, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
 # `None` = always active (plain wall-clock lag) — for artifacts on a once-daily build.
 ALWAYS = None
 
+# ── NFL point-in-time capture cadence (NF-CAP1) ─────────────────────────────────────────
+# Sourced from the deployed crons in pipeline/schedules/sports_nfl_pit_capture_schedules.py:
+#   sports_nfl_pit_metadata_schedule  "0  9 * 9-12,1-2 2,5"   Tue+Fri 09:00 PT, Sep-Feb
+#   sports_nfl_pit_market_schedule    "15 9 * 9-12,1-2 2,5"   Tue+Fri 09:15 PT, Sep-Feb
+# and CONFIRMED against the live store: `nfl/pit/market` carries capture_timestamps of
+# 2026-09-01T16:15:19Z and 2026-09-04T16:15:19Z — 09:15 PDT to the second.
+#
+# ⭐ `active_hours_utc` is deliberately None for these, and that is a DST decision rather than a
+# shortcut. 09:00 PT is 16:00 UTC in PDT and 17:00 UTC in PST, and an NFL season spans the
+# switch — so an hour-granularity UTC window would be right in September and wrong in January,
+# the exact "plausible but wrong" shape pit/schedule.py refuses to guess at for kickoffs. The
+# DAY axis carries all the information needed here: whole Tue/Fri days in-season, nothing else.
+NFL_PIT_TUE_FRI = (1, 4)                        # datetime.weekday(): Mon=0 … Tue=1, Fri=4
+NFL_SEASON_MONTHS = (9, 10, 11, 12, 1, 2)       # Sep-Feb, the crons' own month gate
+
+#: ⏱️ DERIVED, not chosen. Under NFL_PIT_TUE_FRI + NFL_SEASON_MONTHS one cadence interval is
+#: EXACTLY 24.00 active hours in both directions (measured: Tue 16:15 -> Fri 16:15 = 24.00h;
+#: Fri -> Tue = 24.00h; and 24.00h again in January, because there is no hour filter to shift),
+#: and one fully missed fire is exactly 48.00. 36 sits halfway: 12h of headroom above the
+#: healthy maximum, and a missed fire crosses it ~12h before the following capture, so the next
+#: freshness tick pages rather than the one after. A tighter SLA would page on a slow run; a
+#: looser one would let a missed fire hide behind the next healthy one.
+NFL_PIT_TUE_FRI_SLA_MINUTES = 36 * 60
+
 
 @dataclass(frozen=True)
 class FreshnessContract:
@@ -120,6 +144,19 @@ class FreshnessContract:
     cadence: str                    # human description of the writer's cadence
     why: str                        # what breaks downstream when this artifact freezes
     remediate: str                  # the first thing an operator should do
+    # ── NF-CAP1: the other two axes of a writer's active window ──────────────────────────
+    # Hours alone cannot express a WEEKLY or SEASONAL writer, and both exist now: the NFL
+    # point-in-time captures fire Tue+Fri and only from September to February. Without these a
+    # Tue/Fri contract false-pages every Wednesday, and a Sep-Feb one false-pages all summer —
+    # the same defect the hour axis was added to prevent, one and two periods up. `None` = every
+    # weekday / every month, so every pre-existing contract is unchanged by construction.
+    active_weekdays: tuple[int, ...] | None = None   # Mon=0 … Sun=6 (datetime.weekday())
+    active_months: tuple[int, ...] | None = None     # 1..12
+    # The NFL point-in-time store is a Delta table under `nfl/pit/<source>`, not an MLB lakehouse
+    # view, so the READ differs even though every line of policy below is shared. Set this to the
+    # pit source name to route the read; `ts_table` still equals `name`, so `is_proxied` keeps
+    # meaning exactly what it meant.
+    pit_source: str | None = None
 
     @property
     def is_proxied(self) -> bool:
@@ -236,19 +273,106 @@ REGISTRY: tuple[FreshnessContract, ...] = (
             "and stg_batter_pitches are current and that the stg_ref_players_archive/ prefix exists"
         ),
     ),
+    # ── NFL point-in-time forward captures (NF-CAP1) ────────────────────────────────────
+    # These are NOT serving-critical — nothing downstream reads them yet, and best_alpha=0. They
+    # are here because their failure mode is STRICTLY WORSE than a serving outage: a serving
+    # artifact that freezes can be rebuilt, and a point-in-time capture that does not happen is
+    # gone forever (the Open-Meteo archive returns observations rather than the forecast that
+    # stood at the time, and the odds history retains only closing lines). A frozen capture is
+    # also invisible to every source-watching check by construction — the nflverse release and
+    # the Odds API are both perfectly healthy while we simply fail to look.
+    FreshnessContract(
+        name="nfl_pit_market",
+        ts_table="nfl_pit_market",
+        pit_source="market",
+        ts_expr="max(try_cast(capture_timestamp as timestamp))",
+        max_lag_minutes=NFL_PIT_TUE_FRI_SLA_MINUTES,
+        active_hours_utc=ALWAYS,
+        active_weekdays=NFL_PIT_TUE_FRI,
+        active_months=NFL_SEASON_MONTHS,
+        cadence="Tue+Fri 09:15 PT, Sep-Feb (sports_nfl_pit_market_schedule)",
+        why=(
+            "the Tue/Fri point-in-time NFL market board — the ONLY source from which an "
+            "early-week market feature can ever be backtested, because the Odds API's history "
+            "retains closing lines only. A frozen capture is not a delayed feature, it is a "
+            "permanently absent one: every week not captured is a week missing from the training "
+            "frame forever, and no later fetch reconstructs it"
+        ),
+        remediate=(
+            "confirm sports_nfl_pit_market_schedule is RUNNING in Dagit (it ships STOPPED, so its "
+            "ON state lives only in the Dagster Postgres and a volume reset reverts it), then "
+            "re-run the leg while the slate is still pre-kickoff: python -m "
+            "quant_sports_intel_models.football.nfl.pit.run_capture --leg market"
+        ),
+    ),
+    FreshnessContract(
+        name="nfl_pit_injuries",
+        ts_table="nfl_pit_injuries",
+        pit_source="injuries",
+        ts_expr="max(try_cast(capture_timestamp as timestamp))",
+        max_lag_minutes=NFL_PIT_TUE_FRI_SLA_MINUTES,
+        active_hours_utc=ALWAYS,
+        active_weekdays=NFL_PIT_TUE_FRI,
+        # ⚠️ ARMED FROM OCTOBER, NOT SEPTEMBER, and this is the INC-45 rule ("do NOT put a
+        # freshness SLA on an artifact that should not advance") applied to a WINDOW rather than
+        # to a whole artifact. nflverse publishes `injuries_<season>.parquet` only once injury
+        # reports exist — week 1's practice reports — so through September the artifact CANNOT
+        # advance and a Sep-armed SLA would page daily on a leg working exactly as designed.
+        # Measured 2026-09-05: the 2026 asset 404s, and the leg's two September fires correctly
+        # captured nothing.
+        #
+        # September is not left uncovered, it is covered by the two mechanisms that can actually
+        # see it: the leg PAGES ITSELF once its own `data_expected_from` bar passes (week 2's
+        # first kickoff, ~mid-September) if the asset is still absent OR lands zero rows, and
+        # check_monitors_healthy pages IMMEDIATELY, all year, if the schedule drifts STOPPED.
+        # Arming here from October puts this backstop strictly downstream of the leg's own bar,
+        # so the two never double-page over the same ambiguous window.
+        active_months=(10, 11, 12, 1, 2),
+        cadence="Tue+Fri 09:00 PT, Oct-Feb armed (sports_nfl_pit_metadata_schedule; Sep covered by the leg's own bar)",
+        why=(
+            "nflverse DELETED injuries.date_modified in 2025, so OUR capture_timestamp is the "
+            "only as-of bound that will ever exist for a 2025+ injury report — and one cannot be "
+            "manufactured after the fact. A frozen capture means every downstream injury study "
+            "is either leaking or unrunnable, and the leakage guard has no original to enforce a "
+            "vendor revision against"
+        ),
+        remediate=(
+            "confirm sports_nfl_pit_metadata_schedule is RUNNING in Dagit, then re-run: python -m "
+            "quant_sports_intel_models.football.nfl.pit.run_capture --leg injuries . If it "
+            "reports expected_absent, nflverse has not published the season asset yet and there "
+            "is nothing to capture — check the leg's own escalation instead"
+        ),
+    ),
 )
 
 
 # ── The core: active-minute lag ─────────────────────────────────────────────────────────
 # A gap longer than this is reported at the cap rather than accumulated minute by minute. It only
 # affects the NUMBER printed for an already-catastrophic freeze, never a verdict.
-_MAX_SCAN_DAYS = 45
+#
+# ⚠️ NF-CAP1 RAISED IT 45 -> 400 DAYS, and the reason is a correctness bug, not performance. The
+# cap returned a FLAT `days * 24 * 60` regardless of which minutes were active — fine when the
+# only filter was hour-of-day (every day contributes, so a long gap is stale under any reading),
+# and WRONG the moment a contract is seasonal. A Sep-Feb artifact frozen on 2026-08-05 and read
+# on 2026-09-20 is 46 days out: under the old cap that returned 64,800 minutes and paged, when
+# the TRUE active lag is ZERO because September is not in its active months. The scan is now
+# DAY-bucketed, so an inactive day costs one comparison instead of 24 — cheap enough to scan a
+# year exactly rather than guess past 45 days.
+_MAX_SCAN_DAYS = 400
 
 
 def active_minutes_between(
-    start: datetime, end: datetime, active_hours: tuple[int, ...] | None
+    start: datetime,
+    end: datetime,
+    active_hours: tuple[int, ...] | None,
+    active_weekdays: tuple[int, ...] | None = None,
+    active_months: tuple[int, ...] | None = None,
 ) -> float:
-    """Minutes in ``[start, end)`` whose UTC hour is in ``active_hours`` (all hours if None).
+    """Minutes in ``[start, end)`` that fall inside the writer's declared active window.
+
+    A minute is active when its UTC hour is in ``active_hours``, its weekday in
+    ``active_weekdays`` and its month in ``active_months``; ``None`` on any axis means "every
+    value" on that axis. With all three ``None`` this is plain wall-clock lag.
 
     PURE. This is the whole off-hours-awareness mechanism — see the module docstring for why a
     raw wall-clock lag is unusable against a writer with a deliberate 10.5-hour overnight gap.
@@ -257,24 +381,41 @@ def active_minutes_between(
     """
     if end <= start:
         return 0.0
-    if active_hours is None:
+    if active_hours is None and active_weekdays is None and active_months is None:
         return (end - start).total_seconds() / 60.0
-    if (end - start) > timedelta(days=_MAX_SCAN_DAYS):
-        # Cap the scan. Anything this stale is far past every SLA in the registry.
-        return float(_MAX_SCAN_DAYS * 24 * 60)
 
-    hours = frozenset(active_hours)
+    hours = None if active_hours is None else frozenset(active_hours)
+    weekdays = None if active_weekdays is None else frozenset(active_weekdays)
+    months = None if active_months is None else frozenset(active_months)
+
     total = 0.0
-    # Walk hour buckets, clamping the first and last to the true bounds.
-    cursor = start.replace(minute=0, second=0, microsecond=0)
-    while cursor < end:
-        nxt = cursor + timedelta(hours=1)
-        if cursor.hour in hours:
-            lo = max(cursor, start)
-            hi = min(nxt, end)
-            if hi > lo:
-                total += (hi - lo).total_seconds() / 60.0
-        cursor = nxt
+    scanned_days = 0
+    # Walk DAY buckets; an inactive day is skipped whole. Inside an active day, walk hour buckets,
+    # clamping the first and last to the true bounds.
+    day = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    while day < end:
+        next_day = day + timedelta(days=1)
+        scanned_days += 1
+        if scanned_days > _MAX_SCAN_DAYS:
+            # Anything this stale is far past every SLA in the registry; report at the cap.
+            return float(_MAX_SCAN_DAYS * 24 * 60)
+        if (weekdays is None or day.weekday() in weekdays) and (
+            months is None or day.month in months
+        ):
+            if hours is None:
+                lo, hi = max(day, start), min(next_day, end)
+                if hi > lo:
+                    total += (hi - lo).total_seconds() / 60.0
+            else:
+                cursor = day
+                while cursor < next_day and cursor < end:
+                    nxt = cursor + timedelta(hours=1)
+                    if cursor.hour in hours:
+                        lo, hi = max(cursor, start), min(nxt, end)
+                        if hi > lo:
+                            total += (hi - lo).total_seconds() / 60.0
+                    cursor = nxt
+        day = next_day
     return total
 
 
@@ -330,7 +471,10 @@ def evaluate(
             "passing it (E9.48-b)",
         )
 
-    lag = active_minutes_between(content_ts, now, contract.active_hours_utc)
+    lag = active_minutes_between(
+        content_ts, now, contract.active_hours_utc,
+        contract.active_weekdays, contract.active_months,
+    )
     if lag > contract.max_lag_minutes:
         return FreshnessReading(
             contract, content_ts, lag, STALE,
