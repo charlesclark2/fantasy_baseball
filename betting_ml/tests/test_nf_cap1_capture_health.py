@@ -127,6 +127,29 @@ class TestAPropsLossCannotBeSilent:
         assert m["prop_events"] == 0
         assert m["escalate"] is True
 
+    def test_an_explicit_argument_is_itself_a_declaration(self, monkeypatch, tmp_path):
+        """A hand-run that passes `capture_props=` has DECIDED — it must not be paged at about an
+        env flag it never consulted. Only the leg silently inheriting an absent flag escalates,
+        which is the failure that actually happened."""
+        monkeypatch.delenv(PROPS_ENV_FLAG, raising=False)
+        m = run_market_capture(
+            2026, now=_d(2026, 9, 8, 16, 15), local_root=str(tmp_path), capture_props=False,
+            fetch_game_lines=lambda: [_event("e1", "2026-09-10T00:20:00Z")],
+            fetch_props=lambda: [],
+        )
+        assert m["props_state"] == PROPS_OFF, "the explicit argument is what was declared"
+        assert m["escalate"] is False
+
+    def test_an_explicit_true_still_needs_props_to_land(self, monkeypatch, tmp_path):
+        """The other side of it: deciding explicitly does not excuse capturing nothing."""
+        monkeypatch.delenv(PROPS_ENV_FLAG, raising=False)
+        m = run_market_capture(
+            2026, now=_d(2026, 9, 8, 16, 15), local_root=str(tmp_path), capture_props=True,
+            fetch_game_lines=lambda: [_event("e1", "2026-09-10T00:20:00Z")],
+            fetch_props=lambda: [],
+        )
+        assert m["escalate"] is True
+
     def test_props_enabled_and_captured_is_healthy(self, monkeypatch, tmp_path):
         """The two-sided control: the healthy state must NOT page, or the guard is vacuous."""
         m = self._run(monkeypatch, tmp_path, "1",

@@ -53,6 +53,17 @@ BREAKS = (
         gone='    if declared == PROPS_UNDECLARED:',
     ),
     Break(
+        # `declared` is what makes an EXPLICIT `capture_props=` argument count as a declaration.
+        # Revert it to reading the env unconditionally and a hand-run that chose is paged at
+        # about a flag it never consulted.
+        "an explicit capture_props= argument counting as a declaration",
+        "quant_sports_intel_models/football/nfl/pit/market_capture.py",
+        '    declared = props_state() if capture_props is None else (\n'
+        '        PROPS_ON if capture_props else PROPS_OFF\n    )',
+        '    declared = props_state()',
+        gone='        PROPS_ON if capture_props else PROPS_OFF',
+    ),
+    Break(
         "props-enabled-but-zero-events escalation",
         "quant_sports_intel_models/football/nfl/pit/market_capture.py",
         '    elif capture_props and not manifest["prop_events"]:',

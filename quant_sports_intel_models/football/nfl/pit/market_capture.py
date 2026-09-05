@@ -202,7 +202,14 @@ def run_market_capture(
     cadence_label = cadence_label or f"{now.strftime('%a').lower()}-{now.strftime('%Y-%m-%d')}"
     # `props_state` is recorded even when the caller passes `capture_props` explicitly, so the
     # manifest always says what the ENVIRONMENT declared as well as what this run did.
-    declared = props_state()
+    #
+    # ⚠️ But only an env-DECIDED run can be UNDECLARED. An explicit `capture_props=` argument IS
+    # a declaration — a hand-run that says what it wants must not be paged at about a flag it
+    # never consulted. The escalation below is for the leg silently inheriting an absent flag,
+    # which is the failure that actually happened, not for a caller who chose.
+    declared = props_state() if capture_props is None else (
+        PROPS_ON if capture_props else PROPS_OFF
+    )
     capture_props = props_enabled() if capture_props is None else capture_props
 
     manifest = {
@@ -214,9 +221,14 @@ def run_market_capture(
     }
 
     if dry_run:
+        # MEASURED 2026-09-05 (NF-CAP1), not the pre-correction 10x figures: the Odds-API 10x
+        # multiplier applies to /historical and this leg is LIVE. The props estimate uses the
+        # board size rather than a slate, because the fan-out is unbounded (`odds_max_events` is
+        # None) — quoting a per-slate number here understates it ~10x.
         manifest["note"] = (
-            "dry-run: would spend 30 credits (game lines)"
-            + (" + ~120 credits/event (props)" if capture_props else "")
+            "dry-run: would spend 3 credits (game lines)"
+            + (" + ~10 credits/event over the whole /events board (~272 events ≈ 2,720)"
+               if capture_props else "")
         )
         return manifest
 
