@@ -427,6 +427,33 @@ spec:
         * ⛔ The interim node-3b board figures stay UNCARRIED until the registered run produces
           them properly (PM, verbatim).
 
+      🔴 NODE-4 PRECONDITION, MEASURED 2026-09-05 — THE DECISIVE RUN'S NUMBERS DEPEND ON WHICH
+      CHECKOUT'S NF1.5 POOL CACHE IT READS, AND THE TWO ON THIS LAPTOP DISAGREE.
+        * `artifacts/nf1_5_feature_cache/pool_base{b}.parquet` is GITIGNORED and `build_nf1_2_pool`
+          REBUILDS a missing file from a live upstream with no error — so a checkout is scored on
+          whatever vintage it happens to hold (the node-1 51-of-55 mechanism, and CLAUDE.md's
+          "a cache keyed on the RANGE, not the query TEXT, serves a stale column set").
+        * MEASURED: the worktree's cache (2026-07-31) and the main `dev` checkout's (2026-09-01)
+          hold IDENTICAL ROW COUNTS for every base the seven folds need (2017-2024) and differ by
+          FIVE COLUMNS the newer one has — `injury_games_served`, `injury_games_incumbent`,
+          `fp_ppr_pg_sd`, `games_sd_raw`, `_formal_discount_applied`. Two of those are the
+          NF-INJ3 / NF-INJ-NEWS-1 injury-cap columns, i.e. this story's own subject matter.
+        * IT MOVES THE ARMS. Re-scoring folds 2023-2025 on each cache: the three SCORE-USING arms
+          shift by up to 0.028 CRPS and the M1 margin by up to 0.032, while BOTH DEGENERATES are
+          BYTE-IDENTICAL on all three folds (they ignore the fitted score) — which is what locates
+          the difference in the scored arms rather than in the harness.
+        * ⇒ THE DECISIVE RUN USES THE CACHE THAT MATCHES THE CODE THAT WRITES IT — the main `dev`
+          checkout's. ⭐ The criterion is CORRECTNESS (the newer cache carries the columns the
+          current `season_projection` emits; the older one predates them), ⛔ NOT the result: it
+          happens to give `stratified` a LARGER margin on 2 of 3 folds, which is exactly why the
+          criterion is stated first and independently (E2.1-r).
+        * ⛔ NO number above is a finding about any arm — three folds, not the registered seven,
+          and the run that produced them is a CODE-PATH smoke that wrote `_smoke` and was deleted.
+        * NOW SELF-RECORDING: node 4's artifact carries a `feature_vintage` block with a CONTENT
+          FINGERPRINT (row/column structure per file), ⛔ not an mtime — INC-41's lesson on a local
+          file, and the difference above is invisible to an mtime by construction. RECORDED, ⛔
+          never gated: node 3a §1 admits no band for it, and a guard pins it out of the verdict.
+
       REMAINING FINDINGS from nodes 3-7 land here. PM triages into: checklist item on the
       parent card | merge into an existing card (name it) | a new spec. Worker sessions
       never create Trello cards.

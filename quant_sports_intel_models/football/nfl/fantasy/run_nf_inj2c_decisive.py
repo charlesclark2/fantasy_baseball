@@ -54,6 +54,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 # ⚠️ `parents[4]` is the REPO ROOT and is the house convention (90 modules use it; 4 use
 # `parents[5]`, which resolves ABOVE the repo — three of those four are this story's own lineage,
@@ -733,20 +734,42 @@ def feature_vintage() -> dict:
     artifact a build READS but never WRITES is invisible until someone looks)."""
     def _stat(d: Path) -> dict:
         if not d.exists():
-            return {"present": False, "files": 0, "newest_mtime": None,
+            return {"present": False, "files": 0, "newest_mtime": None, "fingerprint": None,
                     "note": "ABSENT — see this function's docstring for how each input fails"}
         fs = sorted(d.glob("*.parquet"))
+        # ⭐ A CONTENT FINGERPRINT, ⛔ not an mtime. INC-41's lesson, on a local file: an atomic COPY
+        # refreshes the mtime while the DATA is unchanged, and a rebuild can land the same mtime
+        # bucket with a different COLUMN SET — which is exactly the difference that matters. The two
+        # checkouts' caches were measured on 2026-09-05 to hold IDENTICAL row counts and a 5-column
+        # difference (`injury_games_served`, `injury_games_incumbent`, `fp_ppr_pg_sd`,
+        # `games_sd_raw`, `_formal_discount_applied`), which moved the scored arms while leaving both
+        # DEGENERATES byte-identical. An mtime cannot see that; a column/row fingerprint can.
+        import hashlib
+        parts = []
+        for f in fs:
+            try:
+                cols = pd.read_parquet(f).dtypes
+                parts.append(f"{f.name}:{len(cols)}:" + ",".join(sorted(map(str, cols.index))))
+            except Exception as exc:                       # a cache we cannot read is not a pass
+                parts.append(f"{f.name}:UNREADABLE:{type(exc).__name__}")
+        digest = hashlib.sha256("|".join(parts).encode()).hexdigest()[:16] if parts else None
         return {"present": True, "files": len(fs), "dir": str(d),
                 "newest_mtime": (datetime.fromtimestamp(max(f.stat().st_mtime for f in fs),
                                                         tz=timezone.utc).isoformat()
                                  if fs else None),
+                "fingerprint": digest,
+                "unreadable": [x.split(":")[0] for x in parts if ":UNREADABLE:" in x],
                 "names": [f.name for f in fs]}
     return {
         "nf1_5_pool_cache": _stat(N15._FEATURE_CACHE),
         "nf1_9_veteran_band_panel": _stat(R2._PANEL),
         "note": ("⛔ RECORDED, ⛔ NOT GATED. A run is internally consistent whatever the vintage; "
                  "this exists so a CROSS-RUN comparison can check it was the same one, and so a "
-                 "silently REBUILT pool cache is visible instead of assumed."),
+                 "silently REBUILT pool cache is visible instead of assumed. ⭐ Compare the "
+                 "`fingerprint` (row/column structure), ⛔ NOT `newest_mtime` — a copy refreshes an "
+                 "mtime while the data is unchanged (INC-41), and the difference that actually "
+                 "moved the scored arms between two checkouts was a COLUMN SET at identical row "
+                 "counts, which an mtime cannot see."),
     }
 
 

@@ -932,6 +932,47 @@ class TestTheRunRecordsTheVintageItWasScoredOn:
         assert fv["nf1_5_pool_cache"]["present"] is False
         assert fv["nf1_5_pool_cache"]["files"] == 0
 
+    def test_the_vintage_is_a_CONTENT_fingerprint_not_an_mtime(self, tmp_path) -> None:
+        """⭐ INC-41 on a local file: a COPY refreshes an mtime while the data is unchanged, and the
+        difference that actually moved the scored arms between two checkouts on 2026-09-05 was a
+        5-COLUMN delta at IDENTICAL row counts. An mtime cannot see that; a column fingerprint can.
+        """
+        import pandas as pd
+
+        d = tmp_path / "cache"
+        d.mkdir()
+        import types
+
+        pd.DataFrame({"a": [1], "b": [2]}).to_parquet(d / "pool_base2024.parquet")
+        orig = D.N15
+        try:
+            D.N15 = types.SimpleNamespace(_FEATURE_CACHE=d)
+            a = D.feature_vintage()["nf1_5_pool_cache"]["fingerprint"]
+            # same rows, one MORE column — the exact shape of the real difference
+            pd.DataFrame({"a": [1], "b": [2], "injury_games_served": [3]}).to_parquet(
+                d / "pool_base2024.parquet")
+            b = D.feature_vintage()["nf1_5_pool_cache"]["fingerprint"]
+        finally:
+            D.N15 = orig
+        assert a and b and a != b, (
+            "a 5-column difference at identical row counts did not move the fingerprint — the "
+            "record cannot distinguish the two vintages it exists to distinguish")
+
+    def test_an_unreadable_cache_file_is_named_rather_than_skipped(self, tmp_path) -> None:
+        """NF1.7 (a): a cache we cannot read is not a cache we verified."""
+        import types
+
+        d = tmp_path / "cache"
+        d.mkdir()
+        (d / "pool_base2024.parquet").write_text("not a parquet file")
+        orig = D.N15
+        try:
+            D.N15 = types.SimpleNamespace(_FEATURE_CACHE=d)
+            got = D.feature_vintage()["nf1_5_pool_cache"]
+        finally:
+            D.N15 = orig
+        assert got["unreadable"] == ["pool_base2024.parquet"]
+
     def test_the_record_says_it_is_not_a_gate(self) -> None:
         """⛔ Recording a vintage must not become a bar. It has no admissible band (node 3a §1),
         so folding it into the verdict would be a criterion invented after the registration."""
