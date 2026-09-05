@@ -229,6 +229,21 @@ def test_deploy_stamps_the_package_and_never_the_working_tree():
     assert "git rev-parse HEAD" in sh, "the marker is not derived from the packaged commit"
 
 
+def test_the_stamp_runs_AFTER_the_source_copy_that_would_overwrite_it():
+    """⚠️ ORDERING, AND ITS FAILURE IS SILENT. `cp -r app/backend "$PACKAGE_DIR/app/"` copies the
+    SENTINEL copy into the package; the stamp must overwrite it afterwards. Reversed, the copy wins
+    and every deployed build reports `packaged: false` forever — which reads as "deploy.sh was not
+    used", i.e. the marker would confidently report the opposite of the truth. Nothing else in the
+    script would fail, and the marker is precisely the thing nobody double-checks.
+    """
+    sh = _strip_sh_comments(DEPLOY.read_text())
+    copy_at = sh.index('cp -r app/backend "$PACKAGE_DIR/app/"')
+    stamp_at = sh.index('cat > "$PACKAGE_DIR/app/backend/build_info.py"')
+    assert copy_at < stamp_at, (
+        "the build-info stamp runs BEFORE the source copy that overwrites it — every deployed "
+        "build would report itself unpackaged")
+
+
 def test_the_marker_never_becomes_a_lambda_environment_variable():
     """⛔⛔ THE LANDMINE THIS DESIGN EXISTS TO AVOID, pinned so a 'simplification' cannot reintroduce it.
 

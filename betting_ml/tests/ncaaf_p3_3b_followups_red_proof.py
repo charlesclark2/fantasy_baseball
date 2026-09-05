@@ -84,6 +84,15 @@ CASES: list[tuple[str, Path, str, str, str]] = [
 
     # ⛔⛔ The E9.8-P2 landmine: `--environment` REPLACES the whole Variables map and this script
     # only calls `update-function-code`, so it cannot restore what it wiped.
+    # ⚠️ Reversed, the sentinel copy wins and EVERY deployed build reports `packaged: false` —
+    # the marker confidently reporting the opposite of the truth, with nothing else failing.
+    ("the stamp is moved ABOVE the copy that overwrites it",
+     DEPLOY,
+     'cp -r app/backend "$PACKAGE_DIR/app/"',
+     'cat > "$PACKAGE_DIR/app/backend/build_info.py" <<EOF2\nBUILD_SHA = "x"\nEOF2\n'
+     'cp -r app/backend "$PACKAGE_DIR/app/"',
+     "test_the_stamp_runs_AFTER_the_source_copy_that_would_overwrite_it"),
+
     ("deploy.sh reaches for update-function-configuration",
      DEPLOY,
      'BUILD_SHA_VALUE="$(git rev-parse HEAD 2>/dev/null || echo unknown)"',
