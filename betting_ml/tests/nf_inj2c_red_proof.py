@@ -750,6 +750,47 @@ BREAKS: list[tuple[str, Path, str, str, str, str]] = [
      "AMENDMENT LOG",
      "TestTheAmendmentDocumentSaysWhatTheCodeDoes::"
      "test_the_amendment_exists_and_the_prereg_points_at_it"),
+
+    ("the run stops recording the gitignored vintage it was scored on", _DEC,
+     '        "feature_vintage": feature_vintage(),\n',
+     "",
+     '"feature_vintage": feature_vintage()',
+     "TestTheRunRecordsTheVintageItWasScoredOn::test_the_record_says_it_is_not_a_gate"),
+
+    ("an ABSENT pool cache is omitted instead of reported absent (reads as 'not checked')", _DEC,
+     '            return {"present": False, "files": 0, "newest_mtime": None,',
+     '            return {"newest_mtime": None,',
+     '"present": False, "files": 0',
+     "TestTheRunRecordsTheVintageItWasScoredOn::"
+     "test_an_absent_input_is_reported_absent_rather_than_omitted"),
+
+    ("an UNDEFINED gate at low n is reported as a real F1 failure (NF-D20 inactivity)", _DEC,
+     "    if f1 and not f2 and not f3 and folds is not None:",
+     "    if False:",
+     "if f1 and not f2 and not f3 and folds is not None:",
+     "TestF1IsInactiveNotFailedWhenAGateCannotBeFormed::"
+     "test_at_two_folds_an_empty_metric_survivor_set_is_INACTIVE"),
+
+    ("the inactivity carve-out swallows a DEGENERATE alarm at a low fold count", _DEC,
+     "    if f1 and not f2 and not f3 and folds is not None:",
+     "    if f1 and folds is not None:",
+     "if f1 and not f2 and not f3 and folds is not None:",
+     "TestF1IsInactiveNotFailedWhenAGateCannotBeFormed::"
+     "test_the_carve_out_never_excuses_a_degenerate_survivor"),
+
+    ("the carve-out excuses EVERY F1, not just the structurally inactive one", _DEC,
+     "        if clause.wins_required is None:",
+     "        if True:",
+     "if clause.wins_required is None:",
+     "TestF1IsInactiveNotFailedWhenAGateCannotBeFormed::"
+     "test_at_the_registered_seven_folds_the_same_input_is_a_real_FAILURE"),
+
+    ("an INACTIVE control stops blocking the disposition (the carve-out becomes a pass)", _DEC,
+     '    control_failed = str(control_binding.get("state")) in ("FAILS", "UNEVALUABLE")',
+     '    control_failed = str(control_binding.get("state")) == "FAILS"',
+     '("FAILS", "UNEVALUABLE")',
+     "TestF1IsInactiveNotFailedWhenAGateCannotBeFormed::"
+     "test_an_inactive_F1_still_blocks_the_disposition"),
 ]
 
 

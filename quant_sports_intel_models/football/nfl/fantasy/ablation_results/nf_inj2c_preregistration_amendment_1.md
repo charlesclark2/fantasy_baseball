@@ -93,6 +93,21 @@ The control **FAILS** — and a failure blocks the disposition regardless of any
 a convenience: charging an arm's failure on an INJECTION-INVARIANT gate to the family's *sensitivity*
 is PLAT-CVP2 defect 1, the defect NF-INJ2b's `BLIND` badge was earned by.
 
+⭐ **F1 IS *INACTIVE*, ⛔ NOT FAILED, WHEN A GATE IN THE TABLE IS UNDEFINED AT THE FOLD COUNT**
+(added 2026-09-05, BEFORE PR #1084 merged and BEFORE the decisive run — found by the 2-fold
+code-path smoke, and checkable: §1's guard asserts the decisive artifact does not exist at this
+commit). At n ≤ 2 the calibrated fold-consistency clause declares itself UNDEFINED (MH2 H8: `2⁻ⁿ`
+already exceeds α), so it is False for **every** arm, `metric_survivors` empties **structurally**,
+and F1 fires for a reason with nothing to do with the family's sensitivity. Reporting that as *"the
+family did not detect a planted effect"* would be untrue (NF-D20: count the folds the mechanism can
+ACT on; NF1.9: a mechanism that cannot act is a finding, not an omission).
+
+⛔ This changes the **REASON**, ⛔ never the **OUTCOME** — an inactive F1 returns `UNEVALUABLE`,
+which blocks exactly as `FAILS` does, so the clause stays REFUSE-ONLY. ⛔ And it never reaches
+**F2/F3**: a degenerate clearing every gate is an alarm at any fold count and is not a fold-count
+artifact, so the carve-out is conditioned on F1 being the *only* failure. The registered **seven**
+folds define the clause (6 wins required), so F1 is a real test there.
+
 **The verdict wiring.** A control failure yields the disposition state **`CONTROL_REFUSED`**, which
 takes precedence over `DEFLATION_REFUSED` and over `DOMINATES`. A family that cannot certify a
 planted effect makes every gate reading downstream of it moot, so the control is read FIRST; the

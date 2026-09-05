@@ -713,7 +713,44 @@ def positive_control(per_fold: dict, folds: tuple[int, ...], scored: dict,
     }
 
 
-def control_binding_verdict(control: dict) -> dict:
+def feature_vintage() -> dict:
+    """RECORD the gitignored inputs this run was scored on — ⛔ not a gate, an audit trail.
+
+    ⭐ WHY. Two of node 4's inputs are gitignored, and they fail in OPPOSITE ways:
+
+      · the NF1.9 veteran PANELS (`load_realized`) RAISE when absent, naming the rebuild — a loud
+        failure, which is the safe shape;
+      · the NF1.5 POOL CACHE does NOT. `build_nf1_2_pool(use_cache=True)` REBUILDS a missing
+        `pool_base{b}.parquet` from a live upstream, logs a line, and returns — so a checkout
+        missing it is scored on a DIFFERENT feature vintage with no error anywhere. That is exactly
+        how node 1's diagnosis reproduced 51 of 55 violation counts in a fresh worktree: the four
+        misses were the arms whose points move furthest, i.e. the rows nearest the envelope.
+
+    A vintage difference does not invalidate a run — every arm in ONE run is scored on ONE vintage,
+    and the disposition is arm-vs-incumbent WITHIN that run. What it invalidates is a comparison
+    ACROSS runs. So this records what was actually read, and says so in the report, rather than
+    leaving a later reader to assume the caches were the ones node 1 used (NF-INFRA1's class: an
+    artifact a build READS but never WRITES is invisible until someone looks)."""
+    def _stat(d: Path) -> dict:
+        if not d.exists():
+            return {"present": False, "files": 0, "newest_mtime": None,
+                    "note": "ABSENT — see this function's docstring for how each input fails"}
+        fs = sorted(d.glob("*.parquet"))
+        return {"present": True, "files": len(fs), "dir": str(d),
+                "newest_mtime": (datetime.fromtimestamp(max(f.stat().st_mtime for f in fs),
+                                                        tz=timezone.utc).isoformat()
+                                 if fs else None),
+                "names": [f.name for f in fs]}
+    return {
+        "nf1_5_pool_cache": _stat(N15._FEATURE_CACHE),
+        "nf1_9_veteran_band_panel": _stat(R2._PANEL),
+        "note": ("⛔ RECORDED, ⛔ NOT GATED. A run is internally consistent whatever the vintage; "
+                 "this exists so a CROSS-RUN comparison can check it was the same one, and so a "
+                 "silently REBUILT pool cache is visible instead of assumed."),
+    }
+
+
+def control_binding_verdict(control: dict, folds: int | None = None) -> dict:
     """PRE-REGISTRATION AMENDMENT 1 §4 (b) — the control's BINDING substance, as a verdict.
 
     ⭐ THE DECLARATION RE-SCOPES THE CONTROL; IT NEVER WAIVES IT (PM ruling #6 D1, verbatim). The
@@ -728,6 +765,18 @@ def control_binding_verdict(control: dict) -> dict:
       F3  a declared DEGENERATE is among the NULL leg's survivors — amendment 1 §3's carve-out; an
           alarm H1 does not entail and the declaration does not reach.
       F4  the control did not run, or its record lacks the keys above — ⛔ never a pass (NF1.7 (a)).
+
+    ⭐ **F1 IS INACTIVE, ⛔ NOT FAILED, WHEN A GATE IN THE TABLE IS *UNDEFINED* AT THIS FOLD COUNT**
+    (NF-D20: count the folds on which the mechanism could ACT before crediting or condemning it;
+    NF1.9: a mechanism that cannot act is a finding, not an omission). At n <= 2 the calibrated
+    fold-consistency clause declares itself UNDEFINED (MH2 H8: `2^-n` already exceeds α), so it is
+    False for EVERY arm, so `metric_survivors` is empty for EVERY arm — F1 then fires for a reason
+    that has nothing to do with the family's sensitivity, and "the family did not detect a planted
+    effect" would be flatly untrue. Found by the 2-fold code-path smoke, which is what a smoke is
+    for. The registered SEVEN folds define the clause (6 wins), so F1 is a real test there.
+
+    ⚠️ This changes the REASON, ⛔ never the OUTCOME: an inactive F1 returns UNEVALUABLE, which
+    blocks exactly as FAILS does. The function stays refuse-only.
 
     ⭐ `metric_survivors`, ⛔ not `survivors`, is the F1 reading: charging an arm stopped by an
     INJECTION-INVARIANT gate to the family's SENSITIVITY is PLAT-CVP2 defect 1 — the defect that
@@ -767,6 +816,21 @@ def control_binding_verdict(control: dict) -> dict:
         "degenerate_injected_survivors": f2,
         "degenerate_null_survivors": f3,
     }
+    # ⭐ NF-D20 — is F1 even ABLE to act at this fold count? A gate that is UNDEFINED for every arm
+    # empties `metric_survivors` structurally, and an inactive check is ⛔ never a failure.
+    # ⛔ `not f2 and not f3` is LOAD-BEARING: a DEGENERATE clearing every gate is an alarm at
+    # ANY fold count and is ⛔ not a fold-count artifact, so the carve-out must never swallow
+    # it. Caught by its own guard, which is the point of writing one per clause.
+    if f1 and not f2 and not f3 and folds is not None:
+        clause = cv_power.fold_consistency_clause(int(folds))
+        if clause.wins_required is None:
+            return {"state": "UNEVALUABLE", "failures": ["F1_INACTIVE"], "checks": checks,
+                    "why": (f"at {folds} fold(s) the calibrated fold-consistency clause declares "
+                            "itself UNDEFINED (MH2 H8), so it is False for EVERY arm and "
+                            "`metric_survivors` is empty STRUCTURALLY. F1 cannot act here, so it "
+                            "is INACTIVE, ⛔ not failed — reporting 'the family did not detect a "
+                            "planted effect' would be untrue (NF-D20 / NF1.9). ⛔ Still not a "
+                            "pass: an unevaluable control blocks exactly as a failing one does.")}
     if failures:
         why = "; ".join(filter(None, [
             ("F1 — NO arm cleared every injection-MOVABLE gate at an injected effect of "
@@ -834,7 +898,7 @@ def run(con, schema: str, folds: tuple[int, ...], selections: dict, *,
     defl = deflation_blocks(per_fold, folds, arm)
     coherence_counts = {a: int(scored[a]["coherence_violating_players"] or 0) for a in B.ARMS}
     control = positive_control(per_fold, folds, scored, coherence_counts, board=brd)
-    control_binding = control_binding_verdict(control)
+    control_binding = control_binding_verdict(control, folds=len(folds))
     dom = dominance_verdict(measures)
     vdt = verdict(dominance=dom, defl=defl, control=control, control_binding=control_binding,
                   fold_wins=int((measures["M1"] or {}).get("folds_won") or 0), folds=len(folds))
@@ -856,6 +920,7 @@ def run(con, schema: str, folds: tuple[int, ...], selections: dict, *,
         "node_3b_baseline": {k: brd[k] for k in
                              ("source", "generated_at", "reproduction_pin",
                               "served_incumbent_baseline", "bands")},
+        "feature_vintage": feature_vintage(),
         "fold_n": fold_n,
         "scored": scored,
         "measures": measures,
@@ -945,6 +1010,16 @@ def write_report_md(rep: dict, path: Path) -> None:
           "null construction) is the CARDED true fix; this study does not wait for it"]
     if pc.get("reading"):
         L += ["", f"⭐ {pc['reading']}"]
+    fv = rep["feature_vintage"]
+    L += ["", "## 3b. The gitignored inputs this run was scored on", "",
+          f"- NF1.5 pool cache: {fv['nf1_5_pool_cache'].get('files')} file(s), newest "
+          f"{fv['nf1_5_pool_cache'].get('newest_mtime')}",
+          f"- NF1.9 veteran panels: {fv['nf1_9_veteran_band_panel'].get('files')} file(s), newest "
+          f"{fv['nf1_9_veteran_band_panel'].get('newest_mtime')}",
+          "", "⛔ RECORDED, ⛔ not gated. The pool cache REBUILDS itself from a live upstream when "
+          "absent, with no error — so a checkout missing it is scored on a different feature "
+          "vintage silently. A run is internally consistent either way; a CROSS-RUN comparison is "
+          "what this makes checkable.", ""]
     L += ["", "## 4. The node-3b baseline this run reads", "",
           f"- source `{rep['node_3b_baseline']['source']}`, generated "
           f"{rep['node_3b_baseline']['generated_at']}",

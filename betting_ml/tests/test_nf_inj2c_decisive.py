@@ -909,3 +909,93 @@ class TestTheControlGlueOverTheREALInstrument:
         for arm in tuple(C.DEGENERATE_ARMS) + tuple(C.REFERENCE_ARMS):
             assert out["per_fold"][arm][2019]["crps"] == per_fold[arm][2019]["crps"], (
                 f"{arm} was injected — F2/F3 would charge it for a survival the control MANUFACTURED")
+
+
+class TestTheRunRecordsTheVintageItWasScoredOn:
+    """⭐ NF-INFRA1's class, on the READ side: an artifact a build reads but never writes is
+    invisible until someone looks. Two of node 4's inputs are gitignored and fail in OPPOSITE
+    ways — the panels RAISE when absent (safe), the pool cache silently REBUILDS from a live
+    upstream (not safe). ⛔ RECORDED, ⛔ never gated: a run is internally consistent whatever the
+    vintage; what this makes checkable is a comparison ACROSS runs."""
+
+    def test_the_vintage_names_both_gitignored_inputs(self) -> None:
+        fv = D.feature_vintage()
+        assert set(fv) >= {"nf1_5_pool_cache", "nf1_9_veteran_band_panel"}
+        for key in ("nf1_5_pool_cache", "nf1_9_veteran_band_panel"):
+            assert "present" in fv[key] and "newest_mtime" in fv[key]
+
+    def test_an_absent_input_is_reported_absent_rather_than_omitted(self, monkeypatch,
+                                                                    tmp_path) -> None:
+        """An input that is not there must SAY so — a missing key reads as 'not checked'."""
+        monkeypatch.setattr(D.N15, "_FEATURE_CACHE", tmp_path / "nope")
+        fv = D.feature_vintage()
+        assert fv["nf1_5_pool_cache"]["present"] is False
+        assert fv["nf1_5_pool_cache"]["files"] == 0
+
+    def test_the_record_says_it_is_not_a_gate(self) -> None:
+        """⛔ Recording a vintage must not become a bar. It has no admissible band (node 3a §1),
+        so folding it into the verdict would be a criterion invented after the registration."""
+        fv = D.feature_vintage()
+        assert "NOT GATED" in fv["note"]
+        src = _strip_comments(_RUNNER.read_text())
+        # ⛔ NOT `"feature_vintage()" in src` — the DEFINITION line satisfies that, so the clause
+        # stayed GREEN with the call deleted from the payload (the NF-C0e wired-but-never-invoked
+        # shape; caught by the RED proof, not by review). Match the CALL SITE.
+        assert '"feature_vintage": feature_vintage()' in src, (
+            "the run no longer records the vintage it was scored on")
+        assert "feature_vintage" not in src.split("def verdict(")[1].split("\ndef ")[0], (
+            "the vintage reached the verdict — it is an audit trail, not a measure, and node 3a "
+            "§1 admits no band for it")
+
+
+class TestF1IsInactiveNotFailedWhenAGateCannotBeFormed:
+    """⭐ NF-D20 / NF1.9 — count whether the mechanism could ACT before condemning it.
+
+    At n <= 2 the calibrated fold-consistency clause is UNDEFINED (MH2 H8), so it is False for
+    EVERY arm and `metric_survivors` empties STRUCTURALLY. Reporting that as "the family did not
+    detect a planted effect" is untrue. Found by the 2-fold code-path smoke.
+
+    ⛔ The distinction changes the REASON, never the OUTCOME — both still block."""
+
+    def test_at_two_folds_an_empty_metric_survivor_set_is_INACTIVE(self) -> None:
+        got = D.control_binding_verdict(_control(metric_survivors=[], survivors=[]), folds=2)
+        assert got["state"] == "UNEVALUABLE" and got["failures"] == ["F1_INACTIVE"]
+        assert "INACTIVE" in got["why"] and "UNDEFINED" in got["why"]
+
+    def test_at_the_registered_seven_folds_the_same_input_is_a_real_FAILURE(self) -> None:
+        """Non-vacuity: the clause must DISCRIMINATE, or the carve-out excuses every F1."""
+        got = D.control_binding_verdict(_control(metric_survivors=[], survivors=[]), folds=7)
+        assert got["state"] == "FAILS" and got["failures"] == ["F1"]
+
+    def test_an_inactive_F1_still_blocks_the_disposition(self) -> None:
+        dom = {"state": "DOMINATES", "by_measure": {}, "regressed_measures": [],
+               "unevaluable_measures": []}
+        defl = {"binding": {"dsr_binding": 0.99, "dsr_min": 0.95, "pbo": 0.01, "pbo_max": 0.2}}
+        v = D.verdict(dominance=dom, defl=defl, control={"verdict": "BLIND"},
+                      control_binding=D.control_binding_verdict(
+                          _control(metric_survivors=[], survivors=[]), folds=2),
+                      fold_wins=2, folds=2)
+        assert v["state"] == "CONTROL_REFUSED", (
+            "an INACTIVE control was scored as a pass — the carve-out must change the REASON, "
+            "never the outcome (it stays refuse-only)")
+
+    def test_the_carve_out_never_excuses_a_degenerate_survivor(self) -> None:
+        """⛔ F2/F3 are NOT fold-count artifacts: a degenerate clearing every gate is an alarm at
+        any n, so the inactivity carve-out must not swallow it."""
+        got = D.control_binding_verdict(
+            _control(metric_survivors=[], survivors=[],
+                     null_control_survivors=["mvp1_null"]), folds=2)
+        assert "F3" in got["failures"] and got["state"] == "FAILS"
+
+    def test_the_runner_passes_the_fold_count(self) -> None:
+        src = _strip_comments(_RUNNER.read_text())
+        assert "control_binding_verdict(control, folds=len(folds))" in src
+
+
+def test_the_amendment_records_the_F1_inactivity_carve_out() -> None:
+    """The document must say what the code does — a carve-out present only in code is a rule a
+    later reader cannot audit against the registration."""
+    flat = _flat(_AMENDMENT.read_text())
+    assert _flat("F1 IS *INACTIVE*, ⛔ NOT FAILED") in flat
+    assert _flat("never reaches") in flat and "F2/F3" in flat
+    assert _flat("changes the **REASON**, ⛔ never the **OUTCOME**") in flat
