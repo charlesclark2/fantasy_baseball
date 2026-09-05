@@ -351,12 +351,28 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     import os
+    # ⭐ `--publish` REQUIRES AN EXPLICIT `--s3-bucket`, and will NOT inherit `$CACHE_BUCKET`.
+    #
+    # NF1.7's lesson is that `--publish` with NO bucket resolved must be a hard error rather than a
+    # silent no-op. This is the SAME hazard facing the other way, and it is the one that actually
+    # bit during this story's build: `$CACHE_BUCKET` is set in a normal working shell, so a
+    # `--publish` intended to exercise the REFUSAL path resolved a bucket from the environment and
+    # reached the LIVE prod api-cache instead. An outward-facing action must not have its target
+    # chosen by an environment variable the caller cannot see in the command they typed — that is
+    # the documented-but-never-set class (`W7B_LAKEHOUSE_S3`) pointed at a publish.
+    #
+    # ⚠️ `$CACHE_BUCKET` IS STILL HONOURED FOR STAGING, which is the safe direction: a run without
+    # `--publish` uses it only to print what WOULD upload. Only the destination of a real write has
+    # to be spelled out.
     bucket = args.s3_bucket or os.environ.get("CACHE_BUCKET")
-    if args.publish and not bucket:
+    if args.publish and not args.s3_bucket:
         raise SystemExit(
-            "--publish was passed but NO BUCKET resolved (--s3-bucket / $CACHE_BUCKET is unset or "
-            "empty), so nothing would upload and the run would have looked successful. Re-run with "
-            "the bucket named explicitly:\n"
+            "--publish requires --s3-bucket to be passed EXPLICITLY; it deliberately does not "
+            "inherit $CACHE_BUCKET"
+            + (f" (which is currently set to {os.environ['CACHE_BUCKET']!r})"
+               if os.environ.get("CACHE_BUCKET") else " (which is unset)")
+            + ".\n\nA publish reaches the LIVE prod api-cache, so its target must be named in the "
+            "command that performs it rather than inherited from the shell. Re-run with:\n"
             "  --s3-bucket credence-prod-s3-api-cache --publish"
         )
 

@@ -560,3 +560,37 @@ def test_the_builder_emits_every_field_the_contract_declares():
     # …and every PAID field is actually populated, not merely present as a declared null.
     assert all(rows[0][f] is not None for f in WS.C.PAID_WEEKLY_PLAYER_FIELDS)
     WS.C.NflWeeklyPlayer.model_validate(rows[0])
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 10. A publish must name its own destination
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+def test_publish_refuses_to_inherit_the_bucket_from_the_environment(monkeypatch):
+    """⭐ AN OUTWARD-FACING ACTION MUST NAME ITS TARGET IN THE COMMAND THAT PERFORMS IT.
+
+    NF1.7's lesson is that `--publish` with no bucket resolved must be a hard error rather than a
+    silent no-op. This is the same hazard facing the other way, and it is the one that actually bit
+    while this story was being built: `$CACHE_BUCKET` is set in a normal working shell, so a
+    `--publish` intended to exercise the REFUSAL path resolved a bucket from the environment and
+    reached the LIVE prod api-cache. A destination chosen by an invisible environment variable is
+    the documented-but-never-set class pointed at a publish.
+
+    ⚠️ Two-sided: the env var is still honoured for STAGING, which is the safe direction — only a
+    real write has to be spelled out.
+    """
+    from quant_sports_intel_models.football.nfl.fantasy import run_weekly_serving as R
+
+    monkeypatch.setenv("CACHE_BUCKET", "credence-prod-s3-api-cache")
+
+    def _explode(*a, **k):  # a refusal must happen BEFORE any build work
+        raise AssertionError("build() ran — the refusal came too late to prevent a publish")
+
+    monkeypatch.setattr(R, "build", _explode)
+    with pytest.raises(SystemExit, match="does not inherit"):
+        R.main(["--publish"])
+    # …and the error names the value that would have been used, so the reader sees what they nearly
+    # published to rather than being told only that something was missing.
+    monkeypatch.delenv("CACHE_BUCKET")
+    with pytest.raises(SystemExit, match="unset"):
+        R.main(["--publish"])

@@ -41,6 +41,7 @@ _ROUTER = _REPO / "app/backend/routers/fantasy.py"
 _GUARDRAILS = _REPO / "app/backend/services/cost_guardrails.py"
 _CDN = _REPO / "frontend/app/api/public/[...path]/route.ts"
 _SERVING = _FAN / "weekly_serving.py"
+_RUNNER = _FAN / "run_weekly_serving.py"
 _FRESH = _REPO / "betting_ml/monitoring/nfl_weekly_freshness.py"
 
 _G_CONTRACT = _TESTS / "test_nf_c6_ph2_weekly_contract.py"
@@ -143,6 +144,12 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "    same_week = train[train[\"week\"] == target.week]",
      "    same_week = train",
      f"{_G_SERVING}::test_the_coverage_report_separates_a_serve_only_null_from_a_structural_one"),
+
+    ("--publish silently inherits $CACHE_BUCKET again (the bug that published to prod mid-story)",
+     _RUNNER,
+     "    if args.publish and not args.s3_bucket:",
+     "    if args.publish and not bucket:",
+     f"{_G_SERVING}::test_publish_refuses_to_inherit_the_bucket_from_the_environment"),
 
     ("the builder stops emitting the paid quantile vector (a declared-null leak from the writer)",
      _SERVING,
