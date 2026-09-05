@@ -120,7 +120,7 @@ export const FIXTURES = {
   ncaafSlateDegraded: () => fixture("ncaaf-slate-degraded.synthetic.json"),
   // ⭐ NCAAF-P3.3 — the team stats page. THREE fixtures, split for the same reason the slate is:
   //
-  //   ncaafTeam68 / ncaafTeam2449   CAPTURED verbatim from production on 2026-09-03, the morning
+  //   ncaafTeam68 / ncaafTeam2449   CAPTURED verbatim from production, RE-TAKEN 2026-09-04 by
   //                                 the route went live. 68 is a 2026 REALIGNMENT MOVER (Mountain
   //                                 West -> Pac-12) whose schedule is wholly upcoming; 2449 is NEW
   //                                 TO FBS and has a completed game, so the played/upcoming split

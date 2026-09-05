@@ -1,7 +1,7 @@
 {
   "captured_from": "https://api.credencesports.com",
-  "captured_at": "2026-09-03T05:24:52.749Z",
-  "how": "node e2e/fixtures/capture-fixtures.mjs --only ncaaf-team",
+  "captured_at": "2026-09-04T06:52:57.857Z",
+  "how": "node e2e/fixtures/capture-fixtures.mjs --only ncaaf-team-",
   "anonymous": true,
   "files": [
     {
@@ -72,18 +72,18 @@
     {
       "file": "ncaaf-team-2449.json",
       "url": "https://api.credencesports.com/ncaaf/teams/2449",
-      "bytes": 11615,
-      "sha256_16": "b8f9b99e86622361",
+      "bytes": 12086,
+      "sha256_16": "8b6be2e8a1789f98",
       "note": "NCAAF-P3.3 — a first-year FBS program with one game played. ⚠️ ON RE-CAPTURE: keep BOTH a completed game and an upcoming one in the schedule. A fixture where every game is played (or none is) cannot tell a component that renders a result from one that renders whatever it is handed — the same argument the mixed market slate rests on.",
-      "captured_at": "2026-09-03T05:24:52.749Z"
+      "captured_at": "2026-09-04T06:52:57.857Z"
     },
     {
       "file": "ncaaf-team-68.json",
       "url": "https://api.credencesports.com/ncaaf/teams/68",
-      "bytes": 10976,
-      "sha256_16": "fd88f85d4bcb910b",
+      "bytes": 11438,
+      "sha256_16": "877dc5984222f45e",
       "note": "NCAAF-P3.3 — a 2026 conference mover with a wholly-upcoming schedule. ⚠️ ON RE-CAPTURE: keep a team whose `conference` differs from its prior season and whose `conference_source` is `scd2_dim` — the realignment clause reads this payload's own values, and a fixture whose conference never moved could not tell a point-in-time read from a `is_current` one.",
-      "captured_at": "2026-09-03T05:24:52.749Z"
+      "captured_at": "2026-09-04T06:52:57.857Z"
     },
     {
       "file": "picks-featured.json",

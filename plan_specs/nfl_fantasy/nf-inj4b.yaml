@@ -8,7 +8,7 @@ metadata:
   name: nf-inj4b
   vertical: nfl_fantasy
   card: https://trello.com/c/PENDING   # PM links at kickoff
-  status: ACCEPTED
+  status: CLOSED(SHIP_CANDIDATE, deploy-held)
 spec:
   description: >
     Fresh forward registration of the designation→games-missed duration
@@ -148,8 +148,63 @@ spec:
       - id: 5-closeout
         desc: "Verdict + findings into closeout.followUps; NF-C9 follow-up named if shipped; operator summary."
   closeout:
-    verdict: null
+    verdict: >
+      SHIP_CANDIDATE — DEPLOY-HELD. 9/9 registered gates pass under the
+      matched-resolution anchor; 34/34 of NF-INJ4's published figures
+      reproduce at the artifact's own 6-decimal resolution. ⛔ THE HONESTY
+      CLAUSE HELD AND IS STATED IN THE RECORD: field, folds and data were
+      unchanged (measured two ways — imports + a substrate vintage check), so
+      every number was already known and only the gate flipped. This bought a
+      PROPERLY-REGISTERED RECORD of an already-measured result, never fresh
+      confirmation. best_alpha=0; the served Q/D/O discount is still EXACTLY
+      ZERO and no production caller passes the designation channel.
+      compose_availability_caps is WIRED (default-off) with the absence guard
+      flipped to a presence guard in the same commit. NF-INJ4's record stands
+      unedited; only its anchor clause is superseded, forward.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      PM triage. (1) ⭐ INSTRUMENT — the PLAT-CVP2 positive control's
+      null-control leg is MIS-SPECIFIED for any caller defining
+      inject(0)=identity: the null payload is then the REAL DATA, so a study
+      that SHIPS cannot avoid VACUOUS (its winner clears every gate on the
+      real data, hence survives the null payload) — that direction is EXACT.
+      ⚠️ The converse is not, and the distinction matters because an
+      over-stated instrument finding propagates: VACUOUS says only that SOME
+      arm cleared every gate on the real data, a statement about the study's
+      RESULT and never about the gate family's SENSITIVITY, which is what the
+      leg is read as measuring. Either way the leg carries no information
+      about the gate family for such a caller. Measured here: the family does NOT
+      certify noise (0 survivors on 5 mechanism-absent shuffles). The remedy
+      is a MECHANISM-ABSENT null payload (a permutation) rather than an
+      UN-INJECTED one — a change to the instrument's contract or to callers'
+      inject(); a FORWARD decision, deliberately not adopted after seeing the
+      badge. NF-INJ4's own clean null leg was clean for the WRONG REASON (its
+      failing oracle clause blocked every arm on the identity payload too),
+      which is why this was invisible until the defect was removed. (2) ⭐
+      NF-C9's disclosure guard bans three TOKEN SPELLINGS in
+      season_projection.py; the designation channel is now wired under a
+      different name, so that scan can be routed around. This story added the
+      stronger guard (no production caller passes designation_games), but
+      NF-C9's own guard should be re-keyed onto the wiring rather than the
+      tokens. (3) NF-C9 COPY retires the moment the discount ships — "we hold
+      the designation and do not price it" becomes false on every surface;
+      named in the closeout, not silently. (4) The NF-W0a weekly injuries
+      capture has fired ONCE EVER and holds ZERO 2026 rows (re-measured
+      2026-09-04) — the 2026 re-test and all monitoring value depend on it
+      running weekly; operator lane (Sprint card DFZDxfRZ). (5) PLAT-CVP2's
+      name-heuristic retirement trigger (card YAxmU2Cv) — this is the SECOND
+      registration consuming explicit gate_classes, partition_source
+      "gate_classes", partition_verified true. (6) ESPN attribution (card
+      yjZo7pk9) still owns the 25% substrate; untouched, as registered. (7)
+      ⭐ A FOURTH way a RED PROOF LIES, repo-wide: pytest exits NON-ZERO on
+      an unresolvable node id, so a guard that has been RENAMED, MOVED or
+      DELETED scores a perfect RED forever. Caught live — NF-INJ4's own red
+      proof reported 14/14 with one case pointing at a test this story had
+      renamed. Both proofs here now assert every named node id RESOLVES, in
+      the BASELINE phase (a mutation that trips a module assert legitimately
+      breaks collection). Re-anchoring that case then exposed two further
+      real defects: a stale MUTATION written against the retired property,
+      and a caller scan that resolved the repo root one level too high so it
+      iterated an EMPTY set and passed on nothing (DSR-CONV #690). Worth
+      propagating to the repo's other red proofs; it belongs beside #682 /
+      #815 / E11.24 in the standing "three ways a red proof lies" note,
+      which is now four.

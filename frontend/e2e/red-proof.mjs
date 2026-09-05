@@ -3428,6 +3428,96 @@ const CASES = [
     to: "",
     grep: "a withheld cell adds EXACTLY ONE note row",
   },
+  // ══ NCAAF-P3.3b — the ratings-update stamp ════════════════════════════════════════════════
+  //
+  // ⭐ EVERY ANCHOR BELOW IS UNIQUE IN ITS FILE, verified before these were written. This harness
+  // applies ONE first-occurrence `String.replace` (see the note at the bottom of the file), so a
+  // shared anchor lands the break on the WRONG symbol and the run comes back green reporting a
+  // FALSE "the suite is vacuous" — the most dangerous direction, because it reads as a finding and
+  // invites weakening a guard that was fine.
+  //
+  // ⚠️ THE DEFECT CLASS THESE GUARD IS "A PLAUSIBLE DATE OVER AN UNREAD ARTIFACT". A stamp that
+  // renders nothing is visibly broken; a stamp that renders TODAY, or the serving write's own
+  // clock, or the vintage repeated under "next update", looks completely normal and is a stronger
+  // claim than the data supports. Three of the five below are that shape.
+  {
+    id: "ncaaf-standing-absence-renders-as-a-blank",
+    shipped: "NCAAF-P3.3 — the named absence this branch exists to render",
+    // ⭐ ADDED BY P3.3b BECAUSE THAT CLAUSE WAS RE-ANCHORED, and a re-anchor is precisely when a
+    // guard quietly stops guarding. The original read the absence off the CAPTURE and announced
+    // itself when that stopped being true; the 2026-09-04 re-capture acquired standings, so it
+    // fired and was retired BY RE-CAPTURING. The branch is now reached through a `transform`-
+    // stripped payload, and the claim "the branch stays covered" is worth exactly as much as this
+    // case: without it, "we synthesized the state instead" would be an assertion about a test
+    // nobody had watched fail.
+    detail: "Renders a blank where the named standing-absence belongs (NF-C6b).",
+    file: "components/ncaaf/team-strength.tsx",
+    from: '          <p data-testid="ncaaf-team-standing-absent" className="text-[11px] text-gray-500">\n            {STANDING_UNAVAILABLE}\n          </p>',
+    to: "          {null}",
+    grep: "renders the named absence, not a blank",
+  },
+  {
+    id: "ncaaf-ratings-stamp-hardcodes-a-date",
+    shipped: "NCAAF-P3.3b — the defect the whole story exists to avoid, in its simplest form",
+    // The reason the stamp is DERIVED rather than written: a cadence sentence is right on the day
+    // it is typed and free to be wrong forever after. #1081's commit message states the P1.2 fit
+    // "rolls forward weekly" — it does not, and that claim was already in the repo when P3.3b was
+    // specified off it. A typed date is the same mistake with a shorter shelf life.
+    detail: "Replaces the payload-read vintage with a date literal.",
+    file: "lib/ncaaf-team.ts",
+    from: "    asOf: isoDateOf(strength?.ratings_as_of),",
+    to: '    asOf: "2026-09-04",',
+    grep: "invents no date|payload's own date",
+  },
+  {
+    id: "ncaaf-ratings-stamp-ignores-the-payload",
+    shipped: "NCAAF-P3.3b — a stamp that survives a change of vintage",
+    // The wired-≠-invoked shape (NF-C0e) on the stamp itself: the component is imported, mounted
+    // and rendering, and its output no longer tracks the field it exists to publish. A vintage
+    // that changed would move nothing on screen, which is indistinguishable from a frozen artifact.
+    detail: "Renders the stamp from nothing, so no vintage can ever reach it.",
+    file: "components/ncaaf/ratings-vintage.tsx",
+    from: "  const stamp = ratingsStamp(strength)",
+    to: "  const stamp = ratingsStamp(null)",
+    grep: "payload's own date",
+  },
+  {
+    id: "ncaaf-ratings-stamp-not-rendered",
+    shipped: "NCAAF-P3.3b — the stamp declared, owned, tested, and never mounted",
+    // A field can be declared on the contract, produced by the writer, typed on the client and
+    // still reach no reader — the class NF-C0e measured twice. The cheapest way for this story to
+    // silently un-ship is for the one call site to be dropped in a later refactor of the block.
+    detail: "Removes the stamp from the strength block.",
+    file: "components/ncaaf/team-strength.tsx",
+    from: "      <NcaafRatingsVintage strength={strength} />",
+    to: "      {null}",
+    grep: "renders on BOTH the played",
+  },
+  {
+    id: "ncaaf-ratings-next-update-echoes-the-vintage",
+    shipped: "NCAAF-P3.3b — 'next update' quietly answered with the LAST update",
+    // ⛔ THE OVERCLAIM, and the one a copy-paste would produce. It reads as a working stamp and
+    // promises a refresh on a date that has already passed — worse than the absence it replaces,
+    // because a stated absence is honest and this is confidently wrong.
+    detail: "Falls back to the as-of instant when no next update is scheduled.",
+    file: "lib/ncaaf-team.ts",
+    from: "    nextUpdate: isoDateOf(strength?.ratings_next_update),",
+    to: "    nextUpdate: isoDateOf(strength?.ratings_next_update ?? strength?.ratings_as_of),",
+    grep: "no scheduled next update",
+  },
+  {
+    id: "ncaaf-ratings-unreadable-vintage-becomes-today",
+    shipped: "NCAAF-P3.3b — an unread artifact rendered as today's date",
+    // ⭐ THE WORST OF THE FIVE. When the lake read fails the writer sends null, and a client that
+    // filled that with `new Date()` would publish "these ratings are current" on precisely the
+    // occasion we could not tell. NF1.7(a) as a render: a value that could not be read is not a
+    // value that may be guessed, and the fabricated one is the one a reader would act on.
+    detail: "Substitutes today for a vintage the payload does not carry.",
+    file: "lib/ncaaf-team.ts",
+    from: '  if (typeof value !== "string") return null',
+    to: '  if (typeof value !== "string") return new Date().toISOString().slice(0, 10)',
+    grep: "invents no date",
+  },
   {
     id: "csv-note-fires-on-a-file-that-withholds-nothing",
     shipped: "NF-CSV1 — a note claiming a withholding the file does not contain",

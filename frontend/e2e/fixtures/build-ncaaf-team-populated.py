@@ -56,6 +56,13 @@ from quant_sports_intel_models.football.ncaaf.serving import team_payloads  # no
 
 OUT = REPO / "frontend/e2e/fixtures/api/ncaaf-team-populated.synthetic.json"
 
+#: NCAAF-P3.3b — the MEASURED vintage of the served ratings artifact, pinned. Read from inside
+#: `ncaaf/derived/team_strength_week`'s Delta transaction log on 2026-09-04 (commit version 67),
+#: never from an S3 `LastModified` (INC-41). It agrees with the P1.2 re-fit date the snapshot job's
+#: docstring and `BOX_OPERATIONS.md §10` both record independently, which is what makes it a
+#: cross-checked measurement rather than a number someone chose.
+RATINGS_AS_OF = "2026-08-18T06:16:36.806000+00:00"
+
 TEAM_ID, SEASON = 68, 2025
 
 #: The fit-level context, identical on every week row (it is a property of the season's fit).
@@ -199,6 +206,19 @@ def main() -> int:
         dim_row=_DIM,
         prior_season_dim_row=_DIM,
         marts_available=True,
+        # ⭐ NCAAF-P3.3b — THE PRODUCTION SHAPE AFTER THE PHASE-A DEPLOY, and it is deliberately
+        # ASYMMETRIC: a vintage, and NO next update. That is not a half-built fixture — it is what
+        # the writer emits, because `ncaaf_ratings_vintage.RATINGS_REFRESH_SCHEDULES` is empty by
+        # MEASUREMENT (nothing in `pipeline/` re-fits P1.2; it is an operator step). Serving a
+        # `ratings_next_update` here would make the fixture assert a shape production does not have.
+        #
+        # ⚠️ THE VALUE IS THE REAL ONE, PINNED — not invented. Read off the lake on 2026-09-04:
+        # `ncaaf/derived/team_strength_week` last committed at this instant (version 67), which is
+        # the operator's documented 2026-08-18 P1.2 re-fit. Pinned for the same reason
+        # `generated_at` below is: a generated fixture must be reproducible, and a live lake read
+        # would make it depend on AWS and on the day it ran.
+        ratings_as_of=RATINGS_AS_OF,
+        ratings_next_update=None,
     )
     # ⭐ THE STANDING IS A PROPERTY OF THE WHOLE BOARD, so it cannot come from a one-team build —
     # `attach_standings` is what the writer runs, and it needs a population to rank within. Rather
@@ -234,6 +254,15 @@ def main() -> int:
             f"branch of all four blocks (reason={blob[block]['reason']!r})")
     assert blob["schedule"]["n_completed"] and blob["schedule"]["n_upcoming"], (
         "the schedule must mix played and upcoming games")
+    # ⛔ NON-VACUITY. This fixture is the ONLY route to the stamp's PRESENT arm (both captures
+    # predate the Phase-A deploy and carry neither field), so a build that silently dropped the
+    # vintage would leave that arm passing on nothing — the guard-vacuity class this repo keeps
+    # re-learning. Assert the asymmetry in BOTH directions, not just the half that is set.
+    assert blob["strength"]["ratings_as_of"] == RATINGS_AS_OF, (
+        "the vintage did not survive the builder — the stamp's PRESENT arm would test nothing")
+    assert blob["strength"]["ratings_next_update"] is None, (
+        "this fixture must carry NO next update: that is production's real shape, and a fabricated "
+        "one here would assert a schedule that does not exist")
 
     OUT.write_text(json.dumps(blob, indent=2) + "\n")
     print(f"wrote {OUT.relative_to(REPO)}  {OUT.stat().st_size} bytes")

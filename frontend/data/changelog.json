@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "improved",
+        "text": "The college-football team pages now say WHEN their ratings last took in games. The rating, its range and both rankings only move when the model is re-fit, so between fits a team can win on Saturday while all four sit unchanged beside that win in its own schedule \u2014 every number correct, and the page still misleading, because a rating printed today reads as a rating worked out today. Each page now carries the date its ratings were last updated, read from the ratings themselves rather than written into the page, so it stays right through bye weeks and cancelled games. Where we have no scheduled next update we say so plainly instead of naming a date, and the stamp never promises the next update will change anything \u2014 a re-fit over a bye week produces the same number."
+      },
+      {
+        "tag": "improved",
         "text": "The college-football team pages now say where a team sits \u2014 in FBS and in its own conference \u2014 and, as with the rating itself, never without the range around it. That matters more than it sounds: before anyone has played, the middle team's plausible placement spans more than half the country, so a bare ranking would be close to noise presented as a fact. You get the ranking and how firmly we hold it, and the range tightens on its own as games are played. The page also explains what the rating means in the one way that makes it usable \u2014 the gap between two teams' ratings is roughly the margin we would expect between them. We also fixed the strength curve, which was drawn stretched out of shape and carried a warning line that belonged to the game pages."
       },
       {
