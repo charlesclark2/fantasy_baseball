@@ -1,0 +1,175 @@
+{
+  "story": "NF-C6-PH2",
+  "generated_at": "2026-09-05T18:39:52+00:00",
+  "model_family": "nfl_fantasy",
+  "target": "weekly_projection",
+  "entry": {
+    "served_version": "nfl_fantasy_weekly_v1",
+    "base_model_version": "nfl_fantasy_nf_w1_v1",
+    "point_model_version": "nf_w1_lgbm_hurdle",
+    "interval_model_version": "nf_w1_lgbm_hurdle",
+    "component_head_status": "advisory_ungated",
+    "projection_source": "nf_w1_weekly",
+    "positions": [
+      "QB",
+      "RB",
+      "WR",
+      "TE"
+    ],
+    "scoring_system_id": "ppr",
+    "artifact_uri": "s3://credence-prod-s3-api-cache/fantasy/nfl/weekly/",
+    "fallback_artifact_uri": "repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w1_weekly_bakeoff.json",
+    "promotion_status": "challenger",
+    "generated_at": "2026-09-05T18:39:52.898924+00:00",
+    "staged_digest": "48954c1bfc0c18791cb4d9cae35eef78a9dc41933fad94701e4eceb6befb0c23"
+  },
+  "ready_to_promote": false,
+  "gates": {
+    "n": 10,
+    "passed": 6,
+    "failed": 0,
+    "unevaluable": 4,
+    "gates": [
+      {
+        "gate": "model_stamp_consistency",
+        "status": "PASS",
+        "detail": "artifact stamp agrees with the registry on 1 lineage field(s)",
+        "data": {
+          "checked": [
+            "served_version"
+          ]
+        }
+      },
+      {
+        "gate": "projection_source_consistency",
+        "status": "PASS",
+        "detail": "payload lineage agrees with the registry (model_version=None, projection_source='nf_w1_weekly')"
+      },
+      {
+        "gate": "universe_count",
+        "status": "UNEVALUABLE",
+        "detail": "universe counts unavailable on one or both sides"
+      },
+      {
+        "gate": "rookie_coverage",
+        "status": "PASS",
+        "detail": "95 rookie(s), unchanged",
+        "data": {
+          "n_rookies": 95
+        }
+      },
+      {
+        "gate": "interval_floors",
+        "status": "PASS",
+        "detail": "all per-group coverage floors met after the change (floor rule: NF-D22 power-derived exact one-sided Binomial acceptance bound)",
+        "data": {
+          "floor_rule": "NF-D22 power-derived exact one-sided Binomial acceptance bound"
+        }
+      },
+      {
+        "gate": "scoring_parity",
+        "status": "UNEVALUABLE",
+        "detail": "no scoring-parity measurement supplied"
+      },
+      {
+        "gate": "track_record_copy_compatible",
+        "status": "PASS",
+        "detail": "copy carries no forbidden market/edge claim"
+      },
+      {
+        "gate": "rollback_artifact_exists",
+        "status": "PASS",
+        "detail": "rollback artifact present at repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w1_weekly_bakeoff.json",
+        "data": {
+          "uri": "repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w1_weekly_bakeoff.json"
+        }
+      },
+      {
+        "gate": "live_payload_matches_staged",
+        "status": "UNEVALUABLE",
+        "detail": "one side has no digest (pre-publish, or the live read failed) \u2014 cannot claim the live payload matches what was reviewed"
+      },
+      {
+        "gate": "clients_agree_on_version",
+        "status": "UNEVALUABLE",
+        "detail": "neither client version could be read"
+      }
+    ]
+  },
+  "unresolvable_reasons": {
+    "live_payload_matches_staged": "post-publish by construction (POST_PUBLISH_GATE_NAMES)",
+    "clients_agree_on_version": "post-publish, and one-sided even then \u2014 there is no weekly frontend yet; it is the next story",
+    "universe_count": "no previous weekly universe exists; nothing weekly has ever served, and inventing a baseline would fake the comparison",
+    "scoring_parity": "not applicable: the weekly point and the weekly component line come from INDEPENDENT heads, so the point is not derived from the line. See `component_coherence` for the question that IS answerable"
+  },
+  "interval_revalidation": {
+    "pass": true,
+    "misses": [],
+    "floor_rule": "NF-D22 power-derived exact one-sided Binomial acceptance bound",
+    "nominal": 0.8,
+    "positions": {
+      "QB": {
+        "coverage": 0.8173,
+        "n": 5485,
+        "power_floor": 0.7911,
+        "pass": true,
+        "margin_rows": 144
+      },
+      "RB": {
+        "coverage": 0.8494,
+        "n": 8591,
+        "power_floor": 0.7929,
+        "pass": true,
+        "margin_rows": 485
+      },
+      "WR": {
+        "coverage": 0.8523,
+        "n": 12827,
+        "power_floor": 0.7942,
+        "pass": true,
+        "margin_rows": 745
+      },
+      "TE": {
+        "coverage": 0.8827,
+        "n": 7649,
+        "power_floor": 0.7924,
+        "pass": true,
+        "margin_rows": 691
+      }
+    },
+    "populations_read_by_the_gate": [],
+    "note": "per-POSITION, so `interval_floors`' rookies/veterans/kdst loop reads nothing; the misses handed to it are computed here against the NF-D22 floor and the per-position detail is recorded so the verdict is checkable rather than asserted"
+  },
+  "supplementary_lineage_check": {
+    "evaluable": true,
+    "checked": [
+      "served_version",
+      "base_model_version",
+      "point_model_version",
+      "interval_model_version"
+    ],
+    "mismatches": [],
+    "pass": true
+  },
+  "component_coherence": {
+    "evaluable": true,
+    "n": 503,
+    "mean_signed_diff": -0.7709,
+    "median_abs_diff": 0.6016,
+    "p95_abs_diff": 3.7101,
+    "max_abs_diff": 7.9164,
+    "interpretation": "the points distribution and the component head are INDEPENDENT models; this is a coherence diagnostic, never a parity gate"
+  },
+  "staged": {
+    "manifest_present": true,
+    "season": 2026,
+    "week": 1,
+    "n_players": 503,
+    "staged_digest": "48954c1bfc0c18791cb4d9cae35eef78a9dc41933fad94701e4eceb6befb0c23"
+  },
+  "not_promoted_here": {
+    "nfl_fantasy_w2b_v1": "weekly injury-rate arm \u2014 its own notes require a LIVE stamped injury forward-capture and pre-flip snapshots beyond this story; stays CHALLENGER",
+    "nfl_fantasy_w6c_v1": "per-stat distributions (a different target) \u2014 blocked on the DEFERRED re-scoring consumer; nothing here reads them; stays CHALLENGER",
+    "nfl_fantasy_w6d_v1": "as w6c; stays CHALLENGER"
+  }
+}

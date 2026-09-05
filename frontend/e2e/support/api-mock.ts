@@ -1753,6 +1753,11 @@ function cdnPathToApiPath(pathname: string): string | undefined {
   if (rest === "manifest") return "/fantasy/nfl/manifest"
   if (rest === "projections") return "/fantasy/nfl/projections"
   if (rest === "board") return "/fantasy/nfl/board"
+  // NF-C6-PH2 — the two FREE weekly reads. An unmapped CDN surface does not fail loudly: the
+  // request slips past the interceptor, lands on the real Next handler and reaches for the REAL
+  // API, so the suite keeps passing while quietly ceasing to be hermetic.
+  if (rest === "weekly-manifest") return "/fantasy/nfl/weekly/manifest"
+  if (rest === "weekly-projections") return "/fantasy/nfl/weekly/projections"
   if (rest === "track-record/manifest") return "/fantasy/nfl/track-record/manifest"
   if (/^track-record\/\d{4}$/.test(rest)) return `/fantasy/nfl/${rest}`
   return undefined
