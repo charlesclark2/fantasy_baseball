@@ -152,6 +152,32 @@ def resolve_target_week(schedule: pd.DataFrame, *, now: datetime | None = None) 
 
 # ── 2. the serving matrix, and the proof its target week's outcome is inert ──────────────────────
 
+#: The size of the synthetic outcome `assert_no_target_week_outcome` injects. Deliberately huge and
+#: unmistakable: a leak of a 99-PPR week is ~13 orders of magnitude above the tolerance below.
+INJECTED_POINTS = 99.0
+
+#: Tolerance for the outcome-independence comparison.
+#:
+#: ⭐ WHY IT IS NOT BIT-EXACT, AND WHY THAT IS NOT A LOOSENING. Two champion features —
+#: `prior_week_box__ppr_sum_s2d` and its derived mean — are computed as `cumsum() − own`, i.e. the
+#: target week's own value is ADDED and then SUBTRACTED rather than excluded. That cancels exactly
+#: in real arithmetic and only ALMOST exactly in floating point, so injecting 99.0 leaves a
+#: cancellation residue of order 1e-13 on a mid-season row.
+#:
+#: ⚠️ THE FIRST REAL BUILD PASSED BIT-EXACTLY BY LUCK OF THE WEEK NUMBER. In week 1 the
+#: season-to-date group contains only the target row, so `cumsum − own` is `99.0 − 99.0 = 0.0`
+#: exactly; from week 2 onward it is `(prior + 99.0) − 99.0`, which is not. A bit-exact bar would
+#: therefore have gone green on the 2026 week-1 build and started false-firing every week after —
+#: a guard that fires on arithmetic noise is one that gets muted.
+#:
+#: The tolerance is derived from FLOATING-POINT PRECISION, never from the observed failure (that
+#: would be the E2.1-r inversion): a genuine leak moves a feature by an amount of the order of
+#: `INJECTED_POINTS`, and 1e-9 sits ~11 orders below that and ~4 above the residue. That separation
+#: is what `test_the_proof_CATCHES_a_lost_lag` proves is still real — and `max_abs_drift` is
+#: reported on every build, so a residue that ever GREW would be visible rather than absorbed.
+INDEPENDENCE_RTOL = 1e-9
+INDEPENDENCE_ATOL = 1e-9
+
 #: The two features whose PRESENCE — not value — used to depend on the target week having been
 #: played. See `opponent_grid_stub`.
 OPPONENT_BLOCK_COLUMNS: tuple[str, ...] = (
@@ -274,7 +300,7 @@ def assert_no_target_week_outcome(src: dict[str, pd.DataFrame], *, target: Targe
         "position": clean.loc[tgt_mask, "position"].to_numpy(),
         "team": clean.loc[tgt_mask, "team"].to_numpy(),
         "opponent_team": clean.loc[tgt_mask, "opponent"].to_numpy(),
-        "fantasy_points_ppr": 99.0,
+        "fantasy_points_ppr": INJECTED_POINTS,
         "carries": 40.0, "targets": 40.0, "attempts": 60.0, "receptions": 30.0,
         "passing_yards": 600.0, "passing_tds": 7.0, "passing_interceptions": 5.0,
         "rushing_yards": 300.0, "rushing_tds": 5.0,
@@ -299,22 +325,29 @@ def assert_no_target_week_outcome(src: dict[str, pd.DataFrame], *, target: Targe
             f"injecting a target-week outcome changed the target-week ROW COUNT "
             f"({len(a)} → {len(b)}); the serving frame depends on the week's own outcome."
         )
-    moved = [
-        c for c in features
-        if not np.allclose(
-            pd.to_numeric(a[c], errors="coerce").to_numpy(dtype=float),
-            pd.to_numeric(b[c], errors="coerce").to_numpy(dtype=float),
-            rtol=0.0, atol=0.0, equal_nan=True,
-        )
-    ]
+    moved, max_drift = [], 0.0
+    for c in features:
+        va = pd.to_numeric(a[c], errors="coerce").to_numpy(dtype=float)
+        vb = pd.to_numeric(b[c], errors="coerce").to_numpy(dtype=float)
+        both = ~np.isnan(va) & ~np.isnan(vb)
+        if (np.isnan(va) != np.isnan(vb)).any():
+            moved.append(c)
+            continue
+        if both.any():
+            max_drift = max(max_drift, float(np.max(np.abs(va[both] - vb[both]))))
+        if not np.allclose(va, vb, rtol=INDEPENDENCE_RTOL, atol=INDEPENDENCE_ATOL,
+                           equal_nan=True):
+            moved.append(c)
     if moved:
         raise WeeklyServingError(
-            f"the target week's own outcome REACHES its own features: {sorted(moved)} moved when a "
-            f"synthetic {target.season} wk {target.week} stat line was injected. A lag was lost — "
-            "every champion feature must be shift(1) of strictly-prior weeks."
+            f"the target week's own outcome REACHES its own features: {sorted(moved)} moved by up "
+            f"to {max_drift:.3e} when a synthetic {target.season} wk {target.week} stat line worth "
+            f"{INJECTED_POINTS} PPR was injected. A lag was lost — every champion feature must be "
+            "shift(1) of strictly-prior weeks."
         )
     return {"n_target_rows": n_target, "n_features_compared": len(features),
-            "n_injected_stat_rows": int(len(injected))}
+            "n_injected_stat_rows": int(len(injected)),
+            "max_abs_drift": max_drift, "injected_points": INJECTED_POINTS}
 
 
 # ── 3. the frozen-form horizon ───────────────────────────────────────────────────────────────────
@@ -475,10 +508,7 @@ def feature_coverage(rows: pd.DataFrame, features: tuple[str, ...] = WP.FEATURES
     """Per-feature non-null share on the SERVED rows.
 
     ⭐ PER-COLUMN, NEVER A POOLED MEAN (MH2.1 (c)): "missing" and "never existed on this population"
-    are different findings and a mean hides both. This is the instrument that makes a structural
-    serving-time absence visible — the opponent block, for instance, is derived from realized stats
-    and is therefore ENTIRELY absent in week 1 of a new season, which is honest but is a real
-    train/serve distribution difference a reader is owed rather than one they discover later.
+    are different findings and a mean hides both.
     """
     n = len(rows)
     if not n:
@@ -488,6 +518,46 @@ def feature_coverage(rows: pd.DataFrame, features: tuple[str, ...] = WP.FEATURES
         for c in features
     }
 
+
+def train_serve_coverage(target_rows: pd.DataFrame, train: pd.DataFrame, *, target: TargetWeek,
+                         features: tuple[str, ...] = WP.FEATURES) -> dict:
+    """Compare each feature's serving coverage against TRAINING'S COVERAGE ON THE SAME WEEK NUMBER.
+
+    ⭐ THIS IS THE INSTRUMENT THAT MADE THE OPPONENT-BLOCK DIAGNOSIS DECISIVE, generalised so the
+    next defect of its class is caught rather than discovered. A feature being 100% null on the
+    served week is NOT by itself a finding — two measured examples from the same build say why:
+
+      `prior_week_box__ppr_s2d_mean`   serve 0.0000, and training's week-1 rows are 0.0000 too
+                                       (2022/2023/2024/2025, ~2,000 rows). Season-to-date has no
+                                       value in week 1. The model was fitted on exactly this null
+                                       pattern. BENIGN.
+      `opponent_matchup__*`            serve 0.0000, and training's week-1 rows are 1.0000. The
+                                       model was fitted on a feature that is always present and
+                                       would have been served one that is always absent. A REAL
+                                       train/serve gap (E7.9), and the reason `opponent_grid_stub`
+                                       exists.
+
+    Comparing against the SAME WEEK NUMBER rather than against pooled training is what separates
+    them: pooled coverage for the season-to-date feature is 0.9184, which would have flagged the
+    benign case just as loudly as the real one and taught the reader to ignore both.
+
+    `serve_only_null` is therefore the actionable list, and it should be EMPTY.
+    """
+    same_week = train[train["week"] == target.week]
+    serve = feature_coverage(target_rows, features)
+    ref = feature_coverage(same_week, features) if len(same_week) else {}
+    serve_only = sorted(
+        c for c in features
+        if serve.get(c, 0.0) == 0.0 and ref.get(c, 0.0) > 0.0
+    )
+    return {
+        "serve": serve,
+        "train_same_week": ref,
+        "train_same_week_rows": int(len(same_week)),
+        "serve_only_null": serve_only,
+        "null_in_both": sorted(c for c in features
+                               if serve.get(c, 0.0) == 0.0 and ref.get(c, 1.0) == 0.0),
+    }
 
 def build_ros(target_rows: pd.DataFrame, target_q: np.ndarray,
               horizon: pd.DataFrame, horizon_q: np.ndarray) -> pd.DataFrame:

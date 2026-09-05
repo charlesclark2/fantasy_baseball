@@ -258,15 +258,25 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
     C.NflWeeklyCurrent.model_validate(current)
     C.assert_best_alpha_is_zero(C.NflWeeklyManifest.model_validate(manifest).model_dump())
 
-    coverage = WS.feature_coverage(target_rows)
-    dead = sorted(c for c, v in coverage.items() if v == 0.0)
-    for c, v in sorted(coverage.items()):
+    cov = WS.train_serve_coverage(target_rows, train, target=target)
+    for c, v in sorted(cov["serve"].items()):
         log.info("[METRIC] weekly_feature_coverage_%s=%.4f", c, v)
-    if dead:
-        # ALERT-tier, never fatal: the champion is NaN-tolerant and every one of these is honestly
-        # "unknown on this population" rather than broken. Reported per COLUMN because a pooled mean
-        # hides both which feature and whether it ever existed here (MH2.1 (c)).
-        log.warning("⚠️ %d feature(s) are 100%% NULL on the served week: %s", len(dead), dead)
+    log.info("[METRIC] weekly_serve_only_null_count=%d", len(cov["serve_only_null"]))
+    if cov["null_in_both"]:
+        # BENIGN, and named so it is not mistaken for the other list: null on the served week AND on
+        # training's rows for the same week number, i.e. a structural property of this week (a
+        # season-to-date feature in week 1), not a serving defect.
+        log.info("· %d feature(s) null on the served week AND in training's week-%d rows "
+                 "(structural, benign): %s",
+                 len(cov["null_in_both"]), target.week, cov["null_in_both"])
+    if cov["serve_only_null"]:
+        # ⭐ THE ACTIONABLE LIST, and it should be EMPTY. A feature training had at this week number
+        # and serving does not is the E7.9 train/serve class — the shape `opponent_grid_stub` was
+        # written to close. ALERT-tier rather than fatal: the champion is NaN-tolerant, so refusing
+        # to serve would be a worse outcome than serving with the gap NAMED.
+        log.warning("⚠️ %d feature(s) are null ONLY at serve (training's week-%d rows have them): "
+                    "%s — the E7.9 train/serve class; the model was fitted on a feature it is not "
+                    "being given", len(cov["serve_only_null"]), target.week, cov["serve_only_null"])
     log.info("[METRIC] weekly_serving_build_seconds=%.1f", time.time() - t0)
     return {"target": target, "manifest": manifest, "payload": payload, "current": current,
             "diagnostics": {"pit": {k: v for k, v in pit.items() if k != "weeks_dropped"},
@@ -275,8 +285,7 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
                             "n_train": int(len(train)),
                             "n_train_purged_equivalent": purged,
                             "n_score": int(len(score)),
-                            "feature_coverage": coverage,
-                            "feature_coverage_zero": dead,
+                            "feature_coverage": cov,
                             "build_seconds": round(time.time() - t0, 1)}}
 
 
