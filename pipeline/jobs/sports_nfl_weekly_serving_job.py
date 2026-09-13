@@ -105,7 +105,7 @@ def nfl_weekly_serving_op(context):
     # the muted-monitor pattern (INC-37: judging a feed before it lands pages every morning).
     #
     # ⛔ NOT A SILENT SUCCESS EITHER. The run said so with a distinct exit code, this logs it, and
-    # the thing that escalates if it persists is the OFF-CYCLE freshness monitor on the PUBLISHED
+    # the thing that escalates if it persists is the DAILY freshness monitor on the PUBLISHED
     # artifact — which goes WRONG_WEEK once the served week falls behind. A build that declines to
     # run is structurally invisible to itself, which is why that monitor is a different job.
     if proc.returncode == EXIT_AWAITING_ROSTERS:
@@ -293,5 +293,20 @@ def nfl_weekly_freshness_op(context):
 
 @job(executor_def=in_process_executor)
 def sports_nfl_weekly_freshness_job():
-    """Off-cycle: is the PUBLISHED weekly projection advancing, and is it for the right week?"""
+    """On-demand: is the PUBLISHED weekly projection advancing, and is it for the right week?
+
+    ⚠️ THIS JOB IS NOT THE CADENCE, AND SAYING SO MATTERS. `nfl_weekly_freshness_op`'s daily run is
+    an independent leaf on `sports_nfl_sleeper_injuries_job` (NF-C6-PH2, 2026-09-13), because a
+    monitor hosted inside its own subject cannot see its subject stop — the same argument
+    `nfl_published_board_freshness_op` makes, and it applies with extra force here: the weekly build
+    SKIPS CLEANLY and reports SUCCESS while the next week's rosters are unpublished, so a schedule
+    that silently reverted to STOPPED looks identical to the routine cadence from the artifact side.
+
+    ⛔ This job carries NO schedule ON PURPOSE. It shipped that way and the op consequently NEVER
+    RAN — while the builder's own skip message named "the OFF-CYCLE freshness monitor" as the thing
+    that escalates. A named escalation path that does not exist is worse than an absent one: it is
+    the E11.30 "detected, nobody notified" shape one step earlier, at INVOCATION rather than paging.
+    Adding a schedule here would have been the wrong repair (one more instigator that can itself be
+    silently STOPPED); riding a job that already self-starts and is heartbeat-checked is the fix.
+    What remains is a convenience handle for an operator who wants the verdict on demand."""
     nfl_weekly_freshness_op()
