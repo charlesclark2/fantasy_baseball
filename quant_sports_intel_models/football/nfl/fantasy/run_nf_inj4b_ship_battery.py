@@ -525,6 +525,17 @@ def render(s: dict) -> str:
             continue
         L.append(f"| {pop} | {r['rows']} | {r['material_cells']} | "
                  f"{r['worst_abs']:.4f}{' (' + str(r['worst_cell']) + ')' if r['worst_cell'] else ''} |")
+    rk = md.get("rookies") or {}
+    L += ["", (f"⭐ **ROOKIE-BAND MOTION IS EXACTLY ZERO** ({rk.get('material_cells', 0)} material "
+               f"cells over {rk.get('rows', 0)} rookie rows), so it needs no comparison against the "
+               f"≥5-draw same-commit envelope (card QkpAHBYa) — that envelope exists to tell real "
+               f"motion from rebuild noise, and there is no motion to classify. The reason is a "
+               f"POPULATION fact rather than a guarantee: no rookie on this slate carries a weekly "
+               f"designation."
+               if (rk.get("material_cells") == 0) else
+               f"⚠️ The rookie band moved in {rk.get('material_cells')} material cell(s) — read it "
+               f"against the ≥5-draw same-commit envelope (card QkpAHBYa) before attributing it to "
+               f"the discount; rebuilds of this board differ there at 0–21 cells on their own.")]
     viol = md.get("INVARIANT_VIOLATIONS")
     L += ["", ("⛔ **INVARIANT VIOLATION** — the discount moved a column it must not: "
                f"`{viol}`") if viol else

@@ -1,6 +1,6 @@
 # NF-INJ4b-SHIP — the measurement battery on the publish candidate
 
-**Generated 2026-09-13T22:19:11+00:00 · season 2026.** `best_alpha = 0`. ⛔ **This run publishes nothing.** It measures what the wired discount does to the board the operator is deciding about.
+**Generated 2026-09-13T22:26:28+00:00 · season 2026.** `best_alpha = 0`. ⛔ **This run publishes nothing.** It measures what the wired discount does to the board the operator is deciding about.
 
 ---
 
@@ -75,6 +75,8 @@ At an epsilon of `1e-09`.
 | undesignated | 11340 | 0 | 0.0000 |
 | rookies | 1134 | 0 | 0.0000 |
 | veterans | 11046 | 3444 | 49.5404 (standard_10.ptsP90) |
+
+⭐ **ROOKIE-BAND MOTION IS EXACTLY ZERO** (0 material cells over 1134 rookie rows), so it needs no comparison against the ≥5-draw same-commit envelope (card QkpAHBYa) — that envelope exists to tell real motion from rebuild noise, and there is no motion to classify. The reason is a POPULATION fact rather than a guarantee: no rookie on this slate carries a weekly designation.
 
 ✅ Every column the discount must NOT touch (`adp`, `repl`, `bye`, `pos`, `team`, `rookie`) is unchanged on every board.
 

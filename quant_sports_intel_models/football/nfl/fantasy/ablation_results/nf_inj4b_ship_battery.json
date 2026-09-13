@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-09-13T22:19:11+00:00",
+ "generated_at": "2026-09-13T22:26:28+00:00",
  "story": "NF-INJ4b-SHIP",
  "season": 2026,
  "best_alpha": 0,
@@ -4559,10 +4559,10 @@
   "baseline": {
    "story": "NF-TR2b",
    "read": "cross-position placement (NF-D16 class)",
-   "generated_at": "2026-09-13T22:19:11.638031+00:00",
+   "generated_at": "2026-09-13T22:26:29.122243+00:00",
    "source_kind": "s3",
    "source": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-inj4b-ship/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj4b_ship_baseline",
-   "read_from": "/var/folders/88/q8wq3ss94k3bvmkq1j1f_j0w0000gn/T/tmpyrngaroc/baseline",
+   "read_from": "/var/folders/88/q8wq3ss94k3bvmkq1j1f_j0w0000gn/T/tmpu788mwbk/baseline",
    "season": 2026,
    "served_level_model_version": "nfl_fantasy_nf_tr2b_veteran_level_v1",
    "served_level_status": "recalibrated",
@@ -7406,10 +7406,10 @@
   "candidate": {
    "story": "NF-TR2b",
    "read": "cross-position placement (NF-D16 class)",
-   "generated_at": "2026-09-13T22:19:11.988815+00:00",
+   "generated_at": "2026-09-13T22:26:29.482492+00:00",
    "source_kind": "s3",
    "source": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-inj4b-ship/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj4b_ship_baseline",
-   "read_from": "/var/folders/88/q8wq3ss94k3bvmkq1j1f_j0w0000gn/T/tmpyrngaroc/candidate",
+   "read_from": "/var/folders/88/q8wq3ss94k3bvmkq1j1f_j0w0000gn/T/tmpu788mwbk/candidate",
    "season": 2026,
    "served_level_model_version": "nfl_fantasy_nf_tr2b_veteran_level_v1",
    "served_level_status": "recalibrated",
@@ -10259,5 +10259,5 @@
   "consequence": "a capped player's 80% band is attached to his CAPPED point \u2014 the identical treatment the formal availability cap has always received; the band's calibration lives in the panel, which this change cannot touch",
   "reported_as_a_pass": false
  },
- "elapsed_s": 2.8
+ "elapsed_s": 2.9
 }
