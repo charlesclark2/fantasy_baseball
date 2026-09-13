@@ -43,6 +43,10 @@ from quant_sports_intel_models.football.nfl.fantasy import weekly_serving as WS 
 log = logging.getLogger("nfl.fantasy.run_weekly_serving")
 
 _STAGING = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/artifacts/weekly_serving"
+
+#: Exit code for "the target week's rosters have not published yet" — a routine feed
+#: cadence state, mapped by the Dagster op to a clean skip rather than a page.
+EXIT_AWAITING_ROSTERS = 3
 FIRST_TRAIN_SEASON = 2016
 
 
@@ -149,6 +153,10 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
             src = _load_sources(target.season)
     log.info("target: %s wk %s (first kickoff %s, last REG week %s)",
              target.season, target.week, target.first_kickoff, target.last_reg_week)
+
+    # ⭐ CADENCE CHECK BEFORE ANY INVARIANT — see `assert_target_week_rosters_published`.
+    n_roster = WS.assert_target_week_rosters_published(src["rosters"], target=target)
+    log.info("target week carries %d game-day roster rows", n_roster)
 
     modeled, pit, frame = WS.build_serving_matrix(src, target=target)
     # ⛔ NON-VACUITY FIRST. A gate that examined nothing has not passed (NF1.7(a)).
@@ -376,7 +384,17 @@ def main(argv: list[str] | None = None) -> int:
             "  --s3-bucket credence-prod-s3-api-cache --publish"
         )
 
-    built = build(args.season, args.week)
+    try:
+        built = build(args.season, args.week)
+    except WS.WeeklyRostersNotPublished as exc:
+        # ⭐ A DISTINCT EXIT CODE, not a log line the caller has to parse. The Dagster op maps this
+        # to a clean skip; an exit code cannot be faked by a message and cannot be missed by a regex
+        # that drifted. ⛔ And it is NOT exit 0: "published" and "correctly declined to publish" are
+        # different outcomes and must stay distinguishable at the process boundary (the
+        # ALERT-loud-but-continue tier — a graceful skip that hides work is never silent).
+        log.warning("⏸️  %s", exc)
+        log.warning("[METRIC] weekly_serving_skipped=awaiting_rosters")
+        return EXIT_AWAITING_ROSTERS
     written = stage(built, Path(args.out))
     log.info("staged %d file(s) under %s", len(written), args.out)
     if bucket:

@@ -60,6 +60,10 @@ NFL_WEEKLY_BUILD_TIMEOUT_SECONDS = int(
 # shipped nothing.
 NFL_WEEKLY_CACHE_BUCKET = os.environ.get("CACHE_BUCKET", "credence-prod-s3-api-cache")
 
+#: Mirrors `run_weekly_serving.EXIT_AWAITING_ROSTERS`. Pinned equal by
+#: `test_nf_c6_ph2_weekly_serving.py` so the two owners of this code cannot drift.
+EXIT_AWAITING_ROSTERS = 3
+
 
 def _page(context, title: str, body: str, *, severity: str, dedup_key: str) -> None:
     """Page, and mirror it into the step log. Distinct `dedup_key` per failure mode so one noisy
@@ -94,6 +98,23 @@ def nfl_weekly_serving_op(context):
 
     for line in (proc.stdout or "").splitlines()[-80:]:
         context.log.info("[weekly] %s", line)
+
+    # ⭐ THE CADENCE SKIP IS NOT A FAILURE. The target week advances at the previous slate's first
+    # kickoff while its game-day rosters publish days later, so for most of every week the next week
+    # is the right target and has no roster rows. Paging on that would fire CRITICAL on most days —
+    # the muted-monitor pattern (INC-37: judging a feed before it lands pages every morning).
+    #
+    # ⛔ NOT A SILENT SUCCESS EITHER. The run said so with a distinct exit code, this logs it, and
+    # the thing that escalates if it persists is the OFF-CYCLE freshness monitor on the PUBLISHED
+    # artifact — which goes WRONG_WEEK once the served week falls behind. A build that declines to
+    # run is structurally invisible to itself, which is why that monitor is a different job.
+    if proc.returncode == EXIT_AWAITING_ROSTERS:
+        context.log.warning(
+            "⏸️ [nfl weekly] the target week's rosters have not published yet — nothing built, "
+            "nothing published; the previously published week keeps serving")
+        context.log.info("[METRIC] nfl_weekly_skipped_awaiting_rosters=1")
+        return
+
     if proc.returncode != 0:
         for line in (proc.stderr or "").splitlines()[-80:]:
             context.log.warning("[weekly:stderr] %s", line)

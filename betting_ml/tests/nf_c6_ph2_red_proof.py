@@ -42,6 +42,7 @@ _GUARDRAILS = _REPO / "app/backend/services/cost_guardrails.py"
 _CDN = _REPO / "frontend/app/api/public/[...path]/route.ts"
 _SERVING = _FAN / "weekly_serving.py"
 _RUNNER = _FAN / "run_weekly_serving.py"
+_OP = _REPO / "pipeline/jobs/sports_nfl_weekly_serving_job.py"
 _FRESH = _REPO / "betting_ml/monitoring/nfl_weekly_freshness.py"
 
 _G_CONTRACT = _TESTS / "test_nf_c6_ph2_weekly_contract.py"
@@ -145,6 +146,18 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "    same_week = train",
      f"{_G_SERVING}::test_the_coverage_report_separates_a_serve_only_null_from_a_structural_one"),
 
+    ("an unpublished target week is reported as a generic failure instead of its own state",
+     _SERVING,
+     "    raise WeeklyRostersNotPublished(",
+     "    raise WeeklyServingError(",
+     f"{_G_SERVING}::test_the_cadence_check_fires_on_an_unpublished_week_and_passes_on_a_published_one"),
+
+    ("the op stops mapping the cadence skip, so a routine feed state pages CRITICAL",
+     _OP,
+     "    if proc.returncode == EXIT_AWAITING_ROSTERS:",
+     "    if False:",
+     f"{_G_SERVING}::test_the_skip_exit_code_has_exactly_one_value_across_both_owners"),
+
     ("--publish silently inherits $CACHE_BUCKET again (the bug that published to prod mid-story)",
      _RUNNER,
      "    if args.publish and not args.s3_bucket:",
@@ -202,13 +215,32 @@ def _collects(nodeid: str) -> bool:
     return probe.returncode == 0 and "no tests ran" not in (probe.stdout + probe.stderr)
 
 
+_BAK_SUFFIX = ".redproof.bak"
+
+
 def _sweep_stale_backups() -> list[str]:
-    """⛔ FIRST, before any mutation: a stale `.redproof.bak` means real source is still broken."""
+    """⛔ FIRST, before any mutation: a stale `.redproof.bak` means real source is still broken.
+
+    ⚠️ `with_suffix("")` IS WRONG HERE AND THIS HARNESS SHIPPED WITH IT. `Path` treats only the LAST
+    dotted segment as the suffix, so `weekly_serving.py.redproof.bak.with_suffix("")` is
+    `weekly_serving.py.redproof` — the recovery wrote the original source to a JUNK FILENAME, left
+    the real file mutated, deleted the only backup, and reported "restored N". A recovery path that
+    reports success while leaving the damage is worse than none, and this one exists precisely for
+    the case where nobody is watching (the harness killed mid-mutation, where a signal skips
+    `finally` — the E11.26 lesson). Strip the WHOLE known suffix instead.
+
+    ⚠️ IT ALSO MEANS THIS HARNESS IS NOT SAFE TO RUN CONCURRENTLY WITH ITSELF: a second instance
+    sweeps the first instance's IN-FLIGHT backup as though it were stale. That is how the bug above
+    was found. One at a time.
+    """
     restored = []
     for root in (_FAN, _TESTS, _REPO / "app/backend", _REPO / "betting_ml/monitoring",
-                 _REPO / "frontend/app/api"):
-        for bak in root.rglob("*.redproof.bak"):
-            target = bak.with_suffix("")
+                 _REPO / "frontend/app/api", _REPO / "pipeline/jobs"):
+        for bak in root.rglob(f"*{_BAK_SUFFIX}"):
+            target = Path(str(bak)[: -len(_BAK_SUFFIX)])
+            assert target.suffix in (".py", ".ts"), (
+                f"refusing to restore {bak} onto {target} — that is not a source file, so the "
+                "suffix stripping is wrong and a blind write would create junk")
             target.write_text(bak.read_text())
             bak.unlink()
             restored.append(str(target.relative_to(_REPO)))

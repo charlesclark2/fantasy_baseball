@@ -20,6 +20,7 @@ RED-proven by `betting_ml/tests/nf_c6_ph2_red_proof.py`.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,8 @@ import pytest
 from quant_sports_intel_models.football.nfl.fantasy import weekly_frame as WF
 from quant_sports_intel_models.football.nfl.fantasy import weekly_projection as WP
 from quant_sports_intel_models.football.nfl.fantasy import weekly_serving as WS
+
+_REPO = Path(__file__).resolve().parents[2]
 
 TEAMS = ("AAA", "BBB", "CCC", "DDD")
 SEASONS = (2024, 2025)
@@ -594,3 +597,74 @@ def test_publish_refuses_to_inherit_the_bucket_from_the_environment(monkeypatch)
     monkeypatch.delenv("CACHE_BUCKET")
     with pytest.raises(SystemExit, match="unset"):
         R.main(["--publish"])
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 11. "The rosters have not published yet" is a STATE, not a failure
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+def test_awaiting_rosters_is_its_own_state_not_a_generic_failure():
+    """⭐ MEASURED ON A LIVE FEED (2026-09-13). The target week advances at the PREVIOUS slate's
+    first kickoff, but `weekly_rosters` publishes the next week's game-day rows days later — that
+    day `resolve_target_week` returned 2026 wk 2 while the roster feed held week 1 only.
+
+    Treating that as a failure would CRITICAL-page on most days of every week, which is the
+    muted-monitor pattern (INC-37: judging a feed before it lands pages every morning). Treating it
+    as a success would be the NF-FRESH1 19-green-runs class. So it is its own state, with its own
+    exit code, and the message names the FEED rather than the guard that noticed — the first cut
+    said "the proof has no rows to compare", which reads like a malfunction (INC-40 anchoring).
+    """
+    from quant_sports_intel_models.football.nfl.fantasy import run_weekly_serving as R
+
+    assert issubclass(WS.WeeklyRostersNotPublished, WS.WeeklyServingError)
+    # …but distinguishable from the generic failure, or the op could not map it.
+    assert WS.WeeklyRostersNotPublished is not WS.WeeklyServingError
+
+
+def test_the_skip_exit_code_has_exactly_one_value_across_both_owners():
+    """⚠️ ONE LOGICAL THING, TWO OWNERS (INC-30/36/38). The runner returns the code and the Dagster
+    op maps it to a clean skip; if they drift, a routine cadence skip becomes a CRITICAL page or —
+    worse — a real failure becomes a silent skip.
+
+    ⛔ The op is read from SOURCE rather than imported: nothing in the fast gate may import
+    `pipeline`, whose `__init__` reads the dbt manifest and crashes at COLLECTION when it is absent
+    (E11.23)."""
+    import re
+
+    from quant_sports_intel_models.football.nfl.fantasy import run_weekly_serving as R
+
+    op_src = (_REPO / "pipeline/jobs/sports_nfl_weekly_serving_job.py").read_text()
+    m = re.search(r"^EXIT_AWAITING_ROSTERS = (\d+)$", op_src, flags=re.M)
+    assert m, "the op no longer declares EXIT_AWAITING_ROSTERS"
+    assert int(m.group(1)) == R.EXIT_AWAITING_ROSTERS == 3
+    # …and the op actually BRANCHES on it, rather than merely declaring it (wired ≠ invoked).
+    assert "proc.returncode == EXIT_AWAITING_ROSTERS" in op_src
+    # ⛔ NOT zero: "published" and "correctly declined to publish" must stay distinguishable at the
+    # process boundary.
+    assert R.EXIT_AWAITING_ROSTERS != 0
+
+
+def test_the_cadence_check_fires_on_an_unpublished_week_and_passes_on_a_published_one(world):
+    """Two-sided, and driven on the pure function so it does no IO.
+
+    Measured on the live feed 2026-09-13: `resolve_target_week` returned 2026 wk 2 while
+    `weekly_rosters` held week 1 only — the routine state this distinguishes from a defect.
+    """
+    ros = world["rosters"]
+    published = WS.TargetWeek(season=2025, week=3,
+                              first_kickoff=pd.Timestamp(_gameday(2025, 3), tz="UTC"),
+                              last_reg_week=6)
+    assert WS.assert_target_week_rosters_published(ros, target=published) > 0
+
+    unpublished = WS.TargetWeek(season=2025, week=9,
+                                first_kickoff=pd.Timestamp("2025-11-01", tz="UTC"),
+                                last_reg_week=9)
+    with pytest.raises(WS.WeeklyRostersNotPublished, match="NO game-day rows"):
+        WS.assert_target_week_rosters_published(ros, target=unpublished)
+    # The message names the FEED and its newest week, not the guard that noticed — the first cut
+    # said "the proof has no rows to compare", which reads like a malfunction (INC-40 anchoring).
+    try:
+        WS.assert_target_week_rosters_published(ros, target=unpublished)
+    except WS.WeeklyRostersNotPublished as exc:
+        assert "weekly_rosters" in str(exc) and "newest week present: 6" in str(exc)
+        assert "cadence, not a defect" in str(exc)

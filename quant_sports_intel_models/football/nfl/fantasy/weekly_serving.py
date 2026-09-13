@@ -107,6 +107,30 @@ class WeeklyServingError(RuntimeError):
     """A serving-boundary invariant was violated. Fail closed: never publish past one."""
 
 
+class WeeklyRostersNotPublished(WeeklyServingError):
+    """The target week has no game-day roster rows YET — a feed CADENCE fact, not a defect.
+
+    ⭐ WHY THIS IS A SEPARATE STATE RATHER THAN A FAILURE, measured on 2026-09-13. The target week
+    advances the moment the CURRENT week's first kickoff passes (Thursday), but `weekly_rosters`
+    does not publish the next week's game-day rosters until a few days later. So for most of every
+    week there is a legitimate window in which the next week is the right target and has no roster
+    rows at all. Measured that day: `resolve_target_week` → 2026 wk 2, and `weekly_rosters` held
+    week 1 only.
+
+    ⛔ TREATING THAT AS A FAILURE WOULD PAGE CRITICAL ON MOST DAYS OF EVERY WEEK, which is the
+    muted-monitor pattern this repo keeps paying for (INC-37's W11 tail: "judging all three same-day
+    would page CRITICAL every morning on the normal build cadence"). It is the same distinction as
+    a BUILD_GAP versus a feed that simply has not landed yet, and the two must not render
+    identically (NF-C6b).
+
+    ⚠️ IT IS NOT A SILENT NO-OP EITHER (the NF-FRESH1 19-green-runs class). The run exits with a
+    DISTINCT code, says so loudly, and publishes nothing — and the thing that escalates if it
+    persists is the OFF-CYCLE freshness monitor on the PUBLISHED artifact, which goes WRONG_WEEK
+    once the served week falls behind the schedule. A build declining to run is structurally
+    invisible to itself; that separation is the whole reason the monitor is a different job.
+    """
+
+
 # ── 1. which week are we projecting ──────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -234,6 +258,32 @@ def opponent_grid_stub(schedule: pd.DataFrame, stats: pd.DataFrame, *,
         if c not in stub.columns:
             stub[c] = 0.0
     return stub.reindex(columns=stats.columns)
+
+
+def assert_target_week_rosters_published(rosters: pd.DataFrame, *, target: TargetWeek) -> int:
+    """RAISE `WeeklyRostersNotPublished` when the target week has no game-day roster rows yet.
+
+    ⭐ CALLED BEFORE ANY INVARIANT, and the order is the whole point. Without it the first thing to
+    notice an unpublished week is the outcome-independence proof, which reports "no target-week rows
+    to compare" — true, and it reads like a guard malfunction rather than a feed that has not landed
+    (INC-40: an alert that names the wrong cause costs the first hour). Returns the row count so the
+    caller can log a number rather than a claim.
+    """
+    m = ((rosters["season"] == target.season) & (rosters["week"] == target.week)
+         & rosters["position"].isin(WP.POSITIONS)
+         & rosters["status"].isin(WF.GAMEDAY_STATUSES))
+    n = int(m.sum())
+    if n:
+        return n
+    present = rosters.loc[rosters["season"] == target.season, "week"]
+    raise WeeklyRostersNotPublished(
+        f"weekly_rosters carries NO game-day rows for {target.season} wk {target.week} yet "
+        f"(newest week present: {int(present.max()) if len(present) else 'none'}). The target week "
+        f"advanced at the previous slate's first kickoff; its rosters publish a few days later. "
+        f"Nothing was built and nothing was published — this is the feed's cadence, not a defect. "
+        f"The previously published week keeps serving, and the OFF-CYCLE freshness monitor is what "
+        f"escalates if the served week falls behind."
+    )
 
 
 def build_serving_matrix(src: dict[str, pd.DataFrame], *, target: TargetWeek,

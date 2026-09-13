@@ -226,3 +226,39 @@ spec:
       FORWARD: `--publish` now REQUIRES an explicit `--s3-bucket` and will not inherit
       `$CACHE_BUCKET` — an outward-facing action must not have its target chosen by an environment
       variable the caller cannot see in the command they typed. Guarded two-sided and RED-proven.
+      (11) ⭐ FOUND BY RE-VALIDATING THE HANDOFF EIGHT DAYS LATER, and it would have paged CRITICAL
+      on most days of every week: the target week advances the moment the PREVIOUS slate's first
+      kickoff passes (Thursday), but `weekly_rosters` does not publish the next week's game-day
+      rows until a few days after that. Measured 2026-09-13 — `resolve_target_week` returned 2026
+      wk 2 while the roster feed held week 1 only, and the build correctly refused rather than
+      publishing an empty week. But it refused through the OUTCOME-INDEPENDENCE PROOF ("no
+      target-week rows to compare"), which is true and reads like a guard malfunction rather than a
+      feed that has not landed (INC-40: an alert naming the wrong cause costs the first hour). Now
+      its own state: `WeeklyRostersNotPublished`, raised by a cadence check that runs BEFORE any
+      invariant, carrying a distinct exit code the Dagster op maps to a clean skip. ⛔ Not a silent
+      success either (the NF-FRESH1 19-green-runs class) — the run says so loudly, publishes
+      nothing, and what escalates if it PERSISTS is the off-cycle freshness monitor on the
+      published artifact, because a build that declines to run is structurally invisible to itself.
+      That separation is why the monitor is a different job. (12) ⭐ THE FRESHNESS MONITOR GOT AN
+      UNPLANNED LIVE VALIDATION: run against the real prod objects on 2026-09-13 it returned
+      WRONG_WEEK / CRITICAL with an accurate message (served week 1, schedule says week 2,
+      generated_at 193.3h old) — the exact INC-37 shape it was built for, on real data, untuned.
+      (13) ⛔ A BUG IN THE RED-PROOF HARNESS'S OWN RECOVERY PATH, inherited from the shape every
+      other harness in the repo copies (`nf_inj4b_red_proof.py` and siblings carry it too). The
+      stale-backup sweep computed its restore target with `bak.with_suffix("")`, and `Path` treats
+      only the LAST dotted segment as the suffix — so `weekly_serving.py.redproof.bak` restored to
+      `weekly_serving.py.redproof`. It wrote the original source to a JUNK FILENAME, left the real
+      file MUTATED, deleted the only backup, and printed "restored 1 stale backup(s)". A recovery
+      path that reports success while leaving the damage is worse than none, and this one exists
+      precisely for the case where nobody is watching (killed mid-mutation, where a signal skips
+      `finally` — E11.26). FIXED here by stripping the whole known suffix plus an assertion that the
+      restore target is actually a source file. ⚠️ SURFACED BY A SECOND BUG worth stating on its
+      own: THE HARNESS IS NOT SAFE TO RUN CONCURRENTLY WITH ITSELF — a second instance sweeps the
+      first's IN-FLIGHT backup as though it were stale. I ran two and it left a real mutation
+      (`opponent_grid_stub` neutered) in the working tree, which surfaced as three guard failures
+      whose cause was NOT the code under test. ⭐ AND THE DIAGNOSTIC LESSON: my first residual-
+      mutation check grepped for `if False:` and came back clean on a tree that WAS mutated,
+      because that mutation had a different shape. `git diff` against the committed version is the
+      authoritative check for "is my working tree what I think it is"; a pattern grep answers a
+      narrower question than the one being asked. The sibling harnesses' identical sweep is a
+      candidate follow-up.
