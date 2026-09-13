@@ -283,10 +283,23 @@ export const WEEKLY_DESIGNATION_SUMMARY =
 export const WEEKLY_DESIGNATION_UNKNOWN_SUMMARY =
   "Our injury feed carries a game-status value for this player that we do not recognise, so we are not going to guess at what it says."
 
-/** ⭐⭐ THE SENTENCE THE WHOLE STORY IS FOR. If a copy trim ever takes one line out of this block,
- *  this is the line that must not be it: without it the chip reads as an adjustment we made. */
-export const WEEKLY_DESIGNATION_NOT_MODELLED =
-  "Our projected-games figure does not take this into account. That number moves only on a formal roster move — injured reserve, the physically-unable-to-perform list, the non-football-injury list, or a suspension — so a weekly designation like this one applies no discount to it at all. We show it because we hold it, not because we have built it into anything."
+/** ⭐⭐ THE SENTENCE THE WHOLE STORY IS FOR, and it was INVERTED by NF-INJ4b-SHIP.
+ *
+ *  Until the designation discount shipped, this constant said the projected-games figure did NOT
+ *  take a weekly designation into account — which was true, and was the whole point of NF-C9: the
+ *  chip disclosed something we held and did not act on. The certified NF-INJ4b model now prices
+ *  Out / Doubtful / Questionable, so that sentence became FALSE on every surface that renders it,
+ *  in the flattering-to-nobody direction — we would have been disclaiming work we had actually done.
+ *
+ *  ⛔ THE COPY AND THE DISCOUNT SHIP TOGETHER. `test_nf_inj4b_ship_wiring.py` refuses a build where
+ *  `designation_discount_policy.serving_enabled()` and this wording disagree, in EITHER direction —
+ *  a declaration ahead of its production is the NF-C0e failure, and a production ahead of its
+ *  declaration is this one. If the discount is ever rolled back, this constant reverts with it.
+ *
+ *  ⚠️ It still refuses the two claims NF-C9 exists to refuse: it prices the FILING, not the player,
+ *  and the number it names is an average over past filings rather than a read on this man. */
+export const WEEKLY_DESIGNATION_HOW_MODELLED =
+  "Our projected-games figure takes this into account. A game-status listing is priced as a measured average of how many games past listings like it have cost — about a tenth of a season for a player listed Out, and considerably less for the softer designations. That is an average over past filings, not a read on this player. A formal roster move — injured reserve, the physically-unable-to-perform list, the non-football-injury list, or a suspension — is priced separately and more heavily; where more than one of these applies we take the largest single discount, never both."
 
 /** The refusal, in the register the NF-C8 flag uses. Says what a designation IS and what it is not:
  *  one club's filing about one game, not a diagnosis, and carrying no length. */

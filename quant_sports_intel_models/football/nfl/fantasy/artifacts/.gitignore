@@ -22,3 +22,13 @@ nf_inj2_baseline/
 # api-cache; the record that belongs in git is `ablation_results/nf_c6_ph2_promotion_review.*`,
 # not the payload. Same treatment as `draft_board_json/`, which is likewise untracked.
 weekly_serving/
+
+# NF-INJ4b-SHIP — the ship battery's capture of the SERVED board. The MANIFEST beside it IS tracked
+# (it is the vintage record the NF-INJ2c preconditions read, and it is 22 KB); the 1.3 MB board
+# payload is not, for the same reason `nf_inj2_baseline/` is not — it is a snapshot of an artifact
+# the board build already owns, and committing it forks a second vintage of the same board.
+# ⚠️ Re-stage it with the command in `ablation_results/nf_inj4b_ship_battery.md`. Note that this
+# re-stages the CURRENT board, which after the ADP day rolls is a DIFFERENT one (NF-INJ2c: a vendor
+# snapshot is not recoverable once its day passes) — the manifest is what says which board the
+# battery's numbers describe.
+nf_inj4b_ship_baseline/served_projections_2026.json

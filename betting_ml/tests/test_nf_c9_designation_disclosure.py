@@ -66,7 +66,7 @@ _NF_C9_CONSTANTS = (
     "WEEKLY_DESIGNATION_LABEL",
     "WEEKLY_DESIGNATION_SUMMARY",
     "WEEKLY_DESIGNATION_UNKNOWN_SUMMARY",
-    "WEEKLY_DESIGNATION_NOT_MODELLED",
+    "WEEKLY_DESIGNATION_HOW_MODELLED",
     "WEEKLY_DESIGNATION_NOT_A_DIAGNOSIS",
 )
 
@@ -158,54 +158,84 @@ def test_the_component_extractor_finds_a_real_body():
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 1. ⛔⛔ THE DISCLOSURE IS NOT AN ADJUSTMENT — the story's whole reason to exist
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-@pytest.mark.parametrize("name", _NF_C9_CONSTANTS)
-def test_the_designation_copy_never_claims_the_projection_prices_it_in(name, copy_src):
-    """⭐ THE CLAUSE THE STORY IS FOR. The designation applies a discount of EXACTLY ZERO, so any
-    wording implying otherwise is false — and it is false in the flattering direction, which is the
-    one that survives review.
+#: the constants that must NEVER claim an adjustment — everything except the one that describes the
+#: model. ⛔ Derived by exclusion rather than re-listed, so a constant ADDED to `_NF_C9_CONSTANTS`
+#: is screened from its first run.
+_DISCLOSURE_ONLY_CONSTANTS = tuple(
+    n for n in _NF_C9_CONSTANTS if n != "WEEKLY_DESIGNATION_HOW_MODELLED")
 
-    ⚠️ The one constant allowed to contain the negated form is `WEEKLY_DESIGNATION_NOT_MODELLED`,
-    which says "does not take this into account" — and it is exempted BY NAME below rather than by a
-    negation window, because a window would wave through the un-negated claim too."""
+
+@pytest.mark.parametrize("name", _DISCLOSURE_ONLY_CONSTANTS)
+def test_the_chip_copy_never_claims_the_projection_prices_it_in(name, copy_src):
+    """⭐ RE-ANCHORED BY NF-INJ4b-SHIP, and the direction of the claim is now the opposite one.
+
+    NF-C9 screened these strings because the projection applied a discount of EXACTLY ZERO, so any
+    wording implying otherwise was false. NF-INJ4b's certified model now prices Out / Doubtful /
+    Questionable, so the false claim has moved: it is no longer "we price this in" but "we price
+    this in HERE", on a chip or a summary whose job is only to say what the club filed.
+
+    The screen therefore still runs, on every constant EXCEPT the one whose entire purpose is to
+    describe the model — and that constant is required to make the claim by
+    `test_the_definition_says_out_loud_that_the_projection_DOES_price_it_in` below. The pair is what
+    stops the strict scan making the honest sentence the cheapest thing to delete (the NF-C8
+    pairing, preserved through the inversion)."""
     prose = _const(copy_src, name)
-    banned = _ADJUSTMENT_CLAIMS
-    if name == "WEEKLY_DESIGNATION_NOT_MODELLED":
-        # The disclaimer's own phrasing. It is the sentence that REFUSES the claim, and it is
-        # separately required to be present by its own clause below.
-        banned = tuple(c for c in banned if c != "taken into account")
-        prose = prose.replace("does not take this into account", "")
-    hits = [c for c in banned if c in prose]
+    hits = [c for c in _ADJUSTMENT_CLAIMS if c in prose]
     assert not hits, (
-        f"{name} implies the projection acts on the weekly designation {hits} — it does not: "
-        f"`injury_availability_games` moves only on a roster transaction, so the discount here is "
-        f"exactly zero"
+        f"{name} claims the projection acts on the weekly designation {hits}. That is now TRUE of "
+        f"the board but it is not this string's job to say so: a label, a one-line summary or an "
+        f"unknown-value notice that asserts an adjustment is claiming it for rows the discount may "
+        f"never have touched. The single constant that may make the claim is "
+        f"WEEKLY_DESIGNATION_HOW_MODELLED."
     )
 
 
-def test_the_definition_says_out_loud_that_the_projection_does_not_price_it_in(copy_src):
-    """The other half of the pair above. Screening the false claim is not enough — a chip beside a
-    games figure reads as an adjustment by POSITION alone, whatever the words omit, so the words
-    have to refuse it explicitly. This is the clause that would go quietly missing in a copy trim,
-    and its absence would be invisible: the chip renders perfectly well without it."""
-    prose = _const(copy_src, "WEEKLY_DESIGNATION_NOT_MODELLED")
-    assert "does not" in prose, (
-        "WEEKLY_DESIGNATION_NOT_MODELLED no longer states in the negative that the projected-games "
-        "figure is unaffected — without it the chip reads as an adjustment we made"
+def test_the_definition_says_out_loud_that_the_projection_DOES_price_it_in(copy_src):
+    """⭐⭐ THE INVERSION ITSELF — the clause NF-C9 wrote in the negative, re-anchored onto the true
+    claim rather than weakened (MH2.7).
+
+    NF-C9's version required the words "does not", because the chip reads as an adjustment by
+    POSITION alone and the copy had to refuse it. The refusal is now the false statement: the
+    discount IS applied, so a disclaimer denying it would tell a reader we had left work undone
+    that we had in fact done — and nothing in the rendered board could contradict it, because a
+    games figure looks the same either way.
+
+    ⛔ Kept as an EXPLICIT REQUIREMENT rather than deleted. Without it, a copy trim that dropped the
+    sentence would leave a chip with no statement about the projection at all, which is exactly the
+    invisible state both versions of this clause exist to prevent."""
+    prose = _const(copy_src, "WEEKLY_DESIGNATION_HOW_MODELLED")
+    claims = [c for c in _ADJUSTMENT_CLAIMS if c in prose]
+    assert claims, (
+        "WEEKLY_DESIGNATION_HOW_MODELLED no longer states that the projected-games figure takes the "
+        "designation into account. The board applies the NF-INJ4b discount, so silence here reads "
+        "as a denial of work actually done"
+    )
+    assert "does not take this into account" not in prose, (
+        "the RETIRED NF-C9 disclaimer is still present. It is now false on every surface that "
+        "renders it — the discount is live"
     )
     assert "projected-games" in prose or "projected games" in prose, (
-        "the disclaimer no longer names the projected-games figure, so a reader cannot tell WHICH "
-        "number is unaffected"
+        "the definition no longer names the projected-games figure, so a reader cannot tell WHICH "
+        "number the designation moves"
     )
 
 
-def test_the_disclaimer_names_what_the_projection_does_move_on(copy_src):
-    """A bare "we do not price this in" invites the reading that we price nothing in. The honest
-    version names the channel that DOES move the number — a formal roster move — which is both true
-    and the thing that makes the boundary legible instead of arbitrary."""
-    prose = _const(copy_src, "WEEKLY_DESIGNATION_NOT_MODELLED")
+def test_the_definition_still_names_the_formal_roster_channel_and_refuses_to_stack(copy_src):
+    """The scope half, and it survived the inversion because it was never about the discount's SIZE.
+
+    A reader told "we price this in" needs to know it is not the only availability channel, and —
+    the part that is easy to lose — that the channels do NOT compound. The board takes the single
+    strongest cap (`compose_availability_caps`); copy implying a player caught by both is discounted
+    twice would misdescribe the arithmetic in the direction that looks more thorough."""
+    prose = _const(copy_src, "WEEKLY_DESIGNATION_HOW_MODELLED")
     assert "roster move" in prose, (
-        "the disclaimer no longer names the roster transaction the availability discount actually "
-        "moves on, so the boundary reads as arbitrary rather than as a scope limit"
+        "the definition no longer names the formal roster transaction, so the designation reads as "
+        "the only thing that moves the number"
+    )
+    assert "never both" in prose or "largest single" in prose, (
+        "the definition no longer says the channels do not stack — a player carrying a formal cap "
+        "AND a designation takes the strongest ONE, and copy that implies otherwise describes an "
+        "arithmetic the board deliberately does not do (the 9.06-vs-7.83 composition)"
     )
 
 
@@ -220,11 +250,16 @@ def test_the_designation_copy_never_forecasts_an_injury(name, copy_src):
     assert not hits, f"{name} forecasts an injury {hits}"
 
 
-@pytest.mark.parametrize("name", _NF_C9_CONSTANTS)
+@pytest.mark.parametrize("name", _DISCLOSURE_ONLY_CONSTANTS)
 def test_the_designation_copy_never_implies_a_duration(name, copy_src):
     """A weekly designation covers ONE game and says nothing about length. Implying a duration
-    would invent the exact quantity whose absence is why this is a disclosure rather than a
-    model."""
+    would invent the exact quantity whose absence is why this is a disclosure rather than a model.
+
+    ⭐ RE-SCOPED, NOT RELAXED (NF-INJ4b-SHIP). The FILING still carries no duration and these strings
+    still may not invent one. What changed is that we now HAVE a duration — measured across past
+    filings, not read off this one — and `WEEKLY_DESIGNATION_HOW_MODELLED` is the single string
+    licensed to describe it. It is held to a stricter requirement instead: its own clause below
+    demands the average be attributed to past filings rather than to the player."""
     prose = _const(copy_src, name)
     hits = [c for c in _DURATION_CLAIMS if c in prose]
     assert not hits, (
@@ -343,18 +378,72 @@ def test_the_disclosure_map_carries_no_games_number_or_weight():
     )
 
 
-def test_the_projection_path_never_reads_the_disclosure_channel():
-    """⭐ THE CODE FORM OF THE COPY CLAUSE, and the more durable one: the copy is only true while
-    nothing in the availability path consumes this field. A future edit that wired `gameStatus` or
-    `disclosable_designation` into `season_projection` would make every sentence above a lie without
-    touching a single string."""
-    src = _SEASON_PROJECTION.read_text()
-    for token in ("disclosable_designation", "WEEKLY_DESIGNATIONS", "gameStatus"):
-        assert token not in src, (
-            f"season_projection.py reads {token} — the weekly designation has become a projection "
-            f"input, and NF-C9's copy ('our projected-games figure does not take this into "
-            f"account') is now false everywhere it renders"
+def test_the_modelled_definition_attributes_its_average_to_past_filings_not_to_the_player():
+    """⭐ THE NEW HEDGE THE INVERSION MADE NECESSARY, and it is the one a copy trim would take.
+
+    The moment the copy is allowed to name a number of games, it is one noun away from a medical
+    claim about the man on the screen. The number is an average over past filings LIKE this one; it
+    is not a read on how long anybody will be unavailable, and the model has no idea who he is —
+    the certified arm is position-invariant and sees only the designation.
+
+    Required explicitly rather than left to the banned-verb screen, for the reason NF-C8 records:
+    a strict screen makes the honest hedge the cheapest thing to delete, so the hedge is separately
+    mandatory (the pairing)."""
+    prose = _const(_CLAIM_COPY_TS.read_text(), "WEEKLY_DESIGNATION_HOW_MODELLED")
+    assert "average" in prose, (
+        "the definition names a games figure without calling it an average — a bare number beside a "
+        "player's name reads as a forecast about him"
+    )
+    assert "past" in prose, (
+        "the definition no longer says the average is drawn from PAST filings, so the number reads "
+        "as a claim about this player's current situation"
+    )
+    assert "not a read on this player" in prose, (
+        "the definition no longer refuses the player-level reading explicitly. The refusal is what "
+        "separates 'filings like this have cost about this much' from 'he will miss about this "
+        "much', and the two are one noun apart"
+    )
+
+
+def test_the_projection_path_REACHES_the_designation_channel_through_the_certified_model():
+    """⭐⭐ RE-KEYED BY NF-INJ4b-SHIP ONTO THE WIRING, and the re-key is the finding.
+
+    NF-C9's version asserted three TOKEN SPELLINGS were absent from `season_projection.py`
+    (`disclosable_designation`, `WEEKLY_DESIGNATIONS`, `gameStatus`) as the code form of "the copy
+    is true". ⛔ **It passed, green, while the discount shipped.** The feed read lives in
+    `designation_discount_serving.py` and the production caller in `run_season_projection.py`, so
+    not one of those three tokens ever appeared in the file being scanned — the guard was one module
+    boundary away from the thing it existed to protect, and the whole 52-clause suite went green
+    over copy that had just become false.
+
+    ⭐ THE LESSON, and it is why this clause is shaped the way it is: a guard keyed on a SPELLING
+    tests where somebody happened to type a name. A guard keyed on the WIRING tests whether the
+    model is reached. Only the second one can survive a refactor that moves the read one file over,
+    which is the commonest thing that happens to a serving path (NF-CAP1's re-key).
+
+    So this asserts the POSITIVE property the copy now depends on: the certified discount is reached
+    from the production build path, through the policy that can switch it off."""
+    from quant_sports_intel_models.football.nfl.fantasy import (
+        designation_discount_policy as POLICY,
+    )
+
+    assert POLICY.serving_enabled(), (
+        "designation_discount_policy.SERVING_ENABLED is False, so the board serves NO designation "
+        "discount — while WEEKLY_DESIGNATION_HOW_MODELLED tells every reader that it does. The copy "
+        "and the discount ship together, in both directions (see test_nf_inj4b_ship_wiring.py)"
+    )
+    consts = POLICY.load_constants()
+    for level in ("out", "doubtful", "questionable"):
+        assert level in consts, (
+            f"the served artifact carries no constant for {level!r}, so that designation is priced "
+            f"at nothing while the copy says it is priced"
         )
+    caller = (_SEASON_PROJECTION.parent / "run_season_projection.py").read_text()
+    assert "_DDS.designation_games_callable(" in caller, (
+        "the production build path no longer reaches the designation channel. NF-C9's copy — now "
+        "asserting that the projected-games figure DOES take the designation into account — is "
+        "false the moment this line goes, and nothing in the rendered board would show it"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -620,7 +709,7 @@ def test_the_disclaimer_renders_on_the_unknown_branch_too():
     # against a `{known != null && <p>…</p>}` that hides the sentence on the one branch where a
     # reader has least to go on.
     m = re.search(
-        r'(\S)\s*<p className="[^"]*">\{WEEKLY_DESIGNATION_NOT_MODELLED\}</p>', body
+        r'(\S)\s*<p className="[^"]*">\{WEEKLY_DESIGNATION_HOW_MODELLED\}</p>', body
     )
     assert m, "the un-modelled disclaimer paragraph has moved or is gone from the component"
     # ⭐ THE PRECEDING NON-SPACE CHARACTER IS THE WHOLE ASSERTION, and it is stated as a REFUSAL of

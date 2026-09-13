@@ -66,8 +66,14 @@ from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
     injury_games_policy as _INJ_POLICY,
 )
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    designation_discount_serving as _DDS,
+)
 from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E402
+from quant_sports_intel_models.football.nfl.ingest.sources import (  # noqa: E402
+    current_season as _current_season,
+)
 
 log = logging.getLogger("nfl.fantasy.fastpath")
 REASON_UNMATCHED = "UNMATCHED_ON_BOARD"       # mirrors reported_absence_overrides
@@ -1023,6 +1029,7 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
                              band_model=None, level_recal: tuple | None = None,
                              reported_absence_rows=None,
                              reported_absence_log=None,
+                             designation_games=None,
                              injury_covariates: pd.DataFrame | None = None) -> pd.DataFrame:
     """The VETERAN half of the board, as a WIDE frame (every base-season input column retained).
 
@@ -1114,6 +1121,7 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
     return project_veterans(base, priors, projection_season, band_model=band_model,
                             level_recal=level_recal,
                             reported_absence_rows=reported_absence_rows,
+                            designation_games=designation_games,
                             reported_absence_log=reported_absence_log,
                             injury_covariates=injury_covariates, **kw)
 
@@ -1201,6 +1209,23 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     _ra = _RAO.load_overrides(as_of=None, season=int(projection_season))
     _RAO.emit_load_log(_ra, log)
     _ra_log: list = []
+    # ── NF-INJ4b-SHIP: the WEEKLY-DESIGNATION discount — THE PRODUCTION CALLER ───────────────────
+    #    ⭐ THIS LINE IS THE DEPLOY HOLD. Until it existed, NF-INJ4b's certified model was wired
+    #    into `apply_availability_chain` but reachable from nowhere, so the served Questionable /
+    #    Doubtful / Out discount was EXACTLY ZERO by construction rather than by a flag. Passing the
+    #    channel is what lifts that, and `designation_discount_policy.serving_enabled()` is the one
+    #    read that can put it back (returning None ⇒ the availability owner's no-designation branch
+    #    ⇒ a byte-identical pre-NF-INJ4b board).
+    #
+    #    ⚠️ LIVE-BOARD PATH ONLY, and gated on the season exactly as the reported-absence overrides
+    #    are. A historical fold rebuilt for the scorecard or the band panel must keep the games
+    #    figures it was graded on — a designation feed read TODAY and applied to a 2019 board would
+    #    regrade the past against a status that did not exist when the projection was made (the
+    #    `market_freshness` hindsight boundary, on the availability channel).
+    _desig_log: dict = {}
+    _designation_games = (
+        _DDS.designation_games_callable(int(projection_season), row_log=_desig_log)
+        if int(projection_season) == _current_season() else None)
     vets = build_veteran_projection(
         con, base_season, projection_season, schema, usage_role_blend=usage_role_blend,
         mover_opportunity_blend=mover_opportunity_blend, env_tilt_blend=env_tilt_blend,
@@ -1209,6 +1234,7 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         absence_prior_blend=absence_prior_blend, band_model=band_model,
         level_recal=((level_form, level_params) if (level_form and level_params) else None),
         reported_absence_rows=_ra.rows, reported_absence_log=_ra_log,
+        designation_games=_designation_games,
         injury_covariates=injury_covariates)
     if veteran_postprocess is not None:
         vets = veteran_postprocess(vets, band_model)
@@ -1264,6 +1290,7 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     _rk_status = load_forward_roster_status(con, projection_season)
     rks = (project_rookies(incoming, curve, projection_season,
                            reported_absence_rows=_ra.rows, reported_absence_log=_ra_log,
+                           designation_games=_designation_games,
                            roster_status=_rk_status)
            if not incoming.empty else pd.DataFrame())
 

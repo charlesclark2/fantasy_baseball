@@ -2601,8 +2601,8 @@ const CASES = [
     // this (see that suite's note on the preceding-character assertion).
     detail: "Hides the un-modelled disclaimer on the unreadable-value branch.",
     file: "components/fantasy/shared.tsx",
-    from: '      <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>',
-    to: '      {known != null && <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>}',
+    from: '      <p className="mt-2">{WEEKLY_DESIGNATION_HOW_MODELLED}</p>',
+    to: '      {known != null && <p className="mt-2">{WEEKLY_DESIGNATION_HOW_MODELLED}</p>}',
     grep: "still carries the disclaimer",
   },
   {

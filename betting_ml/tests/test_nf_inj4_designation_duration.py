@@ -288,20 +288,27 @@ def test_the_cap_is_monotone_and_never_raises_a_projection():
         assert DD.remaining_season_rate_cap(10.0, missed) <= 10.0 + 1e-12
 
 
-def test_the_designation_channel_is_wired_but_structurally_off_in_production():
-    """⭐ **THE ABSENCE GUARD, FLIPPED TO A PRESENCE GUARD — NF-INJ4b, in the same commit that wired
-    the channel** (MH2.7: a guard whose property is deliberately changed is RE-ANCHORED onto the new
+def test_the_designation_channel_is_wired_AND_REACHED_by_a_production_caller():
+    """⭐ **THE PRESENCE GUARD — NF-INJ4b-SHIP, in the same commit that wired the production caller**
+    (MH2.7: a guard whose property is deliberately changed is RE-ANCHORED onto the new
     implementation, never weakened and never deleted).
 
-    NF-INJ4 was `CONSTRAINT_REFUSED`, so this asserted the availability owner carried NO branch
-    reading the model. NF-INJ4b certified the same measurement under a matched-resolution anchor, so
-    the branch now EXISTS — and the deploy hold has to be re-expressed as something stronger than an
-    absence, because "there is no code" is no longer the thing keeping the served discount at zero.
+    THE LINEAGE, because this clause has now been re-anchored twice and each move was a real change
+    in what keeps the served board honest:
 
-    ⭐ What replaces it: the channel is wired, it DEFAULTS TO OFF, and **no production caller passes
-    it**, so the served Questionable / Doubtful / Out discount is EXACTLY ZERO and the branch is
-    provably unreachable in production. That is a stronger claim than the old one — the old guard
-    could only say the code was absent; this one says the SERVED BOARD does not move.
+      NF-INJ4   `CONSTRAINT_REFUSED` → the availability owner carried NO branch reading the model.
+                The guard asserted the CODE WAS ABSENT.
+      NF-INJ4b  certified under a matched-resolution anchor → the branch exists but DEFAULTS TO OFF
+                and no production caller passes it, so the served discount is exactly zero and the
+                branch is provably unreachable. The guard asserted NO CALLER EXISTS.
+      NF-INJ4b-SHIP  the operator's ship path → a production caller DOES pass it, gated on
+                `designation_discount_policy.serving_enabled()`. The absence claim is now false BY
+                DESIGN, so asserting it would be asserting the ship never happened.
+
+    ⭐ What replaces it, and why it is not weaker: an absence guard only ever said "nothing reaches
+    this code". This one says the certified model IS reached, from the production build path, through
+    the ONE policy read that can turn it off — so a silent unplugging (the failure the absence guard
+    could never see, because a deleted caller looks exactly like a deploy hold) now goes RED.
     """
     sp = Path(DD.__file__).parent / "season_projection.py"
     raw = sp.read_text()
@@ -319,38 +326,68 @@ def test_the_designation_channel_is_wired_but_structurally_off_in_production():
         "the designation cap must stamp the formal-applied flag, or a player carrying BOTH a news "
         "cap and a live designation takes both")
 
-    # ⛔ THE DEPLOY HOLD, as a MEASURED property rather than a comment: nothing in the production
-    #    tree passes the argument, so the branch cannot execute on a served build.
+    # ⭐ THE FLIP: a PRODUCTION CALLER must pass the argument, or the certified model is serving
+    #    nothing while every stamp and every line of copy says it is.
     repo = Path(DD.__file__).resolve().parents[4]
     tree = repo / "quant_sports_intel_models"
     callers, scanned = [], 0
     for path in tree.rglob("*.py"):
         scanned += 1
         if path.name.startswith("run_nf_inj4b_"):
-            continue          # the story's own counterfactual is allowed to turn it on
+            continue          # the story's own counterfactual/battery may turn it on directly
         body = "\n".join(ln for ln in path.read_text().splitlines()
                           if not ln.lstrip().startswith("#"))
-        # ⛔ The availability owner itself is NOT exempt — a serving caller defined INSIDE
-        #    `season_projection` lifts the deploy hold exactly as one outside it does, and the
-        #    first cut of this guard excluded that file and stayed GREEN when the RED proof put a
-        #    production caller there. The parameter's own default (`designation_games=None`) is
-        #    excluded by the pattern, not by the path.
-        if re.search(r"\bdesignation_games\s*=\s*(?!None\b)", body):
-            callers.append(str(path.relative_to(repo)))
-    # ⛔ NON-VACUITY, and it is not decoration: the first cut of this guard resolved the repo root
-    #    one level too HIGH, so `rglob` matched NOTHING, the loop never ran and the guard passed on
-    #    an empty set. A guard that ITERATES matches must assert the match set is non-empty, or it
-    #    certifies nothing while looking like it certifies everything (DSR-CONV #690). The RED proof
-    #    is what surfaced it — a production caller planted in the owner module stayed GREEN.
+        # The parameter's own default (`designation_games=None`) is excluded by the pattern, and a
+        # pure pass-through (`designation_games=designation_games`) is a THREADING site, not a
+        # caller — the distinction matters, because a chain of pass-throughs ending in nothing is
+        # exactly the shape a silent unplugging leaves behind.
+        for m in re.finditer(r"\bdesignation_games\s*=\s*(?!None\b)(\w+)", body):
+            if m.group(1) != "designation_games":
+                callers.append(str(path.relative_to(repo)))
+                break
+    # ⛔ NON-VACUITY, and it is not decoration: the first cut of the predecessor guard resolved the
+    #    repo root one level too HIGH, so `rglob` matched NOTHING, the loop never ran and the guard
+    #    passed on an empty set (DSR-CONV #690). The RED proof is what surfaced it.
     assert scanned > 100, (
         f"the caller scan visited only {scanned} file(s) under {tree} — it is not scanning the "
-        f"production tree, so its 'no callers' verdict is vacuous")
-    assert not callers, (
-        f"{callers} pass `designation_games=` into the availability owner. NF-INJ4b is DEPLOY-HELD: "
-        f"the served Q/D/O discount must stay EXACTLY ZERO until the gated ship path and explicit "
-        f"operator approval. This is also the code form of NF-C9's disclosure copy — the moment a "
-        f"production caller passes it, 'our projected-games figure does not take this into account' "
-        f"is FALSE everywhere it renders")
+        f"production tree, so any verdict it reaches is vacuous")
+    assert callers, (
+        "NO production caller passes `designation_games=` into the availability owner. NF-INJ4b's "
+        "certified Questionable / Doubtful / Out discount is therefore serving EXACTLY ZERO — while "
+        "`designation_discount_policy.SERVING_ENABLED` and NF-C9's user-facing copy both say it is "
+        "live. That combination is worse than the deploy hold it replaced: the deploy hold was "
+        "honest about serving nothing.")
+
+    # ⭐ …AND THE CALLER MUST BE GATED ON THE POLICY, or the rollback is not one read.
+    caller_src = (repo / "quant_sports_intel_models/football/nfl/fantasy/"
+                  "run_season_projection.py").read_text()
+    assert "_DDS.designation_games_callable(" in caller_src, (
+        "the production caller no longer routes through `designation_discount_serving` — a "
+        "hand-rolled channel here would bypass the policy read, the persisted constants and the "
+        "feed's own id normaliser at once")
+
+
+def test_the_designation_discount_is_never_served_for_a_historical_season():
+    """⛔ A designation read TODAY must never reach a BACKTEST board.
+
+    The scorecard and the published track record grade our past projections against the world as it
+    was when the projection was made. A live game-status feed applied to a 2019 rebuild would
+    regrade that history against a designation that did not exist — the same hindsight boundary
+    `market_freshness.should_refresh_market` enforces for ADP/ECR, on the availability channel.
+
+    Pinned on the SOURCE because the alternative is rebuilding a historical board to find out."""
+    repo = Path(DD.__file__).resolve().parents[4]
+    caller = (repo / "quant_sports_intel_models/football/nfl/fantasy/"
+              "run_season_projection.py").read_text()
+    block = caller.split("_designation_games = (", 1)
+    assert len(block) == 2, (
+        "the production designation caller is no longer recognisable — this clause cannot tell "
+        "whether it is season-gated, and an unevaluable check is never a pass (NF1.7 (a))")
+    guarded = block[1].split(")", 1)[0] + block[1].split(")", 1)[1][:200]
+    assert "_current_season()" in guarded, (
+        "the designation channel is no longer gated on the CURRENT season — a historical fold "
+        "rebuilt for the band panel or the scorecard would receive today's designations and be "
+        "graded against them")
 
 
 def test_passing_no_designation_channel_leaves_the_chain_byte_identical():

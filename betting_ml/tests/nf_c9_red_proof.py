@@ -57,7 +57,7 @@ CASES = [
      "It is already priced in.",
      "not because we have built it into anything",
      "test_the_designation_copy_never_claims_the_projection_prices_it_in"
-     "[WEEKLY_DESIGNATION_NOT_MODELLED]"),
+     "[WEEKLY_DESIGNATION_HOW_MODELLED]"),
 
     # ⭐ The same failure on a DIFFERENT constant — the parametrisation must actually cover each one
     # rather than passing because the first is clean.
@@ -87,7 +87,7 @@ CASES = [
      "We show it because we hold it, not because we have built it into anything.",
      "We show it because a player listed this way will miss time.",
      None,
-     "test_the_designation_copy_never_forecasts_an_injury[WEEKLY_DESIGNATION_NOT_MODELLED]"),
+     "test_the_designation_copy_never_forecasts_an_injury[WEEKLY_DESIGNATION_HOW_MODELLED]"),
 
     ("invent a duration in the summary", COPY,
      "Listed {status} on the most recent game-status report our injury feed carries.",
@@ -296,10 +296,10 @@ CASES = [
      "test_the_definition_travels_through_infotip_and_not_a_hover_only_tooltip"),
 
     ("re-type the disclaimer in the component", SHARED,
-     '      <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>',
+     '      <p className="mt-2">{WEEKLY_DESIGNATION_HOW_MODELLED}</p>',
      '      <p className="mt-2">Our projected-games figure does not take this into account.</p>',
      # ⚠️ SCOPED: the constant NAME is also in the file's import list.
-     "{WEEKLY_DESIGNATION_NOT_MODELLED}",
+     "{WEEKLY_DESIGNATION_HOW_MODELLED}",
      "test_the_component_prose_is_the_canonical_constants_and_not_retyped"),
 
     # ⭐ "unknown" with no disclaimer beneath it reads MORE like a model input than a designation
@@ -311,11 +311,11 @@ CASES = [
      "      {/* ⭐⭐ THE LINE THE STORY IS FOR. It renders on BOTH branches — an unrecognised value is\n"
      "          exactly as un-modelled as a recognised one, and a reader who meets \"unknown\" with no\n"
      "          disclaimer would have no way to tell. */}\n"
-     '      <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>',
+     '      <p className="mt-2">{WEEKLY_DESIGNATION_HOW_MODELLED}</p>',
      "          ? WEEKLY_DESIGNATION_UNKNOWN_SUMMARY\n"
      "          : WEEKLY_DESIGNATION_SUMMARY.replace(\"{status}\", known)}\n"
      "      </p>\n"
-     '      {known != null && <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>}',
+     '      {known != null && <p className="mt-2">{WEEKLY_DESIGNATION_HOW_MODELLED}</p>}',
      None,
      "test_the_disclaimer_renders_on_the_unknown_branch_too"),
 
