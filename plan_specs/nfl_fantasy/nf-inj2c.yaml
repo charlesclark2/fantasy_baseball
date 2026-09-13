@@ -293,6 +293,30 @@ spec:
       2026 recorded as the calendar-bound 8th) and the BINDING deflation field (NF-INJ2c's
       own coherent point-space family, with the inherited 10-arm field published beside it
       as a declared NON-BINDING diagnostic). Node 3's prereg is written on that basis.
+
+
+      ⭐ FINAL (2026-09-13, node 7). NODE 4 = **DEFLATION_REFUSED**; NODE 5 =
+      **POWER_LIMITED**; NODE 6 DID NOT FIRE; the story CLOSES WITH NO SHIP. Strict
+      dominance HELD on all six registered measures — M1 +0.4551 CRPS on 7/7 folds
+      (p=0.0012, band 0.0901), M2 -10.43 violating players/fold negative on 7/7, M3
+      1.9947 -> 1.7467, M4 89.26% -> 30.02%, M5 regressing at NO position, M6 clearing
+      every NF-D22 power floor — with PBO 0.0 and fold consistency 7/7 against 6
+      required. ⛔ ONE gate refused: `dsr` 0.9306 vs 0.95. The positive control returned
+      DETECTED and its binding verdict PASSED, so the family demonstrably certifies an
+      effect of this size over this field and the refusal is evidence about the EFFECT,
+      ⛔ not about a blind gate family.
+
+      ⭐ THE THESIS WAS CONFIRMED EVEN THOUGH THE STORY DID NOT SHIP. NF-INJ2 was
+      CONSTRAINT_REFUSED at QB because a POINTS-fitted ranker was handed a RATE multiset
+      (rho 0.481 -> 0.350, BH-significant). NF-INJ2c moved the same mechanism into POINT
+      space and the ordering constraint held at EVERY position. The mechanism works; the
+      EVIDENCE at seven folds does not clear the deflation bar. Those are different
+      findings and the record keeps them apart.
+
+      ⛔ NOTHING SERVES. `best_alpha = 0`, DEPLOY-HELD, `SERVED_ARM` stays `incumbent`,
+      no publish, no deploy, no operator packet — branch 4 is not the ship branch. PRs
+      #1084 (node 4 harness, merged 2026-09-05) and #1090 (nodes 4-5 records, merged
+      2026-09-13 as 48d903da).
     followUps: >
       NODE-1 FINDINGS, retained (they are the re-scope's licensing evidence).
 
@@ -325,6 +349,115 @@ spec:
       (6) A fresh worktree silently REBUILDS the gitignored NFL feature caches from a live
       upstream, so a reproduction there is measured on a different feature vintage (51/56
       bare vs 55/56 after rsyncing the main checkout's caches). Landed in CLAUDE.md.
+
+
+      NODES 3b-7 FINDINGS.
+
+      (7) ⭐⭐ A POSITIVE CONTROL'S NULL LEG WHOSE "NO EFFECT" HANDS BACK THE REAL PAYLOAD
+      IS A NOISE TEST ONLY FOR A STUDY *EXPECTING* A NULL. `injected_effect_positive_
+      control(check_null_control=True)` reads an arm surviving `inject(0.0)` as "the
+      family certifies noise" and returns `VACUOUS` — highest precedence, partition-free.
+      But this study's gate table IS its ship condition, so `ship => a non-degenerate arm
+      clears every gate on the real payload => VACUOUS`: the badge is ENTAILED by the
+      outcome it exists to inform, and a verdict entailed by its own subject carries no
+      information about it. NF-INJ2b never reached this branch because `coherence_restored`
+      blocked every arm — the gate PM ruling 2 removed here. ⭐ PM-ruled (#6 D1): the TRUE
+      fix is an advantage-removed null construction plus a declared study-shape input, and
+      it is CARDED as PLAT-CVP3 (defect 5 of the instrument family). The interim was a
+      FORWARD DECLARATION (`nf_inj2c_preregistration_amendment_1.md`), ⛔ never an
+      annotation after the fact. ⛔ (A) "VACUOUS is disqualifying" was REJECTED and the
+      reason recorded, because it is the option a later reader assumes was the safe one: a
+      control that structurally cannot support ANY shipping study of this shape is the
+      UNACHIEVABLE-GATE family (E9.61's strict-pin boundary; NF-INJ4's oracle) — the
+      program refuses gates that cannot FAIL *and* gates that cannot PASS.
+
+      (7a) ⚠️ THE AMENDMENT WAS **INERT** ON THE DECISIVE RUN, and that is the entailment
+      working rather than a wasted document: `dsr` refused, so no arm cleared every gate,
+      so the null leg had no survivor and the badge came back DETECTED.
+      `null_leg_declaration_applies` is recorded FALSE. ⛔ Stated plainly so nothing reads
+      as though the declaration did work — it was written for a branch this run did not
+      take and it stands for a future one.
+
+      (8) ⭐⭐ A DSR REFUSAL IS **NOT ALWAYS** A FIELD-COMPOSITION STORY, AND HERE THE
+      REFLEX WOULD BE WRONG — MEASURED, ⛔ not reasoned. Four prior stories in this
+      vertical converted a DSR refusal into a ship via a fresh coherent re-registration
+      (MARGIN2->3, W7->W7b, W6b-C, NCAAF-S1), which makes "re-register a narrower family"
+      the automatic move. It is measured CLOSED here two independent ways: the binding
+      field is ALREADY the declared minimum (`field_remedy_admissible` = False, the MH2.7
+      machine flag, ⛔ read as the flag and never the prose), AND the non-binding inherited
+      10-arm diagnostic returns DSR **0.933** — within 0.003 of the binding 0.9306. Field
+      composition is not what binds; per-fold EVIDENCE at seven folds is. This is NF-W7f's
+      counterexample shape, and carding a coherent re-registration would spend a story on
+      the wrong lever. ⇒ ALWAYS compute the 2x2 before naming the remedy.
+
+      (9) ⭐ A GITIGNORED FEATURE CACHE DECIDES THE NUMBERS, AND AN **MTIME CANNOT SEE
+      IT** — finding (6) above, now MEASURED on the decisive population. The two checkouts
+      on the operator's laptop hold IDENTICAL row counts for every base the seven folds
+      need and differ by FIVE COLUMNS the newer one has (`injury_games_served`,
+      `injury_games_incumbent`, `fp_ppr_pg_sd`, `games_sd_raw`,
+      `_formal_discount_applied` — two of them this story's own subject matter). Re-scoring
+      the same folds on each moves the three SCORE-USING arms by up to 0.028 CRPS and the
+      M1 margin by up to 0.032, while BOTH DEGENERATES come back BYTE-IDENTICAL — which is
+      what locates the difference in the scored arms rather than in the harness. ⇒ the run
+      uses the cache MATCHING THE CODE THAT WRITES IT, a CORRECTNESS criterion stated
+      first and independently because it happens to favour the arm (E2.1-r). ⭐ The
+      artifact now self-records a CONTENT FINGERPRINT (row/column structure per file), ⛔
+      NOT an mtime: INC-41's lesson on a local file — a COPY refreshes an mtime while the
+      data is unchanged, and a 5-column delta at identical row counts is invisible to one
+      by construction. RECORDED, ⛔ never gated (node 3a §1 admits no band for it).
+
+      (10) ⭐ A CONTROL'S FAILURE CONDITION CAN BE **STRUCTURALLY GUARANTEED** AT A LOW
+      FOLD COUNT — NF-D20 applied to a control rather than an arm. At n <= 2 the calibrated
+      fold-consistency clause declares itself UNDEFINED (MH2 H8), so it is False for EVERY
+      arm, `metric_survivors` empties STRUCTURALLY, and the control reports "the family did
+      not detect a planted effect" — which is untrue. It now returns INACTIVE with the
+      reason. ⛔ Changes the REASON, never the OUTCOME (both block), so the clause stays
+      refuse-only; and it is conditioned on that being the ONLY failure, because a
+      DEGENERATE clearing every gate is an alarm at any fold count. Found by the code-path
+      smoke; the narrowing was found by its own guard.
+
+      (11) ⭐ A DOCUMENT-PROVENANCE GUARD CAN ONLY BE BROKEN BY **ADDING** TEXT, so a
+      RED-proof harness whose #815 check asserts a token DISAPPEARED reports a FALSE
+      VACUITY for it — the dangerous direction, since a false vacuity invites weakening a
+      correct guard. `nf_inj2c_red_proof.py` gained an explicit INSERTION-break mode
+      (`gone=None` ⇒ assert the INJECTED text is present) rather than having the removal
+      check weakened for every other break. Final state 119/119, 0 vacuous.
+
+      (12) `parents[5]` OFF-BY-ONE in the project-root constant: 90 modules use
+      `parents[4]` and 3 of the 4 exceptions are this story's own lineage. This story's is
+      fixed; ⛔ the others are FLAGGED, not touched — PM-placed to be swept by whichever
+      story next touches them.
+
+      (13) PLAT-CVP2 LANDED MID-STORY AND REFUTED THE PRE-REGISTRATION §7's PREMISE
+      (verified at its own commit, then measured FALSE: `gate_classes=`/`invariant_gates=`
+      exist and `CONSTRAINT_BLOCKED` is reachable). ⛔ §7 is left VERBATIM with the
+      refutation recorded beside it (NF-W7f); the control is driven by the partition §7
+      itself declared FORWARD, which is a change of DELIVERY and not of substance
+      (PM-confirmed, #6 D2). With NF-INJ4b's registration this completes the two-caller
+      trigger for retiring `cv_power`'s name-heuristic default — PLAT-CVP2's checklist
+      item, ⛔ not this story's to build.
+
+      (14) THE MARKET-VINTAGE CLUSTER — PM-PLACED on the platform reproducibility card as
+      accumulating evidence, recorded here so the story's own record is complete: the
+      NF1.5 ADP/ECR caches are a FIFTH gitignored-consumer-read instance and VOIDED node
+      3b run 1 on a six-day-stale ECR snapshot that is structurally UNRECOVERABLE (FP
+      serves only the current snapshot; the lake's asset is season-partitioned and
+      overwritten); `apply_2026` hardcodes `market_refresh=False` and the payload builder
+      FALLS THROUGH to a live network pull on a cache MISS, so "reproduction mode"
+      silently live-pulls; and `--market-refresh` names DIFFERENT SCOPES in two entrypoints
+      (`run_nf1_5.py` re-fetches ADP *and* ECR; `run_season_projection.py` the ADP census
+      only). A day-granularity precondition now REFUSES a build whose cache vintage does
+      not match the served manifest. The durable fix — capture-pinning the market caches
+      BESIDE the board — is NOT built.
+
+      (15) ⭐ A SESSION'S OWN REPRODUCTION PIN CAN FAIL ON A **REPRESENTATION** ARTIFACT,
+      ⛔ not a data difference. The node-3b pin compares a worst absolute diff against a
+      DECIMAL half-unit bar with no exact binary form, so a structural TIE lands on either
+      side of it by luck of representation (`16.6 - 16.55` = 0.05000000000000071 is OVER;
+      `15.1 - 15.05` = 0.049999999999998934 is UNDER). PM-ruled (#5 D1) to a
+      representation-tolerant comparison at an explicit 1e-9 epsilon — ⛔ NOT slack, ⛔ NOT
+      a moved bar, and ⛔ NOT round-then-equate. The decisive run's pin held at exactly
+      0.05000000000000071.
 
       ✅ RESOLVED BY PM RULING 2026-09-01 — THE FOLD AND THE FIELD (raised at node 3c,
       held, ruled). The block that stood here set out the two options and was answered:
