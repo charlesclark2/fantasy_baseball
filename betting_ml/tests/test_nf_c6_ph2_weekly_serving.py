@@ -624,6 +624,116 @@ def test_slate_end_reads_the_last_gameday_of_the_SERVED_week():
     assert WS.slate_end(sched, season=2025, week=2) is None
 
 
+# ── 8c. The monitor must actually RUN, and the schedule must not be silently revertible ────────
+#
+# ⛔ E11.23 forbids importing `pipeline` in the fast gate (it reads the dbt manifest at import and
+# dies at COLLECTION when absent), so these read SOURCE. That is the technique the repo's other
+# wiring guards use — and it is why each one matches a real CALL form rather than a bare name: an
+# identifier is satisfied by an import line or a docstring (the NF-C0e wired-not-invoked shape and
+# the INC-38 prose-satisfies-a-scan shape, both of which have shipped green in this repo before).
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+_TRIPLE_DQ = chr(34) * 3
+_TRIPLE_SQ = chr(39) * 3
+
+
+def _src(rel: str) -> str:
+    return (_REPO_ROOT / rel).read_text()
+
+
+def _strip_comments_and_docstrings(src: str) -> str:
+    """Remove `#` comments and triple-quoted blocks so PROSE cannot satisfy a wiring assertion."""
+    out, i, n = [], 0, len(src)
+    while i < n:
+        if src.startswith(_TRIPLE_DQ, i) or src.startswith(_TRIPLE_SQ, i):
+            quote = src[i:i + 3]
+            close = src.find(quote, i + 3)
+            i = n if close == -1 else close + 3
+            continue
+        if src[i] == "#":
+            nl = src.find("\n", i)
+            i = n if nl == -1 else nl
+            continue
+        out.append(src[i])
+        i += 1
+    return "".join(out)
+
+
+def test_the_stripper_actually_removes_prose_or_these_guards_are_vacuous():
+    """The guards below are only as good as this helper — if it stopped stripping, a COMMENT naming
+    the op would satisfy them (INC-38). Prove it removes both comment and docstring forms."""
+    sample = "x = 1  # nfl_weekly_freshness_op()\n" + _TRIPLE_DQ + "nfl_weekly_freshness_op()" \
+        + _TRIPLE_DQ + "\ny = 2\n"
+    stripped = _strip_comments_and_docstrings(sample)
+    assert "nfl_weekly_freshness_op()" not in stripped
+    assert "x = 1" in stripped and "y = 2" in stripped
+
+
+def test_the_weekly_freshness_monitor_is_actually_INVOKED_by_a_scheduled_job():
+    """⭐ THE GAP THIS CLOSES. The op was defined, exported and tested — and wired into a job that
+    nothing scheduled, so it NEVER RAN, while the builder's own skip message named it as the thing
+    that escalates. A named escalation path that does not exist is worse than an absent one.
+
+    It must be CALLED, not merely imported — an import line alone is the wired-not-invoked shape."""
+    host = _strip_comments_and_docstrings(
+        _src("pipeline/jobs/sports_nfl_sleeper_injuries_job.py"))
+    assert "nfl_weekly_freshness_op()" in host, (
+        "the weekly freshness monitor is not CALLED by sports_nfl_sleeper_injuries_job — if it has "
+        "moved to another scheduled host, re-anchor this guard onto that host rather than deleting "
+        "it; a monitor nothing invokes is not a monitor")
+
+
+def test_the_weekly_freshness_monitor_does_NOT_live_in_the_job_it_watches():
+    """A monitor hosted inside its own subject cannot see its subject STOP — when the schedule is
+    off there is no run, no verification and nothing red. The op is DEFINED with its subject (it
+    shares that module's S3 keys and paging helper); what must not happen is its being INVOKED by
+    `sports_nfl_weekly_serving_job`, whose failure mode it exists to detect."""
+    subject = _strip_comments_and_docstrings(
+        _src("pipeline/jobs/sports_nfl_weekly_serving_job.py"))
+    # ⚠️ SCOPE TO THIS JOB'S BODY ONLY. `sports_nfl_weekly_freshness_job` is defined LATER in the
+    # same module and calls the op legitimately (an on-demand operator handle), so reading to
+    # end-of-file makes this guard fail for the wrong reason — which is exactly what it did on its
+    # first cut. Cut at the next top-level definition.
+    body = subject.split("def sports_nfl_weekly_serving_job(")[-1]
+    for terminator in ("\n@", "\ndef "):
+        body = body.split(terminator)[0]
+    assert "nfl_weekly_freshness_op()" not in body, (
+        "the weekly freshness monitor is invoked by the very job it watches — it cannot observe "
+        "that job failing to run at all")
+
+
+def test_the_weekly_serving_schedule_self_starts_and_is_heartbeat_checked():
+    """NF-INFRA1, twice-bitten: a schedule toggled ON in Dagit holds that state ONLY in the Dagster
+    Postgres, so a volume reset or box re-host silently reverts it to STOPPED with nothing paging.
+
+    ⚠️ It needs BOTH halves and this asserts both. `default_status=RUNNING` makes the intended state
+    a property of the CODE; `CRITICAL_SCHEDULES` makes a revert PAGE. Either alone leaves a hole —
+    and here the artifact cannot substitute for the heartbeat, because a clean `awaiting_rosters`
+    skip is the healthy answer most days, so a stopped schedule looks exactly like the cadence."""
+    sched = _src("pipeline/schedules/sports_rollforward_schedules.py")
+    block = sched.split("def sports_nfl_weekly_serving_schedule(")[0]
+    decorator = block.rsplit("@schedule(", 1)[-1]
+    assert "default_status=DefaultScheduleStatus.RUNNING" in decorator, (
+        "sports_nfl_weekly_serving_schedule does not self-start — its ON state would live only in "
+        "the Dagster Postgres")
+
+    from betting_ml.monitoring import monitor_health as MH
+
+    assert "sports_nfl_weekly_serving_schedule" in set(MH.CRITICAL_SCHEDULES), (
+        "sports_nfl_weekly_serving_schedule is not heartbeat-checked, so a revert to STOPPED would "
+        "freeze the weekly artifact silently")
+
+
+def test_the_builder_does_not_promise_an_escalation_path_that_does_not_exist():
+    """The skip message is operator-facing and makes a CLAIM about what escalates. It named an
+    'OFF-CYCLE freshness monitor' that was on no schedule. Whatever it names must be real."""
+    src = _src("quant_sports_intel_models/football/nfl/fantasy/weekly_serving.py")
+    assert "OFF-CYCLE freshness monitor" not in src, (
+        "the skip path still points at the retired 'OFF-CYCLE' monitor wording — the monitor now "
+        "runs DAILY as a leaf on sports_nfl_sleeper_injuries_job")
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 9. The builder must populate every field the contract declares
 # ══════════════════════════════════════════════════════════════════════════════════════════════

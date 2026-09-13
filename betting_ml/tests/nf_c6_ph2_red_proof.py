@@ -44,6 +44,9 @@ _SERVING = _FAN / "weekly_serving.py"
 _RUNNER = _FAN / "run_weekly_serving.py"
 _OP = _REPO / "pipeline/jobs/sports_nfl_weekly_serving_job.py"
 _FRESH = _REPO / "betting_ml/monitoring/nfl_weekly_freshness.py"
+_SLEEPER_JOB = _REPO / "pipeline/jobs/sports_nfl_sleeper_injuries_job.py"
+_SCHEDULES = _REPO / "pipeline/schedules/sports_rollforward_schedules.py"
+_MON_HEALTH = _REPO / "betting_ml/monitoring/monitor_health.py"
 
 _G_CONTRACT = _TESTS / "test_nf_c6_ph2_weekly_contract.py"
 _G_SERVING = _TESTS / "test_nf_c6_ph2_weekly_serving.py"
@@ -220,6 +223,48 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "    return days.max().to_pydatetime()",
      "    return days.min().to_pydatetime()",
      f"{_G_SERVING}::test_slate_end_reads_the_last_gameday_of_the_SERVED_week"),
+
+    # ── NF-C6-PH2 follow-up: the monitor must RUN, and the schedule must not silently revert ────
+    ("the weekly freshness monitor stops being invoked by any scheduled job (it never runs again)",
+     _SLEEPER_JOB,
+     "    nfl_published_board_freshness_op()\n    nfl_weekly_freshness_op()",
+     "    nfl_published_board_freshness_op()",
+     f"{_G_SERVING}::test_the_weekly_freshness_monitor_is_actually_INVOKED_by_a_scheduled_job"),
+
+    ("the monitor is hosted INSIDE the job it watches (it cannot see its subject stop)",
+     _OP,
+     "    \"\"\"Rebuild + publish the NFL weekly projection for the next unplayed week, then verify it.\"\"\"\n"
+     "    nfl_weekly_serving_op()",
+     "    \"\"\"Rebuild + publish the NFL weekly projection for the next unplayed week, then verify it.\"\"\"\n"
+     "    nfl_weekly_serving_op()\n    nfl_weekly_freshness_op()",
+     f"{_G_SERVING}::test_the_weekly_freshness_monitor_does_NOT_live_in_the_job_it_watches"),
+
+    ("the weekly serving schedule stops self-starting (its ON state lives only in Postgres)",
+     _SCHEDULES,
+     "    # NF-INFRA1 shape: self-start + heartbeat-checked — see the block above.\n"
+     "    default_status=DefaultScheduleStatus.RUNNING,\n"
+     ")\ndef sports_nfl_weekly_serving_schedule(",
+     "    default_status=DefaultScheduleStatus.STOPPED,\n"
+     ")\ndef sports_nfl_weekly_serving_schedule(",
+     f"{_G_SERVING}::test_the_weekly_serving_schedule_self_starts_and_is_heartbeat_checked"),
+
+    ("the weekly serving schedule drops out of the heartbeat set (a revert stops paging)",
+     _MON_HEALTH,
+     '    "sports_nfl_weekly_serving_schedule",\n',
+     "",
+     f"{_G_SERVING}::test_the_weekly_serving_schedule_self_starts_and_is_heartbeat_checked"),
+
+    ("the builder goes back to promising an OFF-CYCLE monitor that no schedule invokes",
+     _SERVING,
+     'f"The previously published week keeps serving, and the DAILY freshness monitor on the "',
+     'f"The previously published week keeps serving, and the OFF-CYCLE freshness monitor on the "',
+     f"{_G_SERVING}::test_the_builder_does_not_promise_an_escalation_path_that_does_not_exist"),
+
+    ("the prose-stripper stops stripping, so a COMMENT can satisfy the wiring guards",
+     _G_SERVING,
+     "        if src.startswith(_TRIPLE_DQ, i) or src.startswith(_TRIPLE_SQ, i):",
+     "        if False:",
+     f"{_G_SERVING}::test_the_stripper_actually_removes_prose_or_these_guards_are_vacuous"),
 
 ]
 

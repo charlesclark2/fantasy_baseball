@@ -125,9 +125,10 @@ class WeeklyRostersNotPublished(WeeklyServingError):
 
     ⚠️ IT IS NOT A SILENT NO-OP EITHER (the NF-FRESH1 19-green-runs class). The run exits with a
     DISTINCT code, says so loudly, and publishes nothing — and the thing that escalates if it
-    persists is the OFF-CYCLE freshness monitor on the PUBLISHED artifact, which goes WRONG_WEEK
-    once the served week falls behind the schedule. A build declining to run is structurally
-    invisible to itself; that separation is the whole reason the monitor is a different job.
+    persists is the DAILY freshness monitor on the PUBLISHED artifact (`nfl_weekly_freshness_op`,
+    which rides `sports_nfl_sleeper_injuries_job`), and it goes WRONG_WEEK once the served week's
+    own slate has COMPLETED while we are still serving it. A build declining to run is structurally
+    invisible to itself; that separation is the whole reason the monitor lives in a different job.
     """
 
 
@@ -305,8 +306,9 @@ def assert_target_week_rosters_published(rosters: pd.DataFrame, *, target: Targe
         f"(newest week present: {int(present.max()) if len(present) else 'none'}). The target week "
         f"advanced at the previous slate's first kickoff; its rosters publish a few days later. "
         f"Nothing was built and nothing was published — this is the feed's cadence, not a defect. "
-        f"The previously published week keeps serving, and the OFF-CYCLE freshness monitor is what "
-        f"escalates if the served week falls behind."
+        f"The previously published week keeps serving, and the DAILY freshness monitor on the "
+        f"published artifact is what escalates if that week's own slate completes while it is "
+        f"still the one being served."
     )
 
 

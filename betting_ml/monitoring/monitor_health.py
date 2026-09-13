@@ -62,6 +62,14 @@ CRITICAL_SCHEDULES = frozenset({
     # NCAAF-on-box card turns them on; adding them now would false-page every evaluation.
     "sports_nfl_board_publish_schedule",
     "sports_nfl_sleeper_injuries_schedule",
+    # NF-C6-PH2 (2026-09-13) — the WEEKLY serving cadence. Added the day the operator enabled it,
+    # which is the moment the schedule above's own warning said it had to be. It carries the same
+    # risk as its two siblings (a Dagit toggle lives only in the Dagster Postgres) plus one the
+    # others do not: this build SKIPS CLEANLY and reports SUCCESS whenever the next week's rosters
+    # have not published yet, so "no recent publish" is a routine, healthy state here. That makes
+    # a silently-STOPPED schedule genuinely indistinguishable from the normal cadence by looking at
+    # the artifact alone — the heartbeat is what separates them.
+    "sports_nfl_weekly_serving_schedule",
     # NF-CAP1 (2026-09-05) — the two FREE NFL point-in-time FORWARD captures. They are the
     # sharpest case this set has: nothing downstream reads them yet (best_alpha=0), and they still
     # belong here because a capture that does not happen cannot be repaired. A serving artifact
