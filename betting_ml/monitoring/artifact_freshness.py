@@ -316,10 +316,21 @@ REGISTRY: tuple[FreshnessContract, ...] = (
         # ⚠️ ARMED FROM OCTOBER, NOT SEPTEMBER, and this is the INC-45 rule ("do NOT put a
         # freshness SLA on an artifact that should not advance") applied to a WINDOW rather than
         # to a whole artifact. nflverse publishes `injuries_<season>.parquet` only once injury
-        # reports exist — week 1's practice reports — so through September the artifact CANNOT
-        # advance and a Sep-armed SLA would page daily on a leg working exactly as designed.
-        # Measured 2026-09-05: the 2026 asset 404s, and the leg's two September fires correctly
-        # captured nothing.
+        # reports exist — week 1's practice reports — so through the EARLY part of September the
+        # artifact CANNOT advance and a Sep-armed SLA would page daily on a leg working exactly
+        # as designed. Measured 2026-09-05: the 2026 asset 404s, and the leg's two September
+        # fires correctly captured nothing.
+        #
+        # ⏱️ RE-MEASURED 2026-09-13: the vendor published between 09-04 and 09-08 and the leg
+        # captured on its next fire (11 rows on 09-08, 167 on 09-11). So "September" is really
+        # two windows — dead until the vendor publishes, live after — and only the DEAD half
+        # justifies the exclusion. The value stays: a September arming would still have false-
+        # paged through the pre-publication window, and the boundary is a VENDOR PUBLICATION
+        # DATE, which is not expressible as a month and would be a season pin if hardcoded (the
+        # NCAAF-P0.6 landmine). The residual is therefore stated rather than engineered around:
+        # between the vendor's publication and Oct 1, a silent freeze here is covered by the
+        # schedule's default_status=RUNNING + its CRITICAL_SCHEDULES entry and by the leg's own
+        # data_expected_from escalation (~week 2's kickoff), NOT by this contract.
         #
         # September is not left uncovered, it is covered by the two mechanisms that can actually
         # see it: the leg PAGES ITSELF once its own `data_expected_from` bar passes (week 2's

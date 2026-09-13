@@ -156,14 +156,31 @@ spec:
       Dagster event log: the flag IS set and the props fetch raised, or every
       per-event fetch failed. Both are equally silent today; all three are now loud.
 
-      PERMANENTLY LOST — the honest cost, per leg:
-        injuries: ZERO weeks. nflverse has published no 2026 injury row for anyone
-          to capture. First capturable fire Fri 2026-09-11 (or Tue 09-15).
-        market game lines: ZERO. Captured on both in-season fires.
-        market PROPS: TWO point-in-time boards, 2026-09-01 and 2026-09-04.
-          Unrecoverable — the live /odds endpoint has no history and /historical
-          retains closing lines only. Next fire Tue 2026-09-08 16:15 UTC, which is
-          the LAST capture before the 09-09 opener.
+      PERMANENTLY LOST — the honest cost, per leg. ⚠️ RE-MEASURED 2026-09-13, eight
+      days after the diagnosis and with the PR still unmerged; the props figure has
+      DOUBLED and is recorded here rather than left at its first reading:
+        injuries: ZERO weeks — and now CONFIRMED rather than predicted. nflverse
+          published injuries_2026.parquet between 09-04 and 09-08, and the leg
+          picked it up on its VERY NEXT FIRE with no operator action: 11 rows on
+          2026-09-08T16:01:01Z (the file had just appeared) and 167 on
+          2026-09-11T16:00:58Z as week 1's report populated. Real content — Out /
+          Questionable designations with practice status, e.g. TreVeyon Henderson
+          NE RB Out / Did Not Participate. This is the diagnosis vindicated end to
+          end: a leg read as dead for five weeks was healthy throughout, needed
+          nothing, and started capturing by itself the moment there was something
+          to capture. `vendor_asof_present` is still FALSE, so nflverse has NOT
+          restored date_modified — our capture_timestamp remains the only as-of
+          bound that will ever exist for a 2026 injury report, which is precisely
+          what this leg exists to create.
+        market game lines: ZERO. Captured on all four in-season fires (09-01, 09-04,
+          09-08, 09-11; the 09-11 board is 212 events rather than 272 because week
+          1's games have come off it).
+        market PROPS: FOUR point-in-time boards — 2026-09-01, 09-04, 09-08 and
+          09-11. Was TWO at diagnosis; the 09-08 board was the LAST before the
+          09-09 opener and is gone, and 09-11 is week 1's. Unrecoverable — the live
+          /odds endpoint has no history and /historical retains closing lines only.
+          The flag was never set, so the loss accrues at two boards a week until it
+          is. NEXT FIRE: Tue 2026-09-15 16:15 UTC.
 
       CREDITS — the suspected 10x error is REAL and now measured, bracketed by free
       /sports reads whose zero delta CERTIFIES the brackets rather than assuming
@@ -177,7 +194,11 @@ spec:
       docstrings and .env.example corrected from the measured numbers in this change.
       New spend incurred: 23 credits (3 + 10 + 10, two events). No other paid call.
     followUps: >
-      1. OPERATOR, BEFORE Tue 2026-09-08 16:15 UTC — THE LAST PRE-OPENER CAPTURE.
+      0. STATUS 2026-09-13: PR #1091 is STILL OPEN (CI green, MERGEABLE/CLEAN, no
+         file overlap with dev's 9 newer commits — all NF-INJ2c, the disjoint lane
+         the OverlapCheck predicted). Nothing in this story has shipped, and the
+         box .env flag was not set, so props have missed two further boards.
+      1. OPERATOR, BEFORE Tue 2026-09-15 16:15 UTC — the next props capture.
          Order matters: the box .env key must exist BEFORE the next deploy, because
          NFL_PIT_CAPTURE_PROPS is now in env.required and a missing key FAILS the
          deploy (a git pull never touches the box .env).

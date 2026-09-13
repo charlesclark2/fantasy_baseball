@@ -21,6 +21,59 @@ The one real defect is the last row, and it is not the one the story expected.
 
 ---
 
+## ⏱️ Re-measured 2026-09-13 — the diagnosis held, and the props cost has doubled
+
+Eight days on, with this PR still unmerged and the box flag still unset.
+
+**Injuries: confirmed, not merely predicted.** nflverse published `injuries_2026.parquet`
+between 09-04 and 09-08, and the leg picked it up **on its very next fire, with no operator
+action at all**:
+
+```
+nfl/pit/injuries  capture_date=2026-09-08  season=2026  week=1   11 rows  16:01:01Z
+nfl/pit/injuries  capture_date=2026-09-11  season=2026  week=1  167 rows  16:00:58Z
+```
+
+Real content — `Out` / `Questionable` with practice status (`TreVeyon Henderson NE RB Out / Did
+Not Participate In Practice`). The 11 → 167 progression is week 1's report populating through the
+week. Most rows carry a NULL `report_status`, which is the documented NF-W0 shape (on the practice
+report, no game designation) and not a defect.
+
+⭐ `vendor_asof_present` is still **False** — nflverse has **not** restored `date_modified`. So our
+`capture_timestamp` remains the only as-of bound that will ever exist for a 2026 injury report,
+which is exactly what this leg exists to create. It is now creating them.
+
+**This is the whole diagnosis vindicated end to end:** a capture read as dead for five weeks was
+healthy throughout, required nothing, and began capturing by itself the moment there was something
+to capture. Had it been "fixed" on the original premise, the fix would have been aimed at nothing.
+
+**Props: the cost has doubled, and it keeps accruing.**
+
+```
+nfl/pit/market  2026-09-08  game_lines  272 events   ← props MISSED (the last pre-opener board)
+nfl/pit/market  2026-09-11  game_lines  212 events   ← props MISSED (week 1)
+```
+
+`market_tier` is still `game_lines` on every row. **Four** point-in-time props boards are now
+permanently gone (09-01, 09-04, 09-08, 09-11), not two. Game lines captured on all four fires; the
+212 is the board shrinking as week 1's games came off it, not a defect. **The loss accrues at two
+boards a week until the flag is set. Next fire: Tue 2026-09-15 16:15 UTC.**
+
+Weather is capturing heavily now that games are live (19 rows on 09-13).
+
+> ⚠️ One consequence for the record: the `nfl_pit_injuries` freshness contract is armed **Oct–Feb**
+> on the reasoning that "through September the artifact cannot advance". That was true when
+> measured on 09-05 and is now too strong — it advanced on 09-08. The arming value is still
+> correct for this season (arming September would have false-paged through the pre-publication
+> window, when the artifact genuinely could not move), but the residual is worth stating: between
+> ~09-08 and Oct 1 a silent freeze of this artifact is covered by the schedule's
+> `default_status=RUNNING` + its `CRITICAL_SCHEDULES` entry and by the leg's own
+> `data_expected_from` escalation from ~09-17, **not** by this contract. A date-based arming would
+> fix it and would be a season pin (the NCAAF-P0.6 landmine), so it is left as a stated bound
+> rather than engineered around.
+
+---
+
 ## Leg A — injuries: running, healthy, nothing lost
 
 **The schedule is not stopped.** `sports_nfl_pit_metadata_schedule` ships
