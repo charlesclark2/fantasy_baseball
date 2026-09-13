@@ -10,7 +10,7 @@ metadata:
   name: nf-inj4b-ship
   vertical: nfl_fantasy
   card: https://trello.com/c/8tgfKzkw   # NF-INJ4b record; SHIP card linked at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     NF-INJ4b closed SHIP_CANDIDATE with a STRUCTURAL hold: 9/9 gates
