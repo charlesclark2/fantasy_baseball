@@ -52,12 +52,16 @@ SUITE = "betting_ml/tests/test_nf_c9_designation_disclosure.py"
 #: ABSENCE (the mutation ADDS the forbidden thing), which cannot be expressed that way.
 CASES = [
     # ══ ⛔⛔ 1. THE DISCLOSURE MUST NOT BECOME AN ADJUSTMENT ═══════════════════════════════════
-    ("claim the projection prices the designation in", COPY,
-     "We show it because we hold it, not because we have built it into anything.",
-     "It is already priced in.",
-     "not because we have built it into anything",
-     "test_the_designation_copy_never_claims_the_projection_prices_it_in"
-     "[WEEKLY_DESIGNATION_HOW_MODELLED]"),
+    # ⭐ RE-ANCHORED BY NF-INJ4b-SHIP. The adjustment claim is now REQUIRED on
+    # WEEKLY_DESIGNATION_HOW_MODELLED and still FORBIDDEN everywhere else, so the break moves to a
+    # sibling constant — the one-line SUMMARY, whose job is only to say what the club filed.
+    ("claim the projection prices the designation in (on a chip summary, where it is false)", COPY,
+     "Listed {status} on the most recent game-status report our injury feed carries.",
+     "Listed {status} on the most recent game-status report our injury feed carries, and it is "
+     "already priced in.",
+     None,   # ADDITIVE break: it appends a claim, so no token is removed
+     "test_the_chip_copy_never_claims_the_projection_prices_it_in"
+     "[WEEKLY_DESIGNATION_SUMMARY]"),
 
     # ⭐ The same failure on a DIFFERENT constant — the parametrisation must actually cover each one
     # rather than passing because the first is clean.
@@ -68,24 +72,28 @@ CASES = [
      "test_the_designation_copy_never_claims_the_projection_prices_it_in"
      "[WEEKLY_DESIGNATION_SUMMARY]"),
 
-    ("drop the disclaimer's negative statement", COPY,
-     "Our projected-games figure does not take this into account.",
+    # ⭐ RE-ANCHORED: the statement the definition must make is now the POSITIVE one.
+    ("drop the definition's positive statement (the chip stops saying we price it)", COPY,
+     "Our projected-games figure takes this into account.",
      "Our projected-games figure is one of several inputs on this page.",
-     "does not take this into account",
-     "test_the_definition_says_out_loud_that_the_projection_does_not_price_it_in"),
+     "takes this into account",
+     "test_the_definition_says_out_loud_that_the_projection_DOES_price_it_in"),
 
-    ("stop naming the channel the discount DOES move on", COPY,
-     "That number moves only on a formal roster move — injured reserve, the "
-     "physically-unable-to-perform list, the non-football-injury list, or a suspension — so a "
-     "weekly designation like this one applies no discount to it at all.",
-     "A weekly designation like this one applies no discount to it at all.",
-     "roster move",
-     "test_the_disclaimer_names_what_the_projection_does_move_on"),
+    # ⭐ RE-ANCHORED: the scope half survived the inversion — it was never about the SIZE of the
+    # discount — but the clause it answers to is now the one that ALSO forbids implying a stack.
+    ("stop naming the formal channel, so the designation reads as the only thing that moves it",
+     COPY,
+     "A formal roster move — injured reserve, the physically-unable-to-perform list, the "
+     "non-football-injury list, or a suspension — is priced separately and more heavily; where "
+     "more than one of these applies we take the largest single discount, never both.",
+     "Other things move it too.",
+     "largest single discount",
+     "test_the_definition_still_names_the_formal_roster_channel_and_refuses_to_stack"),
 
     # ══ ⛔⛔ 2. IT MUST NOT BECOME A MEDICAL FORECAST, AND CARRIES NO DURATION ══════════════════
-    ("forecast an injury in the disclaimer", COPY,
-     "We show it because we hold it, not because we have built it into anything.",
-     "We show it because a player listed this way will miss time.",
+    ("forecast an injury in the definition", COPY,
+     "That is an average over past filings, not a read on this player.",
+     "That is how much time a player listed this way will miss.",
      None,
      "test_the_designation_copy_never_forecasts_an_injury[WEEKLY_DESIGNATION_HOW_MODELLED]"),
 

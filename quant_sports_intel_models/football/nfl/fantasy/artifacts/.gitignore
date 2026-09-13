@@ -31,4 +31,5 @@ weekly_serving/
 # re-stages the CURRENT board, which after the ADP day rolls is a DIFFERENT one (NF-INJ2c: a vendor
 # snapshot is not recoverable once its day passes) — the manifest is what says which board the
 # battery's numbers describe.
-nf_inj4b_ship_baseline/served_projections_2026.json
+nf_inj4b_ship_baseline/*
+!nf_inj4b_ship_baseline/manifest.json

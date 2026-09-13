@@ -307,3 +307,53 @@ def test_the_designation_cap_stamps_the_disjointness_flag_through_the_real_owner
     assert not flag[1], "an untouched row must not be flagged"
     assert out[SP.DESIGNATION_APPLIED_COL].to_numpy(dtype=bool)[0], (
         "the owning channel is no longer recorded per row")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 5. THE BATTERY'S OWN NO-OP CONTROL, AS A GUARD
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_an_empty_designation_map_moves_nothing_on_a_board_whose_vor_is_ROUNDED():
+    """⭐⭐ THE BATTERY'S NO-OP CONTROL, PROMOTED FROM A RUNTIME CHECK TO A GUARD — and it exists
+    because the RED proof found nothing covering it.
+
+    The battery's control caught a real defect at runtime: re-deriving `vor` as `pts − repl` instead
+    of applying the delta to the PUBLISHED value moved **1,113 ranks across the 14 boards under an
+    EMPTY designation map**. The published board rounds `pts`, `repl` and `vor` each to one decimal,
+    so `pts − repl` differs from the published `vor` by up to 0.1 — a rounding residue, not a
+    discount — and that difference would have reached the operator packet as phantom movement on
+    rows nothing had touched. Same shape as the `(config_name, n_teams)` defect that made 1,715 of
+    1,716 rows 'move' in NF-INJ4b's own counterfactual.
+
+    ⚠️ **THE FIXTURE IS THE WHOLE TEST.** Its `vor` is deliberately NOT `pts − repl`: with a
+    consistent fixture both implementations agree and the clause is vacuous. The two must DISAGREE
+    on the fixture or it cannot tell them apart (the NF-C6b rank-gate lesson: a gate needs a fixture
+    where the two orderings differ)."""
+    from quant_sports_intel_models.football.nfl.fantasy import (
+        run_nf_inj4b_ship_battery as BAT,
+    )
+
+    board = pd.DataFrame({
+        "id": ["00-0001", "00-0002", "00-0003"],
+        "name": ["A", "B", "C"], "pos": ["RB", "WR", "QB"], "team": ["X", "Y", "Z"],
+        "pts": [350.5, 314.9, 310.2], "repl": [150.1, 150.1, 150.1],
+        # ⛔ ROUNDED, and NOT equal to `pts - repl` — 350.5-150.1 = 200.40000000000003, published
+        #    as 200.4; the residue is exactly what a re-derivation reintroduces.
+        "vor": [200.4, 164.8, 160.0],
+        "g": [17.0, 16.0, 15.0],
+        "ptsP10": [104.0, 101.5, 103.9], "ptsP90": [420.0, 400.0, 390.0],
+        "vorP10": [-46.1, -48.6, -46.2], "vorP90": [269.9, 249.9, 239.9],
+        "ovrRank": [1, 2, 3], "adp": [1.0, 2.0, 3.0], "bye": [5, 6, 7],
+        "rookie": [False, False, False],
+    })
+    assert not np.allclose(board["pts"] - board["repl"], board["vor"], atol=1e-12), (
+        "the fixture's vor now EQUALS pts − repl, so a re-derivation and a delta agree on it and "
+        "this clause can no longer tell them apart — it would pass on nothing")
+
+    cand = BAT.candidate_board(board, {})
+    for col in ("pts", "g", "vor", "ptsP10", "ptsP90", "vorP10", "vorP90"):
+        worst = float(np.nanmax(np.abs(board[col].astype(float).to_numpy()
+                                       - cand[col].astype(float).to_numpy())))
+        assert worst <= BAT.EPS, (
+            f"an EMPTY designation map moved `{col}` by {worst:.3e} (> {BAT.EPS}). The candidate "
+            f"board must reproduce the published one when nothing is designated, or every figure "
+            f"in the operator packet carries a rounding residue reported as movement")

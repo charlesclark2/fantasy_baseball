@@ -2042,6 +2042,29 @@ def main(argv: list[str] | None = None) -> int:
     # visible on the served artifact rather than only in a build log nobody keeps (E11.30). `None`
     # means the guard could not run — an honest UNVERIFIED, never rendered as a pass.
     manifest["injuryGamesStamp"] = _inj_stamp
+    # NF-INJ4b-SHIP: WHICH designation model this build was configured to serve, and how many rows
+    # were ELIGIBLE for it. ⚠️ Deliberately two DIFFERENT facts, and the stamp says so: a policy
+    # stamp records what a build was CONFIGURED to do, never what it DID (NF-C0e / NF-INJ3b-SHIP
+    # D6). The decisive per-row evidence is the expected-effect artifact the ship battery emits,
+    # which is checked against the PUBLISHED board after the fact.
+    try:
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            designation_discount_policy as _DDP,
+        )
+        _desig_stamp = dict(_DDP.stamp())
+        _desig_stamp["eligible_rows_on_projections"] = (
+            None if (designations is None or pdf is None)
+            else int(sum(1 for pid in pdf["player_id"].astype(str)
+                         if designations.get(_norm_player_id(pid)) is not None)))
+        _desig_stamp["feed_readable"] = designations is not None
+        _desig_stamp["records_what"] = ("the CONFIGURED policy plus the ELIGIBLE population — NOT "
+                                        "what the build moved; see nf_inj4b_ship_expected_effect")
+    except Exception as e:  # noqa: BLE001 — a provenance stamp must never fail a board export
+        log.warning("[ALERT] NF-INJ4b: designation stamp unavailable (%s: %s) — the manifest will "
+                    "carry None, which is an honest UNVERIFIED and never a pass",
+                    type(e).__name__, e)
+        _desig_stamp = None
+    manifest["designationDiscountStamp"] = _desig_stamp
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
     # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45) — gated behind
