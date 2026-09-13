@@ -215,6 +215,24 @@ spec:
       3600 + 900 = 9300s), not from a measured run. The runbook asks the operator
       to record actuals on the supervised first run so the ceiling can be tightened
       against evidence.
+      ⑩ ⭐ THE E11.23 FAST-GATE LANDMINE IS INVISIBLE IN A WORKTREE THAT CARRIES THE
+      MANIFEST SYMLINK. Two non-slow clauses imported `pipeline` (one directly, one
+      because a POPULATED registry makes `next_ratings_update` resolve a live
+      `ScheduleDefinition`), which reads the gitignored `dbt/target/manifest.json`
+      at import. They passed locally — this worktree has a SYMLINK to the main
+      checkout's manifest, left by the P3.3b session — and went red on the first
+      CI run. Two things worth carrying: (a) the cure is to move the PURE
+      predicate to `betting_ml` (the NF-INFRA2 `is_draft_season` split), not to
+      skip the clause; (b) for a clause that genuinely must import `pipeline`,
+      `@pytest.mark.slow` BEATS `@needs_pipeline` — the slow gate builds the
+      manifest with an offline `dbtf parse` so the clause RUNS, while skipif means
+      it never runs in CI at all. The existing `needs_pipeline`-marked P3.3b
+      clauses are in that never-runs-in-CI state and could be converted. (c) A
+      local repro is one command: move the manifest aside and run the shard.
+      ⑪ `_code_only` (strip comments AND docstrings via AST) now exists TWICE —
+      here and as `_executable_source` in the P3.3b suite, written independently
+      for the same reason days apart. That is the shared-helper case making itself;
+      see finding ④.
       ⑨ THE SLA'S HOST MUST BE ON. The ratings freshness contract is evaluated by an
       unbound leaf on `sports_ncaaf_prediction_snapshot_job`; if that schedule is
       STOPPED, the ratings monitor does not run. That placement is correct (a
