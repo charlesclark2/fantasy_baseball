@@ -187,6 +187,40 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "    return expected_week is not None",
      "    return True",
      f"{_G_SERVING}::test_the_off_season_deactivates_the_sla_rather_than_paging_for_seven_months"),
+    # ── NF-C6-PH2 follow-up: the roster feed's cadence is not a wrong week ──────────────────────
+    ("the benign roster-cadence branch is removed (every mid-slate day pages CRITICAL again)",
+     _FRESH,
+     "        if (behind == 1 and served_slate_ends is not None\n"
+     "                and now < served_slate_ends + timedelta(hours=SLATE_COMPLETE_GRACE_HOURS)):",
+     "        if False:",
+     f"{_G_SERVING}::test_the_roster_feeds_cadence_is_not_a_wrong_week"),
+
+    ("the slate-complete grace is sized for a kickoff TIME, not a date (MNF pages mid-game)",
+     _FRESH,
+     "SLATE_COMPLETE_GRACE_HOURS = 30.0",
+     "SLATE_COMPLETE_GRACE_HOURS = 1.0",
+     f"{_G_SERVING}::test_a_monday_night_kickoff_does_not_page_because_gameday_is_date_granular"),
+
+    ("an UNKNOWN slate end is treated as benign (fail-OPEN: the mismatch stops paging)",
+     _FRESH,
+     "        if (behind == 1 and served_slate_ends is not None\n"
+     "                and now < served_slate_ends + timedelta(hours=SLATE_COMPLETE_GRACE_HOURS)):",
+     "        if behind == 1 and (served_slate_ends is None or now < served_slate_ends + timedelta(\n"
+     "                hours=SLATE_COMPLETE_GRACE_HOURS)):",
+     f"{_G_SERVING}::test_an_unknown_slate_end_is_judged_EXACTLY_as_before"),
+
+    ("any number of weeks behind counts as the feed's cadence",
+     _FRESH,
+     "        if (behind == 1 and served_slate_ends is not None",
+     "        if (behind >= 1 and served_slate_ends is not None",
+     f"{_G_SERVING}::test_more_than_one_week_behind_is_never_the_feeds_cadence"),
+
+    ("slate_end returns the FIRST gameday of the served week instead of the last",
+     _SERVING,
+     "    return days.max().to_pydatetime()",
+     "    return days.min().to_pydatetime()",
+     f"{_G_SERVING}::test_slate_end_reads_the_last_gameday_of_the_SERVED_week"),
+
 ]
 
 #: The NOT-SELECTED control: a test that must stay GREEN under every mutation above, so a red
