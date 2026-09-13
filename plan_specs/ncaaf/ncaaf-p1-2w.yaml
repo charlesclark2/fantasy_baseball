@@ -12,7 +12,7 @@ metadata:
   name: ncaaf-p1-2w
   vertical: ncaaf
   card: https://trello.com/c/7cDvCT4W
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The live Team Stats and game surfaces serve strength ratings frozen
