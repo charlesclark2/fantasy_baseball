@@ -954,6 +954,42 @@ _INJURY_GAMES_COLUMNS: dict[str, str] = {
 }
 
 
+def designation_discount_stamp(pdf, designations) -> dict | None:
+    """NF-INJ4b-SHIP — WHICH designation model this build was configured to serve, plus how many
+    rows were ELIGIBLE for it.
+
+    ⚠️ **THOSE ARE TWO DIFFERENT FACTS FROM "WHAT IT DID", and the stamp says so in its own payload.**
+    A policy stamp records a CONFIGURATION; NF-C0e is the whole class of defect where a declaration
+    outruns its production, and NF-INJ3b-SHIP D6 is the fix — the decisive per-row evidence lives in
+    `ablation_results/nf_inj4b_ship_expected_effect.json`, which is joined back to the PUBLISHED
+    board by `run_nf_inj4b_ship_battery --verify-published`.
+
+    ⭐ EXTRACTED FROM `main()` SO IT CAN BE EXERCISED. NF-TR2 shipped a build-time block with a
+    NameError past 26 green tests because none of them INVOKED it with the policy on; a stamp that
+    only ever runs inside a 2,000-line entrypoint is that shape exactly.
+
+    ⚖️ ALERT-tier: returns None rather than raising, because a provenance stamp must never fail a
+    board export — and None is an honest UNVERIFIED, never rendered as a pass (NF1.7 (a))."""
+    try:
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            designation_discount_policy as _DDP,
+        )
+        stamp = dict(_DDP.stamp())
+        stamp["feed_readable"] = designations is not None
+        stamp["eligible_rows_on_projections"] = (
+            None if (designations is None or pdf is None)
+            else int(sum(1 for pid in pdf["player_id"].astype(str)
+                         if designations.get(_norm_player_id(pid)) is not None)))
+        stamp["records_what"] = ("the CONFIGURED policy plus the ELIGIBLE population — NOT what "
+                                 "the build moved; see nf_inj4b_ship_expected_effect.json")
+        return stamp
+    except Exception as e:  # noqa: BLE001 — a provenance stamp must never fail a board export
+        log.warning("[ALERT] NF-INJ4b: designation stamp unavailable (%s: %s) — the manifest will "
+                    "carry None, which is an honest UNVERIFIED and never a pass",
+                    type(e).__name__, e)
+        return None
+
+
 def injury_games_stamp(pdf: pd.DataFrame) -> dict | None:
     """The INJURY-GAMES policy block for the published payload, READ OFF THE BOARD's own stamp
     columns — `rookie_policy_stamp`/`veteran_level_stamp`'s sibling, same three rules: None for a
@@ -2047,24 +2083,7 @@ def main(argv: list[str] | None = None) -> int:
     # stamp records what a build was CONFIGURED to do, never what it DID (NF-C0e / NF-INJ3b-SHIP
     # D6). The decisive per-row evidence is the expected-effect artifact the ship battery emits,
     # which is checked against the PUBLISHED board after the fact.
-    try:
-        from quant_sports_intel_models.football.nfl.fantasy import (
-            designation_discount_policy as _DDP,
-        )
-        _desig_stamp = dict(_DDP.stamp())
-        _desig_stamp["eligible_rows_on_projections"] = (
-            None if (designations is None or pdf is None)
-            else int(sum(1 for pid in pdf["player_id"].astype(str)
-                         if designations.get(_norm_player_id(pid)) is not None)))
-        _desig_stamp["feed_readable"] = designations is not None
-        _desig_stamp["records_what"] = ("the CONFIGURED policy plus the ELIGIBLE population — NOT "
-                                        "what the build moved; see nf_inj4b_ship_expected_effect")
-    except Exception as e:  # noqa: BLE001 — a provenance stamp must never fail a board export
-        log.warning("[ALERT] NF-INJ4b: designation stamp unavailable (%s: %s) — the manifest will "
-                    "carry None, which is an honest UNVERIFIED and never a pass",
-                    type(e).__name__, e)
-        _desig_stamp = None
-    manifest["designationDiscountStamp"] = _desig_stamp
+    manifest["designationDiscountStamp"] = designation_discount_stamp(pdf, designations)
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
     # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45) — gated behind

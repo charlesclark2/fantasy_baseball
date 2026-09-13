@@ -357,3 +357,30 @@ def test_an_empty_designation_map_moves_nothing_on_a_board_whose_vor_is_ROUNDED(
             f"an EMPTY designation map moved `{col}` by {worst:.3e} (> {BAT.EPS}). The candidate "
             f"board must reproduce the published one when nothing is designated, or every figure "
             f"in the operator packet carries a rounding residue reported as movement")
+
+
+def test_the_manifest_stamp_is_actually_EXERCISED_and_says_what_it_does_not_know():
+    """⭐ NF-TR2's lesson, applied to this story's own build-time block: a stamp that only ever runs
+    inside a 2,000-line entrypoint ships a NameError past a green suite, because nothing INVOKES it.
+
+    It also has to be honest about its own scope. `eligible_rows_on_projections` counts rows the
+    discount COULD touch; it is not what the build moved, and a reader who took it for that would be
+    reading a configuration as a measurement (NF-C0e). The payload says so in its own text."""
+    from quant_sports_intel_models.football.nfl.fantasy import export_draft_board_json as EX
+
+    pdf = pd.DataFrame({"player_id": ["00-0001", " 00-0002 ", "00-0003"]})
+    stamp = EX.designation_discount_stamp(pdf, {"00-0001": "Out", "00-0002": "Questionable"})
+    assert stamp is not None, "the stamp returned None on a perfectly readable feed"
+    assert stamp["designation_discount_serving_enabled"] is POLICY.serving_enabled()
+    assert stamp["feed_readable"] is True
+    assert stamp["eligible_rows_on_projections"] == 2, (
+        "the eligible count did not normalise the padded feed id — the same silent-miss that cost "
+        "Josh Jacobs and DK Metcalf their disclosure on a published board (NF-C9)")
+    assert "NOT what the build moved" in stamp["records_what"], (
+        "the stamp no longer states that it records a CONFIGURATION rather than an outcome")
+
+    # ⛔ an unreadable feed must not be scored as 'nothing was eligible'
+    blind = EX.designation_discount_stamp(pdf, None)
+    assert blind["feed_readable"] is False and blind["eligible_rows_on_projections"] is None, (
+        "an unreadable feed reported an eligible count — 0 and 'we could not look' are different "
+        "facts, and one of them is a pass")

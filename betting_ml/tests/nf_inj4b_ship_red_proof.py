@@ -41,6 +41,7 @@ _CALLER = _FAN / "run_season_projection.py"
 _ARTIFACT = _FAN / "served_artifacts/nfl_fantasy_designation_duration_v1.json"
 _BATTERY = _FAN / "run_nf_inj4b_ship_battery.py"
 _COPY = _REPO / "frontend/lib/fantasy-claim-copy.ts"
+_EXPORTER = _FAN / "export_draft_board_json.py"
 
 _SHIP = _REPO / "betting_ml/tests/test_nf_inj4b_ship_wiring.py"
 _INJ4 = _REPO / "betting_ml/tests/test_nf_inj4_designation_duration.py"
@@ -116,6 +117,12 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "            g[vor_col] = board[vor_col].astype(float).to_numpy() + delta",
      "            g[vor_col] = g[pts_col].astype(float) - g[\"repl\"].astype(float)",
      f"{_SHIP}::test_an_empty_designation_map_moves_nothing_on_a_board_whose_vor_is_ROUNDED"),
+
+    ("the manifest stamp stops normalising the padded feed id (a silent under-count)",
+     _EXPORTER,
+     "                         if designations.get(_norm_player_id(pid)) is not None)))",
+     "                         if designations.get(pid) is not None)))",
+     f"{_SHIP}::test_the_manifest_stamp_is_actually_EXERCISED_and_says_what_it_does_not_know"),
 ]
 
 
