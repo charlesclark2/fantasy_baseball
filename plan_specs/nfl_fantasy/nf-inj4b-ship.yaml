@@ -1,0 +1,145 @@
+# Plan spec — NF-INJ4b-SHIP (MINI tier, deploy-held: the ship packet for the certified
+# designation-duration discount — wire, measure, hand the publish decision to the operator)
+# Authored by PM 2026-09-13. Prerequisite: the operator has run run_nf_inj4b_counterfactual
+# on a real in-season designation feed AND its §3 no-op control PASSED. Do not start without
+# that output; do not re-run it yourself unless the operator asks (it is their command by rule).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj4b-ship
+  vertical: nfl_fantasy
+  card: https://trello.com/c/8tgfKzkw   # NF-INJ4b record; SHIP card linked at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    NF-INJ4b closed SHIP_CANDIDATE with a STRUCTURAL hold: 9/9 gates
+    under the matched-resolution anchor, certified magnitudes
+    (out x0.8639 / doubtful x0.9526 / questionable x0.9629), and no
+    production caller passing designation_games — the branch is
+    unreachable by construction. This story is the registered ship
+    path: wire the one-line serving caller, run the level-adjacent
+    measurement battery on the REAL candidate boards, build the
+    operator packet, and stop. ⛔ THE PUBLISH DECISION IS THE
+    OPERATOR'S BY REGISTRATION — this session never runs --publish,
+    deploy.sh, or a box schedule change. best_alpha=0. The W0a
+    dependency is SATISFIED (NF-CAP1 correction: the injuries capture
+    was healthy all along; PIT-safe designation history is accruing).
+  acceptanceCriteria:
+    - description: >
+        PRECONDITION, verified not assumed: the operator-run
+        counterfactual output exists, its §3 NO-OP CONTROL PASSED
+        (empty designation map -> zero rows move on all boards — it
+        has caught the (config_name, n_teams) board-key defect once),
+        and the run priced the CERTIFIED winner's constants (the
+        x0.8639 family — the registered-arm-vs-certified-winner
+        transcription defect is a named failure mode). A failed
+        control or wrong constants -> STOP, return to the PM; nothing
+        downstream is trustworthy.
+    - description: >
+        THE WIRING is the registered one-line change:
+        compose_availability_caps into the season board's availability
+        owner via designation_games, flipping the ABSENCE guard to a
+        PRESENCE guard in the SAME commit — never before, never
+        separately. Re-assert the disjointness invariant on the
+        both-channels row (single strongest min-cap from one baseline,
+        composed 9.06 vs stacked 7.83; _formal_discount_applied stamps
+        so the news channel stays disjoint — the NEWS-1 rule). The
+        remaining-season rate formula convention applies for
+        week-denominated absences.
+    - description: >
+        THE MEASUREMENT BATTERY, on the exact publish-candidate board,
+        per the injury-thread convention: capture-pinned baseline (the
+        D3 capture conventions + the representation-tolerant pin —
+        worst <= tol at explicit 1e-9 epsilon, the NF-INJ2c #5
+        semantics — + the table-driven vintage-match preconditions);
+        population-scoped material diff at 1e-9 (NEVER bitwise;
+        rookie-band motion read against the >=5-draw same-commit
+        envelope, card QkpAHBYa); whole-board placement read +
+        interval revalidation via --out stems (real reads this time —
+        the preseason no-op reads were correctly refused as
+        uninformative); NF-INJ1's realized-max envelope and
+        NF-RATE1's suppression guards GREEN on the counterfactual
+        board (their firing populations may legitimately move — a
+        NEW suppression firing on a newly-capped row is the system
+        composing, record it, don't fight it).
+    - description: >
+        NF-C9 RETIREMENT RIDES THE SHIP, atomically: the moment the
+        discount serves, "our projected-games figure does not take
+        this into account" is FALSE on every surface rendering it —
+        the copy updates (through fantasy-claim-copy.ts conventions;
+        honest scope: Q/D/O now priced, news-report-only players still
+        capped by the curated channel) and
+        test_nf_c9_designation_disclosure.py is RE-ANCHORED onto the
+        new true claim, never weakened, in the same PR as the wiring —
+        plus the NF-CAP1-flagged re-key (guard the WIRING, not token
+        spellings). Declaration never outruns production: the copy
+        change deploys WITH the discount, not ahead of it.
+    - description: >
+        THE OPERATOR PACKET: top-25 rank moves per config including
+        superflex; the per-designation magnitude table with counts of
+        affected players at each designation from the LIVE feed; the
+        give-back/coherence deltas if the counterfactual reports them;
+        the combined read on the exact publish-candidate board; and
+        the paste-ready publish sequence (LAPTOP-vs-BOX, full
+        commands) ending at the operator's yes/no. Changelog entry
+        (user-facing — the availability model now prices weekly
+        designations) STAGED in the PR but worded so it is true only
+        post-publish; if the operator declines, the changelog line is
+        pulled before merge, not left declaring an unserved feature.
+    - description: >
+        Standing: worktree; PR -> dev; guards RED-proven with unique
+        anchors + baseline-pass + NOT-SELECTED + resolve-every-node;
+        owning CI shard for shared guards; >2-min commands operator
+        paste-ready; no post-hoc trims; NF-INJ4b's record is consumed,
+        never re-read (E2.1-r — the gates are settled; this story
+        measures the SHIP, not the model); no Trello. Disjoint from
+        NF-C6-PH2 (weekly serving) and NCAAF-P1.2W — the season-board
+        publish chain is this story's lane; rebase the changelog
+        week-block.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj4b-ship
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ4b" / "ship" / "designation" (board Credence Sports, 2026-09-13)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ4b (Done, SHIP_CANDIDATE) — the certification this executes; gates settled, never re-read."
+      - "NF-INJ-NEWS-0/1 (Done, live) — the curated news cap; the disjointness invariant is the shared boundary; curation flow untouched."
+      - "NF-C9 (Done, live) — retired-by-truth in this PR, atomically with the wiring."
+      - "NF-INJ1-C / NF-RATE1 (Done, live) — downstream guards stay green; population motion recorded, not fought."
+      - "NF-INJ2c (CLOSED, no ship) — SERVED_ARM stays incumbent; ordering untouched by this story (availability LEVEL only)."
+      - "NF-C6-PH2 (IN FLIGHT) — weekly serving lane; disjoint; the weekly model does NOT consume designation_games in this story."
+  triedLedger:
+    files:
+      - "nf_inj4b_closeout.md + the counterfactual runner (the §3 control, the certified constants, the rehearsal magnitudes)"
+      - "compose_availability_caps + its absence guard (the wiring point + the guard to flip)"
+      - "the D3 capture conventions + NF-INJ2c #5 pin semantics + the vintage-match preconditions (the reproduction discipline this inherits)"
+      - "test_nf_c9_designation_disclosure.py + fantasy-claim-copy.ts (the retirement surface)"
+    recordedNulls:
+      - "The preseason counterfactual NO-OP — correctly recorded as uninformative, not evidence; superseded by the real in-season read this story consumes."
+  supersedes: []
+  dependsOn:
+    - "Operator-run counterfactual with §3 control PASSED (the hard precondition)"
+    - "NF-CAP1 on main (the W0a dependency correction + capture health)"
+  feedsInto:
+    - "The flagship paid board pricing weekly Q/D/O designations all season; NF-C9's honest retirement; the duration model's live monitoring stream"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj4b-ship-plan
+spec:
+  goalRef: { name: nf-inj4b-ship }
+  graph:
+    nodes: []   # MINI tier — precondition verify -> wiring+NF-C9 (one PR) -> measurement battery -> operator packet -> publish is the operator's -> closeout
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

@@ -1,7 +1,7 @@
 {
   "story": "NF-INJ4b",
   "node": "0b-substrate",
-  "generated_at": "2026-09-04T05:52:30.245873+00:00",
+  "generated_at": "2026-09-13T21:29:33.132035+00:00",
   "artifact": "quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_inj4_designation_frame_2025.parquet",
   "vintage_check": {
     "matches_nf_inj4_record": true,
@@ -73,14 +73,17 @@
     "reading": "UNCHANGED \u2014 the rebuilt substrate reproduces NF-INJ4's recorded census exactly, so NF-INJ4b's honesty-clause precondition ('field, folds and data unchanged') HOLDS as a measurement rather than as an assumption."
   },
   "forward_capture_nfl_pit_injuries": {
-    "rows": 12136,
+    "rows": 12314,
     "distinct_capture_dates": [
-      "2026-08-05"
+      "2026-08-05",
+      "2026-09-08",
+      "2026-09-11"
     ],
-    "rows_2026": 0,
+    "rows_2026": 178,
     "seasons": {
-      "2025": 12136
+      "2025": 12136,
+      "2026": 178
     }
   },
-  "elapsed_s": 24.49
+  "elapsed_s": 13.96
 }
