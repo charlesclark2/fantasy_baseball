@@ -1,0 +1,809 @@
+{
+  "story": "NF-INJ2c node 4 \u2014 the decisive run on the STRICT-DOMINANCE route",
+  "generated_at": "2026-09-05T18:53:02.582956+00:00",
+  "best_alpha": 0,
+  "deploy_held": true,
+  "primary_arm": "stratified",
+  "registration": {
+    "binding_field": [
+      "incumbent",
+      "stratified",
+      "feasibility_clamp",
+      "mvp1_null",
+      "random_order"
+    ],
+    "declared_field_size": 5,
+    "degenerates": [
+      "mvp1_null",
+      "random_order"
+    ],
+    "reference": [
+      "incumbent"
+    ],
+    "excluded_rate_space": [
+      "points_rate_permute",
+      "rate_refit",
+      "points_rate_stratified",
+      "rate_refit_stratified",
+      "rate_refit_reselect"
+    ],
+    "diagnostic_field": [
+      "incumbent",
+      "points_rate_permute",
+      "rate_refit",
+      "points_rate_stratified",
+      "rate_refit_stratified",
+      "rate_refit_reselect",
+      "stratified",
+      "feasibility_clamp",
+      "mvp1_null",
+      "random_order"
+    ],
+    "folds": [
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "base_from": 2017,
+    "v_members_declared": [
+      "stratified",
+      "feasibility_clamp"
+    ]
+  },
+  "node_3b_baseline": {
+    "source": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj2c_dominance_baseline.json",
+    "generated_at": "2026-09-04T06:07:26.316035+00:00",
+    "reproduction_pin": {
+      "n": 797,
+      "worst_abs_diff": 0.05000000000000071,
+      "tolerance": 0.05,
+      "representation_epsilon": 1e-09,
+      "story_tolerance_for_local_diffs": 1e-09,
+      "reproduces": true,
+      "note": "the incumbent arm rebuilt through this story's code vs the PUBLISHED 2026 artifact. If this does not hold, every arm delta is measured against a board nobody is served (the CLV / NF-INJ1 stale-vintage trap).",
+      "tolerance_note": "the published board is rounded to ONE decimal, so the pin runs at half that rounding unit \u2014 a 1e-9 bar against a 1dp artifact is UNACHIEVABLE, not strict (E9.61).",
+      "representation_note": "the registered bar is UNCHANGED at 0.05; it is a DECIMAL bar evaluated in BINARY, so it is compared with a 1e-09 representation epsilon \u2014 \u26d4 NOT slack. `proj_games` is quantised on a 0.05 grid, so a `.x5` value against its 1dp publication differs by exactly the bar and lands ONE ULP over it in binary; without the epsilon this pin cannot pass a CORRECT reproduction (the unachievable-gate family, E9.61). A row wrong by any amount a 1-decimal artifact can express still REFUSES."
+    },
+    "served_incumbent_baseline": {
+      "M2_violations_attributable": 10,
+      "M3_worst_times_over": 1.9947,
+      "M4_giveback_measure": 89.26,
+      "M4_giveback_signed": 89.26
+    },
+    "bands": {
+      "M2": "SE of the per-fold PAIRED difference \u2014 a FOLD quantity computed by the decisive run, \u26d4 not on a single board; the board figure here is the BASELINE the pre-registration quotes",
+      "M3": 0.01,
+      "M4": 0.01,
+      "source": "nf_inj2c_margin_construction_rule.md (node 3a), committed before this ran"
+    }
+  },
+  "feature_vintage": {
+    "nf1_5_pool_cache": {
+      "present": true,
+      "files": 8,
+      "dir": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf1_5_feature_cache",
+      "newest_mtime": "2026-09-01T06:38:41.765958+00:00",
+      "fingerprint": "b6bd7b4a63b4edad",
+      "unreadable": [],
+      "names": [
+        "pool_base2017.parquet",
+        "pool_base2018.parquet",
+        "pool_base2019.parquet",
+        "pool_base2020.parquet",
+        "pool_base2021.parquet",
+        "pool_base2022.parquet",
+        "pool_base2023.parquet",
+        "pool_base2024.parquet"
+      ]
+    },
+    "nf1_9_veteran_band_panel": {
+      "present": true,
+      "files": 19,
+      "dir": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf1_9_veteran_band_panel",
+      "newest_mtime": "2026-07-30T04:47:05.462910+00:00",
+      "fingerprint": "2ca4ec56a7e1549e",
+      "unreadable": [],
+      "names": [
+        "panel_target2007.parquet",
+        "panel_target2008.parquet",
+        "panel_target2009.parquet",
+        "panel_target2010.parquet",
+        "panel_target2011.parquet",
+        "panel_target2012.parquet",
+        "panel_target2013.parquet",
+        "panel_target2014.parquet",
+        "panel_target2015.parquet",
+        "panel_target2016.parquet",
+        "panel_target2017.parquet",
+        "panel_target2018.parquet",
+        "panel_target2019.parquet",
+        "panel_target2020.parquet",
+        "panel_target2021.parquet",
+        "panel_target2022.parquet",
+        "panel_target2023.parquet",
+        "panel_target2024.parquet",
+        "panel_target2025.parquet"
+      ]
+    },
+    "note": "\u26d4 RECORDED, \u26d4 NOT GATED. A run is internally consistent whatever the vintage; this exists so a CROSS-RUN comparison can check it was the same one, and so a silently REBUILT pool cache is visible instead of assumed. \u2b50 Compare the `fingerprint` (row/column structure), \u26d4 NOT `newest_mtime` \u2014 a copy refreshes an mtime while the data is unchanged (INC-41), and the difference that actually moved the scored arms between two checkouts was a COLUMN SET at identical row counts, which an mtime cannot see."
+  },
+  "fold_n": {
+    "2019": 619,
+    "2020": 645,
+    "2021": 665,
+    "2022": 682,
+    "2023": 669,
+    "2024": 645,
+    "2025": 688
+  },
+  "scored": {
+    "incumbent": {
+      "crps": 26.5193,
+      "mae": 37.6896,
+      "coverage80": 0.8944,
+      "interval_score80": 151.4018,
+      "bias": 6.1027,
+      "rho_pooled": 0.6506,
+      "tier_rho_pooled": 0.5554,
+      "coherence_violating_players": 19.0
+    },
+    "points_rate_permute": {
+      "crps": 26.192,
+      "mae": 37.6098,
+      "coverage80": 0.906,
+      "interval_score80": 147.4237,
+      "bias": 6.4749,
+      "rho_pooled": 0.7097,
+      "tier_rho_pooled": 0.5241,
+      "coherence_violating_players": 0.2857
+    },
+    "rate_refit": {
+      "crps": 26.2822,
+      "mae": 37.7361,
+      "coverage80": 0.9056,
+      "interval_score80": 147.9446,
+      "bias": 6.4082,
+      "rho_pooled": 0.7087,
+      "tier_rho_pooled": 0.521,
+      "coherence_violating_players": 0.1429
+    },
+    "points_rate_stratified": {
+      "crps": 26.2128,
+      "mae": 37.6116,
+      "coverage80": 0.9054,
+      "interval_score80": 148.0861,
+      "bias": 6.1316,
+      "rho_pooled": 0.7076,
+      "tier_rho_pooled": 0.5234,
+      "coherence_violating_players": 0.2857
+    },
+    "rate_refit_stratified": {
+      "crps": 26.2512,
+      "mae": 37.675,
+      "coverage80": 0.9048,
+      "interval_score80": 148.2064,
+      "bias": 6.1297,
+      "rho_pooled": 0.7075,
+      "tier_rho_pooled": 0.5245,
+      "coherence_violating_players": 0.2857
+    },
+    "rate_refit_reselect": {
+      "crps": 26.299,
+      "mae": 37.7454,
+      "coverage80": 0.9066,
+      "interval_score80": 148.0523,
+      "bias": 6.3932,
+      "rho_pooled": 0.7082,
+      "tier_rho_pooled": 0.5137,
+      "coherence_violating_players": 0.1429
+    },
+    "stratified": {
+      "crps": 26.0643,
+      "mae": 37.1689,
+      "coverage80": 0.9022,
+      "interval_score80": 147.9527,
+      "bias": 6.1076,
+      "rho_pooled": 0.7004,
+      "tier_rho_pooled": 0.5583,
+      "coherence_violating_players": 8.5714
+    },
+    "feasibility_clamp": {
+      "crps": 26.3657,
+      "mae": 37.4541,
+      "coverage80": 0.8942,
+      "interval_score80": 150.789,
+      "bias": 5.2746,
+      "rho_pooled": 0.6536,
+      "tier_rho_pooled": 0.5552,
+      "coherence_violating_players": 1.1429
+    },
+    "mvp1_null": {
+      "crps": 27.5159,
+      "mae": 39.6037,
+      "coverage80": 0.8921,
+      "interval_score80": 154.2815,
+      "bias": 6.1056,
+      "rho_pooled": 0.6903,
+      "tier_rho_pooled": 0.3917,
+      "coherence_violating_players": 0.0
+    },
+    "random_order": {
+      "crps": 45.3696,
+      "mae": 62.9041,
+      "coverage80": 0.7456,
+      "interval_score80": 280.8173,
+      "bias": -0.7161,
+      "rho_pooled": 0.2524,
+      "tier_rho_pooled": 0.1445,
+      "coherence_violating_players": 36.0
+    },
+    "oracle_incumbent": {
+      "crps": 18.3885,
+      "mae": 23.0197,
+      "coverage80": 0.9811,
+      "interval_score80": 124.1647,
+      "bias": 6.0324,
+      "rho_pooled": 0.9746,
+      "tier_rho_pooled": 0.9981,
+      "coherence_violating_players": 21.0
+    },
+    "oracle_points_rate_permute": {
+      "crps": 21.4806,
+      "mae": 29.2025,
+      "coverage80": 0.9636,
+      "interval_score80": 130.7721,
+      "bias": 6.3054,
+      "rho_pooled": 0.8708,
+      "tier_rho_pooled": 0.8944,
+      "coherence_violating_players": 0.4286
+    },
+    "oracle_rate_refit": {
+      "crps": 21.4806,
+      "mae": 29.2025,
+      "coverage80": 0.9636,
+      "interval_score80": 130.7721,
+      "bias": 6.3054,
+      "rho_pooled": 0.8708,
+      "tier_rho_pooled": 0.8944,
+      "coherence_violating_players": 0.4286
+    },
+    "oracle_points_rate_stratified": {
+      "crps": 21.5462,
+      "mae": 29.5233,
+      "coverage80": 0.9618,
+      "interval_score80": 130.3191,
+      "bias": 5.8668,
+      "rho_pooled": 0.8723,
+      "tier_rho_pooled": 0.8966,
+      "coherence_violating_players": 0.5714
+    },
+    "oracle_rate_refit_stratified": {
+      "crps": 21.5462,
+      "mae": 29.5233,
+      "coverage80": 0.9618,
+      "interval_score80": 130.3191,
+      "bias": 5.8668,
+      "rho_pooled": 0.8723,
+      "tier_rho_pooled": 0.8966,
+      "coherence_violating_players": 0.5714
+    },
+    "oracle_rate_refit_reselect": {
+      "crps": 21.4806,
+      "mae": 29.2025,
+      "coverage80": 0.9636,
+      "interval_score80": 130.7721,
+      "bias": 6.3054,
+      "rho_pooled": 0.8708,
+      "tier_rho_pooled": 0.8944,
+      "coherence_violating_players": 0.4286
+    },
+    "oracle_stratified": {
+      "crps": 20.214,
+      "mae": 26.7262,
+      "coverage80": 0.9718,
+      "interval_score80": 127.6149,
+      "bias": 6.0788,
+      "rho_pooled": 0.9113,
+      "tier_rho_pooled": 0.9859,
+      "coherence_violating_players": 10.1429
+    },
+    "oracle_feasibility_clamp": {
+      "crps": 18.5122,
+      "mae": 23.4106,
+      "coverage80": 0.9796,
+      "interval_score80": 124.1915,
+      "bias": 5.1092,
+      "rho_pooled": 0.9682,
+      "tier_rho_pooled": 0.9933,
+      "coherence_violating_players": 2.4286
+    }
+  },
+  "measures": {
+    "M1": {
+      "evaluable": true,
+      "mean_lift_vs_incumbent": 0.4551,
+      "per_fold_lift": {
+        "2019": 0.3265,
+        "2020": 0.0525,
+        "2021": 0.461,
+        "2022": 0.6212,
+        "2023": 0.5127,
+        "2024": 0.398,
+        "2025": 0.8135
+      },
+      "folds_won": 7,
+      "n_folds": 7,
+      "tie_band": 0.0901,
+      "band_rule": "R1",
+      "one_sided_p": 0.0012,
+      "verdict": "IMPROVES"
+    },
+    "M2": {
+      "evaluable": true,
+      "mean_paired_diff_vs_incumbent": -10.4286,
+      "per_fold_paired_diff": {
+        "2019": -4.0,
+        "2020": -9.0,
+        "2021": -8.0,
+        "2022": -19.0,
+        "2023": -18.0,
+        "2024": -4.0,
+        "2025": -11.0
+      },
+      "attribution_control": "violations mvp1_null also produces are subtracted (3a \u00a73(b))",
+      "control_inert": true,
+      "tie_band": 2.2976,
+      "band_rule": "R1",
+      "verdict": "IMPROVES",
+      "board_baseline_from_node_3b": {
+        "incumbent_attributable": 10,
+        "arm_attributable": 6,
+        "board_level_reading": "IMPROVES",
+        "note": "the BOARD figure is the BASELINE the pre-registration quotes; the BAND is the per-fold paired SE above, so the authoritative M2 verdict is this run's"
+      }
+    },
+    "M3": {
+      "evaluable": true,
+      "arm": 1.7467,
+      "incumbent": 1.9947,
+      "gain_lower_is_better": 0.248,
+      "tie_band": 0.01,
+      "band_rule": "R2",
+      "verdict": "IMPROVES",
+      "source": "node 3b (BOARD measure \u2014 read, never recomputed)",
+      "node_3b_reading": "IMPROVES"
+    },
+    "M4": {
+      "evaluable": true,
+      "arm": 30.02,
+      "incumbent": 89.26,
+      "gain_lower_is_better": 59.24,
+      "tie_band": 0.01,
+      "band_rule": "R2",
+      "verdict": "IMPROVES",
+      "source": "node 3b (BOARD measure \u2014 read, never recomputed)",
+      "node_3b_reading": "IMPROVES"
+    },
+    "M5": {
+      "evaluable": true,
+      "metric": "top_tier_rho (the metric NF1.5's own bake-off selected on)",
+      "by_position": {
+        "QB": {
+          "arm": 0.4894,
+          "incumbent": 0.4807,
+          "delta": 0.0087
+        },
+        "RB": {
+          "arm": 0.6551,
+          "incumbent": 0.6564,
+          "delta": -0.0013
+        },
+        "WR": {
+          "arm": 0.5768,
+          "incumbent": 0.5742,
+          "delta": 0.0026
+        },
+        "TE": {
+          "arm": 0.5118,
+          "incumbent": 0.5104,
+          "delta": 0.0014
+        }
+      },
+      "regression_pvalues": {
+        "QB": 0.7422,
+        "RB": 0.4174,
+        "WR": 0.8803,
+        "TE": 0.6026
+      },
+      "regression_significant_by_position": {
+        "QB": false,
+        "RB": false,
+        "WR": false,
+        "TE": false
+      },
+      "band_rule": "R3",
+      "q": 0.1,
+      "verdict": "TIES_OR_BETTER",
+      "regressed_positions": [],
+      "bh_direction_note": "\u26a0\ufe0f this BH protects against a false REFUSAL \u2014 it is directionally GENEROUS to the arm. Declared in the pre-registration \u00a76, so the generosity is on the record rather than discovered by a reader.",
+      "strict_point_estimate_reading": false
+    },
+    "M6": {
+      "evaluable": true,
+      "pooling": "over ROWS across folds (NF1.8), \u26d4 never a mean of per-fold rates",
+      "groups": {
+        "QB": {
+          "evaluable": true,
+          "n_rows": 633,
+          "coverage": 0.8626,
+          "power_floor": 0.7741,
+          "nominal": 0.8,
+          "clears": true
+        },
+        "RB": {
+          "evaluable": true,
+          "n_rows": 1129,
+          "coverage": 0.9061,
+          "power_floor": 0.7803,
+          "nominal": 0.8,
+          "clears": true
+        },
+        "WR": {
+          "evaluable": true,
+          "n_rows": 1842,
+          "coverage": 0.9202,
+          "power_floor": 0.7845,
+          "nominal": 0.8,
+          "clears": true
+        },
+        "TE": {
+          "evaluable": true,
+          "n_rows": 1009,
+          "coverage": 0.889,
+          "power_floor": 0.779,
+          "nominal": 0.8,
+          "clears": true
+        }
+      },
+      "band_rule": "R3",
+      "false_reject_target": 0.05,
+      "verdict": "CLEARS",
+      "groups_below_floor": [],
+      "reading_note": "a PASS is 'not shown broken at this n', \u26d4 never 'shown right' \u2014 each group's floor carries the resolution its own n buys (NF-D22)"
+    }
+  },
+  "dominance": {
+    "state": "DOMINATES",
+    "by_measure": {
+      "M1": "IMPROVES",
+      "M2": "IMPROVES",
+      "M3": "IMPROVES",
+      "M4": "IMPROVES",
+      "M5": "TIES_OR_BETTER",
+      "M6": "CLEARS"
+    },
+    "regressed_measures": [],
+    "unevaluable_measures": [],
+    "rule": "improve-or-tie on EVERY measure and regress nowhere (node 3a \u00a72). \u26d4 An UNEVALUABLE measure is NOT a pass \u2014 a dominance claim missing a measure is not a dominance claim (NF1.7 (a))."
+  },
+  "deflation": {
+    "binding": {
+      "pbo": 0.0,
+      "pbo_max": 0.2,
+      "pbo_application": "field",
+      "spread_whole_field": 19.3053,
+      "spread_contender": 0.4551,
+      "flip_distribution": {
+        "stratified": 1.0
+      },
+      "bailey_degradation_pct": 0.0,
+      "trial_sharpes": {
+        "incumbent": 0.0,
+        "stratified": 1.908,
+        "feasibility_clamp": 0.8679,
+        "mvp1_null": -1.287,
+        "random_order": -10.7667
+      },
+      "v_members": [
+        "feasibility_clamp",
+        "stratified"
+      ],
+      "field_label": "NF-INJ2c BINDING five-arm point-space field (PM ruling 2026-09-01)",
+      "v_excluded": [
+        "incumbent",
+        "mvp1_null",
+        "random_order"
+      ],
+      "dsr_whole_field": 0.0,
+      "dsr_binding": 0.9306,
+      "dsr_reference_included_in_v": 0.8652,
+      "dsr_min": 0.95,
+      "dsr_2x2_diagnostic": {
+        "evaluable": false,
+        "structurally_unavailable": true,
+        "v_member_count": 2,
+        "why": "`V` has exactly two members, so the only available drops are the arm under test (inadmissible \u2014 NF-W7h) or the sole other contributor (leaving `V` undefined). The 2x2 is STRUCTURALLY UNAVAILABLE for this declared field; state any refusal a fortiori on the design."
+      },
+      "declared_field_size": 5
+    },
+    "diagnostic": {
+      "pbo": 0.0857,
+      "pbo_max": 0.2,
+      "pbo_application": "field",
+      "spread_whole_field": 19.3053,
+      "spread_contender": 0.4551,
+      "flip_distribution": {
+        "stratified": 0.7429,
+        "points_rate_permute": 0.2,
+        "points_rate_stratified": 0.0286,
+        "rate_refit_stratified": 0.0286
+      },
+      "bailey_degradation_pct": 0.0,
+      "trial_sharpes": {
+        "incumbent": 0.0,
+        "points_rate_permute": 0.6127,
+        "rate_refit": 0.3918,
+        "points_rate_stratified": 0.516,
+        "rate_refit_stratified": 0.4153,
+        "rate_refit_reselect": 0.3721,
+        "stratified": 1.908,
+        "feasibility_clamp": 0.8679,
+        "mvp1_null": -1.287,
+        "random_order": -10.7667
+      },
+      "v_members": [
+        "feasibility_clamp",
+        "points_rate_permute",
+        "points_rate_stratified",
+        "rate_refit",
+        "rate_refit_reselect",
+        "rate_refit_stratified",
+        "stratified"
+      ],
+      "field_label": "NF-INJ2b declared 10-arm field",
+      "v_excluded": [
+        "incumbent",
+        "mvp1_null",
+        "random_order"
+      ],
+      "dsr_whole_field": 0.0,
+      "dsr_binding": 0.933,
+      "dsr_reference_included_in_v": 0.9268,
+      "dsr_min": 0.95,
+      "dsr_2x2_diagnostic": {
+        "evaluable": false,
+        "dropped_arm": "stratified",
+        "why": "the most extreme trial Sharpe IS the winner \u2014 a DSR reached by deleting it would be inadmissible (NF-W7h), so no trimmed figure is reported"
+      },
+      "declared_field_size": 10,
+      "label": "NON-BINDING DIAGNOSTIC (inherited NF-INJ2b 10-arm field)",
+      "status": "NON-BINDING \u2014 declared in advance, publishes either way, and \u26d4 cannot rescue a binding refusal"
+    },
+    "lockstep_variance_lever": {
+      "evaluable": true,
+      "sr": 1.908,
+      "sr0": 0.8771,
+      "gap": 1.0309,
+      "lever_closed": false,
+      "sign_invariant": true,
+      "dsr_falls_as_design_sharpens": false,
+      "ladder": [
+        {
+          "dispersion_factor": 1.0,
+          "winner_sharpe": 1.9080412513717462,
+          "sr0": 0.8771072866632839,
+          "sr_minus_sr0": 1.0309339647084623,
+          "dsr": 0.9305956757765691
+        },
+        {
+          "dispersion_factor": 0.5,
+          "winner_sharpe": 3.8160825027434924,
+          "sr0": 1.7542145733265677,
+          "sr_minus_sr0": 2.0618679294169246,
+          "dsr": 0.964771147216972
+        },
+        {
+          "dispersion_factor": 0.25,
+          "winner_sharpe": 7.632165005486985,
+          "sr0": 3.5084291466531354,
+          "sr_minus_sr0": 4.123735858833849,
+          "dsr": 0.9751582019977214
+        },
+        {
+          "dispersion_factor": 0.1,
+          "winner_sharpe": 19.080412513717462,
+          "sr0": 8.771072866632839,
+          "sr_minus_sr0": 10.309339647084624,
+          "dsr": 0.9790881560150088
+        },
+        {
+          "dispersion_factor": 0.01,
+          "winner_sharpe": 190.80412513717462,
+          "sr0": 87.7107286663284,
+          "sr_minus_sr0": 103.09339647084623,
+          "dsr": 0.9806684651189257
+        }
+      ],
+      "sr_gt_sr0": true,
+      "fold_trigger_publishable": true,
+      "why": "a fold trigger only means anything when SR > SR0: `n` enters through \u221a(n\u22121), which scales a positive gap but can never CREATE one (NF-W8-0d). Under DSR_UNREACHABLE the calendar-bound 2026 trigger is WITHHELD with this reason stated, \u26d4 never published \u2014 that is the NF-D18 misleading direction.",
+      "field_trim_status": "STRUCTURALLY UNAVAILABLE \u2014 `V` has exactly two members, so the only available drops are the arm under test (inadmissible outright, NF-W7h) or the sole other contributor (leaving `V` undefined at one point). Any refusal is stated A FORTIORI on the design, \u26d4 never as a trimmed number (pre-registration \u00a72.3(b))."
+    },
+    "field_trim_2x2": {
+      "evaluable": false,
+      "structurally_unavailable": true,
+      "v_member_count": 2,
+      "why": "`V` has exactly two members, so the only available drops are the arm under test (inadmissible \u2014 NF-W7h) or the sole other contributor (leaving `V` undefined). The 2x2 is STRUCTURALLY UNAVAILABLE for this declared field; state any refusal a fortiori on the design."
+    },
+    "design_quantities": {
+      "dsr_ceiling_at_n_folds": 0.9997339972474304,
+      "fold_consistency_required_wins": 6,
+      "pbo_evaluable": true,
+      "note": "computed from the FOLD COUNT alone, before any score \u2014 a refusal at seven folds is a statement about the evidence, \u26d4 not about structural impossibility"
+    }
+  },
+  "anchors": {
+    "degenerates_scored": {
+      "mvp1_null": 27.5159,
+      "random_order": 45.3696
+    },
+    "winner_crps": 26.0643,
+    "every_degenerate_loses": true,
+    "degenerate_verdicts": {
+      "mvp1_null": true,
+      "random_order": true
+    },
+    "own_form_ceiling": 20.214,
+    "own_form_ceiling_gap": 5.8503,
+    "own_form_ceiling_active": true,
+    "own_form_ceiling_respected": true,
+    "ceiling_reading": "ACTIVE"
+  },
+  "positive_control": {
+    "verdict": "DETECTED",
+    "reason": "2 arm(s) clear every registered gate at an injected effect of 0.75 \u2014 the family can certify an effect of this size over this field.",
+    "effect_injected_crps": 0.75,
+    "survivors": [
+      "stratified",
+      "feasibility_clamp"
+    ],
+    "metric_survivors": [
+      "stratified",
+      "feasibility_clamp"
+    ],
+    "deflation_blocked": [],
+    "deflation_gates": [
+      "dsr"
+    ],
+    "metric_gates": [
+      "fold_consistency",
+      "m1_crps_lift",
+      "m5_tier_rho"
+    ],
+    "blocking_gates": {
+      "incumbent": [
+        "m1_crps_lift",
+        "fold_consistency",
+        "dsr"
+      ],
+      "stratified": [],
+      "feasibility_clamp": [],
+      "mvp1_null": [
+        "m1_crps_lift",
+        "m5_tier_rho",
+        "fold_consistency",
+        "dsr"
+      ],
+      "random_order": [
+        "m1_crps_lift",
+        "m2_coherence",
+        "m3_worst_times_over",
+        "m4_giveback",
+        "m5_tier_rho",
+        "m6_interval_floor",
+        "fold_consistency",
+        "dsr"
+      ]
+    },
+    "field_level_gates_applied_per_arm": [],
+    "null_control_checked": true,
+    "null_control_survivors": [],
+    "declared_partition": {
+      "injection_sensitive": [
+        "m1_crps_lift",
+        "m5_tier_rho",
+        "fold_consistency",
+        "dsr",
+        "bh_fdr"
+      ],
+      "injection_invariant": [
+        "m2_coherence",
+        "m3_worst_times_over",
+        "m4_giveback",
+        "m6_interval_floor"
+      ]
+    },
+    "null_leg_declaration_applies": false,
+    "degenerate_null_survivors": [],
+    "blockers_on_invariant_side": [
+      "m2_coherence",
+      "m3_worst_times_over",
+      "m4_giveback",
+      "m6_interval_floor"
+    ],
+    "blockers_on_sensitive_side": [
+      "dsr",
+      "fold_consistency",
+      "m1_crps_lift",
+      "m5_tier_rho"
+    ],
+    "blockers_unclassified": [],
+    "reading": null,
+    "plat_cvp2_landed": true,
+    "preregistration_7_premise": "\u00a77 states PLAT-CVP2 'has not landed ... no CONSTRAINT_BLOCKED verdict and no injection-invariant-gate parameter'. MEASURED FALSE at this commit: `gate_classes=` and `invariant_gates=` both exist and `CONSTRAINT_BLOCKED` is a verdict. \u2b50 SUPERSEDED BY MEASUREMENT \u2014 \u00a77 is left UNEDITED; the control is driven by the DECLARED partition (which \u00a77 itself declares), \u26d4 not by the instrument's name heuristic. Using the parameter is not a relaxation: the partition is unchanged and was declared BEFORE the control ran, which is exactly the anti-laundering condition the instrument names."
+  },
+  "control_binding": {
+    "state": "PASSES",
+    "failures": [],
+    "checks": {
+      "F1_effect_detected": true,
+      "F2_no_degenerate_survived_injection": true,
+      "F3_no_degenerate_survived_null_leg": true,
+      "metric_survivors": [
+        "stratified",
+        "feasibility_clamp"
+      ],
+      "degenerate_injected_survivors": [],
+      "degenerate_null_survivors": []
+    },
+    "why": "the injected leg detected the planted effect (['stratified', 'feasibility_clamp'] cleared every injection-MOVABLE gate) and no declared degenerate survived either leg. \u26d4 This is the control's binding substance under amendment 1 \u00a74; the instrument's own badge ('DETECTED') is recorded verbatim beside it and does not bind."
+  },
+  "verdict": {
+    "state": "DEFLATION_REFUSED",
+    "gates": {
+      "dsr": false,
+      "pbo_field_level": true,
+      "fold_consistency": true
+    },
+    "gates_failed": [
+      "dsr"
+    ],
+    "gates_undefined": [],
+    "fold_consistency_required_wins": 6,
+    "fold_wins": 7,
+    "fold_consistency_clause": {
+      "wins_required": 6,
+      "attained_false_fire": 0.0625,
+      "legacy_wins_required": 5,
+      "legacy_false_fire": 0.2265625,
+      "note": "the CALIBRATED clause (MH2 H8) \u2014 the raw 0.60 rate is a different gate at every fold count and nearly free at the low end"
+    },
+    "branch": "M1\u2013M6 dominate but a binding deflation gate refuses \u2192 read against \u00a77's control, with the lockstep check FIRST and \u00a72.3(b)'s structural unavailability stated. The diagnostic field publishes beside it and \u26d4 does not rescue it.",
+    "positive_control": "DETECTED",
+    "control_reading": null,
+    "control_binding": {
+      "state": "PASSES",
+      "failures": [],
+      "checks": {
+        "F1_effect_detected": true,
+        "F2_no_degenerate_survived_injection": true,
+        "F3_no_degenerate_survived_null_leg": true,
+        "metric_survivors": [
+          "stratified",
+          "feasibility_clamp"
+        ],
+        "degenerate_injected_survivors": [],
+        "degenerate_null_survivors": []
+      },
+      "why": "the injected leg detected the planted effect (['stratified', 'feasibility_clamp'] cleared every injection-MOVABLE gate) and no declared degenerate survived either leg. \u26d4 This is the control's binding substance under amendment 1 \u00a74; the instrument's own badge ('DETECTED') is recorded verbatim beside it and does not bind."
+    },
+    "null_leg_declaration_applies": false,
+    "best_alpha": 0,
+    "served_arm": "incumbent",
+    "deploy_held": true
+  }
+}

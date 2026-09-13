@@ -222,6 +222,14 @@ def _run_real_script_against(tmp_path: Path, now: datetime | None = None) -> str
     ctx.enter_context(mock.patch("betting_ml.utils.lakehouse_monitor.duck", duckdb.connect))
     ctx.enter_context(
         mock.patch("betting_ml.utils.delta_lakehouse.register_lakehouse_views", _fake_register))
+    # NF-CAP1 added contracts that read the NFL point-in-time Delta store rather than an MLB
+    # lakehouse view, so they take a DIFFERENT read path in the script. Patch it at the same
+    # LOCATIONAL seam and point it at the same fixture directory — otherwise these contracts
+    # would reach real S3 from a fast-gate test (no network) and, worse, would silently ignore
+    # the fixtures every assertion below is written against.
+    ctx.enter_context(
+        mock.patch.object(chk, "_register_pit_table",
+                          lambda conn, contract: _fake_register(conn, [contract.ts_table])))
     ctx.enter_context(mock.patch.object(sys, "argv", ["check_artifact_freshness.py"]))
     ctx.enter_context(contextlib.redirect_stdout(buf))
     with ctx:
@@ -275,16 +283,38 @@ class TestEndToEndOverRealParquet:
         assert severity is None, "a fresh artifact must not page"
 
     def test_a_frozen_artifact_pages_critical(self, tmp_path):
-        """THE RED PROOF — the INC-41 scenario. Every artifact frozen 3 days ago: far past every
-        SLA in the registry no matter which hours are active."""
+        """THE RED PROOF — the INC-41 scenario: every artifact frozen 3 days ago.
+
+        ⚠️ RE-ANCHORED BY NF-CAP1, and the reason matters. This asserted a flat "every verdict is
+        STALE", which was true while every contract filtered on hour-of-day alone — 3 days is past
+        every SLA under any hour window. It stopped being true once contracts could declare a
+        WEEKDAY and MONTH window: a Tue/Fri Oct-Feb capture frozen 3 days ago in September has
+        accrued ZERO active minutes and is CORRECTLY OK, because its writer cannot fire then.
+
+        So the expectation is now DERIVED per contract from the same pure function the production
+        code uses, rather than asserted flat. That is strictly stronger than the old form — it
+        pins the seasonal semantics too — and it keeps the test honest about what "frozen" means
+        for a writer that is deliberately idle.
+        """
         now = datetime.now(timezone.utc)
-        _all_fixtures(tmp_path, (now - timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S"))
+        frozen_at = now - timedelta(days=3)
+        _all_fixtures(tmp_path, frozen_at.strftime("%Y-%m-%d %H:%M:%S"))
         out = _run_real_script_against(tmp_path)
         verdicts = parse_verdicts(out)
-        assert {v for v, _, _ in verdicts.values()} == {STALE}
+
+        expected = {}
+        for c in REGISTRY:
+            lag = active_minutes_between(frozen_at, now, c.active_hours_utc,
+                                         c.active_weekdays, c.active_months)
+            expected[c.name] = STALE if lag > c.max_lag_minutes else OK
+        assert STALE in expected.values(), (
+            "no registered contract is stale after a 3-day freeze — this test would be vacuous"
+        )
+        assert {n: v for n, (v, _, _) in verdicts.items()} == expected
+
         severity, msg = classify(out, now)
         assert severity == "CRITICAL"
-        assert "stg_statsapi_lineups_wide" in msg
+        assert "stg_statsapi_lineups_wide" in msg, "the INC-41 victim must always be in the page"
 
     def test_the_inc41_victim_alone_going_stale_still_pages(self, tmp_path):
         """The realistic shape: ONE build leg dies (INC-41's `--w7b-only`) while everything else

@@ -95,9 +95,11 @@ def nfl_pit_metadata_capture_op(context):
 def nfl_pit_market_capture_op(context):
     """A Tue/Fri point-in-time market board (⚠️ PAID — Odds-API credits).
 
-    ~30 credits per game-line snapshot (≈1,300/season at this cadence). Player props are a
-    SEPARATE opt-in (`NFL_PIT_CAPTURE_PROPS=1`, default OFF) costing ~120 credits PER EVENT
-    (~75,000/season) — confirm the balance before enabling.
+    3 credits per game-line snapshot (≈132/season at this cadence) — MEASURED live 2026-09-05 (NF-CAP1) against x-requests-remaining, bracketed by free /sports reads;
+    the previous ~30/~1,300 figures were 10× high because the Odds-API 10× multiplier applies to
+    the `/historical` endpoint, not the LIVE one this leg uses. Player props are a SEPARATE opt-in
+    (`NFL_PIT_CAPTURE_PROPS=1`, default OFF) at ~10 credits PER EVENT over the whole ~272-event
+    board ≈ 2,720/snapshot ≈ 60,000/season — confirm the balance before enabling.
     """
     _run_leg(context, "market", severity="CRITICAL")
 

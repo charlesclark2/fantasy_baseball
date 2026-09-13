@@ -62,6 +62,34 @@ CRITICAL_SCHEDULES = frozenset({
     # NCAAF-on-box card turns them on; adding them now would false-page every evaluation.
     "sports_nfl_board_publish_schedule",
     "sports_nfl_sleeper_injuries_schedule",
+    # NF-CAP1 (2026-09-05) — the two FREE NFL point-in-time FORWARD captures. They are the
+    # sharpest case this set has: nothing downstream reads them yet (best_alpha=0), and they still
+    # belong here because a capture that does not happen cannot be repaired. A serving artifact
+    # that freezes gets rebuilt; a Tuesday forecast or injury designation nobody looked at is gone
+    # — the Open-Meteo archive returns observations rather than the forecast that stood at the
+    # time, and nflverse deleted the injury as-of column in 2025. Both ship
+    # `default_status=RUNNING` and are measurably firing (`nfl/pit/schema_snapshot` carries
+    # 2026-09-01T16:00:34Z and 2026-09-04T16:00:41Z; `nfl/pit/weather` a 2026-09-05T00:05:16Z
+    # rung), so neither can false-page.
+    #
+    # ⛔ `sports_nfl_pit_market_schedule` IS DELIBERATELY *NOT* HERE, and the reason is that the
+    # entry would have been VACUOUS — a guard that cannot see the failure it names. This set is
+    # consumed by `stopped_critical_instigators`, which flags an instigator only when Dagster has
+    # a PERSISTED STOPPED ROW for it (someone toggled it off). The market schedule ships
+    # `default_status=STOPPED` and is RUNNING only because the operator toggled it on, so the
+    # revert it needs protection from — a volume reset or box re-host wiping that row — leaves it
+    # back at its STOPPED DEFAULT with **no persisted row at all**, which this function correctly
+    # does not flag. Listing it would have read as coverage while detecting nothing.
+    #   Two things follow, and both are live rather than deferred:
+    #   • the REAL detector for that revert is the `nfl_pit_market` freshness contract, which
+    #     asserts the ARTIFACT has advanced and goes STALE within ~36 active hours of a missed
+    #     Tue/Fri fire regardless of what any surface signal says (INC-41's whole thesis);
+    #   • making the heartbeat work here would mean flipping that schedule to
+    #     `default_status=RUNNING`, which auto-starts a PAID capture on every fresh deployment.
+    #     That is a spend decision for the PM, not a monitoring change — carried to NF-CAP1's
+    #     closeout rather than taken here.
+    "sports_nfl_pit_weather_schedule",
+    "sports_nfl_pit_metadata_schedule",
 })
 # Intraday / cutover env flags that must be permanently "1" on the box. An unset one = a
 # silently-gated-off refresh (3 of the 5 incidents). Scoped to the flags we are confident should
