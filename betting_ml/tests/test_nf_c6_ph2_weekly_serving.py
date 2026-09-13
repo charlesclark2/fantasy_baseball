@@ -523,6 +523,107 @@ def test_a_projection_not_refreshed_into_its_own_kickoff_is_flagged():
     assert v["verdict"] == "STALE_INTO_KICKOFF" and v["severity"] == "ERROR"
 
 
+# ── 8b. …and the cadence that is NOT a wrong week (the false-CRITICAL this monitor first shipped)
+
+#: Week 2's last GAMEDAY, date-granular exactly as `schedules.gameday` carries it.
+_WK2_SLATE_END = datetime.fromisoformat("2026-09-21T00:00:00+00:00")
+
+
+def _serving_wk2():
+    """Serving week 2 healthily while the schedule's next week is 3 — the in-season steady state."""
+    return _manifest(week=2, generated_at="2026-09-17T22:00:00+00:00",
+                     projection_day="2026-09-17T20:15:00+00:00")
+
+
+def test_the_roster_feeds_cadence_is_not_a_wrong_week():
+    """⭐ THE REGRESSION THIS EXISTS FOR. The target week advances at the previous slate's FIRST
+    kickoff, but the roster feed publishes the new week's rows days later — so from Thursday night
+    until ~Tuesday the served week is legitimately one behind while ITS OWN games are still being
+    played. The first cut keyed the wrong-week check on `week != expected_week` alone and therefore
+    paged CRITICAL for ~5 of every 7 days, with a detail line ("a slate that has already been
+    played") that was false on its face. That is the muted-monitor pattern, not a finding.
+    """
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    for label, now in (("Fri, two days into the slate", "2026-09-18T18:00:00+00:00"),
+                       ("Sun, main slate in progress", "2026-09-20T18:00:00+00:00"),
+                       ("Mon night, MNF in play", "2026-09-21T22:00:00+00:00")):
+        v = F.classify(F.reading_from_manifest(2026, _serving_wk2()), expected_week=3,
+                       served_slate_ends=_WK2_SLATE_END, now=_now(now))
+        assert v["verdict"] == "AWAITING_NEXT_WEEK", (label, v)
+        assert v["severity"] is None, (label, v)
+        assert not F.is_problem(v), label
+
+
+def test_the_cadence_window_turns_CRITICAL_the_moment_the_served_slate_completes():
+    """The two-sided half: the benign state must not be a blind spot. The SAME reading, judged
+    either side of the served slate's completion, must flip — otherwise this change would have
+    traded a false alarm for a missed one."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    r = F.reading_from_manifest(2026, _serving_wk2())
+    during = F.classify(r, expected_week=3, served_slate_ends=_WK2_SLATE_END,
+                        now=_now("2026-09-21T22:00:00+00:00"))
+    after = F.classify(r, expected_week=3, served_slate_ends=_WK2_SLATE_END,
+                       now=_now("2026-09-22T12:00:00+00:00"))
+    assert during["verdict"] == "AWAITING_NEXT_WEEK" and during["severity"] is None
+    assert after["verdict"] == "WRONG_WEEK" and after["severity"] == "CRITICAL"
+
+
+def test_a_monday_night_kickoff_does_not_page_because_gameday_is_date_granular():
+    """`gameday` is a DATE, so the served slate's end is MIDNIGHT UTC on the Monday — while a
+    20:15 ET kickoff is already 00:15 UTC on TUESDAY. A grace sized for a kickoff TIME rather than
+    a DATE would page CRITICAL with the last game of the week still in play."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(F.reading_from_manifest(2026, _serving_wk2()), expected_week=3,
+                   served_slate_ends=_WK2_SLATE_END,
+                   now=_now("2026-09-22T02:00:00+00:00"))   # MNF kicked off 00:15Z, still running
+    assert v["verdict"] == "AWAITING_NEXT_WEEK", v
+
+
+def test_an_unknown_slate_end_is_judged_EXACTLY_as_before():
+    """NF1.7(a), fail-closed: a check that cannot establish the benign case must not assume it. With
+    no slate end the mismatch keeps its original CRITICAL verdict, so a failed schedule read can
+    only ever cost a false alarm — never a miss."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(F.reading_from_manifest(2026, _serving_wk2()), expected_week=3,
+                   served_slate_ends=None, now=_now("2026-09-18T18:00:00+00:00"))
+    assert v["verdict"] == "WRONG_WEEK" and v["severity"] == "CRITICAL"
+
+
+def test_more_than_one_week_behind_is_never_the_feeds_cadence():
+    """The feed is at most one week out. Two behind means the build stopped publishing, whatever the
+    served slate is doing."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(F.reading_from_manifest(2026, _serving_wk2()), expected_week=4,
+                   served_slate_ends=_WK2_SLATE_END, now=_now("2026-09-18T18:00:00+00:00"))
+    assert v["verdict"] == "WRONG_WEEK" and v["severity"] == "CRITICAL"
+
+
+def test_slate_end_reads_the_last_gameday_of_the_SERVED_week():
+    """`slate_end` answers "has the week we are SERVING finished", which is a different question
+    from `resolve_target_week`'s "which week is next" — and it must read the served week, not the
+    expected one."""
+    import pandas as pd
+
+    from quant_sports_intel_models.football.nfl.fantasy import weekly_serving as WS
+
+    sched = pd.DataFrame({
+        "season": [2026] * 5,
+        "week": [2, 2, 2, 3, 3],
+        "gameday": ["2026-09-17", "2026-09-20", "2026-09-21", "2026-09-24", "2026-09-28"],
+    })
+    assert WS.slate_end(sched, season=2026, week=2) == _WK2_SLATE_END
+    assert WS.slate_end(sched, season=2026, week=3) == datetime.fromisoformat(
+        "2026-09-28T00:00:00+00:00")
+    # A week the schedule does not carry is None, never a silent default.
+    assert WS.slate_end(sched, season=2026, week=9) is None
+    assert WS.slate_end(sched, season=2025, week=2) is None
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 9. The builder must populate every field the contract declares
 # ══════════════════════════════════════════════════════════════════════════════════════════════

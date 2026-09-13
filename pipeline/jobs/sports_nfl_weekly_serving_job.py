@@ -243,6 +243,7 @@ def nfl_weekly_freshness_op(context):
     # staleness bar can make, because a build that runs fine on last week's slate has every
     # timestamp healthy while serving a played game.
     expected_week = None
+    sched = None
     try:
         from quant_sports_intel_models.football.nfl.ingest.query_lake import delta, q
 
@@ -264,7 +265,22 @@ def nfl_weekly_freshness_op(context):
     cur = read(C.weekly_current_key(season))
     week = (cur or {}).get("week", expected_week)
     blob = read(C.weekly_manifest_key(season, week)) if week is not None else None
-    verdict = WF.classify(WF.reading_from_manifest(season, blob), expected_week=expected_week)
+    reading = WF.reading_from_manifest(season, blob)
+
+    # ⭐ THE SERVED WEEK'S OWN SLATE END — what separates the roster feed's cadence from the INC-37
+    # shape. Read from the SCHEDULE (never the artifact being judged, which would make the check
+    # circular) and for `reading.week`, NOT the expected week. Absent ⇒ classify judges the mismatch
+    # exactly as it did before, so a failure here can only ever cost a FALSE ALARM, never a miss.
+    served_slate_ends = None
+    if sched is not None and reading.week is not None:
+        try:
+            served_slate_ends = WS.slate_end(sched, season=season, week=reading.week)
+        except Exception as exc:  # noqa: BLE001
+            context.log.warning("[nfl weekly freshness] could not resolve the slate end for "
+                                "wk %s (%s) — judging the mismatch without it", reading.week, exc)
+
+    verdict = WF.classify(reading, expected_week=expected_week,
+                          served_slate_ends=served_slate_ends)
 
     context.log.info("[METRIC] nfl_weekly_freshness=%s lag_hours=%s",
                      verdict["verdict"], verdict["lag_hours"])
