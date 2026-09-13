@@ -104,6 +104,7 @@ from dagster import (
 from pipeline.jobs.sports_ncaaf_rollforward_job import sports_ncaaf_roll_forward_job
 from betting_ml.monitoring.nfl_board_freshness import is_draft_season
 from pipeline.jobs.sports_nfl_board_publish_job import sports_nfl_board_publish_job
+from pipeline.jobs.sports_nfl_weekly_serving_job import sports_nfl_weekly_serving_job
 from pipeline.jobs.sports_nfl_rollforward_job import sports_nfl_roll_forward_job
 from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
 
@@ -252,3 +253,50 @@ def sports_nfl_board_publish_schedule(context: ScheduleEvaluationContext):
             f"{today} is outside draft season (Aug 1 – Sep 15) and is not a Monday — the board "
             "publishes weekly off-season. The previously published board keeps serving.")
     return RunRequest(run_key=None, tags={"sport": "nfl", "cadence": "board_publish"})
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-C6-PH2 — the WEEKLY serving build
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# 08:30 PT daily, 45 minutes after the board publish. The offset is a COURTESY and not an ordering
+# guarantee — the two jobs share no artifact, so there is nothing here for a cron offset to lose
+# (INC-25 is about a consumer racing its own producer, which this is not). It simply keeps two
+# lightgbm builds off the box's two vCPUs at the same moment.
+#
+# ⛔ SHIPS STOPPED, AND THAT IS THIS STORY'S DEPLOY-HELD POSTURE RATHER THAN AN OVERSIGHT. Enabling
+# it is an OPERATOR step taken after the gateway routes exist and `deploy.sh` has shipped the
+# backend — a schedule that starts publishing weekly blobs to an api-cache no route can read would
+# be spending box CPU on an artifact nobody can fetch.
+#
+# ⚠️ NF-INFRA1's WARNING APPLIES THE MOMENT IT IS TURNED ON: a schedule toggled ON in Dagit holds
+# that state ONLY in the Dagster Postgres, so a volume reset or a box re-host silently reverts it to
+# STOPPED and the weekly artifact freezes with nothing paging. When the operator enables this, it
+# belongs in `BOX_OPERATIONS.md §10` and in `check_monitors_healthy_op`'s required-RUNNING set in the
+# same change — otherwise the cure for a silent freeze is itself silently revertible.
+NFL_WEEKLY_SERVING_CRON = "30 8 * * *"
+
+
+@schedule(
+    job=sports_nfl_weekly_serving_job,
+    cron_schedule=NFL_WEEKLY_SERVING_CRON,
+    execution_timezone="America/Los_Angeles",
+    default_status=DefaultScheduleStatus.STOPPED,
+)
+def sports_nfl_weekly_serving_schedule(context: ScheduleEvaluationContext):
+    """Daily in-season rebuild of the next unplayed week's projection.
+
+    DAILY rather than weekly even though the TARGET week changes once a week: the inputs (rosters,
+    depth charts, snaps, the injury feed) move every day, and a Tuesday build is what carries a
+    Monday-night result into Sunday's projection. The builder resolves its own target week from the
+    published schedule, so a rebuild on a day when nothing changed is idempotent rather than wrong.
+
+    ⭐ IT DOES NOT SELF-SKIP OUT OF SEASON, and that is deliberate. `resolve_target_week` RAISES
+    when no REG week is upcoming, which fails the run loudly instead of publishing a projection for
+    a season that is over — the same fail-closed shape as the rest of this path. A skip predicate
+    here would be a second owner of "is there a week to project", and the builder already answers
+    that from the schedule itself (the INC-30/36/38 one-logical-thing-many-owners shape).
+    """
+    context.log.info("[nfl weekly] building the next unplayed week (%s)",
+                     context.scheduled_execution_time.date())
+    return {}

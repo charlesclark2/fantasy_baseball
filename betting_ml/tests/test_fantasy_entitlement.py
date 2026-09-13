@@ -284,18 +284,31 @@ def test_router_declares_the_fantasy_gate():
     assert deps.require_fantasy_access in dep_calls
 
 
-def test_exactly_three_routes_live_outside_the_fantasy_gate():
+def test_exactly_the_enumerated_routes_live_outside_the_fantasy_gate():
     """E9.56 — the exemption must stay an ENUMERATED list, not an open door.
 
-    The dual-mode reads live on a second router with no `require_fantasy_access` (this codebase's
-    idiom: an exemption is a separate router object, never a flag inside the gated one). The failure
-    mode that idiom exists to prevent is a fourth route quietly joining the un-gated router — a
+    The generic-board reads live on a second router with no `require_fantasy_access` (this
+    codebase's idiom: an exemption is a separate router object, never a flag inside the gated one).
+    The failure mode that idiom exists to prevent is a route quietly joining the un-gated router — a
     write endpoint, or `/nfl/my-teams` (a user's OWN leagues), would then be readable by anyone.
-    Pinning the exact set makes that a failing test rather than a silent leak."""
+    Pinning the exact set makes that a failing test rather than a silent leak.
+
+    ⭐ GROWING THIS SET IS A REVIEWABLE ACT, WHICH IS THE WHOLE POINT. NF-C6-PH2 added the two FREE
+    weekly reads and this guard is what forced them to be declared here rather than absorbed. They
+    belong outside the gate for the same reason the season pair does: neither handler takes a
+    `Request`, so neither can see its caller, and their bytes are identical for anonymous, free and
+    paying callers alike — which is what the CDN entry, `cache_control_for` and the client's
+    `entitled`-keyed query cache all rest on.
+
+    ⛔ `/fantasy/nfl/weekly/projections-full` is deliberately NOT here: it is the paid substrate and
+    sits on the gated `router`."""
     assert {r.path for r in fantasy.board_router.routes} == {
         "/fantasy/nfl/manifest",
         "/fantasy/nfl/projections",
         "/fantasy/nfl/board",
+        # NF-C6-PH2 — the free weekly half.
+        "/fantasy/nfl/weekly/manifest",
+        "/fantasy/nfl/weekly/projections",
     }
     assert deps.require_fantasy_access not in [d.dependency for d in fantasy.board_router.dependencies]
     # ...and every one of them is a READ. A write outside the gate would be far worse than a read.

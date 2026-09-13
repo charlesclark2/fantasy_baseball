@@ -392,6 +392,16 @@ _PUBLIC_CACHE_RULES: tuple[tuple[str, int, int], ...] = (
     ("/fantasy/nfl/manifest", 900, 3600),
     ("/fantasy/nfl/projections", 900, 3600),
     ("/fantasy/nfl/board", 900, 3600),
+    # NF-C6-PH2 — the two FREE weekly reads. Byte-identical for every caller (neither handler takes
+    # a `Request`), rewritten once per weekly build, never intraday.
+    # ⚠️ THE TWO PATHS ARE LISTED EXACTLY, NOT THE `/fantasy/nfl/weekly` PREFIX. A prefix rule would
+    # match `/fantasy/nfl/weekly/projections-full` — the PAID substrate — and mark it shared-
+    # cacheable, which is the precise breach this function exists to prevent. Prefix matching here
+    # requires a following "/", so `…/projections` cannot reach `…/projections-full`; that is a
+    # property of `public_cache_control`, and `test_nf_c6_ph2_weekly_contract.py` pins it rather
+    # than leaving it to be re-derived.
+    ("/fantasy/nfl/weekly/manifest", 900, 3600),
+    ("/fantasy/nfl/weekly/projections", 900, 3600),
     # Past seasons. Immutable in practice — a past season's track record does not change.
     ("/fantasy/nfl/track-record", 3600, 86400),
     # Re-written intraday by each re-score, so a much shorter window. Still collapses a burst of

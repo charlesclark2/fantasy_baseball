@@ -551,6 +551,48 @@ public prefix's cache rule and degrade entry is the defect G100-C1 measured). Pi
 `betting_ml/tests/test_ncaaf_p3_3_team_page.py::test_the_team_route_inherits_the_ncaaf_cost_guardrails_rather_than_needing_its_own`.
 
 
+#### NF-C6-PH2 — the two FREE WEEKLY routes — ⛔ NOT YET APPLIED
+
+NF-W1's certified weekly champion finally has a serving path. Two of its three routes are public in
+the FastAPI layer (`fantasy.board_router`, no `Depends`), which — as always — is **not sufficient**:
+the catch-all `ANY /{proxy+}` carries the Cognito authorizer, so each answers **401 before the
+Lambda is invoked** until an explicit route exists.
+
+```bash
+for RK in "GET /fantasy/nfl/weekly/manifest" "GET /fantasy/nfl/weekly/projections"; do
+  aws apigatewayv2 create-route \
+    --api-id 8dhmehjak7 --region us-east-1 \
+    --route-key "$RK" \
+    --target "integrations/p093jnh" \
+    --authorization-type NONE
+done
+```
+
+⛔ **`GET /fantasy/nfl/weekly/projections-full` MUST NOT GET ONE.** It is the PAID half — the
+per-stat component line and the 39-level predictive vector — and it is gated INSIDE the Lambda by
+`require_fantasy_access`. Creating a `NONE` route for it would strip the gateway layer in front of a
+paid surface; and unlike the free pair it is deliberately absent from the CDN allowlist and from
+`_PUBLIC_CACHE_RULES` for the same reason. Pinned two-sided by
+`betting_ml/tests/test_nf_c6_ph2_weekly_contract.py`.
+
+⭐ **The free pair carries no entitlement decision and reads no Bearer token at all** — neither
+handler takes a `Request`, which is the strongest available statement that nothing varies by caller
+and is what makes the CDN entry legal. `jwt_verify` remains load-bearing for the PAID route only.
+
+Verify anonymously (no `apigateway:*` needed — the everyday profile is denied it). **401 = the
+authorizer is still in front**; a 404 before the first weekly publish is the GOOD outcome, meaning
+the router ran and found nothing published:
+
+```bash
+for P in /fantasy/nfl/weekly/manifest /fantasy/nfl/weekly/projections; do
+  printf '%s -> ' "$P"; curl -s -o /dev/null -w '%{http_code}\n' "https://api.credencesports.com$P?season=2026"
+done
+# and the PAID one must stay 401/403 anonymously:
+curl -s -o /dev/null -w 'projections-full -> %{http_code}\n' \
+  "https://api.credencesports.com/fantasy/nfl/weekly/projections-full?season=2026"
+```
+
+
 ### 🔒 The generic-board public routes — ✅ APPLIED (re-confirmed anonymously 2026-08-08)
 
 ⭐ **RE-VERIFIED FROM OUTSIDE, not read off this doc.** An anonymous `curl` of all three returns
