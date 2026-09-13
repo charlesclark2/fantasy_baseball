@@ -54,9 +54,25 @@ CASES: list[tuple[str, Path, str, str, str]] = [
     # commit message says so outright. It just does not rewrite THIS artifact.
     ("the roll-forward is registered as refreshing the ratings",
      OWNER,
-     "RATINGS_REFRESH_SCHEDULES: tuple[str, ...] = ()",
+     'RATINGS_REFRESH_SCHEDULES: tuple[str, ...] = ("sports_ncaaf_strength_refit_schedule",)',
      'RATINGS_REFRESH_SCHEDULES: tuple[str, ...] = ("sports_ncaaf_roll_forward_schedule",)',
      "test_the_roll_forward_schedule_is_refused_by_name"),
+
+    # NCAAF-P1.2W populated the registry. The refusal above still has to hold, and these two add
+    # what the populated state introduced: a name that does NOT write the artifact must be caught
+    # by the resolve-the-chain clause, and emptying the registry must take the stamp back to the
+    # stated absence rather than leaving a stale date rendering.
+    ("a schedule that does not write the ratings is registered",
+     OWNER,
+     '("sports_ncaaf_strength_refit_schedule",)',
+     '("sports_ncaaf_serving_write_schedule",)',
+     "test_every_registered_schedule_really_does_rewrite_the_ratings_artifact"),
+
+    ("the populated registry stops resolving a real next update",
+     OWNER,
+     '("sports_ncaaf_strength_refit_schedule",)',
+     "()",
+     "test_a_populated_registry_renders_a_real_next_update_and_an_empty_one_the_absence"),
 
     # E9.41: an undeclared field is stripped on serialize — the store is right and the page is not.
     ("the vintage is dropped from the served contract",

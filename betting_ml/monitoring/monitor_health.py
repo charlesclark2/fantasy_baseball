@@ -90,6 +90,23 @@ CRITICAL_SCHEDULES = frozenset({
     #     closeout rather than taken here.
     "sports_nfl_pit_weather_schedule",
     "sports_nfl_pit_metadata_schedule",
+    # NCAAF-P1.2W (2026-09-13) — the weekly P1.2 strength re-fit, and the FIRST NCAAF schedule in
+    # this set. The line above forbidding NCAAF entries is about the two schedules that are still
+    # intentionally STOPPED; this one is enabled by the operator as the story's runtime gate, and
+    # once it is on, a toggle-off freezes every rating, band and rank the product serves — AND
+    # silently falsifies the "next update" date `ncaaf_ratings_vintage` now prints from its cron.
+    #
+    # ⚠️ WHAT THIS ENTRY COVERS AND WHAT IT DOES NOT, stated because the NF-CAP1 reading of
+    # `stopped_critical_instigators` makes the difference load-bearing. That function flags an
+    # instigator only when Dagster holds a PERSISTED STOPPED row, so this catches someone TOGGLING
+    # IT OFF — real coverage, and the commonest way a weekly job dies. It CANNOT catch a
+    # Dagster-volume reset or a box re-host, which wipes the row and drops the schedule back to its
+    # `default_status=STOPPED` with no row to flag. The detector for THAT is the
+    # `ncaaf_team_strength_week` contract in `sports_delta_freshness`, which goes STALE within ~8
+    # ACTIVE days of a missed Monday regardless of what any surface signal says (INC-41's thesis).
+    # Listing this without that second half would have read as coverage while seeing one of two
+    # ways it can stop; both exist, and `test_ncaaf_p1_2w_weekly_refit.py` asserts the pair.
+    "sports_ncaaf_strength_refit_schedule",
 })
 # Intraday / cutover env flags that must be permanently "1" on the box. An unset one = a
 # silently-gated-off refresh (3 of the 5 incidents). Scoped to the flags we are confident should
