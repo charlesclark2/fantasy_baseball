@@ -379,6 +379,16 @@ def test_the_refit_fires_on_a_monday_inside_the_declared_season():
         "and the cadence they describe have drifted apart")
 
 
+def test_the_schedule_reads_the_shared_enable_predicate_rather_than_declaring_its_own():
+    """One owner. A second `os.environ.get(...) == "1"` beside the schedule would be a second rule
+    for the same fact — and it would put the predicate back where the fast gate cannot reach it."""
+    src = _code_only(SCHEDULE.read_text())
+    assert "refit_enabled(" in src and "from betting_ml.monitoring.ncaaf_strength_refit import" in src
+    assert "os.environ" not in src, (
+        "the schedule reads the env directly again — the predicate has one owner in betting_ml, "
+        "which is also the only place the fast gate can import it from (E11.23)")
+
+
 def test_the_cron_month_field_is_built_from_the_season_window_not_retyped():
     """One logical thing, one owner (INC-30/36/38). A month range typed beside the SLA's own month
     tuple is the seasonal-hole class waiting for one of the two to be edited."""
@@ -505,13 +515,20 @@ def test_a_tick_fires_nothing_until_the_operator_sets_the_flag():
     next clause spells out. Merged must not mean running: the first real in-season fit moves ranks
     materially and is a supervised operator step.
 
-    TWO-SIDED — a gate that never fires is as useless as one that never holds."""
-    import pipeline.schedules.sports_ncaaf_strength_refit_schedules as M
+    TWO-SIDED — a gate that never fires is as useless as one that never holds.
 
-    assert M.refit_enabled({M.REFIT_ENABLED_FLAG: "1"}) is True
-    for absent in ({}, {M.REFIT_ENABLED_FLAG: ""}, {M.REFIT_ENABLED_FLAG: "0"},
-                   {M.REFIT_ENABLED_FLAG: "true"}):
-        assert M.refit_enabled(absent) is False, (
+    ⚠️ Reads the predicate from `betting_ml`, NOT from the schedule module: importing anything
+    under `pipeline` triggers the dbt-manifest read that is absent on a CI runner, and the fast
+    gate's stated invariant is that no non-slow test imports `pipeline` (E11.23). This clause
+    shipped importing the schedule and went red on the first CI run for exactly that reason, while
+    passing on a laptop whose worktree carries a SYMLINK to the main checkout's manifest.
+    """
+    from betting_ml.monitoring.ncaaf_strength_refit import REFIT_ENABLED_FLAG, refit_enabled
+
+    assert refit_enabled({REFIT_ENABLED_FLAG: "1"}) is True
+    for absent in ({}, {REFIT_ENABLED_FLAG: ""}, {REFIT_ENABLED_FLAG: "0"},
+                   {REFIT_ENABLED_FLAG: "true"}):
+        assert refit_enabled(absent) is False, (
             f"{absent!r} armed the weekly re-fit — an env var that is present but empty shadows a "
             f"default, and anything but '1' must fail toward NOT firing")
 
@@ -523,16 +540,16 @@ def test_the_skip_is_loud_and_names_the_flag_rather_than_being_silent():
     pipeline = pytest.importorskip("pipeline")
     from dagster import build_schedule_context
 
-    import pipeline.schedules.sports_ncaaf_strength_refit_schedules as M
+    from betting_ml.monitoring.ncaaf_strength_refit import REFIT_ENABLED_FLAG
 
     sched = pipeline.defs.get_schedule_def("sports_ncaaf_strength_refit_schedule")
     with pytest.MonkeyPatch.context() as mp:
-        mp.delenv(M.REFIT_ENABLED_FLAG, raising=False)
+        mp.delenv(REFIT_ENABLED_FLAG, raising=False)
         result = sched.evaluate_tick(build_schedule_context(
             scheduled_execution_time=datetime(2026, 9, 14, 14, 30, tzinfo=UTC)))
     assert not result.run_requests, "the re-fit fired with the deploy-held flag unset"
     reason = result.skip_message or ""
-    assert M.REFIT_ENABLED_FLAG in reason, "the skip does not name the flag that would arm it"
+    assert REFIT_ENABLED_FLAG in reason, "the skip does not name the flag that would arm it"
     assert "freshness" in reason, (
         "the skip does not say that the un-armed state is VISIBLE from the artifact side — which "
         "is the only thing separating this flag from the documented-but-never-set class")

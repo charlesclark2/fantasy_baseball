@@ -71,8 +71,6 @@ the operator added the key by hand, to enforce a default whose correct value at 
 multi-minute CPU-bound fit, two Delta writes and a few hundred small serving-store keys.
 """
 
-import os
-
 from dagster import (
     DefaultScheduleStatus,
     RunRequest,
@@ -81,7 +79,11 @@ from dagster import (
     schedule,
 )
 
-from betting_ml.monitoring.ncaaf_strength_refit import SEASON_MONTHS
+from betting_ml.monitoring.ncaaf_strength_refit import (
+    REFIT_ENABLED_FLAG,
+    SEASON_MONTHS,
+    refit_enabled,
+)
 from pipeline.jobs.sports_ncaaf_strength_refit_job import sports_ncaaf_strength_refit_job
 
 #: Monday 07:30 PT, August → January. The month field is BUILT from `SEASON_MONTHS` rather than
@@ -91,16 +93,11 @@ from pipeline.jobs.sports_ncaaf_strength_refit_job import sports_ncaaf_strength_
 NCAAF_STRENGTH_REFIT_CRON = "30 7 * " + ",".join(str(m) for m in SEASON_MONTHS) + " 1"
 
 #: The deploy-held boundary — see the module docstring for why it is a flag and not a STOPPED
-#: default. Read at TICK time, never at import: the schedule module is imported once when the code
-#: server boots, so reading it then would freeze a value the operator can still change.
-REFIT_ENABLED_FLAG = "NCAAF_STRENGTH_REFIT_ENABLED"
-
-
-def refit_enabled(env=None) -> bool:
-    """PURE — whether a tick may fire. An env var that is PRESENT BUT EMPTY counts as unset (the
-    `sports_duckdb_path` rule: an empty value shadows a default and is the documented trap)."""
-    source = os.environ if env is None else env
-    return (source.get(REFIT_ENABLED_FLAG) or "").strip() == "1"
+#: default. ⭐ OWNED BY `betting_ml.monitoring.ncaaf_strength_refit`, not declared here: the fast
+#: test gate must be able to exercise the predicate, and importing anything under `pipeline`
+#: triggers the dbt-manifest read that is absent on a CI runner (E11.23). The schedule READS it, at
+#: TICK time — never at import, because the schedule module is loaded once when the code server
+#: boots and reading it then would freeze a value the operator can still change with a redeploy.
 
 
 @schedule(

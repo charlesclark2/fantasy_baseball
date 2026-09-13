@@ -250,11 +250,21 @@ CASES: list[tuple[str, Path, str, str, str, str | None]] = [
      "    if False:",
      "test_the_skip_is_loud_and_names_the_flag_rather_than_being_silent", None),
 
+    # ⚠️ The predicate lives in `betting_ml`, NOT beside the schedule — importing anything under
+    # `pipeline` reads the gitignored dbt manifest, which is absent on a CI runner, and the fast
+    # gate's invariant is that no non-slow test imports `pipeline` (E11.23). It shipped beside the
+    # schedule and went red on the first CI run.
     ("a present-but-empty flag arms the weekly re-fit",
-     SCHEDULE,
+     POLICY,
      'return (source.get(REFIT_ENABLED_FLAG) or "").strip() == "1"',
      "return REFIT_ENABLED_FLAG in source",
      "test_a_tick_fires_nothing_until_the_operator_sets_the_flag", None),
+
+    ("the schedule re-declares the enable predicate instead of reading the shared one",
+     SCHEDULE,
+     "    if not refit_enabled():",
+     '    import os\n    if os.environ.get(REFIT_ENABLED_FLAG) != "1":',
+     "test_the_schedule_reads_the_shared_enable_predicate_rather_than_declaring_its_own", None),
 
     ("the skip goes silent instead of naming the flag and its artifact-side visibility",
      SCHEDULE,

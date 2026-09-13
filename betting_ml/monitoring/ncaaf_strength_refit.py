@@ -45,6 +45,31 @@ from datetime import datetime
 #: why it is written once here and read by the freshness contract rather than re-typed.
 SEASON_MONTHS: tuple[int, ...] = (8, 9, 10, 11, 12, 1)
 
+#: NCAAF-P1.2W's deploy-held boundary — the env flag the weekly schedule reads at TICK time.
+#:
+#: ⭐ IT LIVES HERE RATHER THAN BESIDE THE SCHEDULE, and that is E11.23 rather than tidiness:
+#: importing ANY `pipeline.*` submodule triggers `pipeline/__init__.py`, which reads
+#: `dbt/target/manifest.json` at import — a gitignored build artifact ABSENT on a CI runner and in
+#: any fresh worktree. The fast gate's stated invariant is that no non-slow test imports
+#: `pipeline`, so a pure predicate the fast gate must exercise belongs on the `betting_ml` side and
+#: the schedule reads it (the same split NF-INFRA2 made for `is_draft_season`). It shipped beside
+#: the schedule first and went red on the first CI run for exactly this reason.
+REFIT_ENABLED_FLAG = "NCAAF_STRENGTH_REFIT_ENABLED"
+
+
+def refit_enabled(env=None) -> bool:
+    """PURE — whether a weekly-re-fit tick may fire.
+
+    ⚠️ An env var that is PRESENT BUT EMPTY counts as unset, and anything but "1" fails toward NOT
+    firing. An empty value shadows a code default (`os.environ.get(k, d)` returns `""`), which is
+    the trap `env.required` documents and `sports_duckdb_path` guards the same way.
+    """
+    import os
+
+    source = os.environ if env is None else env
+    return (source.get(REFIT_ENABLED_FLAG) or "").strip() == "1"
+
+
 #: The covariate GROUPS whose presence separates a real fit from the cold start.
 #:
 #: ⛔ `carryover` and `talent` are deliberately NOT here, and both exclusions are measurements

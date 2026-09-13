@@ -215,18 +215,27 @@ def test_every_registered_schedule_really_does_rewrite_the_ratings_artifact():
             f"{vintage.RATINGS_ARTIFACT.source}")
 
 
-def test_a_populated_registry_renders_a_real_next_update_and_an_empty_one_the_absence():
-    """BOTH ARMS, and neither is the state the other would produce.
-
-    The surface has to distinguish "the next refresh is on <date>" from "we cannot say", and the
-    only thing separating them is this tuple. The empty arm is passed EXPLICITLY rather than by
-    emptying the module, so both are exercised in one run against the shipped resolver.
-    """
+def test_an_empty_registry_renders_the_stated_absence():
+    """The absence arm, and it stays in the FAST gate because it needs no schedule lookup: an
+    empty registry short-circuits before `_schedule_cron` ever imports `pipeline`."""
     at = datetime(2026, 9, 13, 20, 0, tzinfo=timezone.utc)
     assert vintage.next_ratings_update(at, schedules=()) is None, (
         "an empty registry must render the STATED ABSENCE — inventing a date is the overclaim "
         "this module was built to refuse")
 
+
+@pytest.mark.slow
+def test_a_populated_registry_renders_a_real_next_update():
+    """The PRESENT arm — the half NCAAF-P1.2W activated.
+
+    ⚠️ `@pytest.mark.slow` RATHER THAN `@needs_pipeline`, deliberately. With the registry populated
+    this resolves the cron from the live `ScheduleDefinition`, which imports `pipeline` and so
+    reads the gitignored dbt manifest. `needs_pipeline` would SKIP it on every CI runner, i.e. it
+    would never run in CI at all; the SLOW gate builds that manifest with an offline `dbtf parse`
+    precisely so pipeline-importing clauses can run. A clause that runs is worth more than one that
+    skips politely.
+    """
+    at = datetime(2026, 9, 13, 20, 0, tzinfo=timezone.utc)
     populated = vintage.next_ratings_update(at)
     assert populated is not None, (
         "the registry is populated and the stamp still says 'we cannot say' — the live page's "
