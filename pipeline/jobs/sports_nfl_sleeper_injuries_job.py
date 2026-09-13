@@ -199,6 +199,13 @@ def nfl_sleeper_injuries_freshness_op(context):
           dedup_key=f"nfl_sleeper_injuries:freshness:{verdict['verdict']}")
 
 
+# ⭐ NF-C6-PH2's weekly freshness monitor is DEFINED with its subject (it shares that module's S3
+# keys and paging helper) but INVOKED here, for exactly the reason `nfl_published_board_freshness_op`
+# below spells out: a monitor hosted inside its own subject cannot see its subject stop. Importing
+# the op rather than re-implementing it keeps ONE definition — the alternative is two copies of a
+# policy that must agree (the "one logical rule, many owners" class this repo keeps being bitten by).
+from pipeline.jobs.sports_nfl_weekly_serving_job import nfl_weekly_freshness_op
+
 @op(out=Out(Nothing))
 def nfl_published_board_freshness_op(context):
     """ALERT (never HALT) — NF-INFRA2: assert the PUBLISHED NFL draft board is still advancing.
@@ -249,7 +256,12 @@ def sports_nfl_sleeper_injuries_job():
 
     ⭐ It also carries NF-INFRA2's PUBLISHED-BOARD freshness SLA as an INDEPENDENT leaf (see
     `nfl_published_board_freshness_op`): the detector for "the board publish schedule silently
-    stopped", which cannot live inside the job it watches."""
+    stopped", which cannot live inside the job it watches.
+
+    ⭐ …and NF-C6-PH2's WEEKLY freshness SLA for the same reason (`nfl_weekly_freshness_op`, whose
+    subject is `sports_nfl_weekly_serving_job`). Both are terminal, independent leaves: no `ins`,
+    so a Sleeper outage cannot blind either, and neither can withhold anything."""
     landed = nfl_sleeper_injuries_ingest_op()
     nfl_sleeper_injuries_freshness_op(start=nfl_sleeper_injuries_rebuild_op(start=landed))
     nfl_published_board_freshness_op()
+    nfl_weekly_freshness_op()

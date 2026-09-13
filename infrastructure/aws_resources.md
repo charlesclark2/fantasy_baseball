@@ -551,15 +551,20 @@ public prefix's cache rule and degrade entry is the defect G100-C1 measured). Pi
 `betting_ml/tests/test_ncaaf_p3_3_team_page.py::test_the_team_route_inherits_the_ncaaf_cost_guardrails_rather_than_needing_its_own`.
 
 
-#### NF-C6-PH2 — the two FREE WEEKLY routes — ⛔ NOT YET APPLIED
+#### NF-C6-PH2 — the two FREE WEEKLY routes — ✅ APPLIED 2026-09-13
 
 NF-W1's certified weekly champion finally has a serving path. Two of its three routes are public in
 the FastAPI layer (`fantasy.board_router`, no `Depends`), which — as always — is **not sufficient**:
 the catch-all `ANY /{proxy+}` carries the Cognito authorizer, so each answers **401 before the
 Lambda is invoked** until an explicit route exists.
 
+⚠️ **`apigateway:*` IS DENIED TO `baseball-access-user`** — see the static-keys-beat-`AWS_PROFILE`
+warning above; `env -u` is load-bearing here, not decoration.
+
 ```bash
 for RK in "GET /fantasy/nfl/weekly/manifest" "GET /fantasy/nfl/weekly/projections"; do
+  env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+    AWS_PROFILE=<your-admin-profile> \
   aws apigatewayv2 create-route \
     --api-id 8dhmehjak7 --region us-east-1 \
     --route-key "$RK" \
@@ -567,6 +572,14 @@ for RK in "GET /fantasy/nfl/weekly/manifest" "GET /fantasy/nfl/weekly/projection
     --authorization-type NONE
 done
 ```
+
+✅ **BOTH ROUTES EXIST AS OF 2026-09-13, VERIFIED ANONYMOUSLY FROM OUTSIDE** — and the verification
+discriminates on the BODY, not the status code. Before the first weekly publish both free routes
+answer **404 `{"detail":"Weekly projection not found"}`**: `detail` is FastAPI's key, so the request
+reached the Lambda, which proves the gateway route is `NONE` *and* the backend is deployed. A
+gateway-level miss would be `{"message":"Not Found"}` and a surviving authorizer a **401
+`{"message":"Unauthorized"}`** — which is exactly what `projections-full` still returns, correctly,
+because it deliberately has no route of its own.
 
 ⛔ **`GET /fantasy/nfl/weekly/projections-full` MUST NOT GET ONE.** It is the PAID half — the
 per-stat component line and the 39-level predictive vector — and it is gated INSIDE the Lambda by
@@ -708,6 +721,23 @@ are a POST-flip step, not part of this one.
 
 ⚠️ **`update-stage --route-settings` REPLACES the whole map** (it is not a merge). Read the current
 settings first and re-send everything you want to keep, in one call.
+
+> ⚠️ **`export AWS_PROFILE=…` ALONE IS NOT ENOUGH, AND IT FAILS IN THE MOST CONFUSING WAY (NF-C6-PH2, 2026-09-13).**
+> **STATIC KEYS BEAT `AWS_PROFILE` in botocore's credential chain**, so if `AWS_ACCESS_KEY_ID` is
+> exported in the shell — the everyday state on this laptop — the CLI silently resolves to
+> `baseball-access-user` and the profile you set does *nothing*. The tell is an `AccessDeniedException`
+> naming `user/baseball-access-user` on a command you believe you ran as admin. Unset the static keys
+> for the call instead of relying on the profile:
+>
+> ```bash
+> env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+>   AWS_PROFILE=<your-admin-profile> aws <command>
+> ```
+>
+> Confirm which identity you actually are before a privileged call — `aws sts get-caller-identity`
+> must print the **assumed-role** ARN, not `user/baseball-access-user`. This cost a live session its
+> API-Gateway `create-route` step, and the same trap applies to `deploy.sh` (which calls
+> `lambda:GetFunctionConfiguration` internally via `aws lambda wait`).
 
 ```bash
 # ── 0. Permissions. `baseball-access-user` is DENIED apigateway:* — use an admin profile.
@@ -1640,6 +1670,23 @@ Verify:
 
 ### 1. AWS Budget — $250/month, three notifications  ▸ LAPTOP
 
+> ⚠️ **`export AWS_PROFILE=…` ALONE IS NOT ENOUGH, AND IT FAILS IN THE MOST CONFUSING WAY (NF-C6-PH2, 2026-09-13).**
+> **STATIC KEYS BEAT `AWS_PROFILE` in botocore's credential chain**, so if `AWS_ACCESS_KEY_ID` is
+> exported in the shell — the everyday state on this laptop — the CLI silently resolves to
+> `baseball-access-user` and the profile you set does *nothing*. The tell is an `AccessDeniedException`
+> naming `user/baseball-access-user` on a command you believe you ran as admin. Unset the static keys
+> for the call instead of relying on the profile:
+>
+> ```bash
+> env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+>   AWS_PROFILE=<your-admin-profile> aws <command>
+> ```
+>
+> Confirm which identity you actually are before a privileged call — `aws sts get-caller-identity`
+> must print the **assumed-role** ARN, not `user/baseball-access-user`. This cost a live session its
+> API-Gateway `create-route` step, and the same trap applies to `deploy.sh` (which calls
+> `lambda:GetFunctionConfiguration` internally via `aws lambda wait`).
+
 ```bash
 # `baseball-access-user` is unlikely to have budgets:* — use the admin SSO profile.
 export AWS_PROFILE=<your-admin-profile>
@@ -1686,6 +1733,23 @@ aws budgets describe-budgets --account-id "$ACCOUNT_ID" --region us-east-1 \
 
 Reuses the same SNS topic as every other page (`pipeline/utils/alerting.py::send_alert`), so this
 lands in the inbox the operator already watches.
+
+> ⚠️ **`export AWS_PROFILE=…` ALONE IS NOT ENOUGH, AND IT FAILS IN THE MOST CONFUSING WAY (NF-C6-PH2, 2026-09-13).**
+> **STATIC KEYS BEAT `AWS_PROFILE` in botocore's credential chain**, so if `AWS_ACCESS_KEY_ID` is
+> exported in the shell — the everyday state on this laptop — the CLI silently resolves to
+> `baseball-access-user` and the profile you set does *nothing*. The tell is an `AccessDeniedException`
+> naming `user/baseball-access-user` on a command you believe you ran as admin. Unset the static keys
+> for the call instead of relying on the profile:
+>
+> ```bash
+> env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+>   AWS_PROFILE=<your-admin-profile> aws <command>
+> ```
+>
+> Confirm which identity you actually are before a privileged call — `aws sts get-caller-identity`
+> must print the **assumed-role** ARN, not `user/baseball-access-user`. This cost a live session its
+> API-Gateway `create-route` step, and the same trap applies to `deploy.sh` (which calls
+> `lambda:GetFunctionConfiguration` internally via `aws lambda wait`).
 
 ```bash
 export AWS_PROFILE=<your-admin-profile>
@@ -1784,6 +1848,23 @@ ALREADY HAS ONE.** Measured 2026-08-08: `create-anomaly-monitor` returns
 `ValidationException: Limit exceeded on dimensional spend monitor creation`. That is not a
 misconfiguration and nothing needs deleting — **the monitor is the detector, the SUBSCRIPTION is the
 notification**, and it is only the subscription we are missing. ⇒ LIST FIRST, REUSE THE ARN.
+
+> ⚠️ **`export AWS_PROFILE=…` ALONE IS NOT ENOUGH, AND IT FAILS IN THE MOST CONFUSING WAY (NF-C6-PH2, 2026-09-13).**
+> **STATIC KEYS BEAT `AWS_PROFILE` in botocore's credential chain**, so if `AWS_ACCESS_KEY_ID` is
+> exported in the shell — the everyday state on this laptop — the CLI silently resolves to
+> `baseball-access-user` and the profile you set does *nothing*. The tell is an `AccessDeniedException`
+> naming `user/baseball-access-user` on a command you believe you ran as admin. Unset the static keys
+> for the call instead of relying on the profile:
+>
+> ```bash
+> env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+>   AWS_PROFILE=<your-admin-profile> aws <command>
+> ```
+>
+> Confirm which identity you actually are before a privileged call — `aws sts get-caller-identity`
+> must print the **assumed-role** ARN, not `user/baseball-access-user`. This cost a live session its
+> API-Gateway `create-route` step, and the same trap applies to `deploy.sh` (which calls
+> `lambda:GetFunctionConfiguration` internally via `aws lambda wait`).
 
 ```bash
 export AWS_PROFILE=<your-admin-profile>          # `baseball-access-user` is denied ce:*
