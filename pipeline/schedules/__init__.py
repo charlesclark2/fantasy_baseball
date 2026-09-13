@@ -40,6 +40,9 @@ from pipeline.schedules.sports_odds_capture_schedules import sports_ncaaf_odds_l
 from pipeline.schedules.sports_ncaaf_prediction_snapshot_schedules import (
     sports_ncaaf_prediction_snapshot_schedule,
 )
+from pipeline.schedules.sports_ncaaf_strength_refit_schedules import (
+    sports_ncaaf_strength_refit_schedule,
+)
 from pipeline.schedules.sports_ncaaf_serving_write_schedules import (
     sports_ncaaf_serving_write_schedule,
 )
@@ -78,6 +81,7 @@ all_schedules = [
     sports_ncaaf_odds_live_schedule,
     sports_ncaaf_prediction_snapshot_schedule,
     sports_ncaaf_serving_write_schedule,
+    sports_ncaaf_strength_refit_schedule,
     sports_nfl_pit_weather_schedule,
     sports_nfl_pit_metadata_schedule,
     sports_nfl_pit_market_schedule,

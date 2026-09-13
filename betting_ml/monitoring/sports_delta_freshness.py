@@ -37,10 +37,21 @@ class SportsDeltaContract:
     sport: str               # s3io.table_uri(sport=…)
     source: str              # s3io.table_uri(source=…)
     tier: str                # "raw" | "derived"
-    max_lag_hours: float     # wall-clock hours since the last commit before it is STALE
+    max_lag_hours: float     # ACTIVE hours since the last commit before it is STALE (see below)
     cadence: str             # the writer's declared cadence, in words
     why: str                 # what silently degrades when this freezes
     remediate: str           # the operator's first action
+    #: NCAAF-P1.2W — the CALENDAR MONTHS in which this writer is supposed to run, or None for a
+    #: writer with no seasonal cliff. `None` is the default precisely so every pre-existing
+    #: contract keeps plain wall-clock lag, byte-identical.
+    #:
+    #: ⭐ WHY IT MUST BE ACTIVE-WINDOW LAG AND NOT A "SKIP THE CHECK OFF-SEASON" FLAG (INC-41's
+    #: core mechanic). Suppressing the check while `now` is off-season leaves the FIRST in-season
+    #: read seeing a lag that spans the whole winter, so the monitor's first act every August
+    #: would be a false CRITICAL. Counting only the minutes inside the window makes a January
+    #: final commit legitimately fresh right through July and start ageing again on August 1 —
+    #: idle by DECLARATION rather than by a silently suppressed check.
+    active_months: tuple[int, ...] | None = None
 
 
 # ── The registry ────────────────────────────────────────────────────────────────────────────
@@ -48,6 +59,12 @@ class SportsDeltaContract:
 # unmeasured claim produces a permanent false page (the reason INC-41 REJECTED
 # `feature_pregame_game_features_raw` from its own registry). Only add a table whose cadence you
 # have actually observed.
+#: NCAAF-P1.2W — the season window, imported from the module that owns it rather than retyped as
+#: `(8, 9, 10, 11, 12, 1)` here. A second literal is a second owner of the season boundary, and a
+#: month-range that drifts from the cron it describes is this repo's documented seasonal-hole class
+#: (E9.48(c) / INC-37 / NCAAF-RF1).
+from betting_ml.monitoring.ncaaf_strength_refit import SEASON_MONTHS as _NCAAF_SEASON_MONTHS
+
 REGISTRY: tuple[SportsDeltaContract, ...] = (
     SportsDeltaContract(
         name="nfl_sleeper_injuries",
@@ -72,6 +89,39 @@ REGISTRY: tuple[SportsDeltaContract, ...] = (
             "fails loud instead of swallowing. The usual cause is the sports DuckDB: confirm "
             "SPORTS_DUCKDB_PATH points inside the sports_duckdb volume and that "
             "sports_nfl_dbt_build_job has materialized it"
+        ),
+    ),
+    SportsDeltaContract(
+        name="ncaaf_team_strength_week",
+        sport="ncaaf",
+        source="team_strength_week",
+        tier="derived",
+        # NCAAF-P1.2W. The writer is WEEKLY (`sports_ncaaf_strength_refit_schedule`, Mon 07:30 PT,
+        # Aug-Jan), so the SLA is one cadence plus a day of grace: 192 ACTIVE hours. `classify`
+        # then splits the two regimes it must not conflate — up to 2x the SLA is ONE missed Monday
+        # (WARN, the schedule can be re-fired while the week is still ahead), beyond it the re-fit
+        # is not running at all (CRITICAL). Sized against the break it exists to catch, which was
+        # sitting at 619 wall-clock hours on 2026-09-13.
+        max_lag_hours=192.0,
+        cadence="weekly, Monday 07:30 America/Los_Angeles, Aug-Jan "
+                "(sports_ncaaf_strength_refit_schedule)",
+        # ⭐ THE SEASON WINDOW, and it is the reason this contract could not simply reuse wall-clock
+        # lag. Between the CFP final and August there is genuinely nothing to re-fit, so the last
+        # January commit must stay OK for ~6 months and start ageing again on August 1 — idle by
+        # DECLARATION, never by a silently suppressed check.
+        active_months=_NCAAF_SEASON_MONTHS,
+        why=(
+            "every NCAAF surface's strength rating, uncertainty band and both ranks move ONLY when "
+            "this table is rewritten. Frozen, a team can win by 26 on Saturday while its rating "
+            "sits unchanged beside that win in its own schedule — which is what NCAAF-P3.3b "
+            "measured and NCAAF-P1.2W exists to end. It is also what the served 'next update' "
+            "stamp now PROMISES, so a freeze here turns a stated date into an overclaim"
+        ),
+        remediate=(
+            "launch sports_ncaaf_strength_refit_job in Dagit and READ THE RUN — it fails loud on a "
+            "cold-start reproduction rather than reporting a green tick. Check first that "
+            "sports_ncaaf_roll_forward_schedule is RUNNING (the job refuses to fit on raw games it "
+            "considers stale) and that SPORTS_DUCKDB_PATH points inside the sports_duckdb volume"
         ),
     ),
 )
@@ -116,7 +166,11 @@ def classify(contract: SportsDeltaContract, reading: DeltaReading,
                            "Reported UNVERIFIED rather than healthy — a check that could not run "
                            "is not a check that passed.")}
 
-    lag_hours = round((now - reading.last_commit).total_seconds() / 3600.0, 2)
+    lag_hours = round(active_lag_hours(reading.last_commit, now, contract.active_months), 2)
+    wall_hours = round((now - reading.last_commit).total_seconds() / 3600.0, 2)
+    window = ("" if contract.active_months is None
+              else f" [ACTIVE-WINDOW lag over months {contract.active_months}; "
+                   f"{wall_hours}h wall-clock]")
     if reading.rows is not None and reading.rows <= 0:
         return {"name": contract.name, "verdict": "EMPTY", "severity": "CRITICAL",
                 "lag_hours": lag_hours,
@@ -128,12 +182,26 @@ def classify(contract: SportsDeltaContract, reading: DeltaReading,
         return {"name": contract.name, "verdict": "STALE", "severity": severity,
                 "lag_hours": lag_hours,
                 "detail": (f"last Delta commit v{reading.version} was {lag_hours}h ago, over the "
-                           f"{contract.max_lag_hours}h SLA (cadence: {contract.cadence}). "
+                           f"{contract.max_lag_hours}h SLA{window} (cadence: {contract.cadence}). "
                            f"{contract.why}. FIRST ACTION: {contract.remediate}")}
     return {"name": contract.name, "verdict": "OK", "severity": None, "lag_hours": lag_hours,
             "detail": (f"last Delta commit v{reading.version} {lag_hours}h ago "
-                       f"(SLA {contract.max_lag_hours}h)"
+                       f"(SLA {contract.max_lag_hours}h){window}"
                        + (f", {reading.rows} rows" if reading.rows is not None else ""))}
+
+
+def active_lag_hours(last_commit: datetime, now: datetime,
+                     active_months: "tuple[int, ...] | None") -> float:
+    """Hours between `last_commit` and `now` that fall inside the writer's declared months.
+
+    ⭐ ONE OWNER. The window arithmetic is `artifact_freshness.active_minutes_between` — the INC-41
+    instrument that already walks day/hour buckets and handles a month axis. A second copy here is
+    exactly the "one logical thing, two execution owners" shape this repo keeps paying for
+    (INC-30/36/38), and it would drift the first time either SLA changed.
+    """
+    from betting_ml.monitoring.artifact_freshness import active_minutes_between
+
+    return active_minutes_between(last_commit, now, None, None, active_months) / 60.0
 
 
 def is_problem(verdict: dict) -> bool:
