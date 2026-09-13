@@ -113,3 +113,17 @@ unrepresentable, so round-half-even can legally split a tie differently on two
 machines. This is instrument repair, not bar movement — the E2.1-r refusal
 covers tolerances, populations, and thresholds, never making <= mean its
 registered decimal semantics.
+
+## Absence-of-rows premises (PM ruling 2026-09-13, from NF-CAP1 — a PM error owned)
+A spec premise of the form "zero rows in table X ⇒ process Y is not running" is
+only sound when the spec NAMES THE MECHANISM by which absence implies
+non-execution. NF-CAP1 was commissioned on two such premises and both were
+inverted: an artifact that records only successes cannot distinguish "ran and
+legitimately captured nothing" from "never ran" (the injuries table), and the
+absence of a failure page is evidence of non-execution only when the failure
+path is actually reachable (the props leg's escalation was satisfied by the
+sibling tier's rows). Before carding a dead-capture/dead-job story, identify
+the EXECUTION WITNESS — a store the same op writes unconditionally, a heartbeat
+row, a run log — and read that, not the row count. Quoting a parent record
+verbatim (the spec-premise rule) does not launder an unsound inference layered
+on top of it; the inference needs its own verification.
