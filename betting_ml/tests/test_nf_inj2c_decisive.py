@@ -824,11 +824,49 @@ class TestTheAmendmentDocumentSaysWhatTheCodeDoes:
         txt = _AMENDMENT.read_text()
         assert not sorted(f for f in figures if f in txt)
 
-    def test_the_decisive_run_has_not_happened_at_this_commit(self) -> None:
+    def test_the_amendment_quotes_no_figure_from_the_decisive_run(self) -> None:
         """The blindness that MATTERS here: this document fixes how a control verdict is read, and
-        that verdict has not been computed."""
-        assert not (_AMENDMENT.parent / "nf_inj2c_decisive.json").exists()
-        assert not (_AMENDMENT.parent / "nf_inj2c_decisive.md").exists()
+        it was committed before that verdict was computed.
+
+        ⚠️ **RE-ANCHORED 2026-09-05 — THIS CLAUSE FIRING IS THE DECISIVE RUN HAPPENING, AS
+        DESIGNED.** The original asserted the decisive artifact DID NOT EXIST, which was true when
+        written and is a claim that must go red the moment node 4 legitimately runs. It did exactly
+        that. A provenance claim about the state AT A COMMIT cannot be enforced by a check on the
+        state FOREVER, so it is re-anchored onto the property that stays checkable at every later
+        commit — the amendment quotes NONE of the run's distinctive figures — exactly as the
+        pre-registration's own node-3b provenance guard was re-formed on 2026-09-01.
+
+        ⛔ Deliberately NOT weakened to a prose check: when the artifact is absent the file-absence
+        form is asserted instead, so the guard is never vacuous in either world (NF1.7 (a)).
+        """
+        art = _AMENDMENT.parent / "nf_inj2c_decisive.json"
+        if not art.exists():
+            assert not (_AMENDMENT.parent / "nf_inj2c_decisive.md").exists()
+            return
+        rep = json.loads(art.read_text())
+        figures: set[str] = set()
+
+        def _collect(node) -> None:
+            if isinstance(node, dict):
+                for v in node.values():
+                    _collect(v)
+            elif isinstance(node, list):
+                for v in node:
+                    _collect(v)
+            elif isinstance(node, float) and abs(node) >= 0.01:
+                for text in (f"{node:.2f}", f"{node:.3f}", f"{node:.4f}", repr(node)):
+                    if len(text.split(".")[-1]) >= 2:
+                        figures.add(text)
+            elif isinstance(node, int) and abs(node) >= 1000:
+                figures.add(str(node))
+
+        for key in ("measures", "dominance", "deflation", "scored", "positive_control"):
+            _collect(rep.get(key))
+        assert figures, "no distinctive figure could be extracted — the guard would pass on nothing"
+        hits = sorted(f for f in figures if f in _AMENDMENT.read_text())
+        assert not hits, (
+            f"the amendment quotes figures that only exist in the decisive run ({hits[:5]}) — it "
+            "was NOT written before the number existed, and §1's provenance claim is false")
 
     def test_the_rejected_option_is_recorded_with_its_reason(self) -> None:
         """'The stricter option' is the one a later reader assumes was safe."""
@@ -1040,3 +1078,96 @@ def test_the_amendment_records_the_F1_inactivity_carve_out() -> None:
     assert _flat("F1 IS *INACTIVE*, ⛔ NOT FAILED") in flat
     assert _flat("never reaches") in flat and "F2/F3" in flat
     assert _flat("changes the **REASON**, ⛔ never the **OUTCOME**") in flat
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NODE 5 — the null classification
+#
+# ⛔ These certify no verdict. They pin that the classification READS a recorded result, that the
+# re-test trigger is WITHHELD wherever publishing it would mislead, and that the field-size remedy
+# is never acted on below the declared family.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+class _NV:
+    """A NullVerdict stand-in carrying only what `_retest_trigger` reads."""
+
+    def __init__(self, state, folds_needed=9, extra_seasons=2):
+        self.state, self.folds_needed, self.extra_seasons = state, folds_needed, extra_seasons
+
+
+_OPEN = {"sr_gt_sr0": True, "lever_closed": False}
+_CLOSED = {"sr_gt_sr0": False, "lever_closed": True}
+
+
+class TestTheRetestTriggerIsWithheldWhereItWouldMislead:
+
+    def test_a_power_limited_null_with_an_OPEN_lever_publishes_the_shortfall_in_folds(self) -> None:
+        t = D._retest_trigger(_NV("POWER_LIMITED"), _OPEN, 7)
+        assert t["published"] is True
+        assert t["folds_needed_for_dsr"] == 9 and t["additional_folds"] == 2
+
+    def test_a_genuine_absence_never_publishes_a_fold_trigger(self) -> None:
+        """⛔ No `n` rescues a negative point estimate (NF-D15 g″) — 'come back with more seasons'
+        is the actively-misleading NF-D18 direction."""
+        assert D._retest_trigger(_NV("GENUINE_ABSENCE"), _OPEN, 7)["published"] is False
+
+    def test_a_dsr_unreachable_null_never_publishes_a_fold_trigger(self) -> None:
+        assert D._retest_trigger(_NV("DSR_UNREACHABLE"), _OPEN, 7)["published"] is False
+
+    def test_a_CLOSED_lockstep_lever_withholds_the_trigger_however_good_the_state(self) -> None:
+        """⭐ NF-W8-0d: `n` enters DSR only through √(n−1), which scales a positive gap and can
+        never CREATE one. With SR ≤ SR0 a fold trigger is a promise no fold count can keep."""
+        t = D._retest_trigger(_NV("POWER_LIMITED"), _CLOSED, 7)
+        assert t["published"] is False and "lever open=False" in t["why"]
+
+    def test_an_uncomputed_fold_requirement_is_withheld_not_rendered_as_more_data(self) -> None:
+        t = D._retest_trigger(_NV("POWER_LIMITED", folds_needed=None), _OPEN, 7)
+        assert t["published"] is False and "unevaluable trigger is not a trigger" in t["why"]
+
+    def test_the_published_trigger_says_it_is_not_reachable_now(self) -> None:
+        """The window is SETTLED at seven folds (PM 2026-09-01; node 3c ruled 2018 out), so every
+        further fold is a future SEASON — a horizon, not a live re-test (MH2 (b))."""
+        t = D._retest_trigger(_NV("POWER_LIMITED"), _OPEN, 7)
+        assert t["reachable_now"] is False
+        assert "CALENDAR-BOUND" in t["why"] and "ESTIMATE" in t["why"]
+
+
+class TestTheClassificationReadsARecordedResult:
+
+    def test_it_refuses_a_SMOKE_artifact(self, tmp_path, monkeypatch) -> None:
+        """⛔ A smoke reaches no verdict the record may quote, so it may not be classified either."""
+        monkeypatch.setattr(D, "_REPORT_DIR", tmp_path)
+        (tmp_path / f"{D._STEM}.json").write_text(json.dumps(
+            {"verdict": {"state": "DOMINATES"}, "⚠️ SMOKE": "not the registered folds"}))
+        with pytest.raises(SystemExit, match="SMOKE"):
+            D.main(["--classify"])
+
+    def test_it_refuses_when_there_is_no_recorded_run(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setattr(D, "_REPORT_DIR", tmp_path)
+        with pytest.raises(SystemExit, match="no decisive artifact"):
+            D.main(["--classify"])
+
+    def test_an_unusable_record_is_UNCLASSIFIABLE_never_a_clean_null(self) -> None:
+        assert D.classify({})["evaluable"] is False
+        assert D.classify({"deflation": {"binding": {"trial_sharpes": {"a": 1.0},
+                                                     "v_members": ["a"]}},
+                           "measures": {"M1": {"evaluable": False}}})["evaluable"] is False
+
+    def test_the_classification_never_opens_the_marts(self) -> None:
+        """A classification is a READING of a recorded result, ⛔ not a second answer to it — a
+        second computation of a committed number is a second answer to one question."""
+        src = _strip_comments(_RUNNER.read_text())
+        body = src.split("if args.classify:")[1].split("import duckdb")[0]
+        for forbidden in ("duckdb", "capture_fold", "score_frame", "run("):
+            assert forbidden not in body, f"the classify path reaches {forbidden!r}"
+
+    def test_the_field_remedy_flag_is_carried_and_refuses_below_the_declared_family(self) -> None:
+        """⭐ MH2.7. Five IS this study's declared minimum, so no smaller-field remedy is
+        actionable — and the classification must carry the machine flag saying so."""
+        art = _AMENDMENT.parent / "nf_inj2c_decisive.json"
+        if not art.exists():
+            pytest.skip("the decisive artifact is not in this checkout")
+        c = D.classify(json.loads(art.read_text()))
+        assert c["evaluable"] is True
+        assert c["field_remedy_admissible"] is False, (
+            "a smaller-field remedy was reported ACTIONABLE for a field that is already the "
+            "declared minimum — MH2.2's laundering, in the instrument's own badge")

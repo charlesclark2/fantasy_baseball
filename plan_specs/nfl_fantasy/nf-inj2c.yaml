@@ -454,6 +454,68 @@ spec:
           file, and the difference above is invisible to an mtime by construction. RECORDED, ⛔
           never gated: node 3a §1 admits no band for it, and a guard pins it out of the verdict.
 
+      🟡 NODE 4 = DEFLATION_REFUSED (2026-09-05) — STRICT DOMINANCE HOLDS; ONE GATE REFUSES.
+      Artifact `ablation_results/nf_inj2c_decisive.{json,md}`, generated 18:53:02Z from commit
+      7b21388c, which merged to `dev` at 18:50:32Z — i.e. the record was produced by COMMITTED,
+      MERGED code and the ancestry is checkable (NF-INJ3b-M D3).
+        * DOMINANCE = DOMINATES, on all six: M1 IMPROVES (+0.4551 CRPS, 7/7 folds, one-sided
+          p=0.0012, band 0.0901) · M2 IMPROVES (-10.43 violating players/fold, negative on 7/7,
+          band 2.2976; the `mvp1_null` attribution control was INERT exactly as 3a §3(b) declared
+          in advance) · M3 IMPROVES (1.9947 -> 1.7467) · M4 IMPROVES (89.26% -> 30.02%) ·
+          M5 TIES_OR_BETTER (QB +0.0087, RB -0.0013, WR +0.0026, TE +0.0014; nothing BH-significant)
+          · M6 CLEARS every NF-D22 power floor.
+        * ⭐ NF-INJ2's REFUSAL DOES NOT REPRODUCE. NF-INJ2 was CONSTRAINT_REFUSED at QB on the
+          ordering constraint (rho 0.481 -> 0.350, BH-significant) because a POINTS-fitted ranker
+          was handed a RATE multiset. Operating in POINT space, M5 regresses at NO position. That
+          is the story's whole thesis, and it is the measured outcome.
+        * DEFLATION: PBO 0.0 (field-level) · fold consistency 7/7 vs 6 required (the CALIBRATED
+          clause, MH2 H8) · ⛔ ONLY `dsr` refuses, at 0.9306 vs 0.95.
+        * POSITIVE CONTROL: badge DETECTED, binding verdict PASSES. The family DETECTED a planted
+          effect over THIS field, so the refusal is evidence about the effect, ⛔ not about a blind
+          gate family.
+        * ⭐⭐ AMENDMENT 1 WAS INERT ON THIS RUN, AND THAT IS THE ENTAILMENT WORKING, NOT A WASTED
+          DOCUMENT. §2 says `ship => a non-degenerate arm clears every gate on the real payload =>
+          VACUOUS`. `dsr` refused, so NO arm cleared every gate, so the null leg had no survivor and
+          the badge came back DETECTED rather than VACUOUS. `null_leg_declaration_applies` is
+          recorded FALSE. ⛔ Recorded plainly rather than left to read as though the declaration did
+          work: it was written for a branch this run did not take, and it stands for a future one.
+        * FIELD-TRIM 2x2: STRUCTURALLY UNAVAILABLE (`V` has exactly two members) — pre-declared at
+          §2.3(b) and stated A FORTIORI, ⛔ never as a trimmed number (NF-W7h).
+        * LOCKSTEP (NF-W8-0d), run BEFORE any remedy was named: SR 1.908 vs SR0 0.8771, gap +1.031,
+          lever OPEN, sign-invariant. `n` is therefore a real lever here.
+        * VINTAGE: the run used the MAIN checkout's pool cache (fingerprint b6bd7b4a63b4edad,
+          2026-09-01) — the precondition recorded above, satisfied and self-evidenced in the
+          artifact.
+        * Reproduction pin HELD at 0.05000000000000071 vs 0.05 (the representation-tolerant
+          comparison from PM ruling #5).
+
+      🔵 NODE 5 = POWER_LIMITED (`ablation_results/nf_inj2c_null_classification.{json,md}`).
+        * `cv_power.classify_null`: the effect is positive and every gate is REACHABLE, but this
+          design cannot resolve it — DSR alone needs 9 folds against 7.
+        * RE-TEST TRIGGER **PUBLISHED**, on exactly PM ruling D3's condition (SR > SR0 makes `n` a
+          lever), and stated in the unit that GROWS: **2 more folds**. ⛔ NOT reachable now — the
+          window is SETTLED at seven (PM 2026-09-01; node 3c ruled 2018 out on data fidelity), so
+          each further fold is a future SEASON: 2026 is the 8th, 2027 the 9th. ⚠️ The count is an
+          ESTIMATE at this design's CURRENT SR and V, both of which move with new data — a horizon,
+          ⛔ not a promise.
+        * `field_remedy_admissible` = **False** (MH2.7, read as the MACHINE FLAG, ⛔ not the prose):
+          five IS the declared minimum, so "use a smaller field" would mean dropping pre-registered
+          arms because they lost — the MH2.2 laundering.
+        * ⭐⭐ THIS IS **NOT** THE "THE FIELD DID IT" CASE, AND THE REFLEX WOULD BE WRONG HERE.
+          Four prior stories in this vertical converted a DSR refusal into a ship via a fresh
+          coherent re-registration (MARGIN2->3, W7->W7b, W6b-C, NCAAF-S1), which makes "re-register
+          a narrower family" the reflex. It is MEASURED CLOSED here, two ways: the field is already
+          the declared minimum (flag above), AND the NON-BINDING inherited 10-arm diagnostic field
+          returns DSR **0.933** — within 0.003 of the binding 0.9306. Field composition is not what
+          binds; per-fold EVIDENCE at seven folds is. This is NF-W7f's counterexample shape, and
+          carding a coherent re-registration would burn a story on the wrong lever.
+        * `V` declared 0.5409 vs whole-field 26.19 = a 48.4x inflation from the degenerates —
+          DSR-CONV is doing real work, and the whole-field figure is a diagnostic, never the gate.
+
+      ⛔ NODE 6 DOES NOT FIRE. The ship route is the STRICT-DOMINANCE disposition, and branch 1
+      requires dominance AND the deflation gates. Branch 4 fired instead, so there is NO operator
+      packet, NO publish, and `SERVED_ARM` stays `incumbent`. best_alpha = 0 throughout.
+
       REMAINING FINDINGS from nodes 3-7 land here. PM triages into: checklist item on the
       parent card | merge into an existing card (name it) | a new spec. Worker sessions
       never create Trello cards.
