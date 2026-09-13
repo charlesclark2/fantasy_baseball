@@ -100,17 +100,34 @@ that the weekly re-fit has died.
 > merge to `main` via `orchestration_cd.yml`). **Merged never means running** — the schedule ships
 > `default_status=STOPPED`.
 
-### Step 0 — expect ranks to move, a lot
+### Step 0 — two things to expect, so neither is read as a defect
+
+**(a) Ranks will move, a lot.**
 
 The first real in-season fit replaces a pre-season prior (`strength_margin_sd ≈ 7.3`) with a
 posterior that has absorbed **three** played weeks. **Teams will move a long way on the board the
 morning it lands.** That is the product working; it is not a defect, and it is the single thing most
 likely to be misread on the day.
 
-### Step 1 — arm the schedule (BOX, one flag + a redeploy)
+**(b) One CRITICAL page, immediately, and it is TRUE.** The
+`ncaaf_team_strength_week` freshness contract ships live, and the ratings are already ~620 active
+hours stale against a 192h SLA — so the first run of `sports_ncaaf_prediction_snapshot_job` after
+the deploy will page *"NCAAF strength ratings STALE"*. That is this story's own finding arriving
+through the monitor built to carry it; it goes quiet the moment the first re-fit lands. If it is
+still firing a week after step 2, something is wrong.
 
-The schedule ships `default_status=RUNNING` and is already ticking — and **every tick is skipping**,
-loudly, until one flag is set. (Why a flag rather than a STOPPED default: a STOPPED-default schedule
+### Step 1 — arm the schedule: set the flag **BEFORE** the deploy that ships this code (BOX)
+
+⭐ **THE ORDER IS LOAD-BEARING, and it closes a real overclaim window structurally rather than by
+hoping.** `ncaaf_ratings_vintage.next_ratings_update` resolves the cron from the live
+`ScheduleDefinition`, so the team page's **"next update"** starts printing a real Monday date the
+moment this code is on the box — whether or not the flag is set. With the flag unset the schedule
+ticks and skips, the ratings do not move, and the page would be promising a refresh that is not
+coming: exactly the overclaim NCAAF-P3.3b's stamp was built to refuse. Add the key to the box
+`.env` **first**; then deploy. There is then no window at all.
+
+The schedule ships `default_status=RUNNING` and will be ticking on arrival — and **every tick
+skips**, loudly, until this flag is set. (Why a flag rather than a STOPPED default: a STOPPED-default schedule
 in `CRITICAL_SCHEDULES` cannot see the revert that matters, because a wiped toggle leaves no
 persisted row to flag — the NF-CAP1 reading — and E11.23's `test_critical_instigators_self_start`
 pins every member to `RUNNING`. See the schedule's module docstring.)
