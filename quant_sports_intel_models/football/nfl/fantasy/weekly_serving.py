@@ -174,6 +174,30 @@ def resolve_target_week(schedule: pd.DataFrame, *, now: datetime | None = None) 
                       first_kickoff=row["gameday"], last_reg_week=last_reg)
 
 
+def slate_end(schedule: pd.DataFrame, *, season: int, week: int) -> datetime | None:
+    """The LAST gameday of one REG week, tz-aware UTC. `None` when that week is not in the schedule.
+
+    The counterpart to `resolve_target_week`'s FIRST kickoff, and it answers a different question:
+    that one asks "which week should we project next", this one asks "has the week we are SERVING
+    finished". Between those two instants — the next week's first kickoff and the served week's
+    last game — the served projection is legitimately one week behind the schedule while describing
+    games that are still being played, which is precisely the interval the roster feed needs to
+    publish the new week's rows.
+
+    ⚠️ DATE-GRANULAR, like every other kickoff in this module: `gameday` is a DATE, so this is
+    midnight UTC on the last gameday, not a final whistle. The caller adds the grace that turns it
+    into "the slate is over" (`nfl_weekly_freshness.SLATE_COMPLETE_GRACE_HOURS`), and that grace is
+    deliberately generous because erring late is immaterial while erring early is a false page.
+    """
+    s = schedule[(schedule["season"] == season) & (schedule["week"] == week)]
+    if s.empty:
+        return None
+    days = pd.to_datetime(s["gameday"])
+    if days.dt.tz is None:
+        days = days.dt.tz_localize("UTC")
+    return days.max().to_pydatetime()
+
+
 # ── 2. the serving matrix, and the proof its target week's outcome is inert ──────────────────────
 
 #: The size of the synthetic outcome `assert_no_target_week_outcome` injects. Deliberately huge and
