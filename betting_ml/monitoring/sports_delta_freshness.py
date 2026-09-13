@@ -192,16 +192,55 @@ def classify(contract: SportsDeltaContract, reading: DeltaReading,
 
 def active_lag_hours(last_commit: datetime, now: datetime,
                      active_months: "tuple[int, ...] | None") -> float:
-    """Hours between `last_commit` and `now` that fall inside the writer's declared months.
+    """Hours of DECLARED-ACTIVE time between `last_commit` and `now`.
 
-    ⭐ ONE OWNER. The window arithmetic is `artifact_freshness.active_minutes_between` — the INC-41
+    ⭐ ONE OWNER for the window arithmetic: `artifact_freshness.active_minutes_between`, the INC-41
     instrument that already walks day/hour buckets and handles a month axis. A second copy here is
-    exactly the "one logical thing, two execution owners" shape this repo keeps paying for
-    (INC-30/36/38), and it would drift the first time either SLA changed.
+    the "one logical thing, two execution owners" shape this repo keeps paying for (INC-30/36/38).
+
+    ⭐⭐ AND ONE THING INC-41's HOURLY WINDOWS NEVER HAD TO DECIDE: WHETHER LAG CARRIES ACROSS THE
+    GAP. An overnight window is ~10 hours, so whatever accrues before it is small and carrying it
+    is harmless. A SEASON gap is ~six months, and the tail of the last active month carries
+    straight into the first active month of the next season — which produces a SYSTEMATIC false
+    page every opening week, at the exact moment the monitor is most likely to be believed.
+    Measured on this contract: a final fit on the last Monday of January 2027 carries 152h into
+    August and breaches a 192h SLA barely an hour after the season's first scheduled fire.
+
+    So the clock RESTARTS at the beginning of the current active run of months. That is what "idle
+    by declaration" actually means: the off-season is not a suspended check (which would fire on
+    its first read back), and it is not forgiven staleness either — the season simply begins with a
+    fresh clock, and an artifact that has not been rewritten `max_lag_hours` into the season is
+    STALE on its own merits rather than on the winter's.
+
+    Returns 0.0 whenever `now` itself is outside the window: there is no cadence to be late for.
     """
     from betting_ml.monitoring.artifact_freshness import active_minutes_between
 
-    return active_minutes_between(last_commit, now, None, None, active_months) / 60.0
+    if active_months is None:
+        return max(0.0, (now - last_commit).total_seconds() / 3600.0)
+    if now.month not in active_months:
+        return 0.0
+    start = max(last_commit, active_window_start(now, active_months))
+    return active_minutes_between(start, now, None, None, active_months) / 60.0
+
+
+def active_window_start(now: datetime, active_months: "tuple[int, ...]") -> datetime:
+    """Midnight UTC on the first day of the CURRENT contiguous run of active months.
+
+    Walks back a month at a time while the month is still in the window, so a wrap-around season
+    (Aug→Jan) resolves to the previous August rather than to January 1st. `now` is assumed inside
+    the window; the caller checks that first.
+    """
+    from datetime import timedelta
+
+    cursor = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # At most 12 steps: a run of active months cannot be longer than a year.
+    for _ in range(12):
+        previous = (cursor - timedelta(days=1)).replace(day=1)
+        if previous.month not in active_months:
+            return cursor
+        cursor = previous
+    return cursor
 
 
 def is_problem(verdict: dict) -> bool:
