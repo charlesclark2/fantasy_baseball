@@ -106,6 +106,16 @@ def run_injury_capture(
         "errors": [], "expected_absent": False, "escalate": False,
     }
 
+    # Resolved LAZILY and at most once. `data_expected_from` reads the nflverse schedule over the
+    # network, so hoisting it to the top would put an HTTPS call on every invocation — including
+    # the `rows=`-injected path the offline round-trips use.
+    _bar: list = [expected_from]
+
+    def _expected_from() -> datetime:
+        if _bar[0] is None:
+            _bar[0] = data_expected_from(season)
+        return _bar[0]
+
     if rows is None:
         try:
             rows, vendor_asof_present = read_injuries(season)
@@ -117,15 +127,13 @@ def run_injury_capture(
             # leg pages ERROR on every Tue/Fri fire through the whole pre-season — including both
             # fires before the opener — about a file that is absent by design. Only an
             # unambiguous 404 before the bar is quiet; every other failure still escalates.
-            if expected_from is None:
-                expected_from = data_expected_from(season)
-            if looks_like_missing_asset(str(exc)) and now < expected_from:
+            if looks_like_missing_asset(str(exc)) and now < _expected_from():
                 manifest["expected_absent"] = True
                 log.info(
                     "[nfl/pit/injuries] injuries_%s.parquet is not published yet (EXPECTED, NOT "
                     "paged — nflverse publishes it once injury reports exist; absence after %s "
                     "escalates): %s",
-                    season, expected_from.date().isoformat(), exc,
+                    season, _expected_from().date().isoformat(), exc,
                 )
                 return manifest
             manifest["escalate"] = True
@@ -134,6 +142,35 @@ def run_injury_capture(
 
     manifest["rows_read"] = len(rows)
     manifest["vendor_asof_present"] = vendor_asof_present
+
+    # ⭐ NF-CAP1 — AN ASSET THAT EXISTS AND IS EMPTY IS THE SAME ABSENCE AS A 404, AND IT WAS THE
+    # ONE SHAPE THAT STAYED SILENT. The 404 path above splits absence into "not published yet"
+    # (quiet, recorded) and "should exist by now" (escalates). A file that READS FINE and returns
+    # ZERO ROWS took neither branch: `rows_read` is 0, so the trailing `elif manifest["rows_read"]`
+    # guard is falsy and the manifest comes back clean with escalate=False — a zero-row landing
+    # reported as a success. That is the NF-W2c signature exactly (a parser that matched 0 rows
+    # and said nothing), and it is live right now: nflverse can publish `injuries_<season>.parquet`
+    # as an empty shell before week 1's reports exist, which is the window we are in.
+    #
+    # Same bar, same split, so there is ONE rule for both absence shapes rather than two.
+    if not rows:
+        if now < _expected_from():
+            manifest["expected_absent"] = True
+            log.info(
+                "[nfl/pit/injuries] injuries_%s.parquet is published but EMPTY (0 rows) — "
+                "expected before %s (nflverse publishes the asset once reports exist); recorded, "
+                "not paged. Absence after that bar escalates.",
+                season, _expected_from().date().isoformat(),
+            )
+        else:
+            manifest["escalate"] = True
+            log.warning(
+                "ALERT [nfl/pit/injuries] injuries_%s.parquet read OK but returned ZERO ROWS on "
+                "or after %s — a zero-row landing past the data-expected bar is a silent death, "
+                "not a quiet success. The season's injury reports should exist by now.",
+                season, _expected_from().date().isoformat(),
+            )
+        return manifest
     if vendor_asof_present:
         log.info(
             "[nfl/pit/injuries] nflverse `%s` is POPULATED again for season %s — the vendor as-of "
