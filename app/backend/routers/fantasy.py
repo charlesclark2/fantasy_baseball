@@ -52,6 +52,7 @@ from app.backend.services import (
 # Aliased because `depth_targets` is also the name of the FIELD this module reads off a league
 # record and off a request payload; an unaliased import would shadow-read as the value in every
 # local scope that touches one, which is exactly the kind of thing a reviewer skims past.
+from app.backend.models import nfl_weekly
 from app.backend.services import depth_targets as depth_targets_service
 
 logger = logging.getLogger(__name__)
@@ -305,6 +306,122 @@ def nfl_board(
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy board not found")
     return data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NF-C6-PH2 — THE WEEKLY SURFACES (NF-W1's certified champion, finally served)
+# ══════════════════════════════════════════════════════════════════════════════
+# The split MIRRORS THE SEASON SPLIT LITERALLY: `weekly/manifest` + `weekly/projections`
+# are the free half on `board_router` (no `require_fantasy_access`, no `Request`
+# parameter, so byte-identity is structural rather than remembered), and
+# `weekly/projections-full` is the paid half on `router` (blanket
+# `require_fantasy_access`), exactly as `/nfl/projections` and `/nfl/projections-full`
+# are. Every field is declared once in `app/backend/models/nfl_weekly.py`, which the box
+# builder validates against — one owner, both ends (the NCAAF-P3.1 shape).
+#
+# ⭐ NO `config`/`size` PARAMETER, AND ITS ABSENCE IS THE HONEST ANSWER. The weekly point
+# is PPR-NATIVE — it is the champion's own output, not a re-scoring of a stat line — so
+# other presets do not exist yet rather than sitting behind the paywall. Re-scoring an
+# arbitrary league needs the per-stat line and a scorer, which is the DEFERRED gate-3
+# story (and the moment it lands it triggers the three-implementation parity tax). A
+# parameter that did nothing today would be declaration outrunning production, and it
+# would invite the client to render locks over formats we cannot compute.
+#
+# ⚠️ GATEWAY (NF3.2): the two free routes are public IN CODE and still 401 at the API
+# Gateway until the operator sets their authorizer to NONE — per-route console config,
+# outside this repo's IaC. That flip is also what makes `services/jwt_verify.py`
+# load-bearing here; neither free route reads a token at all, which is the strongest
+# available statement that one cannot help.
+@board_router.get("/nfl/weekly/manifest")
+def nfl_weekly_manifest(
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    week: int | None = Query(default=None, ge=1, le=22),
+):
+    """One week's provenance, counts and absences. FREE — `Capability.GENERIC_BOARD`.
+
+    `week` omitted resolves through `current.json`, the pointer the build overwrites
+    every cycle. The response DECLARES its own `week`, so a caller always knows which one they
+    were given rather than inferring it from the request they sent.
+
+    ⚠️ Resolving through the pointer is a SECOND read, and a missing pointer is a 404
+    rather than a guess: picking "the highest week directory that exists" would silently
+    serve a stale week whenever a publish half-landed.
+    """
+    if week is None:
+        cur = _load_json(nfl_weekly.weekly_current_key(season))
+        if cur is None:
+            raise HTTPException(status_code=404, detail="Weekly projection not found")
+        week = int(cur["week"])
+    data = _load_json(nfl_weekly.weekly_manifest_key(season, week))
+    if data is None:
+        raise HTTPException(status_code=404, detail="Weekly projection not found")
+    return entitlement.open_manifest_payload(data)
+
+
+@board_router.get("/nfl/weekly/projections")
+def nfl_weekly_projections(
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    week: int | None = Query(default=None, ge=1, le=22),
+):
+    """The weekly projection, PUBLIC HALF ONLY. FREE — `Capability.GENERIC_BOARD`.
+
+    Identity, our PPR number, its honest 80% band and the rest-of-season triple. The
+    per-stat component line and the 39-level predictive vector are stripped by
+    `nfl_weekly.public_weekly_payload`, whose paid set is DERIVED from the scorer's own
+    `STAT_FIELD` map — so a new scorable component is withheld automatically rather than
+    shipping public by default (the NF-EPIC 1 denylist hazard).
+
+    ⭐ BYTE-IDENTICAL FOR EVERY CALLER — no `Request`, no entitlement read. A subscriber
+    gets this same reduced blob and fetches the paid half from `/nfl/weekly/projections-full`.
+    That is what keeps the edge cache legal: one copy for everybody precisely because the
+    bytes do not vary.
+    """
+    if week is None:
+        cur = _load_json(nfl_weekly.weekly_current_key(season))
+        if cur is None:
+            raise HTTPException(status_code=404, detail="Weekly projection not found")
+        week = int(cur["week"])
+    data = _load_json(nfl_weekly.weekly_players_key(season, week))
+    if data is None:
+        raise HTTPException(status_code=404, detail="Weekly projection not found")
+    return entitlement.open_projections_payload(nfl_weekly.public_weekly_payload(data))
+
+
+@router.get("/nfl/weekly/projections-full")
+def nfl_weekly_projections_full(
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    week: int | None = Query(default=None, ge=1, le=22),
+):
+    """The COMPLETE weekly projection — the per-stat component line plus the 39-level
+    predictive vector. PAID — `Capability.DECISION_SUPPORT`.
+
+    🔒 On `router`, so it inherits the blanket `require_fantasy_access`. `DECISION_SUPPORT`
+    is not a new capability: its own definition already names "the draft optimizer, and the
+    weekly surfaces as they land", so the paid weekly half lands on something the pricing
+    page already sells.
+
+    ⚠️ The component line is the champion's ADVISORY head — `weekly_projection.fit_component_head`
+    calls it "advisory raw lines beside the gated points distribution (never themselves
+    gated in this slice)" — and the payload stamps `component_head_status:
+    "advisory_ungated"` so that status travels with the numbers. The CERTIFIED per-stat
+    distributions (NF-W6c/W6d) are a different registry target, remain staged challengers
+    with no consumer, and are NOT served here.
+
+    ⛔ NEVER add this path to the CDN allowlist (`frontend/app/api/public/[...path]/route.ts`)
+    or to `cost_guardrails._PUBLIC_CACHE_RULES`. It is caller-gated, so a shared cache entry
+    would hand the paid substrate to anonymous visitors. It is safe today for a structural
+    reason rather than a remembered one: every request carries an `Authorization` header,
+    and `cache_control_for` answers `private, no-store` unconditionally when it sees one.
+    """
+    if week is None:
+        cur = _load_json(nfl_weekly.weekly_current_key(season))
+        if cur is None:
+            raise HTTPException(status_code=404, detail="Weekly projection not found")
+        week = int(cur["week"])
+    data = _load_json(nfl_weekly.weekly_players_key(season, week))
+    if data is None:
+        raise HTTPException(status_code=404, detail="Weekly projection not found")
+    return entitlement.open_projections_payload(data)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
