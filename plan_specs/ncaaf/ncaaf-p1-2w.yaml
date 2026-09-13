@@ -1,0 +1,139 @@
+# Plan spec — NCAAF-P1.2W (MINI tier: schedule the in-season weekly strength re-fit —
+# the served ratings are the pre-season prior and nothing scheduled moves them)
+# Authored by PM 2026-09-13 per NCAAF-P3.3b finding ② and its ruling. Premises verified
+# by P3.3b three ways (structural: ROLL_FORWARD_SOURCES asserts free-CFBD entries and cannot
+# carry a derived model output; documentary: three docstrings + BOX_OPERATIONS §10 say the
+# re-fit is operator-manual; measured: team_strength_week last committed 2026-08-18 while
+# raw games/talent advanced 2026-08-31 and again since).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-p1-2w
+  vertical: ncaaf
+  card: https://trello.com/c/7cDvCT4W
+  status: ACCEPTED
+spec:
+  description: >
+    The live Team Stats and game surfaces serve strength ratings frozen
+    at the pre-season prior — as_of_week:1, games_in_window:0 on all
+    138 teams, now TWO played weeks behind — because P1.2 was built as
+    a once-per-season refit and no schedule runs it. This story makes
+    the DOCUMENTED chain a scheduled box job: fresh lake -> sports
+    DuckDB dbt marts rebuild -> run_team_strength -> prediction
+    snapshot, weekly (Monday, after the roll-forward's raw ingest
+    completes). ⛔ THE FIT ITSELF IS UNTOUCHED: same P1.2 model, same
+    registered behavior, same artifacts — this story schedules an
+    existing operator runbook, it re-selects nothing and re-reads no
+    P1.x verdict (E2.1-r). best_alpha=0; transparency product; a
+    rating is context, never a pick. Deploy-held at the operator
+    boundary: schedule enablement and the first supervised run are
+    operator steps; merged never means running.
+  acceptanceCriteria:
+    - description: >
+        THE DISCRIMINATOR IS THE STORY (P3.3b's warning, measured
+        once already): run_team_strength on stale marts silently
+        reproduces the cold start and LOOKS successful. The job must
+        prove "it worked", not "it ran": (a) the marts-rebuild step
+        precedes the fit INSIDE the job (never assumed done by a
+        sibling schedule), reading the resolved-path discipline
+        (sports_duckdb_env(); never an unset-path parallel build —
+        the SPORTS_DUCKDB_PATH trap); (b) after the fit, assert a
+        NON-ZERO COVARIATE COUNT and that the ratings artifact's
+        CONTENT vintage advanced past the previous run's (INC-41:
+        content fingerprint/timestamp, never an mtime or S3
+        LastModified); a violation FAILS the run loudly and pages —
+        a cold-start reproduction must be a paged failure, never a
+        green tick.
+    - description: >
+        SEQUENCING inside Monday: the job runs AFTER the roll-forward's
+        raw ingest (games/talent) has landed — either as a downstream
+        dependency or a later fixed time with a freshness precondition
+        on the raw inputs it consumes (refuse-and-page if raw is
+        stale, the vintage-match precondition pattern). It must not
+        race the 06:00 roll-forward over shared stores.
+    - description: >
+        MONITORING: the ratings artifact gets freshness-SLA coverage
+        sized to the weekly cadence (active-hours/active-season
+        semantics — an off-season gap is not a breach); the schedule
+        joins the check_monitors_healthy heartbeat so STOPPED-drift
+        pages (E11.23/NF-INFRA1 pattern; a leaf that never runs is
+        silent). Season-boundary behavior stated: what the job does
+        after the bowl season ends (idle by declared season window,
+        not by silent failure).
+    - description: >
+        THE STAMP ACTIVATION, last and only after the runtime gate:
+        add the schedule's name to
+        ncaaf_ratings_vintage.RATINGS_REFRESH_SCHEDULES (the P3.3b
+        one-liner) so the live page's "next update" half starts
+        printing a real date — and REMOVE/adjust nothing else in that
+        module; the guard refusing NCAAF_ROLL_FORWARD_CRON by name
+        STAYS (that schedule still never touches the ratings). E2E/
+        guard: with the registry populated, the rendered stamp shows a
+        real next-update; with it empty, the stated absence — both
+        ways, RED-proven.
+    - description: >
+        RUNTIME GATE (CI mocks IO): the FIRST run is operator-
+        supervised, paste-ready — enable the schedule, watch the run,
+        verify from artifact content (covariate count > 0; vintage
+        advanced past 2026-08-18; as_of_week reflects played weeks;
+        NDSU's page shows a rating that has absorbed its games) and
+        the live page's stamp post-refresh (cache-busted read — a
+        cached read and a failed deploy are byte-identical). Expect
+        RANKS TO MOVE MATERIALLY on the first real fit (two weeks of
+        results against a prior with sd≈7.3) — that is the product
+        working; note it for the operator so it isn't read as a
+        defect. >2-min steps operator-run by rule (the fit + marts
+        rebuild almost certainly qualify — time them).
+    - description: >
+        Standing: guards RED-proven both ways with unique anchors +
+        baseline-pass + NOT-SELECTED + resolve-every-node; owning CI
+        shard for shared guards; worktree; PR -> dev; box schedule/.env
+        changes operator-run; changelog entry ONLY once the ratings
+        actually refresh live (declaration never outruns production);
+        no Trello; roadmap files frozen. Disjoint from NF-C6-PH2 /
+        NF-CAP1 (NFL pipeline files) — rebase pipeline/ if needed.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-p1-2w
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "P1.2" / "re-fit" / "ratings" (board Credence Sports, 2026-09-13)'
+    duplicates: []
+    adjacent:
+      - "NCAAF-P3.3b (Done) — measured the gap, built the stamp + the vintage owner this story's one-liner activates; its roll-forward-refusing guard stays."
+      - "NCAAF-P3.3 (Done, live) — the surface that benefits; rank-with-range + wide-band honesty stays load-bearing while ranks start moving."
+      - "sports_ncaaf_rollforward_job (live) — upstream raw ingest; sequenced after, never modified."
+      - "P1.4/VAL1/VAL3b records — calibration verdicts on the FIT; untouched (this schedules, it does not re-select; any calibration question raised by in-season refits is a FINDING for a new story, never a mid-story re-read)."
+      - "NCAAF-CLK1 (To Do) — the mart-clock report story; disjoint; its E2.1-r REPORT rule unaffected."
+      - "NF-C6-PH2 / NF-CAP1 (IN FLIGHT) — NFL pipeline lanes; disjoint files."
+  triedLedger:
+    files:
+      - "ncaaf-p3-3b.yaml closeout (findings ①-③: the three-way proof, the silent-cold-start incident, the RATINGS_REFRESH_SCHEDULES seam)"
+      - "BOX_OPERATIONS.md §10 + the roll-forward/snapshot docstrings (the documented manual chain this schedules)"
+      - "betting_ml/monitoring/ncaaf_ratings_vintage.py (the stamp owner + the by-name refusal guard)"
+      - "run_team_strength + sports_duckdb_env() (the fit entrypoint + the resolved-path discipline)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn:
+    - "dev→main promoted through #1087 (the stamp + build marker live) — verify, not assume"
+  feedsInto:
+    - "Ratings/bands/ranks current all season on every NCAAF surface; the stamp's 'next update' printing a real date; the Monday product rhythm P3.3 flagged"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-p1-2w-plan
+spec:
+  goalRef: { name: ncaaf-p1-2w }
+  graph:
+    nodes: []   # MINI tier — job (marts->fit->snapshot + discriminator) -> monitoring -> operator first run -> stamp activation -> closeout
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
