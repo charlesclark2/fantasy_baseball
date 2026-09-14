@@ -447,12 +447,203 @@ class NflWeeklyCurrent(BaseModel):
     players_key: str
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐ NF-WK-MT1 — THE LEAGUE-SCORED WEEKLY LINE (the paid my-teams lens's contract)
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# The paid question the weekly stack exists to answer — "what does MY roster do this week, in MY
+# league's scoring" — served by running the league's stored settings over the weekly COMPONENT line
+# through `services/league_scoring`, the ONE server scorer NF-EPIC 1 already owns.
+#
+# ⛔ NO FOURTH SCORING IMPLEMENTATION, AND NOTHING ABOUT THE EXISTING THREE MOVES. The weekly
+# component line is served under the SAME field names `projection_fields.STAT_FIELD` already maps to
+# (`WEEKLY_COMPONENT_FIELD` is derived from it), so `league_scoring.score_row` reads a weekly row
+# verbatim — the adapter in `services/weekly_league_board.py` contains no scoring arithmetic of its
+# own, and `test_nf_wk_mt1_weekly_league_board.py` proves that by SUBSTITUTION rather than by grep.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# ⭐⭐ THE POINT IS EXACT; THE RANGE AND THE REST-OF-SEASON TOTALS ARE NOT, AND THEY SAY SO
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# League scoring is LINEAR in the component line, so `leaguePts` is the league's settings applied to
+# the projected stats — exact, not an approximation of anything.
+#
+# A RANGE is a different object. Re-expressing an 80% interval under arbitrary scoring needs the
+# per-stat DISTRIBUTIONS (NF-W6c/W6d — staged challengers with no consumer), not the per-stat means.
+# `score_row` does carry an interval by rescaling the payload's own bounds by the ratio the point
+# moved; that is a defensible first-order move for a SEASON board and it is deliberately DISCARDED
+# here, because a rescaled range labelled as this league's would be a pseudo-band asserting a
+# precision the substrate does not have. So the range on the wire is the model's own PPR range,
+# carried through UNCHANGED and labelled. Rest-of-season is the same story one step further out:
+# there is no ROS component line at all, so it could only ever be scaled, and it is not.
+#
+# ⚠️ THIS IS WHY `pprPts` IS SERVED BESIDE `leaguePts` AND IS NOT OPTIONAL. The range brackets the
+# PPR number, not the league number. A range rendered beside a league-scored point with no PPR point
+# in sight reads as that point's range, which is false — so the number the range actually belongs to
+# travels with it. Any consumer that renders the band MUST render `pprPts`.
+#
+# ⚠️ AND THE TWO NUMBERS WILL NOT AGREE, BY CONSTRUCTION RATHER THAN BY DEFECT. NF-C6-PH2 measured
+# it: scoring the served component line as full-PPR against the served points head gives mean SIGNED
+# −0.7709, median |d| 0.6016, p95 3.7101, max 7.9200 over n=503 staged rows (2026-09-05) — the
+# component line scores BELOW the points head on average. They are INDEPENDENT heads of one model,
+# not a value and its own derivation, so neither corrects the other. ⛔ A disclosure phrased as "the
+# components may exceed the total" is BACKWARDS (the PM adopted that warning verbatim on 2026-09-14,
+# NF-WK-FE1's disposition). `SCORING_BASIS_NOTE` states the mechanism in words and quotes no figure:
+# a typed magnitude drifts silently on the next re-score, and the honest route to a rendered number
+# is a coherence block written by the box beside the figures `component_coherence` already computes —
+# a PM-declined option, deliberately NOT taken here.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# ⭐ A LEAGUE SCORES FEWER TERMS WEEKLY THAN IT DOES SEASONALLY, AND THAT IS REPORTED, NOT HIDDEN
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# The champion's component head emits ELEVEN stats (`WEEKLY_COMPONENT_STAT_KEY`). The season payload
+# carries far more — `fumbles_lost`, `two_pt`, `pass_cmp`, every K and D/ST term. Those terms are in
+# the DEFAULT preset scoring, so a perfectly ordinary full-PPR league has real weights on stats this
+# week's line cannot express.
+#
+# `league_scoring.resolve_scoring` already answers this correctly when it is handed the fields that
+# are ACTUALLY PRESENT: such a term resolves as CAPTURED — kept for fidelity, scored as zero, and
+# named in the report — rather than silently zeroed behind an "applied" label. So `coverage` on this
+# envelope is not decoration: it is the difference between "your fumble scoring contributed nothing"
+# and "your fumble scoring is not in this number", which are different facts.
+#
+# ⛔ WHICH MAKES THE FIELD SET A CORRECTNESS INPUT, NOT AN OPTIMISATION. Run against the PUBLIC
+# weekly payload every component would be absent, every term would resolve CAPTURED, and every
+# player would score exactly 0.0 — a total, silent failure that looks like a calm empty state.
+# `weekly_league_board.score_weekly_roster` REFUSES a payload carrying no component field at all.
+
+#: Why a rostered player carries no weekly line. FIVE causes, and they are separated because an
+#: empty state meaning several things costs an investigation every time it recurs (NF-C6b; NF-K1,
+#: where a board that published ZERO K and D/ST rows sent two investigations at a join that was
+#: fine and simply had nothing to match against).
+#:
+#: ⭐ `position_not_projected` IS REUSED VERBATIM from `ABSENCE_REASONS` because it means exactly
+#: what it means there. The other four are NEW, and deliberately do NOT reuse that tuple's
+#: `no_gameday_roster_row` / `pit_gate_dropped`: those are MANIFEST-level attributions counted over
+#: the whole slate, and this route cannot tell which of them applies to one player. Emitting either
+#: per-row would be a confident wrong explanation — worse than none (NF1.7 (a)). The manifest's own
+#: counts travel on `absences` so a reader can see the slate-level split without us imputing it.
+ROSTER_ABSENCE_REASONS: tuple[str, ...] = (
+    "position_not_projected",     # K / D/ST / IDP — the champion covers QB/RB/WR/TE only
+    "position_absent_this_week",  # projectable by contract, yet ZERO rows served this week (our gap)
+    "not_in_weekly_payload",      # projectable AND served; this player has no row (see `absences`)
+    "roster_position_unknown",    # the stored roster row carries no usable position
+    "roster_row_unnamed",         # the stored roster row carries no name to join on
+)
+
+#: Plain-words scope for the two figures that are NOT in the caller's scoring. No imperative, no
+#: opponent language, and no magnitude (see the header for why a typed figure is refused).
+SCORING_BASIS_NOTE = (
+    "The points column is your league's scoring applied to this week's projected stat line. The "
+    "range and the rest-of-season totals beside it are the model's own PPR figures, carried through "
+    "unchanged — re-expressing a range in your scoring needs a per-stat distribution, which this "
+    "projection does not publish. The PPR number the range belongs to is shown with it. The two "
+    "numbers come from two separate outputs of the model rather than one being derived from the "
+    "other, so they will not match exactly."
+)
+
+
+class NflWeeklyRosterAbsence(BaseModel):
+    """Why one rostered player has no weekly line. `reason` is machine-readable and drawn from
+    `ROSTER_ABSENCE_REASONS`; `detail` is the sentence a surface may render as-is."""
+
+    reason: str
+    detail: str
+
+
+class NflWeeklyLeagueRow(BaseModel):
+    """One rostered player under the caller's league scoring.
+
+    The roster side is echoed even when nothing matched, so an absent player still renders as
+    himself rather than as a blank row — the whole point of separating the absence causes."""
+
+    # ── the stored roster row, echoed ───────────────────────────────────────────────────────────
+    rosterName: str
+    rosterPos: str | None = None
+    rosterTeam: str | None = None
+    starter: bool | None = Field(
+        default=None, description="whether the platform had this player in a starting slot at import"
+    )
+
+    # ── the matched weekly row's identity (null when absent) ────────────────────────────────────
+    id: str | None = None
+    name: str | None = None
+    pos: str | None = None
+    team: str | None = None
+    opp: str | None = Field(default=None, description="opponent team code; null on a bye")
+    home: bool | None = None
+    status: str | None = Field(default=None, description='"projected" or "bye"')
+
+    #: ⭐ THE NUMBER THIS ROUTE EXISTS TO PRODUCE — the league's settings applied to the projected
+    #: component line. Exact (scoring is linear in the line), not a rescale of anything.
+    leaguePts: float | None = None
+
+    #: The model's own PPR number. Served because the range below is ITS range (header).
+    pprPts: float | None = None
+
+    # ── the served PPR range and rest-of-season totals, carried through UNCHANGED ───────────────
+    bandP10: float | None = None
+    bandP90: float | None = None
+    rosPpr: float | None = None
+    rosP10: float | None = None
+    rosP90: float | None = None
+    rosWeeks: int | None = None
+    histWeeks: int | None = None
+
+    absence: NflWeeklyRosterAbsence | None = None
+
+
+class NflWeeklyLeagueBoard(BaseModel):
+    """One saved league's roster, scored for one week. The response of the paid my-teams lens.
+
+    ⛔ CARRIES NO COMPONENT LINE. The caller is entitled to it (this route sits behind the same
+    `require_fantasy_access` as `/nfl/weekly/projections-full`) and can fetch it there; shipping it
+    again here would multiply the response by a roster for no question this surface asks."""
+
+    season: int
+    week: int
+    league_id: str
+    league_name: str | None = None
+
+    #: What `leaguePts` is in: the league's own settings, named rather than assumed.
+    scoring_source: Literal["league_settings"] = "league_settings"
+    #: What `pprPts`, the range and the rest-of-season totals are in.
+    band_scoring_system_id: Literal["ppr"] = SCORING_SYSTEM_ID
+    scoring_basis_note: str = SCORING_BASIS_NOTE
+
+    #: `league_scoring.resolve_scoring`'s report — every league term classified applied / derived /
+    #: captured against the fields this week's line ACTUALLY carries. See the header: this is what
+    #: separates "contributed nothing" from "is not in this number".
+    coverage: dict
+
+    #: Which projectable positions this week's payload ACTUALLY carries, read off the served rows
+    #: rather than restated from `PROJECTED_POSITIONS` — the NF-K1 direction. A constant would have
+    #: reported a position as published right through an outage in which it was not.
+    weekly_positions: list[str]
+
+    rows: list[NflWeeklyLeagueRow]
+
+    #: The manifest's own slate-level absence counts, carried so a per-row `not_in_weekly_payload`
+    #: can be understood without this route imputing a reason it cannot know.
+    #:
+    #: ⚠️ `null`, NOT `[]`, when the manifest could not be read. An empty list is a REAL answer
+    #: ("this week left nobody out"), and conflating it with "we do not know" would make every
+    #: absent player on a degraded read look unexplained when the explanation merely failed to
+    #: load — the same distinction `/nfl/my-teams` draws with `board_positions` (NF1.7 (a)).
+    absences: list[NflWeeklyAbsence] | None = None
+
+    generated_at: str
+    projection_day: str | None = None
+
+
 #: Every model this contract declares — the walk targets for the schema guards, and the registry
 #: `test_nf_c6_ph2_weekly_contract.py` asserts is EXHAUSTIVE (a model added to this file but not to
 #: this tuple would escape every guard, which is the vacuity this list exists to prevent).
 CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     NflWeeklyPlayer, NflWeeklyAbsence, NflWeeklyInputVintage, NflWeeklyLineage,
     NflWeeklyHonestFraming, NflWeeklyManifest, NflWeeklyPayload, NflWeeklyCurrent,
+    # NF-WK-MT1 — the league-scored weekly lens. In the registry so the import-time claim guards
+    # walk these too: a surface that renders a roster is exactly where a start/sit imperative or an
+    # opponent claim would first appear.
+    NflWeeklyRosterAbsence, NflWeeklyLeagueRow, NflWeeklyLeagueBoard,
 )
 
 
