@@ -159,8 +159,9 @@ spec:
       SHIPPED. All five nodes complete, verified against real data rather than
       fixtures. (1) CAPTURES: every Odds-API unit price measured on live
       x-requests headers and reconciled against an independent free-/sports
-      bracket — the two instruments AGREED exactly on every leg. 775 credits
-      spent total (0.016% of a 4,812,933 balance). Proposed cadence: futures
+      bracket — the two instruments AGREED exactly on every leg. 787 credits
+      spent total (0.0164% of a 4,812,933 balance — the session balance delta;
+      a first tally said 775 by summing the per-leg brackets and missed 12). Proposed cadence: futures
       daily + game lines every 30 min = 14,938 credits/season (0.31%). A
       fan-out ceiling ships REFUSING, not truncating, because a per-event loop
       over an NCAAB board is 105x the bulk call for identical data. Historical
