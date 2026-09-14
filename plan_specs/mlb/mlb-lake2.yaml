@@ -149,7 +149,12 @@ spec:
       113s from >300s, and compaction removes only the BIND component while the flatten WORK
       remains. The blocking fact resolved YES from CODE + measurement, not timing alone:
       --w3pre-only has EXACTLY TWO callers (the tick leg and the daily lakehouse_w3pre_flatten_op),
-      so a 12:22Z build can only be the daily one ⇒ W11_W3PRE_DAILY is set on the box. Verified
+      so a 12:22Z build can only be the daily one ⇒ W11_W3PRE_DAILY is set on the box. ✅ CONFIRMED
+      DIRECTLY by the operator 2026-09-14, BEFORE the merge: `printenv W11_W3PRE_DAILY` returns
+      `1` — read via `exec` on the PERSISTENT dagster-codeloc container (the one that actually
+      runs jobs), not a throwaway `run --rm`, per FU-1. Two independent lines of evidence agree,
+      so lever ② rests on a verified fact rather than an inference, and no .env step precedes the
+      move. Verified
       independently that no intraday consumer is orphaned: --w6-odds-current re-registers
       stg_oddsapi_odds as a RECENT-scoped flatten straight off the raw store, and events/derivative
       feed only DAILY marts. The tick now passes --w3pre-serving-only (stg_statsapi_games alone);

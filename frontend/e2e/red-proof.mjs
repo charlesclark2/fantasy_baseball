@@ -3533,6 +3533,92 @@ const CASES = [
     to: "fullSeasonRateCsv(p.pts, p.g, p.pos) == null",
     grep: "Export CSV produces a file whose contents match the board on screen",
   },
+  // ══ NF-WK-FE1 — THE WEEKLY SURFACE ═══════════════════════════════════════════════════════════
+  //
+  // ⭐ SIX CASES, EACH WITH ITS ANCHOR VERIFIED UNIQUE AND ITS `grep` VERIFIED TO SELECT EXACTLY
+  // THE TEST IT NAMES. Both checks matter here for reasons this file already documents: a
+  // `String.replace` takes the FIRST occurrence, so a non-unique anchor lands on a different call
+  // site than the case claims (a FALSE VACUITY, the dangerous direction); and a `grep` that matches
+  // NOTHING makes `playwright test` exit non-zero, which this harness reads as a perfect RED for a
+  // test that never ran. The last case's grep was tightened for exactly that reason — "never
+  // scrolls sideways on a phone" selected EIGHT tests across four unrelated mobile specs, so an
+  // unrelated flake would have been credited to this mutation.
+  {
+    id: "weekly-band-dropped",
+    shipped: "NF-WK-FE1 — the guard against a weekly point printed without its interval",
+    detail:
+      "A weekly point is a mean over a wide distribution; printing it alone overstates precision on the surface a reader is most likely to act on.",
+    file: "components/fantasy/weekly-page.tsx",
+    from: `          <div className="text-[11px] tabular-nums text-gray-500" data-testid="weekly-band">
+            {fmt(p.fpP10)}–{fmt(p.fpP90)}
+          </div>`,
+    to: "",
+    grep: "carries its 80% band",
+  },
+  {
+    id: "weekly-bye-as-gap",
+    shipped: "NF-WK-FE1 — a bye rendering as a gap instead of as the certainty it is",
+    detail:
+      "A bye is a DETERMINISTIC zero knowable at schedule release. An em-dash says 'we have nothing for this player', which is a different and false fact.",
+    file: "components/fantasy/weekly-page.tsx",
+    from: `        <td className="px-3 py-2 text-right" data-testid="weekly-points">
+          <div className="font-semibold tabular-nums text-gray-100">{fmt(p.fpPpr)}</div>`,
+    to: `        <td className="px-3 py-2 text-right" data-testid="weekly-points">
+          <div className="font-semibold tabular-nums text-gray-100">{p.status === "bye" ? "—" : fmt(p.fpPpr)}</div>`,
+    grep: "stated zero, keeps its rest-of-season",
+  },
+  {
+    id: "weekly-unpublished-as-error",
+    shipped: "NF-WK-FE1 — the ordinary between-builds 404 presented as a fault",
+    detail:
+      "Measured on the live API 2026-09-13: both free weekly routes 404 because nothing is published yet. Rendering that as 'we could not reach the model' sends the next investigation to the wrong place.",
+    file: "components/fantasy/weekly-page.tsx",
+    from: "  const awaiting = (projections.isError || manifest.isError) && status === 404",
+    to: "  const awaiting = false",
+    grep: "stated absence — not a spinner|failed read is stated as OUR problem",
+  },
+  {
+    id: "weekly-paid-panel-ungated",
+    shipped: "NF-WK-FE1 — the paid stat line printed for a free caller",
+    detail:
+      "The G100 lesson: the gate is WHICH COMPONENT PRINTS. A panel that draws whatever it holds is one stale cache away from printing paid substrate.",
+    file: "components/fantasy/weekly-page.tsx",
+    from: `  const entitled = canUse("decision_support", groups)
+
+  if (!entitled) {`,
+    to: `  const entitled = canUse("decision_support", groups)
+
+  if (false && !entitled) {`,
+    grep: "no paid stat value anywhere",
+  },
+  {
+    id: "weekly-statline-note-dropped",
+    shipped: "NF-WK-FE1 — the stat line shown with no word that it is a separate model",
+    detail:
+      "The points head and the component head are INDEPENDENT, so scoring the line does not reproduce the point. Without the note a reader has two numbers and no way to reconcile them.",
+    file: "components/fantasy/weekly-page.tsx",
+    from: `      <p data-testid="weekly-stat-line-note" className="mt-3 border-t border-[#1f1f1f] pt-2 text-[11px] leading-relaxed text-gray-500">
+        {WEEKLY_STAT_LINE_NOTE}
+      </p>`,
+    to: "",
+    grep: "never totalled",
+  },
+  {
+    // ⭐ THE ONE THAT PINS A DEFECT THIS STORY ACTUALLY FOUND AND FIXED, rather than one it was
+    // written to prevent. Tailwind's `sr-only` is `position: absolute`; with every ancestor static
+    // its containing block is the INITIAL one, so the last column header's accessible name escaped
+    // the scroll container and was laid out at x=864 — inflating documentElement.scrollWidth to 866
+    // in a 412px viewport while the container measured a correct 378/860. Invisible at desktop
+    // width, to `tsc` and to `next build`.
+    id: "weekly-sronly-escapes-scroll-box",
+    shipped: "NF-WK-FE1 — an absolutely-positioned sr-only span escaping its scroll container",
+    detail:
+      "Removing `relative` from the table's overflow box lets the header's sr-only label lay out against the document, giving the whole page a horizontal scrollbar on a phone.",
+    file: "components/fantasy/weekly-page.tsx",
+    from: `<div className="relative min-w-0 overflow-x-auto rounded-lg border border-[#262626]">`,
+    to: `<div className="min-w-0 overflow-x-auto rounded-lg border border-[#262626]">`,
+    grep: "the weekly page never scrolls sideways",
+  },
 ]
 
 /**
@@ -3640,7 +3726,14 @@ const CASES = [
 // INDIVIDUALLY (`node e2e/red-proof.mjs csv-`) rather than by a full board run, for the reason
 // every entry above records: 201 cases × a production build each does not belong in a session. So
 // 199/193/6 → 201/195/6, and the next full run CONFIRMS it. ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 201, red: 195, notObservable: 6 }
+// NF-WK-FE1 adds SIX cases — a point printed without its band, a bye rendered as a gap, the
+// between-builds 404 presented as a fault, the paid panel un-gated, the independent-heads note
+// dropped, and the sr-only span escaping its scroll container (the only one of the six that pins a
+// defect this story FOUND rather than one it was written to prevent). Each RED-proven INDIVIDUALLY
+// (`node e2e/red-proof.mjs weekly-`) rather than by a full board run, for the reason every entry
+// above records: 207 cases x a production build each does not belong in a session. So
+// 201/195/6 -> 207/201/6, and the next full run CONFIRMS it. ⛔ A projection is not a measurement.
+const RECORDED_BOARD = { total: 207, red: 201, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

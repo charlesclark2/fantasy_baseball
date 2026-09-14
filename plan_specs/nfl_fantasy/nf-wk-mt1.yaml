@@ -1,0 +1,149 @@
+# Plan spec — NF-WK-MT1 (FULL tier: the my-teams WEEKLY lens — league-scored weekly points
+# through the ONE server-side scorer; the pragmatic first slice of gate 3)
+# Authored by PM 2026-09-14. Backend-first inside the story (the sequencing rule): the
+# league-scored weekly endpoint lands and is verified served before any page code.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-wk-mt1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/HvVAWD9f   # consumer-chain thread; MT1 card linked at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    The paid question the weekly stack exists to answer: "who do I
+    start, on MY roster, in MY league's scoring." My-teams already
+    holds imported leagues with server-side season scoring
+    (league_scoring.py — the ONE scorer, NF-EPIC 1); NF-C6-PH2 serves
+    weekly per-stat components. This story joins them: a PAID
+    league-scored weekly endpoint that scores the weekly component
+    line under the league's settings SERVER-SIDE through the existing
+    scorer, and a my-teams weekly lens rendering each roster slot's
+    league-scored weekly point + the honest band. ⛔ HARD BOUNDARIES:
+    (a) NO fourth scoring implementation and none of the three moved —
+    the server scorer is REUSED on weekly stat lines via the same
+    STAT_FIELD map; the browser and fantasy_engine scorers are
+    untouched (touching either trips the parity merge-gate — that is
+    gate 3 proper, still deferred); (b) DISTRIBUTIONS under arbitrary
+    scoring (re-scoring the 39-level vector / per-stat distributions)
+    are NOT this story — the league-scored POINT is exact (linear
+    scoring over the component line); the BAND renders as the served
+    PPR-quantile band with an honest label until the distributional
+    re-scoring story exists — never a pseudo-band pretending to be
+    league-scored; (c) start/sit RECOMMENDATION language is out —
+    render projections + bands; the win-prob optimizer is NF-OPT1.
+    best_alpha=0; paid feature behind the existing entitlement.
+  acceptanceCriteria:
+    - description: >
+        PHASE A — SERVING (verified before page code, the P3.3 gate
+        pattern): a paid endpoint (the my-teams/league-board pattern —
+        server reads the weekly components from the box artifact,
+        scores under the league's stored settings via league_scoring,
+        returns league-scored weekly points per rostered player; the
+        browser NEVER sees the component substrate on this route
+        beyond what the entitlement standard already allows).
+        Contract Pydantic-declared, additive; absences per
+        ABSENCE_REASONS (a rostered player missing from the weekly
+        payload renders a stated absence — bye/absent/K-DST-uncovered
+        each distinguishable); byte-identity untouched (this is a
+        paid, authed route — it takes the Request, is absent from CDN
+        allowlists, 401s anon; decide the cache side BEFORE writing,
+        per the G100 rule). SCORING PARITY, proven not assumed: the
+        server-scored weekly PPR under a full-PPR league config must
+        equal the served fpPpr within float tolerance on every
+        covered player (the one cross-check the independent heads
+        allow — and the C6-PH2 coherence caveat applies to COMPONENT
+        sums, so this parity check is against the scorer's own output
+        on the same line, not against the points head; state which
+        comparison each clause makes). Runtime gate: operator curls
+        on the deployed Lambda (a real league, real week; 401 anon;
+        one absent-player case), deploy.sh only, merged never means
+        served.
+    - description: >
+        PHASE B — THE LENS: my-teams gains a weekly view per imported
+        team — each starter/bench slot: league-scored weekly point,
+        the band (labeled honestly per boundary (b)), designation
+        badge where the feed carries one (the served status — no
+        forecast language), bye/absent states; weekly ROS renders
+        league-scored the same way. Copy through the claim-copy
+        conventions: no start/sit imperatives, no matchup language;
+        the PPR-band label states its scope in plain words. The
+        season my-teams view, scorer, and entitlement gates are
+        untouched; the lens is additive navigation within my-teams.
+    - description: >
+        TIMING + FIXTURES: Phase A can build now (the box artifact
+        exists; the first weekly publish is imminent) but its runtime
+        gate needs a REAL served weekly payload — sequence the
+        operator curls after the first-publish verification (card
+        iMHg7nm6). Fixtures captured RAW per E9.64b once live; the
+        pre-publish state renders the same stated absence FE1 ships.
+        One frontend story at a time: Phase B starts only after
+        NF-WK-FE1's #1103 is merged (verify, don't assume).
+    - description: >
+        Guards: E2E per surface both ways (a scored roster, an
+        absence-bearing roster, an entitlement-refused anon read);
+        rendered-output assertions; the parity clause RED-proven (a
+        deliberate scoring-weight mutation must move it); no scorer
+        file outside app/backend/services touched (guard-pinned);
+        RED-proofs with unique anchors + baseline-pass + NOT-SELECTED
+        + resolve-every-node; owning CI shard for shared guards.
+        Changelog (user-facing, paid feature) lands only when the
+        lens actually renders live data. >2-min commands operator
+        paste-ready; worktree; PR -> dev; no Trello; roadmap frozen.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-wk-mt1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "my-teams" / "weekly" / "gate 3" (board Credence Sports, 2026-09-14)'
+    duplicates: []
+    adjacent:
+      - "NF-C6-PH2 (Done) — the weekly substrate + contract; its serving layer is extended by one paid route, not modified."
+      - "NF-WK-FE1 (PR #1103) — the public weekly page; Phase B waits for its merge (one frontend story at a time); shared components reused, not forked."
+      - "Gate 3 proper / NF-W6d / NF-OPT1 (deferred) — distributional re-scoring + optimizer; boundary (b)/(c); this story's endpoint is what they will extend."
+      - "NF-EPIC 1 / G100 (live) — the one-scorer rule, the entitlement standard, the cache-side decision rule; all bind verbatim."
+      - "My-teams / NF-C6 (live) — the season lens untouched; PR #518 lineage components reused where they fit."
+      - "MLB-LAKE2 / NCAAF (in flight/queued) — disjoint."
+  triedLedger:
+    files:
+      - "app/backend/services/league_scoring.py + the STAT_FIELD map (the one scorer this reuses; NF-C6's 3-implementation parity-tax record is WHY reuse is the design)"
+      - "app/backend/models/nfl_weekly.py + the box weekly artifact (the component substrate); the C6-PH2 closeout (component-coherence caveat, corrected figures per the FE1 disposition)"
+      - "my-teams server-scored /league-board route (the pattern Phase A mirrors)"
+    recordedNulls:
+      - "The component-coherence offset (mean signed −0.77) — carried as the reason the parity clause compares the scorer to ITSELF on the same line, never the component sum to the points head."
+  supersedes: []
+  dependsOn:
+    - "NF-C6-PH2 on main (verified); first weekly publish for the runtime gate (calendar-bound); NF-WK-FE1 #1103 merged before Phase B"
+  feedsInto:
+    - "The paid tier answering its highest-volume weekly question; gate 3 proper and NF-OPT1 extending this endpoint; the my-teams surface becoming the in-season home"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-wk-mt1-plan
+spec:
+  goalRef: { name: nf-wk-mt1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-phase-a
+        desc: "The paid league-scored weekly endpoint through the ONE scorer; parity clause; contract."
+      - id: 2-runtime-gate
+        desc: "⛔ Operator: deploy.sh + curls on a real league/week after the first weekly publish. No page code before this."
+      - id: 3-phase-b
+        desc: "The my-teams weekly lens; honest band labeling; absence states."
+      - id: 4-verify
+        desc: "E2E both ways; live content verification cache-busted; changelog only when rendering live data."
+      - id: 5-closeout
+        desc: "Verdict + findings into closeout.followUps; the contract statement for gate 3 proper / NF-OPT1."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

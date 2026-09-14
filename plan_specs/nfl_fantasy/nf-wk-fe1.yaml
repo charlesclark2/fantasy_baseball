@@ -9,7 +9,7 @@ metadata:
   name: nf-wk-fe1
   vertical: nfl_fantasy
   card: https://trello.com/c/HvVAWD9f   # C6-PH2 record; FE card linked at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The weekly model finally reaches users: a weekly projections page
@@ -31,8 +31,15 @@ spec:
         IS THE PROJECTION — the paid per-stat components render as
         stat substrate, never as a second total; anywhere both are
         visible, the component-derived figure is either not summed on
-        the page or the discrepancy is disclosed (median offset 0.77,
-        p95 3.71 — measured, not hypothetical); (b) the band renders
+        the page or the discrepancy is disclosed. ⚠️ CORRECTED FIGURES
+        (PM 2026-09-14 — the labels below were wrong in C6-PH2 ruling ②
+        and propagated here by copy; measured
+        2026-09-05 on n=503 STAGED rows, `nf_c6_ph2_promotion_review.json`
+        → component_coherence): mean SIGNED −0.77 — the component-scored
+        PPR lands on average 0.77 BELOW the served point — median |d|
+        0.60, p95 3.71, max 7.92. ⛔ DIRECTION IS LOAD-BEARING: any
+        disclosure phrased as "the components may exceed the total"
+        would be BACKWARDS. (b) the band renders
         WITH the point everywhere the point renders (the NCAAF
         rank-with-range instinct — a weekly point without its interval
         overstates precision); (c) status has exactly the served
@@ -117,8 +124,211 @@ spec:
   graph:
     nodes: []   # MINI tier — fixtures from contract -> page + entitlement + copy -> guards -> live re-capture + verify + changelog -> closeout
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED-PENDING-PUBLISH. The page, its nav door, the entitlement seam and every
+      guard are built and green; the LIVE-DATA half of the DONE gate is OPEN and
+      calendar-bound. Measured 2026-09-14 04:57Z, cache-busted: both free weekly routes
+      still answer 404 `{"detail":"Weekly projection not found"}` — from the LAMBDA, not
+      the gateway, so the authorizer flip is already done and the routes are anonymously
+      reachable with nothing behind them. The paid route answers 401 AT the gateway.
+      ⛔ THE CHANGELOG ENTRY IS DELIBERATELY NOT WRITTEN: this is the weekly product's
+      debut line and the spec's own rule is that declaration never outruns production.
+      It, the raw fixture re-capture and the live content verification are listed as
+      post-publish operator steps below.
+      Guards: E2E 18 desktop + 4 mobile, full frontend suite 713+ passed / 0 failed;
+      Python 24 clauses; RED proofs 16/16 (Python) and 6/6 (frontend), both attributable
+      with baseline-pass, NOT-SELECTED and resolve-every-node legs, plus three more
+      RED-proven individually (the sr-only containment, the provenance format, the
+      in-flight paid read); fast gate 12,666 passed / 0 failed.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) ⭐ THE COHERENCE FIGURE IS NOT ON THE WIRE, AND THAT DECIDED CRITERION 1(a).
+      The criterion allows either NOT SUMMING the components or DISCLOSING the
+      discrepancy. Only the first was available: `test_nf_tr1_claim_copy.py::
+      test_the_canonical_copy_module_carries_no_measured_figure` mechanically REFUSES any
+      decimal with two or more places in `fantasy-claim-copy.ts`, and the manifest carries
+      no coherence block to read one from — so a disclosed magnitude could only ever have
+      been a typed figure that drifts silently on the next re-score. The page therefore
+      sums nothing (guarded statement-level) and states the independent-heads mechanism in
+      words. ⇒ IF THE PM WANTS THE MAGNITUDE SHOWN, that is a CONTRACT addition (a
+      coherence block on `NflWeeklyManifest.framing`, written by the box beside the figures
+      `run_nf_c6_ph2_promotion_review.component_coherence` already computes) and therefore
+      a BACKEND story, not a copy edit.
+
+      (2) ⚠️ THIS SPEC'S OWN FIGURES ARE MISLABELLED — worth correcting on the card so the
+      error does not propagate by copy. The spec says "median offset 0.77, p95 3.71". The
+      measured record (`nf_c6_ph2_promotion_review.json`, n=503) says `mean_signed_diff =
+      -0.7709`, `median_abs_diff = 0.6016`, `p95_abs_diff = 3.7101`. So 0.77 is the MEAN
+      SIGNED difference (and it is negative), not the median; the median absolute
+      difference is 0.60. Only p95 was quoted correctly. Nothing shipped depends on this —
+      no figure was rendered — but the card is the source a future story would copy from.
+
+      ✅ PM DISPOSITION (2026-09-14) — RULED (a), CORRECTION SPLIT BY OWNER, and the error
+      acknowledged as the PM's: the mislabelling ORIGINATED in C6-PH2 ruling ② and propagated
+      into this spec by copy — the told-two-sites-found-nine class, caught before it reached a
+      third. The SPEC-SIDE correction is EXECUTED IN THIS PR: criterion 1(a)'s parenthetical now
+      carries the correctly-labelled set WITH ITS VINTAGE AND POPULATION STATED, per the
+      re-measure-before-citing rule (mean SIGNED −0.77 with the direction named, median |d| 0.60,
+      p95 3.71, max 7.92, measured 2026-09-05 on n=503 STAGED rows). The PM corrects the C6-PH2
+      record card to match. ⭐ The directional warning is ADOPTED INTO THE RECORD VERBATIM: any
+      future disclosure phrased as "the components may exceed the total" would be BACKWARDS.
+      ⛔ (b) IS DECLINED FOR NOW — recorded as a GATED OPTION, not a card, so the option carries
+      its design: the ruled presentation is the NOT-SUMMING branch, so no rendered magnitude is
+      planned. If a future design wants the number ON THE PAGE, the only honest route is the one
+      this finding identifies — a coherence block on `NflWeeklyManifest.framing`, written by the
+      box beside the figures `run_nf_c6_ph2_promotion_review.component_coherence` ALREADY
+      computes. A typed figure would drift silently on the next re-score, and the copy module's
+      no-measured-figure guard is CORRECT to refuse it. That is a BACKEND SPEC of its own at that
+      time, never a copy edit.
+
+      (3) 🚪 THE PAGE IS PUBLIC AND INDEXED BUT HAS NO SIGNED-OUT NAV DOOR, and that is a
+      PM DECISION I deliberately did not make. It joins `SPORTS` (the signed-in fantasy
+      menu, beside Projections) as the spec asks. `SIGNED_OUT_NAV` in `positioning-copy.ts`
+      is a separate, authored positioning surface where EVERY entry carries a recorded
+      PM/operator ruling, so adding one is a positioning change rather than nav wiring.
+      ⚠️ The consequence is concrete and is the NCAAF-P3.9 shape: a logged-out visitor can
+      reach the page from search (it is `index: true`) or from the signed-in menu, but
+      cannot DISCOVER it from the nav — and "what does my guy do this week" is the highest-
+      volume recurring query in fantasy football. Recommend a `desktop: false` entry beside
+      the existing "Projections" one.
+
+      ✅ PM DISPOSITION (2026-09-14) — RULED (a), OPENED AT FIRST PUBLISH. The `desktop: false`
+      entry lands beside "Projections" — a PEER of the fantasy surfaces, in the menu/mobile list,
+      NOT the top bar. The admission rule is satisfied (the page is free, so the anonymous visitor
+      can actually use it), so the entry is legitimate; but weekly is a RETURNING-USER surface and
+      the top bar's two slots are the trust assets. ⭐ THE PRECEDENT IS READ PRECISELY:
+      NCAAF-P3.9's load-bearing half (a free surface whose DEFAULT reader is anonymous) supports
+      admission to THE LIST, not necessarily to the TOP LEVEL — those are separate claims and only
+      the first transfers. REVISIT TRIGGER recorded on the entry itself: if anonymous weekly-page
+      traffic via search proves material, top-level promotion is a FRESH positioning decision,
+      never an inference from this one.
+
+      ⚙️ MECHANISM (session's call, per the ruling) — A POST-PUBLISH EDIT, NOT A FLAG, and the
+      reason is a documented trap rather than a preference. (i) A `NEXT_PUBLIC_*` flag is the
+      WORST option available here: changing a Vercel env var does not change git, so a plain
+      Redeploy re-diffs the same commit and the `ignoreCommand` path filter SKIPS the build — the
+      flip silently never takes effect and the door never opens, with no error (the documented
+      Vercel redeploy trap). (ii) A DATA-conditional entry (render the door only once a manifest
+      exists) would put a public API read on every anonymous render, which is precisely what the
+      G100-D1 cost guardrails forbid a new landing surface from doing. ⇒ the door lands as a
+      one-line edit in the SAME change that follows the wk-2 rosters verification, beside the
+      changelog entry — the same "declaration never outruns production" discipline that keeps the
+      changelog entry unwritten today. 🧭 The RULING IS RECORDED NOW, on the surface itself, as a
+      dated comment at the position the entry will occupy (`SIGNED_OUT_NAV` in
+      `positioning-copy.ts`) — that list's own convention already records an ABSENCE as a ruling
+      (the ⛔ NO MLB ENTRY comment), so a future session can neither add the door early nor read
+      its absence as an oversight. ⚠️ The comment is PROSE and nothing enforces it; the enumerated
+      operator-steps block below is what actually carries the edit.
+
+      (4) 🐛 A DEFECT FOUND AND FIXED, and the class is worth carrying: Tailwind's `sr-only`
+      is `position: absolute`, so inside a scroll container whose ancestors are all `static`
+      its containing block is the INITIAL one — it escapes the container entirely. The last
+      column header's accessible name laid out at x=864 and inflated
+      `documentElement.scrollWidth` to 866 in a 412px viewport while the container itself
+      measured a correct 378/860. Invisible at desktop width, to `tsc` and to `next build`;
+      caught on the mobile spec's FIRST run. ⭐ The tell that it was real rather than a
+      measurement quirk: the shipped season tables use the identical pattern with WIDER
+      tables (980px, 954px) and measure 412 — a NARROWER table leaking is backwards for any
+      overflow explanation, which is what pointed at an escaping absolute child. Fixed by
+      containment (`relative`), not by deleting the span, which is the column's only
+      accessible name. A repo-wide scan finds no other component combining `overflow-x-auto`
+      with `sr-only`, so it is not latent elsewhere TODAY — but the next wide table with a
+      screen-reader-only header will reproduce it.
+
+      (5) ⛔ A PRE-EXISTING RED ON `dev`, REPAIRED IN A SEPARATE COMMIT (4cd5de4e) AND
+      FLAGGED RATHER THAN SMUGGLED. NF-C6-PH2 (`be1fb87c`) added `nfl_weekly_freshness_op`
+      to `sports_nfl_sleeper_injuries_job` without moving
+      `test_nf_infra1_sleeper_hardening.py`'s exhaustive node-set assertion, so that clause
+      has been failing on `dev` since — verified at base commit 04fd0059, failing
+      identically with this branch checked out or not, and NF-WK-FE1 touches no pipeline,
+      monitoring or Sleeper file. Repaired the STRONGER way: the op joins the node set AND
+      gains the same no-dependencies assertion its sibling has (measured: it already has
+      none). RED-proven two-sided. PM may split this commit out if it belongs to another
+      story's ledger.
+
+      (6) 🗓️ FIXTURE RETIREMENT TRIPWIRE. The three weekly fixtures are GENERATED by the
+      shipping writer + reducer (`frontend/e2e/fixtures/build-nfl-weekly.py`) because
+      nothing weekly has ever published and there is nothing to capture. A fixture derived
+      from the writer can only confirm the shape we already assumed (E9.64b) — so on the
+      first real publish they must be RETIRED and re-captured RAW from the live API. The
+      builder's header says so; this is the PM-visible copy of it.
+
+      (7) 📋 RED-PROOF BOARD DRIFT, PRE-EXISTING AND DOCUMENTED, reported rather than
+      "fixed": `e2e/red-proof.mjs` now holds 246 cases against a `RECORDED_BOARD` of 207.
+      207 is correct BY THE FILE'S OWN CONVENTION (the last measured board, 201, plus this
+      story's 6); the gap is ~39 cases of compounded projection from stories that added
+      cases without a full board run. ⛔ Writing 246 would assert a red/not-observable split
+      nobody has measured. A full run is what reconciles it.
+
+      (8) 🧪 A HARNESS FOOTGUN PAID FOR IN THIS SESSION: `e2e/red-proof.mjs` is a SCRIPT with
+      top-level side effects, so `import()`-ing it to syntax-check STARTS A FULL RUN. Killing
+      that left `app/subscribe/page.tsx` mutated in the working tree — exactly the residue
+      the file's own header warns about. Restored via `git checkout --`; nothing reached a
+      commit, because staging by explicit path rather than `git add -A` is what kept it out.
+      Use `node --check` to validate that file.
+
+      (9) 🧟 …AND THAT KILLED RUN LEFT A SECOND, WORSE ARTEFACT: AN ORPHANED `next-server` ON
+      PORT 3100, WHICH SILENTLY HIJACKED EVERY LATER E2E RUN. Playwright's `webServer` config
+      REUSES an existing listener, so the suite kept being served a build frozen at 23:56 —
+      producing five confident-looking failures on a page whose source was fine, and two
+      throwaway captures that were byte-identical and stuck on "Loading". ⭐ THE TELL: the
+      failures survived `git status` coming back CLEAN and a fresh `npm run e2e:build`, which
+      together rule out both source residue and a stale artifact — at which point the only
+      remaining candidate is that the thing under test is not the thing being served.
+      `lsof -nP -iTCP:3100 -sTCP:LISTEN` settled it in one command. ⚠️ A THIRD `next-server`
+      was found alongside it dated **2026-08-20** — a 3.5-week-old orphan from an unrelated
+      session, i.e. this accumulates silently on a long-lived machine. Worth a one-line
+      pre-flight in the E2E README ("check 3100 before believing a failure"); the repo already
+      records the class ("a stale next-server squatting port 3100 silently hijacks the whole
+      E2E suite") but nothing checks it.
+
+      (10b) 🕓 A FOURTH STATE FOUND LATE AND FIXED: the paid stat line is a SEPARATE query, so an
+      entitled reader who opened a row before `/weekly/projections-full` resolved was told "No
+      projected stat line was produced for this player this week" — the in-flight read was
+      borrowing the ABSENCE state's sentence. That is not a slow render, it is a FALSE CLAIM
+      ABOUT THE MODEL held on screen for as long as the fetch takes, and a reader cannot tell
+      the two apart. ⭐ Worth carrying as a pattern: this page's whole design is that an empty
+      state meaning several things costs an investigation every recurrence — the corollary,
+      which is easy to miss, is that a state meaning something UNTRUE is strictly worse than
+      one that is merely ambiguous. Any surface with a SECOND, independently-resolving read has
+      this shape. Guarded by delaying only the paid read (the real sequence, not a simulated
+      flag) and asserting the NEGATIVE — the absence sentence must not be on screen.
+
+      (11) 📣 THE SHARED `FreemiumBoundary` ADVERTISES "the market ADP beside it" ON A PAGE
+      WITH NO ADP. Visible in the rendered capture: the weekly page carries the canonical
+      product-level freemium block, whose copy enumerates "every ranking, every 80% range and
+      the market ADP" — true of the season board, not of this surface. ⛔ NOT CHANGED HERE ON
+      PURPOSE: it is one shared component rendered identically on Projections, Rankings and
+      Player Search, the spec says the season surfaces are untouched, and its wording is
+      screened marketing copy. ⇒ a PM call: either accept it as product-level copy that
+      describes the free TIER rather than the page, or give the block a per-surface variant.
+      (The adjacent "no number quietly withheld" clause is NOT a new inconsistency — the
+      season stat line has been paid since NF-EPIC 1 and the same block ships there.)
+
+      ━━━ 🗓️ POST-PUBLISH OPERATOR STEPS (the block the verdict refers to) ━━━
+      Every item below is CALENDAR-BOUND on the first real weekly publish (wk-2 rosters) and
+      NONE of them may be done ahead of it — that is the point of the list. They land as ONE
+      change, in this order, because each step's evidence is the next step's precondition:
+
+      (P1) RE-CAPTURE THE THREE FIXTURES RAW from the live API, retiring the generated ones
+      (finding 6). A fixture derived from our own writer can only confirm the shape we already
+      assumed (E9.64b).
+
+      (P2) VERIFY THE LIVE PAGE BY CONTENT on a cache-busted read — a named player, his point,
+      his band — not a 200 and not a screenshot. The routes answering 404 today is the honest
+      pre-publish state, so "it loads" is not evidence of anything.
+
+      (P3) LAND THE SIGNED-OUT NAV DOOR — the `desktop: false` entry in `SIGNED_OUT_NAV`
+      beside "Projections", per the PM disposition on finding (3). Its ruling comment is
+      ALREADY in `positioning-copy.ts` marking the position; this step replaces that comment's
+      placeholder with the entry. ⛔ Not before P2: a door pointing at an honest-empty page in
+      the season's highest-traffic week is a worse first impression than a two-day-later door.
+
+      (P4) WRITE THE CHANGELOG ENTRY — the weekly product's debut line — LAST, and only once
+      P2 has actually passed. Declaration never outruns production; this ordering is the whole
+      reason the entry is absent from this PR. ⚠️ Rebase the week block first — NF-INJ4b-SHIP
+      shares it, and two stories appending to one Monday's `items` is this repo's commonest
+      merge conflict.

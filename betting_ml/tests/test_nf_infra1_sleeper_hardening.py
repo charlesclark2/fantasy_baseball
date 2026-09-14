@@ -321,14 +321,29 @@ def test_the_freshness_check_runs_downstream_of_the_land_as_a_graph_edge():
     downstream of the Sleeper ingest, because that op raises by design and a Sleeper outage would
     then blind the board monitor on exactly the days something is already wrong. So the Sleeper
     chain's edges are asserted UNCHANGED, and the new op is asserted to have NO dependencies at
-    all. Pinned on the COMPILED graph, which is what actually decides execution order."""
+    all. Pinned on the COMPILED graph, which is what actually decides execution order.
+
+    ⭐ RE-ANCHORED AGAIN BY NF-WK-FE1 (2026-09-14), and the re-anchor is REPAIRING A RED, not
+    accommodating one. NF-C6-PH2 (`be1fb87c`) added `nfl_weekly_freshness_op` to this job and did
+    not move this exhaustive node-set assertion with it, so this clause has been FAILING on `dev`
+    ever since — verified at that commit, and it fails identically with NF-WK-FE1's branch checked
+    out or not.
+
+    ⚠️ THE WEEKLY OP IS ADDED TO THE NODE SET *AND* GIVEN THE SAME NO-DEPENDENCIES ASSERTION ITS
+    SIBLING HAS — measured on the compiled graph, it already has none, exactly like the board SLA
+    leg and for the identical reason. That is deliberately the STRONGER repair: simply widening the
+    node set would leave the weekly op with no assertion about its edges at all, which is how it
+    slipped in unnoticed. Re-anchoring an existing property onto the current implementation is the
+    sanctioned move; ⛔ adding a NEW story's requirement into an older story's clause is not
+    (NF-D17 §7), and nothing about NF-WK-FE1 is asserted here."""
     _skip_without_manifest()
     from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
 
     graph = sports_nfl_sleeper_injuries_job.graph
     assert {n.name for n in graph.nodes} == {
         "nfl_sleeper_injuries_ingest_op", "nfl_sleeper_injuries_rebuild_op",
-        "nfl_sleeper_injuries_freshness_op", "nfl_published_board_freshness_op"}
+        "nfl_sleeper_injuries_freshness_op", "nfl_published_board_freshness_op",
+        "nfl_weekly_freshness_op"}
 
     deps = graph.dependencies
     freshness = next(k for k in deps if k.name == "nfl_sleeper_injuries_freshness_op")
@@ -336,11 +351,17 @@ def test_the_freshness_check_runs_downstream_of_the_land_as_a_graph_edge():
     assert {d.node for d in deps[freshness].values()} == {"nfl_sleeper_injuries_rebuild_op"}
     assert {d.node for d in deps[rebuild].values()} == {"nfl_sleeper_injuries_ingest_op"}
 
-    # The board SLA leg takes NOTHING from this chain (NF-INFRA2).
-    board = [k for k in deps if k.name == "nfl_published_board_freshness_op"]
-    assert not board or not deps[board[0]], (
-        "the published-board SLA op has a dependency — a Sleeper failure would skip it, blinding "
-        "the board monitor precisely when the box is already unhealthy")
+    # The board SLA leg takes NOTHING from this chain (NF-INFRA2) — and neither does the WEEKLY
+    # freshness leg (NF-C6-PH2), for the identical reason: `in_process_executor` runs steps one at a
+    # time topologically, so an op made downstream of the Sleeper ingest is SKIPPED when that ingest
+    # raises — which it does by design — and a monitor that goes quiet exactly when the box is
+    # already unhealthy is worse than no monitor.
+    for independent in ("nfl_published_board_freshness_op", "nfl_weekly_freshness_op"):
+        leg = [k for k in deps if k.name == independent]
+        assert leg, f"{independent} is not in the compiled graph at all"
+        assert not deps[leg[0]], (
+            f"{independent} has a dependency — a Sleeper failure would skip it, blinding that "
+            "monitor precisely when the box is already unhealthy")
 
 
 def test_a_missing_sports_duckdb_RAISES_instead_of_reporting_a_green_run(tmp_path, monkeypatch):

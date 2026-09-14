@@ -617,6 +617,33 @@ export const SIGNED_OUT_NAV: readonly SignedOutNavLink[] = [
     desktop: true,
   },
   { label: "Projections", href: "/fantasy/projections", product: "fantasy", desktop: false },
+  // ⏳ WEEKLY ("This Week", `/fantasy/weekly`) IS ADMITTED TO THIS LIST BUT DOES NOT LAND UNTIL THE
+  // FIRST REAL PUBLISH — PM 2026-09-14, NF-WK-FE1 finding (3). The entry belongs directly here, as
+  // `{ label: "This Week", href: "/fantasy/weekly", product: "fantasy", desktop: false }` — MENU
+  // TIER, a peer of Projections and Player search, NOT the top bar.
+  //
+  // ⭐ WHY IT IS ADMISSIBLE: the page is FREE — `app/fantasy/weekly/page.tsx` is wrapped in
+  // `FantasyPublicGuard`, the same PUBLIC wrapper Projections and Rankings use (not `AuthGuard`,
+  // not a subscription gate), and its free components read the free routes only. So an anonymous
+  // visitor is a genuine reader of it, which is exactly this list's admission rule — and exactly
+  // what the MLB entry below could not satisfy.
+  //
+  // ⚠️ WHY IT IS MENU TIER AND NOT TOP-LEVEL, stated because the NCAAF-P3.9 entry below looks like
+  // a precedent for promotion and is not: that ruling's load-bearing half is "a free surface whose
+  // DEFAULT reader is anonymous", which supports admission to THE LIST — a separate claim from
+  // admission to the TOP LEVEL, and only the first transfers. Weekly is a RETURNING-USER surface;
+  // the bar's two slots are the trust assets (Rankings, Track Record).
+  //
+  // ⛔ WHY IT IS NOT HERE YET: until the wk-2 publish the page renders a stated
+  // "weekly projections publish when rosters land" absence — honest, but a nav door pointing at an
+  // empty page in the season's highest-traffic week is a worse first impression than a door two
+  // days later. It lands in the same change as the live-content verification and the changelog
+  // entry (spec `closeout.followUps` → POST-PUBLISH OPERATOR STEPS, P3). ⚠️ It is deliberately NOT
+  // flag-gated: a `NEXT_PUBLIC_*` flip does not change git, so Vercel's `ignoreCommand` skips the
+  // rebuild and the door would silently never open.
+  //
+  // 🔁 REVISIT TRIGGER: if anonymous weekly-page traffic via search proves material, top-level
+  // promotion is a FRESH positioning decision — never an inference from this one.
   { label: "Player search", href: "/fantasy/players", product: "fantasy", desktop: false },
   // ⭐ TRACK RECORD IS TOP-LEVEL (spec §20/§21, operator 2026-08-09) — it is the site's central
   // trust asset and the one record a stranger can read without an account, so it earns a bar slot
