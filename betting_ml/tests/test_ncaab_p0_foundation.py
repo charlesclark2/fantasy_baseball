@@ -13,7 +13,7 @@ from __future__ import annotations
 import ast
 import json
 import pathlib
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -21,6 +21,7 @@ from betting_ml.monitoring import ncaab_freshness as nf
 from betting_ml.monitoring import sports_delta_freshness as sdf
 from quant_sports_intel_models.basketball.ncaab.ingest import budget, sources as S
 from quant_sports_intel_models.basketball.ncaab.ingest import source_audit as sa
+from quant_sports_intel_models.basketball.ncaab.ingest import odds_capture as oc
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 NCAAB = REPO / "quant_sports_intel_models" / "basketball" / "ncaab"
@@ -227,6 +228,64 @@ class TestRobotsGroupingIsParsedCorrectly:
         txt = "User-agent: *\nDisallow: /admin/\n"
         v = sa._robots_verdict(txt, ("anthropic-ai",))
         assert "not named" in v["verdict"]
+
+
+# ── 6c. the odds capture MERGES; it does not overwrite, and it cannot collapse history ──
+class TestOddsCaptureMergeCannotDestroyHistory:
+    """Odds accumulate all season while the lake's ordinary write is a season-grained
+    replaceWhere OVERWRITE. Everything here guards the gap between those two facts — and the
+    first cut of that merge really did collapse a season into one row."""
+
+    def test_the_merge_key_refuses_a_row_with_no_capture_timestamp(self):
+        # ⭐ THE DEFECT A REAL RUN CAUGHT. The raw_json write path produced read-back rows with
+        # none of these columns, so every EXISTING row keyed to (None, None, None) and the
+        # merge collapsed them into one — silently, on the second capture. Keying a shape it
+        # does not understand to a default is the failure; raising is the fix.
+        with pytest.raises(RuntimeError, match="capture_timestamp"):
+            oc._merge_key({"market_tier": "game_lines", "event_id": "abc"})
+
+    def test_distinct_captures_of_the_same_event_are_distinct_rows(self):
+        a = {"capture_timestamp": "2027-01-15T18:00:00+00:00", "market_tier": "game_lines",
+             "event_id": "evt1"}
+        b = dict(a, capture_timestamp="2027-01-15T18:30:00+00:00")
+        assert oc._merge_key(a) != oc._merge_key(b), (
+            "two snapshots of one event at different times must survive as two rows, or the "
+            "line-movement history the capture exists to build is lost")
+
+    def test_re_merging_the_same_tick_is_idempotent(self):
+        rows = [{"capture_timestamp": "2027-01-15T18:00:00+00:00", "market_tier": "game_lines",
+                 "event_id": f"evt{i}"} for i in range(5)]
+        merged = {oc._merge_key(r): r for r in rows}
+        for r in rows:                      # a retry / a manual run beside the cron
+            merged[oc._merge_key(r)] = r
+        assert len(merged) == 5
+
+    def test_the_write_path_is_typed_not_raw_json(self):
+        # The merge must read back the SAME SHAPE it writes. `write_records` wraps everything
+        # into a raw_json VARCHAR, which is precisely what broke the key.
+        src = pathlib.Path(
+            REPO / "quant_sports_intel_models/basketball/ncaab/ingest/odds_capture.py"
+        ).read_text()
+        code = "\n".join(l for l in src.splitlines() if not l.strip().startswith("#"))
+        assert "write_dataframe(" in code
+        assert "write_records(" not in code, (
+            "odds_capture must not use the raw_json write path — see ODDS_COLUMNS")
+
+    def test_an_unreadable_existing_partition_refuses_rather_than_merging_into_nothing(self):
+        # If an unreadable table returned [], the merge would write only the new capture and
+        # the replaceWhere would delete a season of history — the same catastrophe by the
+        # error path instead of the happy one.
+        src = pathlib.Path(
+            REPO / "quant_sports_intel_models/basketball/ncaab/ingest/odds_capture.py"
+        ).read_text()
+        assert "REFUSING the merge" in src
+
+    def test_futures_capture_is_once_a_day_not_once_a_tick(self):
+        # 48 futures calls a day for a board that moves slowly is 48x the price for no extra
+        # information; and the decision is a pure function of the tick, so no second cron.
+        fires = [oc.should_capture_futures(datetime(2027, 1, 15, h, m, tzinfo=timezone.utc))
+                 for h in range(24) for m in (0, 30)]
+        assert sum(fires) == 1, f"expected exactly one futures tick a day, got {sum(fires)}"
 
 
 # ── 7. the paid feeds cannot run by accident ────────────────────────────────────────────

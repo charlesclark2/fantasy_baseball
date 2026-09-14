@@ -186,6 +186,19 @@ r=requests.get('https://api.the-odds-api.com/v4/sports/basketball_ncaab/odds',
 print('events:',len(r.json()),'cost:',r.headers['x-requests-last'],'(expect 3)')"
 ```
 
-Schedule enablement, cadence choice, and any backfill remain **operator decisions**. The
-ingest side is built and tested; what it does **not** yet have is a Dagster schedule, because
-turning one on is the spend decision this document exists to inform.
+```
+# 2. ENABLE THE CAPTURE (the spend decision). Dagit → Automation →
+#    toggle `sports_ncaab_odds_capture_schedule` ON.
+#    It ships STOPPED on purpose; the job, the cron and the merge are already wired, so
+#    enabling is a toggle and not a code change during the season.
+#    ⭐ Safe to enable EARLY: an empty board bills 0, so every tick before the season posts
+#       lines is free. There is no reason to wait for November.
+#
+# 3. ARM THE FRESHNESS CONTRACTS in the SAME change (they are declared, not registered —
+#    a contract for a table nothing writes is a permanent false page):
+uv run python -c "from betting_ml.monitoring.ncaab_freshness import registration_snippet as r; print(r())"
+```
+
+**Cadence choice and the backfill remain operator decisions.** What is built: the capture job,
+its cron at the proposed cadence, the read-merge-write that lets it accumulate safely, and the
+fan-out ceiling. What is deliberately **not** done: turning it on.

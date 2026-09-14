@@ -21,6 +21,7 @@ from pipeline.jobs.sports_dbt_job import (
 )
 # NCAAF-P0.7: the annual pre-season season roll-forward (schedule + covariates → mart rebuild).
 from pipeline.jobs.sports_ncaab_ingest_job import sports_ncaab_ingest_job
+from pipeline.jobs.sports_ncaab_odds_capture_job import sports_ncaab_odds_capture_job
 from pipeline.jobs.sports_ncaaf_rollforward_job import sports_ncaaf_roll_forward_job
 # NF-D1: the annual NFL season roll-forward (rosters/schedule/depth_charts/injuries/rookie class
 # → mart rebuild) — the NFL analog of NCAAF-P0.7.
@@ -81,6 +82,7 @@ all_jobs = [
     sports_ncaaf_dbt_build_job,
     sports_ncaaf_roll_forward_job,
     sports_ncaab_ingest_job,
+    sports_ncaab_odds_capture_job,
     sports_nfl_board_publish_job,
     sports_nfl_weekly_serving_job,
     sports_nfl_roll_forward_job,

@@ -29,6 +29,9 @@ from pipeline.schedules.sports_dbt_schedules import (
 # ⚠️ UNVERIFIED ON THE BOX at merge — the first write to the ncaab/ S3 prefix may need an
 # IAM grant (the E8.5 class, invisible to CI). See the NCAAB-P0 handoff.
 from pipeline.jobs.sports_ncaab_ingest_job import sports_ncaab_ingest_schedule
+# NCAAB-P0: the PAID market capture. ⛔ default_status=STOPPED — operator-gated on SPEND
+# (docs/ncaab_p0_credit_arithmetic.md). Safe to enable early: an empty board bills 0.
+from pipeline.jobs.sports_ncaab_odds_capture_job import sports_ncaab_odds_capture_schedule
 from pipeline.schedules.sports_rollforward_schedules import (
     sports_ncaaf_roll_forward_schedule,
     sports_nfl_board_publish_schedule,
@@ -80,6 +83,7 @@ all_schedules = [
     sports_ncaaf_dbt_schedule,
     sports_nfl_dbt_schedule,
     sports_ncaab_ingest_schedule,
+    sports_ncaab_odds_capture_schedule,
     sports_ncaaf_roll_forward_schedule,
     sports_nfl_board_publish_schedule,
     sports_nfl_roll_forward_schedule,

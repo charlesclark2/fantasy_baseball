@@ -258,9 +258,13 @@ def _wrap_odds(records: list[dict], meta: dict, market_tier: str) -> list[dict]:
         out.append({
             "capture_timestamp": stamp,
             "market_tier": market_tier,
+            # The event id is lifted OUT of the payload into its own column: it is half the
+            # merge key, and a key that has to parse a JSON blob to exist is a key that goes
+            # missing the moment the blob shape changes.
+            "event_id": str(r.get("id")) if isinstance(r, dict) and r.get("id") else None,
             "snapshot_timestamp": meta.get("snapshot_timestamp"),
-            "x_requests_last": meta.get("x_requests_last"),
-            "x_requests_remaining": meta.get("x_requests_remaining"),
+            "x_requests_last": str(meta.get("x_requests_last") or ""),
+            "x_requests_remaining": str(meta.get("x_requests_remaining") or ""),
             "payload": json.dumps(r, default=str),
         })
     return out

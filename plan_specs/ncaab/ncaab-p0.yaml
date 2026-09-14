@@ -175,10 +175,25 @@ spec:
       content-timestamped writes, dim_ncaab_team SCD-2 (80 teams carry multiple
       versions touching 2023+; Arizona reads Pac-12 through 2024 then Big 12),
       dbt build PASS=28 WARN=1 ERROR=0 over 6 ingested seasons, 69.2
-      possessions/team-game. (4) VERIFY: 26 guards RED-proven 7/7 under four
+      possessions/team-game. (4) VERIFY: 35 guards RED-proven 10/10 under four
       controls. (5) The free ingest schedule ships RUNNING and heartbeat-checked;
-      the paid captures are deliberately NOT wired, because enabling them is the
-      operator's spend decision.
+      the PAID capture job + schedule are wired but ship STOPPED, so enabling is
+      a Dagit toggle rather than a code change during the season.
+
+      🪤 THE CAPTURE'S MERGE CARRIED A HISTORY-DESTROYING BUG THAT ONLY A REAL
+      RUN CAUGHT, and it is the most transferable finding here. Odds accumulate
+      all season while the lake's ordinary write is a season-grained replaceWhere
+      OVERWRITE, so the capture does a read-merge-write (the NCAAF-P0.6b
+      landmine, inherited). But the first cut wrote through the raw_json path,
+      which wraps every field into ONE VARCHAR — so the read-back carried NONE of
+      the merge key's columns, every EXISTING row keyed to (None, None, None),
+      and the merge collapsed a whole season into ONE row. Silently, on the
+      second capture. Measured: two captures merged back to one. The cure is that
+      the merge must read back the SAME SHAPE it writes (typed path), the key
+      RAISES on an unrecognised shape rather than defaulting, and an UNREADABLE
+      partition refuses the merge outright (an unreadable table returning [] is
+      the same catastrophe reached by the error path). Re-verified on a real
+      Delta tree: three captures, 3 rows, 3 distinct stamps, re-merge idempotent.
 
       ⚠️ TWO THINGS ARE NOT DONE AND ARE NAMED RATHER THAN IMPLIED: the box
       runtime gate (CI mocks all IO, so the first write to the ncaab/ S3 prefix

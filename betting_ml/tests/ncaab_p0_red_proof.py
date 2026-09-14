@@ -124,6 +124,26 @@ BREAKS: tuple[Break, ...] = (
             "false reading",
     ),
     Break(
+        label="the odds merge key defaults instead of refusing an unknown row shape",
+        path="quant_sports_intel_models/basketball/ncaab/ingest/odds_capture.py",
+        old='    if stamp is None:\n        raise RuntimeError(',
+        new='    if False:\n        raise RuntimeError(',
+        node=f"{GUARDS}::TestOddsCaptureMergeCannotDestroyHistory::"
+             "test_the_merge_key_refuses_a_row_with_no_capture_timestamp",
+        why="rows of an unrecognised shape would all key alike and a season of captures would "
+            "collapse into one row on the next merge — the defect a real run caught",
+    ),
+    Break(
+        label="the odds capture reverts to the raw_json write path",
+        path="quant_sports_intel_models/basketball/ncaab/ingest/odds_capture.py",
+        old="        lake.write_dataframe(df, source=table, season=season, local_root=local_root)",
+        new="        lake.write_records(rows, source=table, season=season, local_root=local_root)",
+        node=f"{GUARDS}::TestOddsCaptureMergeCannotDestroyHistory::"
+             "test_the_write_path_is_typed_not_raw_json",
+        why="the merge would stop reading back the shape it writes, which is exactly how the "
+            "history-collapsing bug arose",
+    ),
+    Break(
         label="NCAAB grows its own fork of the shared lake layer",
         path="quant_sports_intel_models/basketball/ncaab/ingest/sources.py",
         # ⚠️ This break REPLACES the seam import rather than adding a line beside it. The first
