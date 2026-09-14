@@ -9,7 +9,7 @@ metadata:
   name: ncaab-p0
   vertical: ncaab
   card: https://trello.com/c/ItLo7klu
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Stand up the NCAAB data foundation the way NCAAF's was stood up,
