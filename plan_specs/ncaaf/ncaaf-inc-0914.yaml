@@ -114,7 +114,76 @@ spec:
     nodes: []   # MINI incident — evidence reads (operator) -> named cause -> minimal matched fix -> restore + freshness verify -> class/census feed -> closeout
   closeout:
     verdict: null
-    followUps: >
+    followUps: |
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      ── PHASE 1 (diagnose) — MEASURED FINDINGS, cause NOT yet named ──────────
+      Evidence plan + all measured reads: docs/ncaaf_inc_0914_evidence_reads.md
+
+      F1. ⭐ THIS DAGSTER INSTANCE PERFORMS NO RUN-WORKER HEALTH CHECK AT ALL, so a
+          DEAD worker and a HUNG worker are indistinguishable and BOTH surface ~4 h
+          late with a message that names no cause. `DefaultRunLauncher` does not
+          override `supports_check_run_worker_health` and the base `RunLauncher`
+          returns False, so `monitor_started_run` skips the health branch entirely
+          and `max_runtime_seconds: 14400` is the ONLY backstop. The alert's silence
+          is therefore a PROPERTY OF THE INSTRUMENT, not of this incident — it will
+          read identically for OOM, crash and hang. (The spec anticipated "a
+          'forcibly marked failed' alert that names no cause is itself an instrument
+          gap"; this is the measured mechanism behind it.) E11.30 class, at the
+          run-monitor layer. Any fix here is a monitoring-capability decision, NOT a
+          loosened gate — the kill behaviour itself worked.
+
+      F2. `pipeline/jobs/sports_dbt_job.py::_run_sports_dbt` uses raw
+          `subprocess.run(..., timeout=)` where its own sibling
+          `sports_ncaaf_strength_refit_job` (which IMPORTS `_run_sports_dbt` for its
+          mart-rebuild leg) uses `betting_ml/utils/bounded_subprocess.run_bounded`.
+          On POSIX the CALLER is genuinely bounded (kill() then wait(), not the
+          Windows communicate() path — verified, so this is NOT the cause here), but
+          a surviving GRANDCHILD is not killed, and on a 2-vCPU box that is the
+          E11.26 "grandchild holding half the box" hazard. One logical discipline,
+          two owners — the repo's recurring INC-30/36/38 shape.
+
+      F3. `sports_ncaaf_dbt_schedule` and `sports_nfl_dbt_schedule` carry the
+          IDENTICAL cron (`0 11` America/Los_Angeles = 18:00 UTC) AND target the
+          SAME DuckDB file (one `SPORTS_DUCKDB_PATH`, separate schemas). DuckDB's
+          write lock is exclusive, so on any day both game-day gates open, one build
+          must lose. NOT this incident's cause (a lock conflict fails fast and loud
+          with a traceback; this run died silently at a 4 h cap), but a latent
+          collision worth its own disposition. Neither job carries a
+          `concurrency_group` or a `dagster/max_runtime` tag, unlike the P1.2W refit
+          job, which carries both and sizes its ceiling from its legs.
+
+      F4. ⭐ THE DEPLOY DRAIN IS BLIND TO A RUN THAT IS NOT YET `STARTED`, AND ITS
+          INC-36 "unknown, never 0" HARDENING HAS A SURVIVING HOLE ONE LAYER DEEPER.
+          `services/dagster/aws/deploy.sh:167-175` probes
+          `runsOrError(filter:{statuses:[STARTED]})` only, while the instance uses
+          `QueuedRunCoordinator` — so every scheduled run passes QUEUED -> STARTING
+          -> STARTED and a run created seconds before a merge is invisible to the
+          drain that authorises the recreate. Separately: the probe returns
+          `unknown` on a TRANSPORT failure (the INC-36 fix) but a GRAPHQL-LEVEL
+          error still degrades to a silent 0 — `runsOrError` resolving to
+          `PythonError` yields JSON with no `results` key, `.get('results',[])`
+          gives 0, and the loop logs "no in-flight runs — safe to recreate". Same
+          swallowed-error class INC-36 was written to remove. NO evidence it fired
+          today; reported as a latent defect, not as this cause.
+
+      F5. CENSUS (measured, GitHub Actions API — no box access): ELEVEN
+          `orchestration_cd.yml` deploys on 2026-09-14, six after 16:56, and EVERY
+          one logged "no in-flight runs — safe to recreate" and then RECREATED
+          `dagster-codeloc` (the run worker), `dagster-daemon` and
+          `dagster-webserver`. The 18:00:15 deploy (PR #1121, merged 18:00:11) tore
+          down and rebuilt the run worker at 18:00:23-18:00:53 UTC — 23 s after
+          `sports_ncaaf_dbt_schedule`'s own cron minute (18:00:00 UTC). This is a
+          measured coincidence of timing plus a measured structural window (F4), NOT
+          a verdict; READ A in the evidence doc decides it. If it IS the cause, the
+          finding is systemic to deploys rather than specific to NCAAF, and belongs
+          with the standing census/scheduling thread (leaf-run detector ZPmBj8PF /
+          the :00-collision card lEgL0V5D / BOX_OPERATIONS) — EXTEND, never fork.
+
+      F6. `Dockerfile:43` installs `dagster>=1.11.5` UNPINNED, so the running version
+          is whatever was latest at the last `--build`. Every source-level inference
+          in F1 and in the evidence doc is read from 1.13.5 and is version-dependent
+          (READ D confirms). Same unpinned-dependency class CLAUDE.md already records
+          for the ML libs.
