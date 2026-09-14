@@ -64,6 +64,22 @@ def run_ingest(*, seasons: list[int] | None = None, source_names: list[str] | No
     ctx = ctx or S.Ctx(odds_api_key=os.environ.get("ODDS_API_KEY"))
     seasons = seasons or [S.season_for(today)]
     names = source_names or S.DEFAULT_SOURCES
+
+    # ⛔ ONE WRITER PER TABLE. `run_capture` owns the live odds tables through a read-merge-write
+    # because they ACCUMULATE all season; every write on THIS path is a season-grained
+    # `replaceWhere` OVERWRITE. So a run_ingest write to one of them does not merge badly — it
+    # replaces the whole season with the single board it just fetched, silently and atomically.
+    # REFUSING rather than routing: a quiet redirect would make `--sources odds_game_lines` do
+    # something other than what it says, and the caller would never learn which writer ran.
+    clobber = [n for n in names if n in S.CAPTURE_OWNED_SOURCES]
+    if clobber:
+        raise S.IngestRefusal(
+            f"{clobber} is written by run_capture (read-merge-write), not by run_ingest. "
+            "Every run_ingest write is a season replaceWhere OVERWRITE, so landing one here "
+            "would replace the whole season's accumulated snapshots with a single board. "
+            "Use `python -m ...ingest.odds_capture` (or the sports_ncaab_odds_capture_job) "
+            "for live odds; `--sources odds_historical` is the paid backfill and writes its "
+            "own separate table.")
     rec = Receipt(started_at=S.now_iso(), requested_sources=list(names), seasons=list(seasons))
 
     for name in names:

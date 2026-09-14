@@ -292,6 +292,48 @@ spec:
       the only calendar-bound item and the one this spec is held open on — see
       the verdict.
 
+      9) 🚨 A DEFECT FOUND WHILE WRITING THE RUNTIME-GATE HANDOFF, and it would have
+      fired on the first deploy. The free daily ingest job's docstring says "The
+      Odds API captures are deliberately NOT in this job — wiring them here would
+      turn that decision into a default nobody chose." That claim was FALSE in the
+      shipped code. `sports_ncaab_ingest_job` ships RUNNING and calls
+      `run_ingest(seasons=[season])` with no source names, which resolves to
+      DEFAULT_SOURCES — defined as "every source that is not on_demand". `on_demand`
+      marks the paid /historical BACKFILL; the two LIVE odds feeds are paid but not
+      on_demand, so they sat in the default set.
+
+      TWO CONSEQUENCES, and the second is the serious one. (a) SPEND: the RUNNING
+      schedule would have billed live futures + game lines daily (~4 credits/day)
+      from the moment of deploy — small in absolute terms, but it bypasses the
+      operator spend gate this whole story is built around, which is the harm.
+      (b) DATA LOSS: those writes go through run_ingest's ordinary path, a
+      season-grained `replaceWhere` OVERWRITE, onto the two tables the capture
+      ACCUMULATES into via read-merge-write. So once the capture was enabled, the
+      14:00 UTC ingest would have REPLACED that season's accumulated snapshots with
+      the single board it happened to fetch — every day, silently. That is the exact
+      catastrophe the capture's read-merge-write was built to prevent, arriving from
+      the other direction, from a job documented as not touching odds at all.
+
+      ⭐ THE GUARD NAMED FOR THIS COULD NOT FAIL. `TestPaidFeedsAreOptIn` asserted
+      "no on_demand source is in DEFAULT_SOURCES" — the DEFINITION restated back to
+      itself, true by construction (the NF-C0e "a test that reads a value back under
+      the key the code wrote" class). A class titled "the paid feeds cannot run by
+      accident" was therefore green throughout. The lesson generalises past this
+      repo: A GUARD MUST NOT KEY ON THE SAME PREDICATE THE DEFINITION USES. The
+      replacement keys on an explicit NAME list (no flag change can satisfy it), on
+      the REFUSAL's behaviour (exercised, not inspected), and on the two writers'
+      table sets being disjoint by name.
+
+      🔧 FIXED AT THE REGISTRY, NOT THE CALL SITE: `SourceSpec.paid` (defaulting to
+      TRUE, so an unconsidered new source fails toward NOT-landing rather than toward
+      spending), `SourceSpec.capture_owned`, DEFAULT_SOURCES = free only, and
+      `run_ingest` REFUSES a capture-owned source even when named explicitly —
+      one writer per table. A guard pins that the op does NOT hand-narrow its own
+      source list, because a fix at one call site leaves the registry wrong for every
+      other caller. RED-proven both ways: restoring the old definition fails 3
+      clauses; deleting the refusal fails 2. NCAAF is NOT affected — its scheduled
+      job uses an explicit ROLL_FORWARD_SOURCES subset and never runs its default set.
+
       8) 📈 P1 READINESS STATEMENT — the canonical copy. Mirrored into
       ncaab_data_inventory.md §8; keep them in step.
 

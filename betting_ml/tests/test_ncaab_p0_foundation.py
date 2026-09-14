@@ -289,13 +289,68 @@ class TestOddsCaptureMergeCannotDestroyHistory:
 
 
 # ── 7. the paid feeds cannot run by accident ────────────────────────────────────────────
+#
+# 🔴 THE FIRST VERSION OF THIS CLASS COULD NOT FAIL, and it let a real defect ship. It asserted
+# `all(not SOURCES[n].on_demand for n in DEFAULT_SOURCES)` while DEFAULT_SOURCES was DEFINED as
+# "every source that is not on_demand" — the definition restated back to itself, true by
+# construction (the NF-C0e "read the value back under the key the code wrote" class). Meanwhile
+# the two LIVE odds feeds are paid but NOT on_demand, so they sat in the default set and
+# `sports_ncaab_ingest_job` — RUNNING, daily, calling run_ingest with no source names — was about
+# to bill credits on a schedule nobody enabled AND season-OVERWRITE the capture's accumulating
+# tables.
+#
+# So these clauses deliberately do NOT key on the flag the definition uses:
+#   • an explicit NAME list, which no flag change can satisfy;
+#   • the REFUSAL's behaviour, exercised rather than inspected;
+#   • the two writers' table sets being disjoint, by name.
 class TestPaidFeedsAreOptIn:
+    #: Written out, not derived. A derived expectation would move with the bug.
+    FREE_SOURCE_NAMES = {"schedules", "team_box", "team_crosswalk"}
+    PAID_SOURCE_NAMES = {"odds_futures", "odds_game_lines", "odds_historical"}
+
+    def test_the_registry_is_fully_partitioned_into_free_and_paid(self):
+        # Anti-vacuity FIRST: if a rename empties either side, every clause below says nothing.
+        assert self.FREE_SOURCE_NAMES | self.PAID_SOURCE_NAMES == set(S.SOURCES), (
+            "the free/paid name lists no longer partition the registry — a source was added or "
+            f"renamed. registry={sorted(S.SOURCES)}")
+
+    def test_a_default_run_executes_exactly_the_free_sources(self):
+        # The load-bearing clause. Keyed on NAMES, so flipping `paid`/`on_demand` cannot satisfy it.
+        assert set(S.DEFAULT_SOURCES) == self.FREE_SOURCE_NAMES, (
+            "a plain run_ingest() would execute something other than the free hoopR feeds. "
+            "sports_ncaab_ingest_job ships RUNNING and calls run_ingest with no source names, so "
+            f"anything here bills or writes on a schedule nobody enabled. default={S.DEFAULT_SOURCES}")
+
+    def test_no_paid_source_can_reach_a_default_run(self):
+        assert not (set(S.DEFAULT_SOURCES) & self.PAID_SOURCE_NAMES)
+
     def test_the_historical_feed_is_on_demand(self):
         assert S.SOURCES["odds_historical"].on_demand is True
 
-    def test_a_default_run_names_no_on_demand_source(self):
-        assert all(not S.SOURCES[n].on_demand for n in S.DEFAULT_SOURCES)
+    @pytest.mark.parametrize("name", ["odds_futures", "odds_game_lines"])
+    def test_run_ingest_REFUSES_a_capture_owned_table_even_when_named(self, name):
+        """Behavioural, not definitional: the default set is only half the protection.
 
-    def test_the_default_set_is_not_empty(self):
-        # Anti-vacuity again: the clause above is trivially true of an empty default set.
-        assert len(S.DEFAULT_SOURCES) >= 4
+        `--sources odds_game_lines` would otherwise take the run_ingest write path, which is a
+        season `replaceWhere` OVERWRITE onto a table the capture ACCUMULATES into — replacing a
+        whole season of snapshots with one board, silently."""
+        from quant_sports_intel_models.basketball.ncaab.ingest.handler import run_ingest
+
+        with pytest.raises(S.IngestRefusal) as exc:
+            run_ingest(seasons=[2027], source_names=[name])
+        assert "run_capture" in str(exc.value), "the refusal must name the correct writer"
+
+    def test_the_two_writers_own_disjoint_tables(self):
+        """One writer per table. An overlap does not conflict — it silently overwrites."""
+        assert not (set(S.DEFAULT_SOURCES) & set(S.CAPTURE_OWNED_SOURCES))
+        assert S.CAPTURE_OWNED_SOURCES == {"odds_futures", "odds_game_lines"}
+
+    def test_the_ingest_op_does_not_narrow_the_set_itself(self):
+        """The protection must live in the REGISTRY, not in one caller.
+
+        If the op passed its own hand-written source list, the registry could stay wrong and every
+        other caller (the CLI, a future job, a backfill) would inherit the defect."""
+        src = (REPO / "pipeline/jobs/sports_ncaab_ingest_job.py").read_text()
+        assert "run_ingest(seasons=[season])" in src, (
+            "the ingest op now names its own sources — move the constraint into DEFAULT_SOURCES "
+            "so every caller inherits it, rather than fixing this one call site")

@@ -116,9 +116,19 @@ class SourceSpec:
     typed: bool = False            # True -> a DataFrame path (write_dataframe)
     cadence: str = "daily"         # daily | intraday | seasonal
     on_demand: bool = False        # excluded from a default run (the paid /historical feeds)
+    paid: bool = True              # ⚠️ DEFAULTS TO PAID — see below. Spends Odds-API credits.
+    capture_owned: bool = False    # written by run_capture's read-merge-write, NOT by run_ingest
     expect_rows: bool = True       # an empty landing in-season is an ESCALATION
     freshness_hours: int | None = None
     notes: str = ""
+
+    # ⭐ `paid` DEFAULTS TO TRUE, which reads backwards until you see what the safe default buys.
+    # A new source added without thinking about cost is then excluded from the routine run and
+    # someone has to ASK for it — the failure mode is a feed that does not land (loud, cheap,
+    # obvious) rather than a schedule that quietly bills. The reverse default fails toward
+    # spending money nobody approved, which is exactly the defect this field was added to close:
+    # `DEFAULT_SOURCES` was "everything not on_demand", the two LIVE odds feeds are not on_demand,
+    # so the free daily ingest was about to make paid calls on a RUNNING schedule.
 
 
 def now_iso() -> str:
@@ -321,27 +331,32 @@ def budget_sport_futures() -> str:
 # ── the registry ────────────────────────────────────────────────────────────────────────
 SOURCES: dict[str, SourceSpec] = {
     "schedules": SourceSpec(
+        paid=False,  # hoopR, CC BY 4.0 — free
         name="schedules", fetch=hoopr_schedule, tier="hoopr", grain="game", typed=True,
         cadence="daily", freshness_hours=36,
         notes="hoopR mbb_schedule_<season>.parquet — 86 cols incl. neutral_site, venue, "
               "conference ids, scores. The spine."),
     "team_box": SourceSpec(
+        paid=False,  # hoopR, CC BY 4.0 — free
         name="team_box", fetch=hoopr_team_box, tier="hoopr", grain="team_game", typed=True,
         cadence="daily", freshness_hours=36,
         notes="hoopR team_box_<season>.parquet — 59 cols; carries all four possession "
               "operands (FGA/ORB/TO/FTA), so tempo is computable without a paid source."),
     "team_crosswalk": SourceSpec(
+        paid=False,  # hoopR, CC BY 4.0 — free
         name="team_crosswalk", fetch=hoopr_team_crosswalk, tier="hoopr", grain="team",
         typed=True, cadence="seasonal", freshness_hours=24 * 14, expect_rows=True,
         notes="hoopR mbb_team_crosswalk_<season>.parquet — 362 D-I teams with conference "
               "NAMES + KenPom/Torvik/Fox/Yahoo join keys. CURRENT SEASON ONLY."),
     "odds_futures": SourceSpec(
         name="odds_futures", fetch=odds_futures, tier="odds", grain="board",
+        capture_owned=True,   # run_capture owns this table (read-merge-write)
         cadence="daily", freshness_hours=36, expect_rows=True,
         notes="1 credit/call (measured). Live NOW — the title board is the only NCAAB "
               "futures key the vendor offers."),
     "odds_game_lines": SourceSpec(
         name="odds_game_lines", fetch=odds_game_lines, tier="odds", grain="board",
+        capture_owned=True,   # run_capture owns this table (read-merge-write)
         cadence="intraday", freshness_hours=6, expect_rows=False,
         notes="3 credits/call (derived from the measured 10x historical multiplier). Whole "
               "board per call. expect_rows=False because an EMPTY board out of season is the "
@@ -355,8 +370,31 @@ SOURCES: dict[str, SourceSpec] = {
               "5-minute granularity from 2022-23, 10-minute before."),
 }
 
-#: Sources a plain (unnamed) run executes. The paid feeds must be asked for by name.
-DEFAULT_SOURCES = [n for n, s in SOURCES.items() if not s.on_demand]
+#: The tables `run_capture` owns. `run_ingest` REFUSES to write these — see `handler.run_ingest`.
+#:
+#: ⛔ ONE WRITER PER TABLE, and this one is load-bearing rather than tidy. The odds tables
+#: ACCUMULATE all season through a read-merge-write, while every `run_ingest` write is a
+#: season-grained `replaceWhere` OVERWRITE. A second writer on the same table does not conflict —
+#: it silently REPLACES the whole season with whatever single board it just fetched.
+CAPTURE_OWNED_SOURCES = frozenset(n for n, s in SOURCES.items() if s.capture_owned)
+
+#: Sources a plain (unnamed) run executes: the FREE feeds only.
+#:
+#: 🔴 THIS WAS "everything not on_demand" AND THAT WAS A DEFECT, recorded because the shape is
+#: generic. `on_demand` marks the paid /historical BACKFILL; the two LIVE odds feeds are paid but
+#: not on_demand, so they sat in the default set — and `sports_ncaab_ingest_job` (which ships
+#: RUNNING and calls `run_ingest` with no source names) would have made paid calls daily on a
+#: schedule nobody enabled, while its own docstring said the captures were "deliberately NOT in
+#: this job". Worse than the spend: those writes are season OVERWRITES onto the capture's
+#: accumulating tables, so once the capture was enabled the 14:00 UTC ingest would have destroyed
+#: that season's snapshots every day.
+#:
+#: The guard that should have caught it could not: it asserted "no on_demand source is in
+#: DEFAULT_SOURCES", which is the DEFINITION restated — true by construction, incapable of
+#: failing (the NF-C0e "a test that reads a value back under the key the code wrote" class).
+#: The replacement keys on `paid`, which is independent of the definition, and on an explicit
+#: expected NAME set.
+DEFAULT_SOURCES = [n for n, s in SOURCES.items() if not s.on_demand and not s.paid]
 
 
 def classify_absence(spec: SourceSpec, season: int, *, when: date | None = None) -> str | None:
