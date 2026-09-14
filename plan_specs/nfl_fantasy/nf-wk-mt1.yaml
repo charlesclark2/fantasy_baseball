@@ -9,7 +9,7 @@ metadata:
   name: nf-wk-mt1
   vertical: nfl_fantasy
   card: https://trello.com/c/HvVAWD9f   # consumer-chain thread; MT1 card linked at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The paid question the weekly stack exists to answer: "who do I
@@ -142,8 +142,204 @@ spec:
       - id: 5-closeout
         desc: "Verdict + findings into closeout.followUps; the contract statement for gate 3 proper / NF-OPT1."
   closeout:
-    verdict: null
+    verdict: >
+      PHASE A COMPLETE AND GREEN; THE RUNTIME GATE IS OPEN AND CALENDAR-BOUND; PHASE B
+      DELIBERATELY NOT STARTED. The paid endpoint
+      `GET /fantasy/nfl/weekly/league-board` scores a saved league's roster for one week
+      through `services/league_scoring` — the ONE scorer, reused rather than ported,
+      because `WEEKLY_COMPONENT_FIELD` is derived from `STAT_FIELD` and the champion's
+      component head is therefore already served under the field names `score_row`
+      reads. No scorer file outside `app/backend/services` is touched; the NF-EPIC 1
+      three-implementation parity merge gate passes unchanged (290 neighbouring clauses
+      green, including it).
+      PARITY, MEASURED NOT ASSERTED: our full-PPR scoring of the weekly component line
+      agrees with NF-C6-PH2's INDEPENDENT full-PPR implementation at `max_abs_diff =
+      0.0` over the fixture. The oracle is USED rather than copied, so the clause cannot
+      be a restatement of the code it checks.
+      ⛔ THE RUNTIME GATE CANNOT BE RUN THIS SESSION and no page code was written.
+      Measured 2026-09-14, cache-busted: `/fantasy/nfl/weekly/manifest` and
+      `/…/projections` both answer 404 `{"detail":"Weekly projection not found"}` from
+      the LAMBDA, and `/…/projections-full` answers 401 at the gateway — i.e. the first
+      weekly publish (card iMHg7nm6) has not happened, so there is no real payload to
+      curl against. Node 2 gates node 3 ("no page code before this"), so Phase B is a
+      follow-on once the curls come back, NOT an omission.
+      NF-WK-FE1 #1103 was VERIFIED merged into `dev` (commit e1de338c) rather than
+      assumed, so the one-frontend-story-at-a-time constraint is already satisfied for
+      whoever picks Phase B up.
+      Guards: 41 clauses, fast-gate-clean (pure/offline, heavy imports lazy). RED proof
+      24/24 attributable, with baseline-pass, NOT-SELECTED, unique-anchor and
+      resolve-every-node legs. Owning shard `core`: 6,621 passed / 0 failed.
+      ⛔ NO CHANGELOG ENTRY — nothing renders yet; it lands with Phase B, per the spec.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) ⭐⭐ CRITERION 2'S ROS CLAUSE IS NOT SATISFIABLE AGAINST THIS SUBSTRATE, and the
+      honest answer is the same shape as NF-WK-FE1's finding (1). The criterion says
+      "weekly ROS renders league-scored the same way". There IS no ROS component line —
+      the payload carries only the PPR triple `rosPpr/rosP10/rosP90` — so league-scoring
+      it exactly is impossible. The only way to produce a league-flavoured ROS is to
+      SCALE the PPR ROS by the ratio the weekly point moved, which is precisely the
+      pseudo-value boundary (b) forbids for the band, and the same argument applies
+      verbatim one step further out. ⇒ Phase A serves the ROS as the served PPR ROS,
+      carried unchanged and labelled by `SCORING_BASIS_NOTE` alongside the band. IF THE
+      PM WANTS A LEAGUE-SCORED ROS, the only honest route is a ROS COMPONENT LINE from
+      the box (a CONTRACT addition on `NflWeeklyPlayer`, written by `weekly_serving`
+      beside the ROS figures it already sums) — a BACKEND SPEC of its own, never a
+      serving-layer change. ⚠️ Note the interaction with `ros_basis = "frozen_form"`: the
+      frozen-form basis makes the per-week stat MIX approximately constant across the
+      horizon, which is a real argument that a scaled ROS would be *close* — but "close"
+      is not "scored", and shipping it under a league's own name is the thing boundary
+      (b) exists to refuse. Recording the argument so a successor does not have to
+      rediscover it, NOT as a licence to take it.
+
+      (2) ⭐ A LEAGUE SCORES FEWER TERMS WEEKLY THAN IT DOES SEASONALLY, AND THIS IS A
+      PRODUCT FACT, NOT AN IMPLEMENTATION DETAIL. The champion's component head emits
+      ELEVEN stats. The shipped `full_ppr` preset also weights `fumbles_lost` (-2) and
+      `two_pt` (+2), plus every kicker and defence term. Measured on the fixture under
+      that preset: 8 terms APPLIED, 20 CAPTURED. So the same league's weekly number and
+      its season number are not the same term set, and a user comparing them will see a
+      difference we should be able to explain. `resolve_scoring`'s report already answers
+      this correctly when handed the fields actually present, and it is served as
+      `coverage` — but NOTHING RENDERS IT YET. ⇒ Phase B must surface the captured terms
+      (it is the difference between "your fumble scoring contributed nothing" and "your
+      fumble scoring is not in this number"), and the PM may want to know that a
+      fumble-heavy or 2-pt-heavy league's weekly total is structurally a little high.
+
+      (3) ⭐ A PPR BAND BESIDE A LEAGUE-SCORED POINT IS A FALSE CLAIM UNLESS THE PPR POINT
+      IS RENDERED WITH IT. The band brackets `pprPts`, not `leaguePts`; a reader shown
+      only the league point and a range will read the range as that point's. So `pprPts`
+      is not an optional extra on this contract — it is what makes the carried band
+      honest, and it is guard-pinned. ⇒ A BINDING CONSTRAINT ON PHASE B: any surface that
+      renders the band MUST render `pprPts` beside it. (Same family as NF-WK-FE1's
+      finding (10b): a state that means something UNTRUE is strictly worse than one that
+      is merely ambiguous.)
+
+      (4) 🔒 AN ENTITLEMENT ASYMMETRY THE PM MAY WANT TO REVISIT — implemented as the spec
+      ruled ("a paid endpoint"), flagged because it is a PRICING question rather than an
+      engineering one. G100-C1's free tier gets ONE personalized league and CAN read the
+      SEASON `/nfl/league-board` (on `personal_router`). It CANNOT read this weekly twin,
+      which sits on `router` behind `require_fantasy_access`. The reasoning is sound and
+      is documented at the route: the free league is a quota grant against
+      `PERSONALIZATION`, while the weekly component line is `DECISION_SUPPORT` — the
+      capability whose own definition names "the weekly surfaces as they land" and behind
+      which NF-C6-PH2 placed `/nfl/weekly/projections-full`. Placing this route on the
+      other router object would have widened a sold capability, which is a pricing change
+      wearing a refactor's clothes. ⚠️ BUT THE USER-VISIBLE SHAPE IS ODD: a free user who
+      has personalized a league and sees a season board for it will find the weekly tab
+      refused, and that reads as a bug rather than a tier boundary. Two honest options,
+      both PM calls: (a) leave it and make Phase B's refusal state say plainly that the
+      weekly lens is a membership feature; (b) extend the free quota to the weekly lens,
+      which is a deliberate DECISION_SUPPORT widening with a revenue consequence. ⛔ Not
+      a decision a worker session should take by choosing a router.
+
+      (5) 🗓️ THE RUNTIME GATE, AND WHY IT IS THE WHOLE REMAINING CRITICAL PATH. Measured
+      2026-09-14 04:5xZ, cache-busted, against `https://api.credencesports.com`: both free
+      weekly routes 404 FROM THE LAMBDA (so the NF3.2 authorizer flip is already done and
+      the routes are anonymously reachable with nothing behind them); the paid route 401s
+      AT the gateway. Nothing weekly has published. ⇒ the operator steps below are
+      sequenced strictly after the first weekly publish verifies (card iMHg7nm6), and
+      Phase B starts only after those curls come back. MERGED NEVER MEANS SERVED: this
+      endpoint reaches production ONLY via `infrastructure/lambda/deploy.sh`, which no CI
+      runs.
+
+      (6) 🧪 THE RED PROOF EARNED ITS KEEP THREE TIMES, AND ALL THREE ARE CARRYABLE
+      PATTERNS — every one was invisible to a green suite and to review.
+      (a) THREE CACHE CLAUSES LOOKED THE ROUTE UP BY A PATH CONSTANT THIS TEST FILE OWNS,
+      so renaming the real route to a CHILD of the free weekly reads — the exact breach
+      they exist to refuse — left them reading the old string and PASSING. A guard that
+      asserts on a constant it also declares is testing itself (the NF-C0e "reads the
+      value back under the key the code wrote" shape, on the test side). Fixed by
+      resolving the route via its ENDPOINT FUNCTION and asking the cache rules about the
+      path it ACTUALLY serves.
+      (b) AN OVER-EAGER LEAK SCAN FIRED ON ITS OWN CORRECT OUTPUT: a whole-body scan for
+      component field names went red on `"rec"`, which was the COVERAGE REPORT naming the
+      league's reception scoring RULE — `STAT_FIELD["rec"] == "rec"`, so the rule NAME and
+      the player's stat VALUE are the same string (the NF-W7 `'temp' ⊂ 'attempt'` family).
+      Rescoped to the rows, plus a contract-level clause, because the RED proof then
+      showed the real enforcement is Pydantic dropping undeclared fields (E9.41 working
+      in our favour) — so the only way a component can reach the wire is by being
+      DECLARED, and that is now what the clause catches.
+      (c) TWO "VACUOUS GUARD" REPORTS WERE INSUFFICIENT MUTATIONS, AND THE DIFFERENCE
+      MATTERS BECAUSE THE FALSE READING INVITES WEAKENING A CORRECT GUARD. Swapping the
+      route's FUNCTION-LEVEL dependency does not remove the ROUTER-LEVEL
+      `Depends(require_fantasy_access)` — it only ADDS a second gate — so the entitlement
+      clause stayed green on a break that never removed anything. The break that really
+      tests it moves the route to another router OBJECT, which means mutating the
+      decorator and the signature as ONE anchor. ⇒ carried in the harness as a named
+      constant with the reasoning attached. (This is also why the route was RE-HOMED
+      beside its season twin `/nfl/league-board`: `personal_router` must be defined above
+      it for that mutation to be expressible — and it is better organisation anyway.)
+
+      (7) 🗓️ FIXTURE RETIREMENT TRIPWIRE, INHERITED (NF-WK-FE1 finding 6 / E9.64b). Every
+      clause here runs against the three GENERATED weekly fixtures, which can only confirm
+      the shape we already assumed. On the first real publish they are retired and
+      re-captured RAW, and this suite re-runs against the captured ones. The clauses were
+      written to survive that: none hardcodes a player, a point or a row count that a real
+      payload would change, and the one count that IS pinned
+      (`test_the_parity_clause_is_not_vacuous`) is pinned as a FLOOR, so more real rows
+      strengthen it rather than breaking it.
+
+      (8) 📐 THE CONTRACT STATEMENT GATE 3 PROPER AND NF-OPT1 EXTEND. This endpoint is the
+      seam both successors were promised, and what each needs is now a specific,
+      bounded change rather than a rewrite:
+      · GATE 3 PROPER (distributional re-scoring) replaces exactly TWO carried values —
+      `bandP10`/`bandP90` — with a genuinely league-scored interval, and flips
+      `band_scoring_system_id` off `"ppr"`. Everything else on the wire is already
+      correct under arbitrary scoring. Its input is the per-stat DISTRIBUTIONS (NF-W6c/
+      W6d), which remain staged challengers with no consumer; the 39-level vector `q` is
+      already served on `/nfl/weekly/projections-full`. ⚠️ It must retire
+      `SCORING_BASIS_NOTE`'s range sentence in the SAME change, or the page will disclaim
+      a limitation it no longer has.
+      · NF-OPT1 (the win-prob optimizer) consumes `rows[].leaguePts` — already exact, and
+      already the caller's own scoring — plus `starter` for the current lineup. It needs
+      NO new scoring path. What it DOES need and this story does not provide is a
+      correlated per-player distribution (it is choosing between lineups, not reading one
+      player), i.e. it depends on gate 3 proper landing first, not on this endpoint
+      changing.
+      · Both inherit `coverage` unchanged: a term the weekly line cannot express is
+      CAPTURED in an optimizer's objective exactly as it is in a rendered number, and
+      neither successor may quietly promote one to APPLIED.
+
+      (9) 🧨 NF-INC-0914 — REBASED ONTO THE FIX, AND ITS LATENT EXPOSURE AUDITED ON THIS
+      STORY'S OWN SUBSTRATE. Branch rebased onto `dev` (fix `5380a6b4` present, 0 behind);
+      no conflicts, because this story's files do not overlap the incident's. ⛔ NOTHING
+      HERE IS ATTRIBUTED TO THE INCIDENT: the outage was `export_draft_board_json.py` →
+      `fantasy/nfl/<season>/`, while the weekly product publishes through a different job
+      and a different prefix (`run_weekly_serving.py` → `fantasy/nfl/weekly/*`). Finding
+      (5)'s live measurement read ONLY the weekly routes, so the pre-restore served board
+      cannot have coloured it and that measurement stands unchanged.
+      ⭐ THE AUDIT, MEASURED RATHER THAN INHERITED. The incident's root cause was that
+      nothing EXECUTED `export_draft_board_json.main()`, so a NameError at a call line
+      inside it rode green CI to prod. Re-measured on the weekly entrypoint: two test
+      files reference `run_weekly_serving` and ZERO call `main()` — the operator's audit
+      reproduced exactly. `main()` is 62 lines and its body resolves only `build`,
+      `stage`, `publish`, `WS.WeeklyRostersNotPublished` and `built[...]`; it references
+      NOTHING this story changed, so the "changed a call line inside main()" trigger does
+      NOT fire here and no execution guard was added. ⛔ Deliberately not written: guarding
+      an entrypoint this story does not functionally change would be scope creep into the
+      weekly-serving story, and the blind spot on `main()`'s BODY is unchanged by anything
+      here.
+      ⚠️ WHAT THIS STORY DID CHANGE IS ITS IMPORT CLOSURE, AND THAT WAS MEASURED TWO-SIDED
+      RATHER THAN REASONED ABOUT. `run_weekly_serving.py:38` imports
+      `app.backend.models.nfl_weekly`, and this story added THREE models to
+      `CONTRACT_MODELS` — the tuple `assert_no_edge_claim_in_schema()` and
+      `assert_no_matchup_claim()` walk AT IMPORT. So the weekly publish now imports a
+      contract with more surface that can refuse at import. Planting a forbidden-token
+      field name on one of the new models: (a) the weekly publish entrypoint FAILS to
+      import (`ValueError` from `assert_no_edge_claim_in_schema`), and (b) CI sees it —
+      the guard file errors at COLLECTION, before a single test runs. ⇒ the widened
+      surface FAILS CLOSED and is already CI-visible, so it needs no new guard; recorded
+      because "my change is in the publish entrypoint's import closure" is exactly the
+      kind of consequence that is invisible until someone looks.
+      ⇒ CARRIED FOR THE NEXT STORY THAT TOUCHES IT, with the trigger named precisely: the
+      unguarded line is `built = build(args.season, args.week)` inside
+      `run_weekly_serving.main()`. Threading a season/week, adding an argument or wiring a
+      new stamp THERE is the change CI cannot see, and the pattern to copy is
+      `betting_ml/tests/test_nf_inc_0914_publish_entrypoint.py` (execute `main()` with real
+      argv, stub IO at the boundary, assert the branch was genuinely taken). ⭐ And the
+      sharper half of the incident's lesson applies to that line specifically: the commit
+      before the break had ALREADY extracted the body into a testable function, which
+      shrank the blind spot to the argument-binding line and did not close it — EXTRACTION
+      IS NOT A SUBSTITUTE FOR EXECUTION.

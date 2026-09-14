@@ -54,6 +54,7 @@ from app.backend.services import (
 # local scope that touches one, which is exactly the kind of thing a reviewer skims past.
 from app.backend.models import nfl_weekly
 from app.backend.services import depth_targets as depth_targets_service
+from app.backend.services import weekly_league_board
 
 logger = logging.getLogger(__name__)
 
@@ -826,6 +827,152 @@ def _joined_league_rosters(record: dict, board_players: list[dict]) -> list[dict
             }
         )
     return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ⭐ NF-WK-MT1 — THE LEAGUE-SCORED WEEKLY LINE (the paid my-teams lens)
+# ══════════════════════════════════════════════════════════════════════════════
+# "What does MY roster do this week, in MY league's scoring" — the highest-volume
+# recurring question in fantasy football, and the one the weekly stack was built to
+# answer. Same shape as `/nfl/league-board` one section down: the server reads the
+# paid substrate, runs the ONE scorer over it, and returns only the OUTPUT.
+#
+# 🔒 WHY THIS IS ON `router` (`require_fantasy_access`) AND NOT ON `personal_router`
+# ──────────────────────────────────────────────────────────────────────────────
+# `/nfl/league-board` — the SEASON twin — sits on `personal_router`, so G100-C1's one
+# free personalized league reaches it. This route deliberately does not, and the
+# difference is a pricing fact rather than an inconsistency:
+#
+#   • the free tier's one league is a QUOTA GRANT against `Capability.PERSONALIZATION`;
+#   • the weekly component line is `Capability.DECISION_SUPPORT`, whose own definition
+#     already names "the draft optimizer, and the weekly surfaces as they land", and
+#     which NF-C6-PH2 placed behind `require_fantasy_access` on
+#     `/nfl/weekly/projections-full`.
+#
+# Serving a league-scored weekly line to a caller without `DECISION_SUPPORT` would
+# widen a capability the pricing page sells, by placing a route on a different router
+# object — a pricing change wearing a refactor's clothes. If the PM wants the free
+# league to include its weekly lens, that is a deliberate entitlement decision with a
+# revenue consequence, not a router move.
+#
+# ⭐ THE QUOTA IS STILL ENFORCED, for the reason `/nfl/league-board` documents: ownership
+# alone is not sufficient, or a lapsed subscriber could keep pulling personalized boards
+# one league id at a time. 404 (not 403) for a league that is not the caller's — an id
+# they do not own should be indistinguishable from one that does not exist.
+#
+# 🗄️ THE CACHE SIDE, DECIDED BEFORE THE HANDLER WAS WRITTEN (the G100 rule)
+# ──────────────────────────────────────────────────────────────────────────────
+# PER-CALLER by construction (one user's league, one user's roster, one user's scoring),
+# so it is the exact opposite of the free board's byte-identity invariant. ⛔ It must
+# never be added to the CDN allowlist (`frontend/app/api/public/[...path]/route.ts`) or
+# to `cost_guardrails._PUBLIC_CACHE_RULES`; a shared cache entry here would hand one
+# subscriber's roster to another caller. It is safe today STRUCTURALLY rather than by
+# memory: every request carries `Authorization`, and `cache_control_for` answers
+# `private, no-store` unconditionally when it sees one.
+#
+# ⚠️ AND THE PATH IS A SIBLING OF `…/projections`, NEVER A CHILD OF IT. Both allowlists
+# match on a prefix followed by "/", so a route named `…/weekly/projections/league`
+# would have INHERITED the free route's public cache rule and been served shared-
+# cacheable — the precise breach NF-EPIC 1 recorded (a gated route placed under a public
+# prefix silently inherits that prefix's CDN rule). `league-board` collides with nothing,
+# and `test_nf_wk_mt1_weekly_league_board.py` pins that MECHANICALLY rather than by
+# reasoning, so a future public rule that would swallow it goes red here.
+@router.get("/nfl/weekly/league-board")
+def nfl_weekly_league_board(
+    request: Request,
+    league_id: str = Query(..., description="a saved league id belonging to the caller"),
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    week: int | None = Query(default=None, ge=1, le=22),
+    user_id: str = Depends(require_fantasy_access),
+):
+    """ONE saved league's roster, scored for ONE week under that league's own settings.
+
+    The points column is EXACT: league scoring is linear in the component line, so the league's
+    weights applied to the projected stats is the answer rather than an estimate of it. The range
+    and the rest-of-season totals are the model's own PPR figures carried through UNCHANGED and
+    labelled — re-expressing an interval under arbitrary scoring needs per-stat DISTRIBUTIONS, which
+    this projection does not publish (NF-W6c/W6d are staged challengers with no consumer). See the
+    NF-WK-MT1 header in `models/nfl_weekly.py` for why a rescaled band is refused outright rather
+    than shipped with a caveat.
+
+    ⚠️ `coverage` IS NOT DECORATION. The champion's component head emits eleven stats, so an
+    ordinary full-PPR league's `fumbles_lost` and `two_pt` weights — and every kicker and defence
+    term — have no projection behind them THIS week and resolve CAPTURED. That is the difference
+    between "your fumble scoring contributed nothing" and "your fumble scoring is not in this
+    number", and only the second is true.
+
+    ⛔ UNLIKE `/nfl/my-teams`, A FAILED READ IS A REAL FAILURE HERE, and for the reason that
+    endpoint's own docstring gives: there the league list is the response and the scored roster is
+    an enhancement, so it degrades to `{}`; here the scored roster IS the response, so an
+    unreadable or unscoreable payload must surface as something the page can report rather than as
+    a silently empty roster that reads like a bye week.
+    """
+    records = [
+        r for r in dynamo.list_fantasy_leagues(user_id) if str(r.get("sport") or "nfl") == "nfl"
+    ]
+    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
+    served = entitlement.leagues_within_quota(records, quota)
+    record = next((r for r in served if str(r.get("league_id") or "") == league_id), None)
+    if record is None:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    if week is None:
+        cur = _load_json(nfl_weekly.weekly_current_key(season))
+        if cur is None:
+            raise HTTPException(status_code=404, detail="Weekly projection not found")
+        week = int(cur["week"])
+
+    payload = _load_json(nfl_weekly.weekly_players_key(season, week))
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Weekly projection not found")
+
+    # Best-effort, and `None` on failure rather than `[]` — see the field's own note. The slate's
+    # absence counts explain a per-row "not in this week's projection"; losing them degrades the
+    # explanation, and must never be reported as "nobody was left out".
+    absences = None
+    projection_day = None
+    try:
+        manifest = _load_json(nfl_weekly.weekly_manifest_key(season, week))
+    except HTTPException:
+        manifest = None
+    if isinstance(manifest, dict):
+        absences = manifest.get("absences")
+        projection_day = manifest.get("projection_day")
+
+    try:
+        scored = weekly_league_board.score_weekly_roster(
+            weekly_players=payload.get("players") or [],
+            roster=record.get("imported_roster") or [],
+            cfg=record,
+            stat_field=projection_fields.STAT_FIELD,
+        )
+    except weekly_league_board.WeeklySubstrateError as e:
+        # 502 rather than 404: the artifact was READ and could not be used, which is a different
+        # fact from "this week has not been published" and points at a different fix.
+        logger.error("weekly payload for %s wk%s cannot be league-scored: %s", season, week, e)
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    rows = []
+    for row in scored["rows"]:
+        try:
+            rows.append(nfl_weekly.NflWeeklyLeagueRow(**row))
+        except Exception:  # noqa: BLE001
+            # E9.49 — one malformed stored roster row must cost only itself, never blank the whole
+            # roster the way a list comprehension would.
+            logger.warning("skipping unserializable weekly roster row in league %s", league_id)
+
+    return nfl_weekly.NflWeeklyLeagueBoard(
+        season=season,
+        week=week,
+        league_id=league_id,
+        league_name=record.get("name"),
+        coverage=scored["coverage"],
+        weekly_positions=scored["weekly_positions"],
+        rows=rows,
+        absences=absences,
+        generated_at=str(payload.get("generated_at") or ""),
+        projection_day=projection_day,
+    ).model_dump()
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
