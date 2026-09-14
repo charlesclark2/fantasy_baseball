@@ -1,0 +1,39 @@
+{
+ "model_version": "nfl_fantasy_nf_inj4b_designation_duration_v1",
+ "contract_version": 1,
+ "source_model": "NF-INJ4b",
+ "arm": "desig_x_practice",
+ "verdict": "SHIP_CANDIDATE (DEPLOY-HELD)",
+ "preregistration": "ablation_results/nf_inj4b_preregistration.md",
+ "decisive_record": "ablation_results/nf_inj4b_designation_duration.md",
+ "served_designations": [
+  "out",
+  "doubtful",
+  "questionable"
+ ],
+ "certified_games_remaining": 17,
+ "season_games": 17.0,
+ "practice_level": "unknown",
+ "designations": {
+  "out": {
+   "expected_games_missed": 2.3145,
+   "rate_multiplier": 0.8639
+  },
+  "doubtful": {
+   "expected_games_missed": 0.8052,
+   "rate_multiplier": 0.9526
+  },
+  "questionable": {
+   "expected_games_missed": 0.6301,
+   "rate_multiplier": 0.9629
+  },
+  "none_listed": {
+   "expected_games_missed": 0.159,
+   "rate_multiplier": 0.9906
+  }
+ },
+ "frame_rows": 1309,
+ "fit_at": "2026-09-13T21:46:27.029378+00:00",
+ "position_invariance": "verified to 0.0e+00 across QB/RB/WR/TE at practice=unknown",
+ "notes": "Derived by run_nf_inj4b_ship_serving_artifact from the CERTIFIED winner read out of the decisive run, on the frame NF-INJ4b scored. `none_listed` is reported for context and is NOT served \u2014 applying it would be a board-wide level shift, not this study. The constants reproduce the operator counterfactual's magnitude table exactly."
+}

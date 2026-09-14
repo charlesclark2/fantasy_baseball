@@ -1,0 +1,12 @@
+{
+ "checked_against": "nf_inj4b_counterfactual.json",
+ "counterfactual_generated_at": "2026-09-13T21:29:44+00:00",
+ "designations_checked": [
+  "doubtful",
+  "none_listed",
+  "out",
+  "questionable"
+ ],
+ "max_abs_difference": 0.0,
+ "reproduces": true
+}
