@@ -10,7 +10,7 @@ metadata:
   name: mlb-lake2
   vertical: mlb
   card: https://trello.com/c/K2zbMQuo
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Restore real headroom to the W3pre intraday tick. The 09-04
