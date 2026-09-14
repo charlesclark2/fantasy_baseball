@@ -37,6 +37,18 @@ models:
       marts:
         +schema: ncaaf_marts
         +materialized: table
+    ncaab:
+      staging:
+        +schema: ncaab_staging
+        # TABLES, not views — inherited from NCAAF-P1.1 / NFL-N0.3 rather than rediscovered:
+        # the raw tier is Delta, and DuckDB's delta extension cannot serialize a DeltaScan
+        # inside a complex plan, so a mart joining several staging VIEWS over delta_scan fails
+        # with "DeltaScan serialization not implemented". fact_ncaab_team_game joins three
+        # staging models plus two SCD self-joins, squarely in that failure mode.
+        +materialized: table
+      marts:
+        +schema: ncaab_marts
+        +materialized: table
     nfl:
       staging:
         +schema: nfl_staging

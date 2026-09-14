@@ -1,0 +1,55 @@
+version: 2
+
+models:
+  - name: stg_ncaab_schedule
+    description: >
+      The NCAAB game spine from hoopR (CC BY 4.0). One row per game. Carries our own
+      capture_timestamp because the source publishes no as-of and overwrites the current
+      season's file in place.
+    columns:
+      - name: game_id
+        description: ESPN game id — the natural key.
+        tests: [not_null, unique]
+      - name: season
+        tests: [not_null]
+      - name: neutral_site_is_trustworthy
+        description: >
+          FALSE before 2008, where the source's neutral_site flag is identically 0 — an
+          ABSENCE rather than a False. Downstream windows reaching that far back must read
+          this rather than the flag.
+        tests: [not_null]
+      - name: capture_timestamp
+        description: OUR fetch time (UTC ISO). Never a file mtime.
+        tests: [not_null]
+
+  - name: stg_ncaab_team_box
+    description: >
+      One row per (game, team). Owns the single shared possession definition
+      (FGA - ORB + TO + 0.475*FTA) so no two downstream models can disagree about pace.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: capture_timestamp
+        tests: [not_null]
+
+  - name: stg_ncaab_team_crosswalk
+    description: >
+      The D-I universe with conference NAMES plus KenPom/Torvik join keys. Current season
+      only upstream — no history is published.
+    columns:
+      - name: team_id
+        tests: [not_null, unique]
+      - name: conference_name
+        description: >
+          NULL for a school in the D-I RECLASSIFICATION window — measured: West Florida
+          (team_id 2697) carries no conference while transitioning up from D-II. That is a
+          true state of the world, not a data defect, so this is WARN severity: a hard failure
+          here would go red every year that a school reclassifies and would train the operator
+          to ignore the staging tests. It stays a test at all because a sudden JUMP in
+          unresolved conferences would be a real crosswalk regression.
+        tests:
+          - not_null:
+              config:
+                severity: warn
