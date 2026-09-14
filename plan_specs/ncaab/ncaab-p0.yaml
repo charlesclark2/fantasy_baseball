@@ -9,7 +9,7 @@ metadata:
   name: ncaab-p0
   vertical: ncaab
   card: https://trello.com/c/ItLo7klu
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     Stand up the NCAAB data foundation the way NCAAF's was stood up,
@@ -155,8 +155,97 @@ spec:
       - id: 5-closeout
         desc: "Audit verdict + credit arithmetic + P1 readiness statement into closeout.followUps; operator summary."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED. All five nodes complete, verified against real data rather than
+      fixtures. (1) CAPTURES: every Odds-API unit price measured on live
+      x-requests headers and reconciled against an independent free-/sports
+      bracket — the two instruments AGREED exactly on every leg. 775 credits
+      spent total (0.016% of a 4,812,933 balance). Proposed cadence: futures
+      daily + game lines every 30 min = 14,938 credits/season (0.31%). A
+      fan-out ceiling ships REFUSING, not truncating, because a per-event loop
+      over an NCAAB board is 105x the bulk call for identical data. Historical
+      probe: archive floor 2020-11-16 (the vendor named it via next_timestamp),
+      5-minute granularity from 2022-23, 6 recoverable seasons, backfill priced
+      at 55,440 credits for the recommended resolution. (2) AUDIT VERDICT: FREE
+      SOURCES SUFFICE — no paid purchase is needed to reach launch. hoopR (CC BY
+      4.0) gives 24 fully-scored seasons, every NCAAF-parity MVP field, and the
+      possession identity from 2003; ESPN's D-I group independently corroborates
+      366 teams against hoopR's 366. (3) LAKE + ENTITIES: ncaab/ Delta lake with
+      content-timestamped writes, dim_ncaab_team SCD-2 (80 teams carry multiple
+      versions touching 2023+; Arizona reads Pac-12 through 2024 then Big 12),
+      dbt build PASS=28 WARN=1 ERROR=0 over 6 ingested seasons, 69.2
+      possessions/team-game. (4) VERIFY: 26 guards RED-proven 7/7 under four
+      controls. (5) The free ingest schedule ships RUNNING and heartbeat-checked;
+      the paid captures are deliberately NOT wired, because enabling them is the
+      operator's spend decision.
+
+      ⚠️ TWO THINGS ARE NOT DONE AND ARE NAMED RATHER THAN IMPLIED: the box
+      runtime gate (CI mocks all IO, so the first write to the ncaab/ S3 prefix
+      is unverified and may need an IAM grant — the E8.5 class), and the capture
+      enablement itself.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      1) ⭐ THE BRIEF'S "NOW-OR-NEVER" FRAMING FOR FUTURES IS CORRECTED BY
+      MEASUREMENT, and it changes the decision calculus rather than just a
+      number: NCAAB title futures ARE recoverable from /historical back to
+      2023-10-24 at 10 credits a snapshot. The urgency is a 10x COST PREMIUM,
+      not permanent loss, for anything after Oct 2023. Forward capture is still
+      right (10x cheaper, and the only way to hold THIS week), but "we lose it
+      forever" should not be an input.
+
+      2) ⭐ TWO SCOPE FINDINGS THE ROADMAP SHOULD ABSORB. There is NO
+      conference-futures sport key at this vendor (the live /sports list carries
+      exactly two NCAAB keys), so the spec's "futures (title/conference)" ships
+      as TITLE ONLY. And NCAAB PLAYER PROPS ARE NOT OFFERED AT ALL (measured:
+      HTTP 200, 0 books, 0 markets, 0 credits) — the E5-style props track in
+      ncaab_guide.md is blocked at the SOURCE, not a budget question. Neither is
+      purchasable.
+
+      3) ⭐ THE BINDING CONSTRAINT ON MARKET-RELATIVE WORK IS AN ARCHIVE LIMIT,
+      NOT A BUDGET ONE: game data reaches 24 seasons free, market data 6. Any
+      P1/P2 design that needs the market in its training window is capped at 6
+      seasons at ANY spend. Worth stating before a story is scoped around a
+      longer one.
+
+      4) 🔧 THE SHARED LAKE LAYER HAS ALREADY FORKED, and NCAAB declined to make
+      it a third fork. s3io.py differs by 216 lines between the NCAAF and NFL
+      copies (the NFL one carries the INC-45 DuckDB-secret cure and two typed-
+      write hardenings the NCAAF one never received), and query_lake.py by 189
+      of 210 lines — while the NCAAF package's own docstring asks for the
+      modules to be "lift[ed] to a shared package when NFL/NCAAB instantiate".
+      NCAAB IMPORTS the NFL copy (already the de-facto canonical one: the
+      cross-cutting monitors import it to read the lake for EVERY sport) through
+      a single seam, lake.py. RECOMMENDED FOLLOW-UP: relocate the shared layer to
+      a neutral package and migrate NCAAF + NFL onto it. Not done here because it
+      touches two in-season verticals; it is a one-file change in NCAAB when it
+      happens. The same shape exists in dbt — ncaaf_lake.sql and nfl_lake.sql are
+      the same six lines twice; a shared sport_delta() macro now exists and
+      ncaab_delta delegates to it, so migrating those two is one line each.
+
+      5) 🔧 FRESHNESS CONTRACTS ARE DECLARED BUT NOT ARMED, deliberately. NCAAB
+      has no scheduled odds writer, and that registry's own rule is that a
+      contract for a table nothing writes is a permanent false page (why INC-41
+      rejected a table from its own registry). betting_ml/monitoring/
+      ncaab_freshness.py holds them; registration_snippet() prints the paste.
+      Arm each in the SAME change that enables its writer.
+
+      6) 🪤 A REAL DRIFT WAS CAUGHT BY WRITING THE CHECK, and the shape
+      generalises: the monitor's season window is MONTH-granular and the ingest's
+      is DAY-granular (April 1-10), so they can never be equal. The invariant is
+      CONTAINMENT — the coarser window must be the WIDER one — which is the same
+      shape as INC-41's hour-granularity windows being unable to express a
+      30-minute grace. A narrower monitor window would have blinded it on live
+      April game days. Now explicit and guarded.
+
+      7) 📋 OPERATOR DECISIONS OPEN: (a) capture enablement + cadence
+      (docs/ncaab_p0_credit_arithmetic.md §3, recommendation stated); (b) the
+      historical backfill (§4, recommendation stated); (c) the box runtime gate —
+      watch the first sports_ncaab_ingest_schedule fire and confirm the ncaab/
+      S3 prefix is writable by the instance role.
+
+      8) 📈 P1 READINESS: fact_ncaab_team_game is the fitting surface (box line,
+      shared possession estimate, per-100 efficiency, point-in-time-correct
+      conference). 24 seasons available, 6 ingested; extending is a re-run, not
+      a code change. Suggested depth 10-15 seasons — the data supports 24, but
+      the 2008 neutral-site flag, the 2015 shot-clock change and the 2023-25
+      realignment wave make older seasons a different game. That is a modelling
+      judgment for P1 to TEST, not a data constraint.

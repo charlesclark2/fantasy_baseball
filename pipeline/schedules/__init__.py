@@ -22,6 +22,13 @@ from pipeline.schedules.sports_dbt_schedules import (
 # NF-D5: the daily (through camp) Sleeper forward-availability refresh, continuing NF-D2 slice 5.
 # ⛔ default_status=STOPPED (operator-gated — same box-readiness prereq as NF-D1's roll-forward;
 # the Sleeper fetch itself needs no API key). WARN-tier throughout — advisory, non-serving.
+# NCAAB-P0: the FREE daily hoopR lake ingest. ✅ default_status=RUNNING — a free ingest has
+# neither reason the NCAAF/NFL schedules ship STOPPED (no cost gate, no season gate), so
+# E11.23's rule applies: a STOPPED default silently never fires and is invisible to the
+# revert heartbeat. Registered in monitor_health.CRITICAL_SCHEDULES for exactly that reason.
+# ⚠️ UNVERIFIED ON THE BOX at merge — the first write to the ncaab/ S3 prefix may need an
+# IAM grant (the E8.5 class, invisible to CI). See the NCAAB-P0 handoff.
+from pipeline.jobs.sports_ncaab_ingest_job import sports_ncaab_ingest_schedule
 from pipeline.schedules.sports_rollforward_schedules import (
     sports_ncaaf_roll_forward_schedule,
     sports_nfl_board_publish_schedule,
@@ -72,6 +79,7 @@ all_schedules = [
     settlement_schedule,
     sports_ncaaf_dbt_schedule,
     sports_nfl_dbt_schedule,
+    sports_ncaab_ingest_schedule,
     sports_ncaaf_roll_forward_schedule,
     sports_nfl_board_publish_schedule,
     sports_nfl_roll_forward_schedule,
