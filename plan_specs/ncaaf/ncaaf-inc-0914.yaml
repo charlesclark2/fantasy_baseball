@@ -1,0 +1,120 @@
+# Plan spec — NCAAF-INC-0914 (MINI, incident: the ncaaf dbt build run was FORCIBLY marked
+# failed by the run monitor — no traceback in the alert; resource-kill class, cause unknown)
+# Authored by PM 2026-09-14. Diagnose-first: the email carries no stack trace, so the first
+# deliverable is the measured cause from Dagit/box reads (operator paste-ready), not a fix.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-inc-0914
+  vertical: ncaaf
+  card: https://trello.com/c/l8Rjkh8j
+  status: ACCEPTED
+spec:
+  description: >
+    sports_ncaaf_dbt_build_job run 06d7352c-5744-4902-b42d-a0c8aa4a43ba
+    FAILED on the box (tier WARN/peripheral) with Dagster's forcible-
+    failure text: "This job is being forcibly marked as failed. The
+    computational resources created by the run may not have been fully
+    cleaned up." That is the RUN MONITOR killing a hung or dead run
+    worker (OOM, worker crash, or exceeded max runtime) — NOT a dbt
+    model error, and the email has no traceback. Two consequences:
+    (1) NCAAF marts feed live serving and the P1.2W weekly refit, so a
+    non-building tier silently ages what users see; (2) a forcible
+    kill is a BOX-RESOURCE symptom before it is an NCAAF symptom — the
+    same box runs the MLB W3pre intraday tier (measured near its
+    budget; LAKE2's compaction may have been applied today), the NFL
+    publish path, and P1.2W's weekly schedule. best_alpha=0; no model
+    or serving change; no budget constant, tier cap, or run-monitor
+    timeout is raised to make the symptom go away without the measured
+    cause in hand (E2.1-r applies to resource limits too).
+  acceptanceCriteria:
+    - description: >
+        DIAGNOSE FROM EVIDENCE, operator paste-ready, before any code:
+        (a) the Dagit run page for 06d7352c — step logs, which step was
+        executing when killed, wall-clock at kill vs the job's
+        historical durations; (b) the box's state at that timestamp —
+        dmesg/journal for OOM-killer lines naming the process, memory/
+        load history if available; (c) the CONCURRENCY census: every
+        Dagster run and cron job active on the box in the window
+        (the W3pre tick? the LAKE2 compaction --apply? the NFL publish?
+        P1.2W?) — name what overlapped, with timestamps from logs, not
+        inference. The finding names ONE of: OOM (and the culprit
+        process), runtime exceeded (and why — data growth? lock/
+        contention? a hung query), worker crash (and its trace), or
+        monitor misfire. If the evidence cannot distinguish, say so
+        and state what instrumentation would — do not pick a story.
+    - description: >
+        FIX MINIMALLY, matched to the measured cause at the
+        instrument (MH2.7): contention -> schedule/serialization fix
+        (mirror the :00-collision discipline), memory -> the specific
+        query/model's footprint (never a blanket box upgrade decision
+        — that is an operator spend call, surfaced with arithmetic if
+        it is truly the answer), hang -> the specific wait, with a
+        guard. A retry-on-force-kill band-aid without the cause is
+        refused. Whatever the fix, the run-monitor's kill behavior
+        itself stays — it did its job.
+    - description: >
+        RESTORE + VERIFY: re-run the dbt build (operator, paste-ready)
+        and verify the marts ADVANCED by content timestamp (INC-41 —
+        never mtimes); confirm downstream freshness SLAs for the NCAAF
+        tables read green at their owning cadence; if the P1.2W weekly
+        refit or the ratings snapshot consumed a stale mart in the
+        gap, say which artifacts carry the staleness and whether the
+        next scheduled fire self-heals or needs a manual re-run
+        (state both paths, recommend one).
+    - description: >
+        CLOSE THE CLASS where the evidence supports it: if the cause
+        is cross-job contention on the box, the finding feeds the
+        standing resource picture (one census of what runs when —
+        check whether the leaf-run detector card ZPmBj8PF or the
+        BOX_OPERATIONS doc already owns this and EXTEND, never fork a
+        second schedule ledger); a "forcibly marked failed" alert that
+        names no cause is itself an instrument gap worth one line in
+        the closeout. Any guard added is RED-proven (unique anchors +
+        baseline-pass + NOT-SELECTED + resolve-every-node). Standing:
+        worktree; PR -> dev; box ops operator-run; >2-min commands
+        operator paste-ready; no schedule/.env change without the
+        operator step stated; no gate loosened; no Trello; findings to
+        closeout.followUps; roadmap files frozen.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-inc-0914
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "dbt" / "forcibly" / "NCAAF build" (board Credence Sports, 2026-09-14)'
+    duplicates: []
+    adjacent:
+      - "MLB-INC-0904 / MLB-LAKE2 — the W3pre budget pressure on the SAME box; if the census shows overlap, the finding joins that thread's record; LAKE2's compaction --apply may have run today (check the operator card kMorCoDy timeline)."
+      - "NF-INC-0914 (IN FLIGHT) — a separate NFL entrypoint NameError; different job, different class; disjoint files unless the census proves a shared-resource link."
+      - "NCAAF-P1.2W (Done) — added the weekly refit schedule; a new tenant in the box's calendar; census candidate, not a suspect by default."
+      - "Leaf-run detector (ZPmBj8PF, To Do) — the daily_ingestion_job census idea; a contention finding here EXTENDS that scope rather than forking it."
+      - "Odds :00 collision card (lEgL0V5D) — the prior contention lesson and its serialization pattern."
+  triedLedger:
+    files:
+      - "The failure email (run id, tier, the forcible-failure text — the ONLY evidence in hand; no traceback)"
+      - "Dagit run 06d7352c (the primary read, operator-run)"
+      - "docs/mlb_inc_0904_* (the box-load measurement method: S3 write timestamps, no box needed — reusable here for the concurrency census)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "NCAAF marts building again on schedule; the box's concurrency picture getting its first measured census entry; whatever standing story the cause justifies"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-inc-0914-plan
+spec:
+  goalRef: { name: ncaaf-inc-0914 }
+  graph:
+    nodes: []   # MINI incident — evidence reads (operator) -> named cause -> minimal matched fix -> restore + freshness verify -> class/census feed -> closeout
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
