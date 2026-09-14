@@ -47,9 +47,11 @@ _FRESH = _REPO / "betting_ml/monitoring/nfl_weekly_freshness.py"
 _SLEEPER_JOB = _REPO / "pipeline/jobs/sports_nfl_sleeper_injuries_job.py"
 _SCHEDULES = _REPO / "pipeline/schedules/sports_rollforward_schedules.py"
 _MON_HEALTH = _REPO / "betting_ml/monitoring/monitor_health.py"
+_JOBS_INIT = _REPO / "pipeline/jobs/__init__.py"
 
 _G_CONTRACT = _TESTS / "test_nf_c6_ph2_weekly_contract.py"
 _G_SERVING = _TESTS / "test_nf_c6_ph2_weekly_serving.py"
+_G_REGISTRY = _TESTS / "test_pipeline_job_registry.py"
 
 #: (label, file, old, new, guard-file::test-name)
 CASES: list[tuple[str, Path, str, str, str]] = [
@@ -306,6 +308,19 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "    return expected_week is not None",
      "    return True",
      f"{_G_SERVING}::test_the_off_season_is_still_silent_even_with_nothing_published"),
+
+    # ── the job-registry omission an operator found by trying to launch the job ───────────────
+    ("the off-cycle freshness job drops out of all_jobs (invisible + unlaunchable in Dagit)",
+     _JOBS_INIT,
+     "    sports_nfl_weekly_freshness_job,\n    sports_nfl_roll_forward_job,",
+     "    sports_nfl_roll_forward_job,",
+     f"{_G_REGISTRY}::test_every_imported_job_is_registered_in_all_jobs"),
+
+    ("a job is imported twice again — the paste artifact that hid the omission in plain sight",
+     _JOBS_INIT,
+     "    sports_nfl_weekly_freshness_job,\n    sports_nfl_weekly_serving_job,\n)",
+     "    sports_nfl_weekly_freshness_job,\n    sports_nfl_weekly_serving_job,\n    sports_nfl_weekly_freshness_job,\n)",
+     f"{_G_REGISTRY}::test_no_job_is_imported_twice"),
 ]
 
 #: The NOT-SELECTED control: a test that must stay GREEN under every mutation above, so a red
@@ -315,7 +330,7 @@ CASES: list[tuple[str, Path, str, str, str]] = [
 #: fails EVERY test in a file that imports it.
 NOT_SELECTED = f"{_TESTS / 'test_freemium_tier.py'}::test_every_capability_is_placed_on_exactly_one_side"
 
-_GUARD_FILES = (_G_CONTRACT, _G_SERVING)
+_GUARD_FILES = (_G_CONTRACT, _G_SERVING, _G_REGISTRY)
 
 
 def _run(nodeid: str) -> bool:
