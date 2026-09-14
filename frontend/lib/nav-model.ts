@@ -8,6 +8,10 @@
 // highlight keeps working across the restructure.
 
 import type { Surface } from "@/lib/entitlements"
+// ⚠️ ONE OWNER FOR THE LABEL. The weekly nav label is claim-adjacent copy ("This Week" is the
+// promise the page has to keep), so it lives in the canonical copy module with every other
+// user-facing string rather than being typed here where no screening would ever see it.
+import { WEEKLY_NAV_LABEL } from "@/lib/fantasy-claim-copy"
 
 export interface NavItem {
   label: string
@@ -111,6 +115,24 @@ export const SPORTS: SportNav[] = [
               { label: "Rankings", href: "/fantasy/rankings", key: "fantasy-rankings", public: true },
               { label: "League Board", href: "/fantasy/league-board", key: "fantasy-league-board" },
               { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections", public: true },
+              // ⭐ NF-WK-FE1 — the IN-SEASON surface, and the label is doing real work. It sits
+              // beside Projections because it is the same question over a different HORIZON: that
+              // one is the whole season, this one is the coming week. "This Week" rather than
+              // "Weekly" for exactly that reason — every board here is updated weekly, and the one
+              // thing a reader needs from a menu is which horizon a surface answers for.
+              //
+              // `public: true` — the two reads behind it are `Capability.GENERIC_BOARD` and take no
+              // `Request` at all, so they are byte-identical for every caller. The paid half is the
+              // per-row stat line INSIDE the page, gated by which component prints, so marking the
+              // item public cannot expose it (contrast League Board / Draft Optimizer, whose
+              // endpoints 403 a free caller outright — marking one of those public would render a
+              // permanently broken page).
+              {
+                label: WEEKLY_NAV_LABEL,
+                href: "/fantasy/weekly",
+                key: "fantasy-weekly",
+                public: true,
+              },
               // NF3.1 — direct lookup: search a name, land on his player page. A separate nav item
               // (not folded into Projections' own search box) because it is the entry point every
               // OTHER surface's Player cell links out to, so it needs to be reachable on its own.
