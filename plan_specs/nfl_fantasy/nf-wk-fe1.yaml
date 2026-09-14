@@ -1,0 +1,124 @@
+# Plan spec — NF-WK-FE1 (MINI tier, frontend: the weekly projections page — the first
+# user-visible surface of the in-season weekly model)
+# Authored by PM 2026-09-13, consuming NF-C6-PH2's landed contract (app/backend/models/
+# nfl_weekly.py; routes weekly/manifest + weekly/projections FREE, weekly/projections-full PAID).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-wk-fe1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/HvVAWD9f   # C6-PH2 record; FE card linked at kickoff
+  status: ACCEPTED
+spec:
+  description: >
+    The weekly model finally reaches users: a weekly projections page
+    off the NF-C6-PH2 contract — per player: point (fpPpr) with its
+    honest 80% band (fpP10/fpP90), ROS (rosPpr + band + rosWeeks),
+    status, opponent/home, and histWeeks as the visible evidence base.
+    FREE tier renders the free routes' fields; PAID adds the
+    projections-full detail (the 39-level vector rendered as a
+    distribution, the 11 per-stat components). ⛔ SCOPE LINE:
+    league-scored weekly (my-teams weekly under a league's scoring) is
+    BLOCKED on gate 3 (the re-scoring consumer) and is NOT this story
+    — this page is PPR-native and says so. best_alpha=0; frontend-only
+    (auto-deploys on main); this story carries the weekly product's
+    FIRST changelog entry — written only when the page actually
+    renders live data.
+  acceptanceCriteria:
+    - description: >
+        HONEST RENDERING, per the C6-PH2 rulings: (a) the POINTS HEAD
+        IS THE PROJECTION — the paid per-stat components render as
+        stat substrate, never as a second total; anywhere both are
+        visible, the component-derived figure is either not summed on
+        the page or the discrepancy is disclosed (median offset 0.77,
+        p95 3.71 — measured, not hypothetical); (b) the band renders
+        WITH the point everywhere the point renders (the NCAAF
+        rank-with-range instinct — a weekly point without its interval
+        overstates precision); (c) status has exactly the served
+        states: "projected", "bye", and ABSENT rendered as a stated
+        absence using the manifest's ABSENCE_REASONS — never an empty
+        row that reads three different causes identically; (d)
+        histWeeks visible (a week-1-rookie projection built on
+        position + rookie flag deserves its evidence base shown);
+        (e) PRICING COPY: the page states the weekly point is
+        PPR-native and other presets are coming (blocked on the
+        re-scoring layer), so "one free format" never reads as 13
+        withheld ones; (f) claims discipline: no "matchup-based"
+        language anywhere (the serving layer asserts it at import;
+        the page's copy must not reintroduce it), no forecast
+        promises — through fantasy-claim-copy.ts conventions.
+    - description: >
+        ENTITLEMENT per the shipped seam: free components read the
+        free routes only; paid detail gates the RENDERERS (the G100
+        lesson — the gate is which component prints, and the paid
+        route is already 401-anon at the wire). No scoring math in the
+        browser beyond display (⛔ no fourth scorer; PPR values come
+        from the payload). Navigation: the weekly page joins the NFL
+        fantasy nav beside the season board with copy distinguishing
+        "this week" from the season/draft view; the season surfaces
+        are untouched.
+    - description: >
+        FIXTURES + TIMING: build against fixtures derived from the
+        contract NOW; the moment the first real publish lands (the
+        operator's verification card), re-capture the fixture RAW from
+        the live API (E9.64b) and verify the LIVE page by content —
+        the story's DONE gate includes rendering real served data, and
+        the changelog entry lands only then (declaration never outruns
+        production). Handle the pre-publish state honestly: if the
+        routes 404/empty because week-2 rosters haven't landed, the
+        page renders a stated "weekly projections publish when
+        rosters land" absence, not a spinner or an error.
+    - description: >
+        Guards: E2E per surface both ways off both fixture states
+        (populated + awaiting-publish), rendered-output assertions
+        (NF-C4), the paid-detail gate proven both ways (free render
+        carries no paid field; entitled render does), RED-proofs with
+        unique anchors + baseline-pass + NOT-SELECTED +
+        resolve-every-node; the freemium byte-identity and CDN rules
+        untouched. Cache-busted live verification (a cached read and
+        a failed deploy are byte-identical). Standing: one frontend
+        story at a time (this IS it); worktree; PR -> dev; rebase the
+        changelog week-block; >2-min to operator; no Trello.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-wk-fe1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "weekly" / "frontend" / "start" (board Credence Sports, 2026-09-13)'
+    duplicates: []
+    adjacent:
+      - "NF-C6-PH2 (Done) — the contract + routes this consumes verbatim; the serving layer is untouched by this story."
+      - "Gate 3 / NF-W6d / NF-OPT1 (deferred) — league-scored weekly + optimizer; explicitly OUT; this page is PPR-native and says so."
+      - "NF-INJ4b-SHIP (IN FLIGHT) — season-board availability; disjoint surface; if its publish lands mid-story the season board changes, this page doesn't."
+      - "My-teams / season board / mock draft (live) — untouched; nav gains one entry."
+      - "NCAAF-P1.2W (IN FLIGHT) — different vertical; changelog week-block shared (rebase)."
+  triedLedger:
+    files:
+      - "app/backend/models/nfl_weekly.py (the contract, field by field) + the C6-PH2 closeout (ABSENCE_REASONS, component_coherence figures, the pricing framing ruling)"
+      - "frontend/lib/entitlements.ts + the G100 gate-the-renderers rules; fantasy-claim-copy.ts conventions"
+      - "NF-W1's record (the usage/snap-not-matchup claims constraint; the 39-level vector semantics)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn:
+    - "NF-C6-PH2 on main (verified); the LIVE-data DONE gate additionally waits on the first weekly publish (calendar-bound, ~09-16)"
+  feedsInto:
+    - "Users seeing weekly projections in-season (the product's weekly pulse); the my-teams weekly lens and NF-OPT1 once gate 3 exists; the weekly changelog debut"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-wk-fe1-plan
+spec:
+  goalRef: { name: nf-wk-fe1 }
+  graph:
+    nodes: []   # MINI tier — fixtures from contract -> page + entitlement + copy -> guards -> live re-capture + verify + changelog -> closeout
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

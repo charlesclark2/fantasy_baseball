@@ -10,7 +10,7 @@ metadata:
   name: nf-c6-ph2
   vertical: nfl_fantasy
   card: https://trello.com/c/HvVAWD9f
-  status: IN_PROGRESS
+  status: DONE  # PM flip 2026-09-13: code story complete (PRs #1089/#1095/#1098 on main); first publish is calendar-bound (weekly_rosters) and its verification is an operator Follow Ups item, not story scope. Promotion disposition: PM allow_unevaluable ruling on the record card.
 spec:
   description: >
     Serve the weekly model. NF-W1's champion (lgbm_hurdle — P(zero) x
