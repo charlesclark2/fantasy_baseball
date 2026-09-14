@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { FIXTURES, collectPageErrors, mockApi } from "../support/api-mock"
+import { FIXTURES, collectPageErrors, mockApi, type MockOptions } from "../support/api-mock"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
 import {
   LOCK_CHIP,
@@ -562,4 +562,90 @@ test.describe("the paid half is still gated", () => {
       expect(page.url(), `${surface} rendered for a logged-out visitor`).not.toContain(path)
     })
   }
+})
+
+test.describe("the freemium sentence may only name what its own surface serves", () => {
+  /**
+   * ⭐ NF-WK-FE1 finding 11 → PM ruling b′ (2026-09-14). This block renders on FOUR surfaces from
+   * ONE component, and it used to carry ONE hard-coded list naming "the market ADP beside it".
+   * `/fantasy/weekly` serves no ADP — zero occurrences in the weekly contract and zero in its read
+   * layer — so that sentence named a number that was not on the page.
+   *
+   * ⛔ THIS DOES NOT ASSERT THE SENTENCE EQUALS ITS OWN CONSTANT. Reading a value back under the
+   * key the code wrote is a restatement of the code, not a test of it (NF-C0e) — it would stay
+   * green if both the list and the surface were wrong together. The rule asserted here is the
+   * SUBSTANTIVE one, both directions: if the sentence names ADP, the surface must actually render
+   * an ADP figure; if it does not, the surface must not have one to name.
+   *
+   * ⚠️ AND IT LOOKS FOR ADP *OUTSIDE* THE BOUNDARY. On a season surface the sentence itself
+   * contains the word, so a naive page-wide search is satisfied by the very text under test — the
+   * vacuous-guard shape, in a browser. The boundary's own text is removed before looking.
+   *
+   * The compile-time half lives in the component: `surface` is a REQUIRED prop, so a new surface
+   * cannot inherit another's list by omission. This is the render-time half.
+   */
+  const SURFACES = [
+    { name: "rankings", path: "/fantasy/rankings", opts: {} as MockOptions },
+    { name: "projections", path: "/fantasy/projections", opts: {} as MockOptions },
+    { name: "weekly", path: "/fantasy/weekly", opts: { weekly: "published" } as MockOptions },
+  ]
+
+  for (const s of SURFACES) {
+    test(`${s.name}: every number the sentence names is on the page`, async ({ page }) => {
+      await mockApi(page, s.opts)
+      await page.goto(s.path)
+
+      const boundary = page.getByTestId("freemium-boundary")
+      await expect(boundary, `${s.name} renders no freemium boundary`).toBeVisible()
+
+      const sentence = await boundary.innerText()
+      const namesAdp = /\bADP\b/i.test(sentence)
+
+      // Everything the visitor can read EXCEPT the boundary itself.
+      const whole = await page.locator("body").innerText()
+      const elsewhere = whole.split(sentence).join(" ")
+      const servesAdp = /\bADP\b/i.test(elsewhere)
+
+      expect(
+        namesAdp,
+        namesAdp
+          ? `${s.name}: the freemium sentence advertises a market ADP, but no ADP is rendered `
+            + "anywhere else on the page — it names a number the surface does not serve"
+          : `${s.name}: the page renders an ADP but the freemium sentence does not mention it`,
+      ).toBe(servesAdp)
+    })
+  }
+
+  test("the player page carries the season list and genuinely serves it", async ({ page }) => {
+    const mock = await mockApi(page)
+    const { id } = FIXTURES.projectionsEntitled().players[0]
+    await page.goto(`/fantasy/player/${id}`)
+
+    const boundary = page.getByTestId("freemium-boundary")
+    await expect(boundary).toBeVisible()
+    const sentence = await boundary.innerText()
+    const elsewhere = (await page.locator("body").innerText()).split(sentence).join(" ")
+
+    expect(/\bADP\b/i.test(sentence), "the player page dropped the ADP clause it can honour").toBe(true)
+    expect(/\bADP\b/i.test(elsewhere), "the player page names an ADP it does not render").toBe(true)
+    expectApiFullyMocked(mock)
+  })
+
+  test("weekly names neither an ADP nor a ranking, because it renders neither", async ({ page }) => {
+    // ⚠️ "ranking" is one clause BEYOND the literal ADP-only scope, and deliberately so: the weekly
+    // table's columns are Player / Team / Opp / Points / Range / Rest-of-season / Weeks left /
+    // Hist weeks / (paid) stat line, and `NflWeeklyPlayer` declares no rank field. Leaving the
+    // ranking clause in would have swapped one false claim for another under a rule whose whole
+    // point is that a surface may only name what it serves.
+    await mockApi(page, { weekly: "published" })
+    await page.goto("/fantasy/weekly")
+
+    const sentence = await page.getByTestId("freemium-boundary").innerText()
+    expect(/\bADP\b/i.test(sentence), "weekly advertises a market ADP it does not carry").toBe(false)
+    expect(/every ranking/i.test(sentence), "weekly advertises rankings it does not render").toBe(false)
+
+    // …and it still makes the free-tier claim it CAN honour, so this is a narrowing, not a deletion.
+    expect(sentence).toMatch(/80% range/i)
+    expect(sentence, "the tier claim was lost with the surface list").toMatch(/no account, no trial/i)
+  })
 })

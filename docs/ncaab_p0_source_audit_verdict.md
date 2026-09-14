@@ -147,8 +147,16 @@ already solved in the lake design.
 - **Depth: 24 seasons available.** A 6-season window (2022–2027) is ingested and built; extending
   is a re-run, not a code change, and costs nothing but time.
 
-**Recommended training depth: 10–15 seasons.** Rationale: the source supports 24, but college
+**Suggested training depth: 10–15 seasons.** Rationale: the source supports 24, but college
 basketball's structure changed materially (the 2008 neutral-site flag, the 2015 shot-clock
 reduction to 30 seconds, and the 2023–25 realignment wave), so the older seasons are a
 different game rather than more of the same one. That is a **modelling** judgment for P1 to
 test, not a data constraint — the data is there either way.
+
+> ⚠️ **This is a suggestion with no authority, and P1 must not inherit it as a default.** Per the
+> PM ruling of 2026-09-14, P1's pre-registration **declares its window family FORWARD**, citing
+> the mechanism for each candidate cut; a window chosen after seeing fits is the E2.1-r inversion.
+> The canonical wording, the per-boundary mechanism table, and the binding **2020-11-16
+> market-archive registration constraint** live in the **P1 readiness statement** —
+> `plan_specs/ncaab/ncaab-p0.yaml` → `closeout.followUps` item 8, mirrored in
+> `ncaab_data_inventory.md` §8. Read that, not this paragraph, when scoping P1.

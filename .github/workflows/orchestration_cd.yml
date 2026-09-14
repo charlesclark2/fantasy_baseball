@@ -70,6 +70,18 @@ on:
       - "quant_sports_intel_models/football/nfl/fantasy/**"
       - "quant_sports_intel_models/football/nfl/ingest/**"
       - "quant_sports_intel_models/football/nfl/pit/**"
+      # ── NCAAB-P0 (2026-09-14): the guard's DEPTH RULE had hardcoded `football`, so the whole
+      # basketball vertical was truncated to the `basketball` NAMESPACE, correctly rejected as a
+      # namespace, and its requirement VANISHED — this list stayed green while
+      # `sports_ncaab_ingest_job` (RUNNING, daily) executed code outside the CD trigger. NF-K1
+      # reintroduced through the guard that exists to prevent it. The rule now descends until a
+      # directory owns a module, so it generalises to any new vertical instead of naming one.
+      # `football/pff` surfaces for the same reason: the old rule resolved it to a FILE path
+      # (`football/pff/client`), which the directory check dropped. It is research (5 commits in
+      # two months) rather than box-executed, and is included on the same "safe direction when
+      # reachability is indirect" reasoning as the three low-churn subtrees above.
+      - "quant_sports_intel_models/basketball/ncaab/ingest/**"
+      - "quant_sports_intel_models/football/pff/**"
       # ⛔ NOT the whole `quant_sports_intel_models/**` tree, and the reason is measured rather than
       # asserted: over the two months to 2026-08-17, 691 commits touched that tree but only 299
       # touched the box-executed subtrees above — so a whole-tree filter would roughly 2.3× the box

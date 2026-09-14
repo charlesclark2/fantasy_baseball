@@ -559,11 +559,51 @@ export function csvWithheldNote(present: readonly CsvWithheldClass[]): string | 
  *  ⚠️ AND IT WENT STALE ONCE ALREADY. Until 2026-08-08 it read "scored for the common league
  *  presets" — true while all 14 preset boards were free, false the moment the tier narrowed, and
  *  invisible either way because nothing renders differently when copy stops being accurate. */
+/**
+ * ⭐ ONE SENTENCE SHAPE, PER-SURFACE DATA (PM 2026-09-14 — NF-WK-FE1 finding 11, option b′).
+ *
+ * This block renders on FOUR surfaces (Projections, Rankings, the Player page, Weekly) and used to
+ * carry ONE hard-coded list, which named "the market ADP beside it". ADP is a season/draft concept:
+ * it appears ZERO times in the weekly contract (`app/backend/models/nfl_weekly.py`) and ZERO times
+ * in the weekly read layer — so on `/fantasy/weekly` the sentence named a number that is not on the
+ * page. Not a hedge or an overstatement; simply absent.
+ *
+ * ⛔ THE FIX IS NOT A SECOND COPY OF THE PROSE. "One logical thing, many owners" is a defect class
+ * this repo has paid for repeatedly (INC-30 / INC-36 / INC-38), and two freemium sentences would
+ * drift apart the first time one was edited. So the WORDING has exactly one owner — `tail`, below,
+ * is byte-identical for every surface — and only the LIST of what a surface actually serves varies.
+ *
+ * ⚠️ `weekly` OMITS "every ranking" AS WELL AS ADP, which is one clause beyond the literal
+ * "ADP-only" scope, and it is deliberate: the weekly table's columns are Player / Team / Opp /
+ * Points / Range / Rest-of-season / Weeks left / Hist weeks / (paid) stat line, and
+ * `NflWeeklyPlayer` declares no rank field. Leaving "every ranking" in would have replaced one
+ * false clause with another and broken this module's own guard, whose whole rule is that a surface
+ * may only name what it serves.
+ *
+ * ⛔ AND IT DOES NOT TOUCH "no number quietly withheld". That clause is strained on EVERY surface
+ * since NF-EPIC 1 made the per-stat line paid, it is a product-wide positioning question, and the
+ * PM ruled it a separate item with operator sign-off on the wording. It lives in `tail` precisely
+ * so this change cannot drift into it.
+ */
 export const FREE_TIER_SUMMARY = {
   title: "This is free, and every number on it is real",
-  detail:
-    "Every player we project, every ranking, every 80% range and the market ADP beside it — no account, no trial, and no number quietly withheld. It is the same board for everyone, which is exactly what makes it free.",
+  /** What each surface ACTUALLY serves. A surface may only name numbers it renders. */
+  items: {
+    season: "Every player we project, every ranking, every 80% range and the market ADP beside it",
+    weekly: "Every player we project, every 80% range and the rest-of-season number beside it",
+  },
+  /** The half that is a claim about the TIER rather than the page — identical everywhere, one owner. */
+  tail:
+    " — no account, no trial, and no number quietly withheld. It is the same board for everyone, which is exactly what makes it free.",
 } as const
+
+/** The surfaces this block renders on. Adding a key is how a NEW surface joins — there is no
+ *  default, so it cannot inherit another surface's list by omission. */
+export type FreeTierSurface = keyof typeof FREE_TIER_SUMMARY.items
+
+export function freeTierDetail(surface: FreeTierSurface): string {
+  return FREE_TIER_SUMMARY.items[surface] + FREE_TIER_SUMMARY.tail
+}
 
 /** The paid half, in the two categories the entitlement actually splits on, plus the format lever.
  *  Each `title` names the capability in the user's words; `detail` says what it does, never how well

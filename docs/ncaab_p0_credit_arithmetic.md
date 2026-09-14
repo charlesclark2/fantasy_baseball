@@ -1,9 +1,53 @@
 # NCAAB-P0 — Odds API credit arithmetic, cadence proposal, and the fan-out ceiling
 
-**For the operator. This is a spend decision; nothing here has been enabled.**
+**For the operator. This is a spend decision. Nothing here has been enabled yet — but the two
+decisions have now been dispositioned by the PM; see the block immediately below.**
 Measured 2026-09-14 against live `x-requests-remaining` / `x-requests-last` headers.
 Witness: `quant_sports_intel_models/basketball/ncaab/ablation_results/ncaab_p0_credit_probe.json`.
 Constants: `basketball/ncaab/ingest/budget.py`. Reproduce: `python -m …ingest.credit_probe`.
+
+---
+
+## ⚖️ DISPOSITIONS (PM, 2026-09-14) — read these before the arithmetic
+
+The measurements below are accepted as measured. Two decisions were taken on them, and they are
+**different in kind**, which is the point of recording them together.
+
+### FORWARD CAPTURE → **RECOMMENDED ON NOW** (operator acts)
+
+Enable `sports_ncaab_odds_capture_schedule` at the §3 recommended cadence. Three reasons, all of
+them measurements from this document rather than judgment calls:
+
+1. **The reason to wait was removed by measurement.** An empty board bills **0**, so every tick
+   between enablement and the season's first posted line is free. "Wait until November" was an
+   assumption about cost that turned out to be false.
+2. **0.31% of balance for a whole season** is a rounding error against what it buys.
+3. **Forward is the only way to hold *this* week at 1×.** Recovery through `/historical` works
+   but costs 10× — so the value of enabling early is real even though the urgency is not
+   existential (see §2's correction).
+
+### THE HISTORICAL BACKFILL → **DEFERRED-ON-DEMAND** (explicitly *not* approved as a block)
+
+The §4 menu is priced and stands, but **no backfill is purchased yet**, and the reasoning matters
+more than the ruling:
+
+> **The archive is not going anywhere.** Its floor is fixed at 2020-11-16 and its contents do not
+> decay, so buying it early buys nothing that buying it later does not. The honest sequencing is
+> therefore: **P1/P2's registered designs NAME the market window they need, and the purchase buys
+> exactly that window.** A speculative 6-season block bought ahead of a design that consumes it is
+> a spend with no stated consumer — and if the design that eventually arrives wants a different
+> resolution (per-tip-slot closes, say, rather than T-1 + evening), the speculative purchase is
+> not even the right shape.
+
+⇒ **When a P1 or P2 spec declares a market window, it comes back here with that window and this
+document prices exactly it.** The §4 table is the menu; a registered design is the order.
+
+⚠️ And the constraint that bounds every such request, recorded as a **registration constraint**
+rather than an advisory: **any P1/P2 clause touching market data declares its window inside the
+2020-11-16 floor, and no story is ever scoped around a longer one.** Game data reaches 24 seasons
+free; market data reaches 6, at any spend.
+
+---
 
 ## 0. How these numbers were made honest
 
@@ -98,6 +142,9 @@ events). **Cadence, not slate size, is the only lever on cost.**
 **Futures daily (154) + game lines every 30 minutes across the 16-hour US window (14,784) —
 ≈ 14,938 credits for the whole season, 0.31% of the balance.**
 
+> ⚖️ **PM DISPOSITION: RECOMMENDED ON NOW.** Enable at this cadence. The measured
+> free-empty-board behaviour removes the reason to wait for November.
+
 Rationale: 30-minute resolution puts a snapshot within half an hour of every tip, which is
 enough for an honest closing-line read, while costing a rounding error. The 5-minute option
 matches the vendor's own archive granularity and is still under 2% — so if P2's calibration
@@ -121,10 +168,18 @@ pre-game line is served from is the one thing this vertical must never do (the N
 | Hourly evening (8/day) | 36,960 | **221,760** | 4.61% |
 | Per distinct tip slot (~21/day) | 97,020 | **582,120** | 12.09% |
 
-**Recommendation: T-1 + late evening, 6 seasons — 55,440 credits (1.15%).** That buys a
-market-relative training window and a CLV benchmark for every archived season at close to a
-rounding error. The per-tip-slot option is the only one that costs real money, and it buys
+**Recommendation (as priced): T-1 + late evening, 6 seasons — 55,440 credits (1.15%).** That
+buys a market-relative training window and a CLV benchmark for every archived season at close to
+a rounding error. The per-tip-slot option is the only one that costs real money, and it buys
 exact per-game closes, which nothing in P1 or P2 currently needs.
+
+> ⚖️ **PM DISPOSITION: DEFERRED-ON-DEMAND — this recommendation is NOT approved as a block.**
+> The archive's floor is fixed and its contents do not decay, so buying early buys nothing that
+> buying later does not. **A P1/P2 registered design names the market window it needs, and the
+> purchase buys exactly that window.** Note the last sentence of the recommendation above is the
+> reason: nothing currently registered consumes the expensive resolution, and there is no
+> registered consumer for the cheap one yet either. Bring a declared window back to this table
+> and it prices exactly that. ⛔ Do not buy a speculative block ahead of the design.
 
 > **This is the binding constraint on market-relative work, and it is worth stating plainly:**
 > game data goes back **24 seasons** (free, hoopR); market data goes back **6**. Any model that
@@ -205,6 +260,19 @@ print('events:', len(r.json()), '| cost:', r.headers['x-requests-last'], '(expec
 uv run python -c "from betting_ml.monitoring.ncaab_freshness import registration_snippet as r; print(r())"
 ```
 
-**Cadence choice and the backfill remain operator decisions.** What is built: the capture job,
-its cron at the proposed cadence, the read-merge-write that lets it accumulate safely, and the
-fan-out ceiling. What is deliberately **not** done: turning it on.
+**Where the two decisions now stand.** What is built: the capture job, its cron at the proposed
+cadence, the read-merge-write that lets it accumulate safely, and the fan-out ceiling. What is
+deliberately **not** done: turning it on.
+
+| Decision | Status | Who acts next |
+|---|---|---|
+| Forward capture (cadence + enablement) | ⚖️ **PM-RECOMMENDED ON NOW** at the §3 cadence | **Operator** — the Dagit toggle in step 2, plus arming the two odds freshness contracts in the same change |
+| Historical backfill | ⚖️ **DEFERRED-ON-DEMAND** — priced, not purchased | **P1/P2** — a registered design names its market window; this table then prices exactly that |
+
+⚠️ **Arming is not optional and not separable.** Whichever writer is enabled, register its
+freshness contracts in the SAME change (`registration_snippet()` prints the paste). The two
+ingest contracts (`ncaab_schedules`, `ncaab_team_box`) and the two odds contracts
+(`ncaab_odds_game_lines`, `ncaab_odds_futures`) have **different writers and therefore different
+arming moments** — see the runtime-gate handoff. Registering a contract for a table nothing
+writes is a permanent false page; leaving one unregistered after its writer is on is a silent
+freeze. Both failures are avoided by arming with the writer, never before and never later.

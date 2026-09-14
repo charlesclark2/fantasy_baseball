@@ -758,7 +758,7 @@ export function RankingsBoard() {
               board, not above it: a visitor has to see that nothing is withheld before "this is the
               generic one" means anything. Put at the top it would read as a paywall on a page that
               has none. Renders nothing for an entitled caller. */}
-          <FreemiumBoundary entitled={entitled} />
+          <FreemiumBoundary entitled={entitled} surface="season" />
         </>
       )}
 

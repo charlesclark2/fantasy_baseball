@@ -70,11 +70,38 @@ def _trigger_paths() -> list[str]:
     return list(paths)
 
 
+def _deployable_subtree(parts: list[str]) -> str:
+    """Truncate a dotted module path to the SHALLOWEST subtree under it that holds code.
+
+    ⭐ THIS DESCENDS THROUGH NAMESPACES INSTEAD OF NAMING THEM, and that is the whole point.
+    The first cut hardcoded the grouping segment — `depth = 4 if parts[1] == "football" else 2` —
+    which was correct for the only vertical that existed and became a silent hole the moment a
+    SECOND sport arrived. NCAAB-P0 landed `quant_sports_intel_models/basketball/ncaab/ingest`,
+    which the box runs daily via `sports_ncaab_ingest_job`; the literal rule truncated it to
+    `quant_sports_intel_models/basketball`, `_is_deployable_dir` then correctly rejected that as a
+    namespace, and the requirement VANISHED — so this guard passed while an entire vertical's
+    box-executed code sat outside the CD trigger. Exactly the NF-K1 outage it was written to
+    prevent, reintroduced through the guard's own depth rule.
+
+    The fix reuses the discriminator this file already trusts rather than adding a second
+    hand-maintained list: walk down until a directory owns a module of its own. Measured to be
+    behaviour-identical on the incumbent verticals — `football`, `football/ncaaf` and
+    `football/nfl` are all pure namespaces, so football still resolves at depth 4 — while
+    `basketball/ncaab/ingest` is now derived. A path that bottoms out with nothing deployable
+    (e.g. `sports_dbt`, which holds no `.py` at all) falls back to the two-segment form and is
+    dropped by the caller's final filter, unchanged from before."""
+    for depth in range(2, len(parts) + 1):
+        candidate = "/".join(parts[:depth])
+        if _is_deployable_dir(candidate):
+            return candidate
+    return "/".join(parts[:2])
+
+
 def _subtrees_in(paths) -> set[str]:
     """The `quant_sports_intel_models.<...>` subtrees referenced by the given files.
 
-    Truncated to the depth the repo organises deployable units at: `fantasy_engine`,
-    `sports_dbt`, and `football/<sport>/<area>`."""
+    Truncated to the shallowest code-holding directory on each path — `fantasy_engine`,
+    `<sport-group>/<sport>/<area>`, and whatever shape a future vertical uses."""
     pattern = re.compile(r"quant_sports_intel_models[\w.]*")
     found: set[str] = set()
     for py in paths:
@@ -84,9 +111,7 @@ def _subtrees_in(paths) -> set[str]:
             parts = [p for p in hit.split(".") if p]
             if len(parts) == 1:
                 continue
-            # football/<sport>/<area>; everything else at one level (fantasy_engine, sports_dbt)
-            depth = 4 if len(parts) > 3 and parts[1] == "football" else 2
-            found.add("/".join(parts[:depth]))
+            found.add(_deployable_subtree(parts))
     return found - _NOT_A_SUBTREE
 
 
@@ -132,6 +157,17 @@ def test_the_derivation_is_not_vacuous():
     assert "quant_sports_intel_models/football/nfl/fantasy" in subtrees, (
         "the NFL fantasy subtree is not being derived, so the regression this guard was written "
         "for would not be caught")
+    # ⭐ AND A NON-FOOTBALL VERTICAL, because the clause above cannot see the hole NCAAB-P0 found.
+    # The depth rule used to hardcode `football`, so EVERY other sport was truncated to its
+    # namespace and dropped from the requirement — leaving this whole file green while
+    # `sports_ncaab_ingest_job` ran box code outside the CD trigger. Both clauses above passed
+    # throughout, because both name football subtrees. Proven two-sided: restoring the old rule
+    # with the basketball filter line removed makes `test_every_box_run_subtree_triggers_a_deploy`
+    # PASS, which is exactly the vacuity this asserts against.
+    assert any(not s.startswith("quant_sports_intel_models/football/") and "/" in s.removeprefix(
+        "quant_sports_intel_models/") for s in subtrees), (
+        "no non-football sport subtree was derived. The depth rule has probably been re-specialised "
+        f"to one vertical — derived: {sorted(subtrees)}")
 
 
 def test_every_box_run_subtree_triggers_a_deploy():
