@@ -9,7 +9,7 @@ metadata:
   name: nf-wk-mt1
   vertical: nfl_fantasy
   card: https://trello.com/c/HvVAWD9f   # consumer-chain thread; MT1 card linked at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The paid question the weekly stack exists to answer: "who do I
