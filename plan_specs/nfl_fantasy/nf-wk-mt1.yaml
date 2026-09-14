@@ -301,3 +301,45 @@ spec:
       · Both inherit `coverage` unchanged: a term the weekly line cannot express is
       CAPTURED in an optimizer's objective exactly as it is in a rendered number, and
       neither successor may quietly promote one to APPLIED.
+
+      (9) 🧨 NF-INC-0914 — REBASED ONTO THE FIX, AND ITS LATENT EXPOSURE AUDITED ON THIS
+      STORY'S OWN SUBSTRATE. Branch rebased onto `dev` (fix `5380a6b4` present, 0 behind);
+      no conflicts, because this story's files do not overlap the incident's. ⛔ NOTHING
+      HERE IS ATTRIBUTED TO THE INCIDENT: the outage was `export_draft_board_json.py` →
+      `fantasy/nfl/<season>/`, while the weekly product publishes through a different job
+      and a different prefix (`run_weekly_serving.py` → `fantasy/nfl/weekly/*`). Finding
+      (5)'s live measurement read ONLY the weekly routes, so the pre-restore served board
+      cannot have coloured it and that measurement stands unchanged.
+      ⭐ THE AUDIT, MEASURED RATHER THAN INHERITED. The incident's root cause was that
+      nothing EXECUTED `export_draft_board_json.main()`, so a NameError at a call line
+      inside it rode green CI to prod. Re-measured on the weekly entrypoint: two test
+      files reference `run_weekly_serving` and ZERO call `main()` — the operator's audit
+      reproduced exactly. `main()` is 62 lines and its body resolves only `build`,
+      `stage`, `publish`, `WS.WeeklyRostersNotPublished` and `built[...]`; it references
+      NOTHING this story changed, so the "changed a call line inside main()" trigger does
+      NOT fire here and no execution guard was added. ⛔ Deliberately not written: guarding
+      an entrypoint this story does not functionally change would be scope creep into the
+      weekly-serving story, and the blind spot on `main()`'s BODY is unchanged by anything
+      here.
+      ⚠️ WHAT THIS STORY DID CHANGE IS ITS IMPORT CLOSURE, AND THAT WAS MEASURED TWO-SIDED
+      RATHER THAN REASONED ABOUT. `run_weekly_serving.py:38` imports
+      `app.backend.models.nfl_weekly`, and this story added THREE models to
+      `CONTRACT_MODELS` — the tuple `assert_no_edge_claim_in_schema()` and
+      `assert_no_matchup_claim()` walk AT IMPORT. So the weekly publish now imports a
+      contract with more surface that can refuse at import. Planting a forbidden-token
+      field name on one of the new models: (a) the weekly publish entrypoint FAILS to
+      import (`ValueError` from `assert_no_edge_claim_in_schema`), and (b) CI sees it —
+      the guard file errors at COLLECTION, before a single test runs. ⇒ the widened
+      surface FAILS CLOSED and is already CI-visible, so it needs no new guard; recorded
+      because "my change is in the publish entrypoint's import closure" is exactly the
+      kind of consequence that is invisible until someone looks.
+      ⇒ CARRIED FOR THE NEXT STORY THAT TOUCHES IT, with the trigger named precisely: the
+      unguarded line is `built = build(args.season, args.week)` inside
+      `run_weekly_serving.main()`. Threading a season/week, adding an argument or wiring a
+      new stamp THERE is the change CI cannot see, and the pattern to copy is
+      `betting_ml/tests/test_nf_inc_0914_publish_entrypoint.py` (execute `main()` with real
+      argv, stub IO at the boundary, assert the branch was genuinely taken). ⭐ And the
+      sharper half of the incident's lesson applies to that line specifically: the commit
+      before the break had ALREADY extracted the body into a testable function, which
+      shrank the blind spot to the argument-binding line and did not close it — EXTRACTION
+      IS NOT A SUBSTITUTE FOR EXECUTION.
