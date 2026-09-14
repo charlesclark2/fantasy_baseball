@@ -1,6 +1,26 @@
-# NCAA Basketball (NCAAB) — Implementation Guide (stub)
+# NCAA Basketball (NCAAB) — Implementation Guide
 
-**Status:** v0.1 — scaffold (Phase 0 not yet started)
+**Status:** v0.2 — Phase 0 (NCAAB-P0) COMPLETE. Data foundation stood up; P1 unblocked.
+
+> 🚩 **STALENESS CORRECTIONS (NCAAB-P0, 2026-09-14) — READ BEFORE TRUSTING ANYTHING BELOW.**
+> The original stub predates the current architecture and three of its claims are now WRONG:
+> 1. **"Railway PG"** — DECOMMISSIONED (INC-16). Serving is DynamoDB → S3.
+> 2. **"Lambda + EventBridge cron"** — superseded. Orchestration is the existing Dagster EC2
+>    box; NCAAB's free ingest is `sports_ncaab_ingest_schedule` (daily, RUNNING).
+> 3. **"ingest a Torvik/KenPom-style source"** — MEASURED UNNECESSARY. The possession identity's
+>    four operands are in the free box scores from 2003, so tempo × efficiency is computable
+>    from the substrate we already have (measured: 69.2 possessions/team-game). hoopR's
+>    crosswalk even ships KenPom/Torvik join keys, so buying one later stays cheap.
+> 4. **"E5 player props"** — BLOCKED AT THE SOURCE, not a budget question: The Odds API carries
+>    no NCAAB player props (measured: HTTP 200, 0 books, 0 markets).
+>
+> **Current master data file:** `ncaab_data_inventory.md`.
+> **Operator decisions:** `docs/ncaab_p0_source_audit_verdict.md` (no paid data needed) and
+> `docs/ncaab_p0_credit_arithmetic.md` (the capture spend decision, still open).
+
+**Original stub text follows, retained for provenance.**
+
+**Status (original):** v0.1 — scaffold (Phase 0 not yet started)
 **Parent:** `quant_sports_intel_models/multi_sport_roadmap.md`
 **Reference implementation:** MLB `baseball/edge_program/` — NCAAB instantiates the same tracks.
 **Master data file:** `basketball/ncaab/ncaab_data_inventory.md` *(to be created in Phase 0)*.
