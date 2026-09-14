@@ -269,11 +269,20 @@ def sports_nfl_board_publish_schedule(context: ScheduleEvaluationContext):
 # backend — a schedule that starts publishing weekly blobs to an api-cache no route can read would
 # be spending box CPU on an artifact nobody can fetch.
 #
-# ⚠️ NF-INFRA1's WARNING APPLIES THE MOMENT IT IS TURNED ON: a schedule toggled ON in Dagit holds
-# that state ONLY in the Dagster Postgres, so a volume reset or a box re-host silently reverts it to
-# STOPPED and the weekly artifact freezes with nothing paging. When the operator enables this, it
-# belongs in `BOX_OPERATIONS.md §10` and in `check_monitors_healthy_op`'s required-RUNNING set in the
-# same change — otherwise the cure for a silent freeze is itself silently revertible.
+# ✅ THE DEPLOY-HOLD IS DISCHARGED (2026-09-13). The gateway routes exist (`--authorization-type
+# NONE` on the two FREE weekly reads), `deploy.sh` has shipped the backend, the box build was run
+# once by hand and skipped cleanly, and the operator has turned this ON in Dagit. Its precondition
+# was "there is a route that can read what this publishes", and that is now true — so the reason to
+# ship STOPPED is gone and the flag follows the fact.
+#
+# ⭐ AND IT SHIPS `RUNNING` FOR THE REASON THE COMMENT BELOW USED TO ONLY WARN ABOUT. A schedule
+# toggled ON in Dagit holds that state ONLY in the Dagster Postgres, so a volume reset or a box
+# re-host silently reverts it to STOPPED and the weekly artifact freezes with nothing paging — the
+# INC-16 default-status-revert / E11.23 "silently never runs" class. `default_status=RUNNING` makes
+# the intended state a property of the CODE rather than of a database row, and the entry in
+# `check_monitors_healthy_op`'s required-RUNNING set + `BOX_OPERATIONS.md §10` make a revert PAGE
+# instead of going quiet. This is exactly the follow-up NF-INFRA1 applied to the two sibling NFL
+# schedules, and the warning this comment carried is what called for it.
 NFL_WEEKLY_SERVING_CRON = "30 8 * * *"
 
 
@@ -281,7 +290,8 @@ NFL_WEEKLY_SERVING_CRON = "30 8 * * *"
     job=sports_nfl_weekly_serving_job,
     cron_schedule=NFL_WEEKLY_SERVING_CRON,
     execution_timezone="America/Los_Angeles",
-    default_status=DefaultScheduleStatus.STOPPED,
+    # NF-INFRA1 shape: self-start + heartbeat-checked — see the block above.
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 def sports_nfl_weekly_serving_schedule(context: ScheduleEvaluationContext):
     """Daily in-season rebuild of the next unplayed week's projection.

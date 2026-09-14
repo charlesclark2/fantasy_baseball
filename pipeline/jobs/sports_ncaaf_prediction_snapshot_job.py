@@ -2,10 +2,13 @@
 
 Runs the SERVED P1.4 game model over the upcoming FBS-vs-FBS slate and appends one immutable row
 per (game_id, snapshot_ts) to `ncaaf/derived/game_prediction_snapshots`, then fans out to a weekly
-snapshot of the P1.5 futures board. Two ops:
+snapshot of the P1.5 futures board. Three ops:
 
   1. ncaaf_prediction_snapshot_op   — the per-game snapshot. The PRIMARY deliverable.
   2. ncaaf_futures_snapshot_op      — the P1.5 futures board, snapshotted (the cheap fan-out).
+  3. ncaaf_ratings_freshness_op     — NCAAF-P1.2W: an UNBOUND ALERT leaf asserting the strength
+     ratings this snapshot is computed FROM are still advancing. It rides here rather than in the
+     re-fit job because a monitor hosted inside its own subject cannot see its subject stop.
 
 ⏰ WHY A MISSED RUN IS NOT RECOVERABLE — and what that means for the tiers.
 A pre-kickoff prediction can only be written BEFORE kickoff. Unlike the P0.6b odds catch-up (whose
@@ -32,8 +35,11 @@ so they are absent from the `COPY . .` image and deploy-ephemeral everywhere els
 an op that quietly depends on one is how a schedule runs green for 19 days over a frozen table.
 No CFBD key, no Odds-API key, no credits.
 
-⚠️ THE ONE QUALITY PREREQUISITE (operator, not code): the season's P1.2 RE-FIT — ✅ DONE
-2026-08-18, and worth recording WHAT it fixed, because the cold start's real defect was not the one
+⚠️ THE ONE QUALITY PREREQUISITE — ⭐ NO LONGER AN OPERATOR STEP as of NCAAF-P1.2W (2026-09-13):
+`sports_ncaaf_strength_refit_schedule` now re-fits P1.2 WEEKLY, Monday 07:30 PT, upstream of this
+Tuesday snapshot in time — so each week's immutable rows are computed off a posterior that has
+absorbed the weekend just played, which is what this job always needed and never had. The season's
+FIRST re-fit was still the operator's — ✅ DONE 2026-08-18, and worth recording WHAT it fixed, because the cold start's real defect was not the one
 the P0.7 note described. Until the re-fit, the strength mart's covariates were all-zero, which does
 not mis-ORDER the board so much as COMPRESS it toward the mean: Ohio State was +19.7 over Ball State
 and P(home win) spanned only 0.356-0.883. With the covariates populated the same slate reads +40.4
@@ -43,9 +49,11 @@ design, so the re-fit had to land first.
 
 ⭐ AND THE RE-FIT IS NOT ONE COMMAND. P1.2 reads its covariates from the sports DuckDB MARTS, not
 from the lake — so `run_team_strength` against stale marts silently reproduces the cold start and
-looks successful (it did, once). The marts must be rebuilt from the fresh lake FIRST. See the
-report's operator section for the chain and the verification that distinguishes "it ran" from "it
-worked".
+looks successful (it did, once). The marts must be rebuilt from the fresh lake FIRST. That chain,
+and the verification that distinguishes "it ran" from "it worked", is now the weekly job's graph
+rather than a runbook a human follows: `sports_ncaaf_strength_refit_job` rebuilds the marts INSIDE
+the run and FAILS loudly on a cold-start reproduction. See the NCAAF-PS report's operator section
+for the hand-run form, and `docs/ncaaf_p1_2w_weekly_strength_refit.md` for the scheduled one.
 """
 
 import os
@@ -139,6 +147,59 @@ def ncaaf_futures_snapshot_op(context):
         manifest.get("strength_as_of_week"))
 
 
+@op(out=Out(Nothing))
+def ncaaf_ratings_freshness_op(context):
+    """ALERT (never HALT) — NCAAF-P1.2W: assert the STRENGTH RATINGS are still advancing.
+
+    ⭐ WHY IT LIVES HERE RATHER THAN IN `sports_ncaaf_strength_refit_job`. That job verifies the
+    artifact it just wrote, and that check is structurally incapable of catching this failure,
+    because it only runs when the job runs. The event this op exists to detect is the weekly re-fit
+    NOT RUNNING — a schedule reverted to STOPPED by a Dagster-volume reset, a code location that
+    failed to load, a stalled daemon. In all of those there is no run, so there is no verification,
+    no failed run, and the last run in Dagit is a genuine green one; the ratings silently freeze at
+    whatever week they reached and every producer-side instrument stays quiet. A monitor hosted
+    inside its own subject cannot see its subject stop (the NF-INFRA2 reading).
+
+    ⭐ AND THIS IS THE RIGHT HOST, not merely a different one. The snapshot this job writes is
+    IMMUTABLE: one row per `(game_id, snapshot_ts)`, never rewritten. A snapshot taken off a frozen
+    prior is a forward track record that permanently records a stale model — so the moment this
+    fact matters most is exactly the moment this job runs, beside the `strength_as_of_week` the
+    snapshot op already logs. It is also weekly, which matches a weekly artifact: `send_alert`'s
+    rate limit is PER PROCESS and each Dagster run is its own process, so hanging this off the
+    hourly serving write would mean twenty-four real emails a day while the ratings were stale.
+
+    ⭐ DELIBERATELY INDEPENDENT — no `ins`, so it is NOT downstream of the snapshot op. That op
+    RAISES by design (a missed pre-kickoff row can never be written later), and hanging this
+    monitor off it would mean a snapshot outage BLINDS the ratings monitor on exactly the days
+    something is already wrong. Two unrelated failures must not share a fate.
+
+    Terminal and never raises: by the time it runs it has only read S3, and failing this run would
+    add nothing while obscuring a successful — deadline-critical — snapshot.
+    """
+    from betting_ml.monitoring import sports_delta_freshness as SDF
+
+    contract = SDF.by_name("ncaaf_team_strength_week")
+    reading = SDF.read_contract(contract)
+    verdict = SDF.classify(contract, reading)
+    context.log.info(
+        "[METRIC] ncaaf_ratings_freshness=%s lag_hours=%s version=%s",
+        verdict["verdict"], verdict["lag_hours"], reading.version)
+    if not SDF.is_problem(verdict):
+        context.log.info("[ncaaf ratings sla] artifact freshness OK — %s", verdict["detail"])
+        return
+    from pipeline.utils.alerting import send_alert
+
+    body = (f"{verdict['detail']}\n\ncadence: {contract.cadence}\n\n"
+            f"⚠️ The served 'ratings as of' stamp on every NCAAF surface now shows this vintage, "
+            f"and the 'next update' half PROMISES the cadence above — a freeze turns that stated "
+            f"date into an overclaim, which is the one thing NCAAF-P3.3b's stamp was built not to "
+            f"do.")
+    send_alert(f"NCAAF strength ratings {verdict['verdict']}", body,
+               severity=verdict["severity"] or "WARN",
+               dedup_key=f"ncaaf_team_strength_week:freshness:{verdict['verdict']}")
+    context.log.warning("ALERT [ncaaf ratings sla] %s — %s", verdict["verdict"], body)
+
+
 @job(executor_def=in_process_executor)
 def sports_ncaaf_prediction_snapshot_job():
     """Weekly pre-kickoff per-game predictions → the lake, the futures-board snapshot, then the
@@ -154,3 +215,6 @@ def sports_ncaaf_prediction_snapshot_job():
     """
     ncaaf_serving_write_after_snapshot_op(
         start=ncaaf_futures_snapshot_op(start=ncaaf_prediction_snapshot_op()))
+    # NCAAF-P1.2W — an UNBOUND leaf, on purpose: see the op's docstring for why it must not be
+    # downstream of the snapshot it rides beside.
+    ncaaf_ratings_freshness_op()
