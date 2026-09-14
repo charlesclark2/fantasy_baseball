@@ -128,10 +128,11 @@ spec:
       debut line and the spec's own rule is that declaration never outruns production.
       It, the raw fixture re-capture and the live content verification are listed as
       post-publish operator steps below.
-      Guards: E2E 16 desktop + 4 mobile, full frontend suite 709 passed / 0 failed;
+      Guards: E2E 18 desktop + 4 mobile, full frontend suite 713+ passed / 0 failed;
       Python 24 clauses; RED proofs 16/16 (Python) and 6/6 (frontend), both attributable
-      with baseline-pass, NOT-SELECTED and resolve-every-node legs; fast gate 12,666
-      passed / 0 failed.
+      with baseline-pass, NOT-SELECTED and resolve-every-node legs, plus three more
+      RED-proven individually (the sr-only containment, the provenance format, the
+      in-flight paid read); fast gate 12,666 passed / 0 failed.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
@@ -231,7 +232,19 @@ spec:
       records the class ("a stale next-server squatting port 3100 silently hijacks the whole
       E2E suite") but nothing checks it.
 
-      (10) 📣 THE SHARED `FreemiumBoundary` ADVERTISES "the market ADP beside it" ON A PAGE
+      (10b) 🕓 A FOURTH STATE FOUND LATE AND FIXED: the paid stat line is a SEPARATE query, so an
+      entitled reader who opened a row before `/weekly/projections-full` resolved was told "No
+      projected stat line was produced for this player this week" — the in-flight read was
+      borrowing the ABSENCE state's sentence. That is not a slow render, it is a FALSE CLAIM
+      ABOUT THE MODEL held on screen for as long as the fetch takes, and a reader cannot tell
+      the two apart. ⭐ Worth carrying as a pattern: this page's whole design is that an empty
+      state meaning several things costs an investigation every recurrence — the corollary,
+      which is easy to miss, is that a state meaning something UNTRUE is strictly worse than
+      one that is merely ambiguous. Any surface with a SECOND, independently-resolving read has
+      this shape. Guarded by delaying only the paid read (the real sequence, not a simulated
+      flag) and asserting the NEGATIVE — the absence sentence must not be on screen.
+
+      (11) 📣 THE SHARED `FreemiumBoundary` ADVERTISES "the market ADP beside it" ON A PAGE
       WITH NO ADP. Visible in the rendered capture: the weekly page carries the canonical
       product-level freemium block, whose copy enumerates "every ranking, every 80% range and
       the market ADP" — true of the season board, not of this surface. ⛔ NOT CHANGED HERE ON
