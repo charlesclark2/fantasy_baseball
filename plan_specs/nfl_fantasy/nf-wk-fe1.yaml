@@ -215,3 +215,29 @@ spec:
       the file's own header warns about. Restored via `git checkout --`; nothing reached a
       commit, because staging by explicit path rather than `git add -A` is what kept it out.
       Use `node --check` to validate that file.
+
+      (9) 🧟 …AND THAT KILLED RUN LEFT A SECOND, WORSE ARTEFACT: AN ORPHANED `next-server` ON
+      PORT 3100, WHICH SILENTLY HIJACKED EVERY LATER E2E RUN. Playwright's `webServer` config
+      REUSES an existing listener, so the suite kept being served a build frozen at 23:56 —
+      producing five confident-looking failures on a page whose source was fine, and two
+      throwaway captures that were byte-identical and stuck on "Loading". ⭐ THE TELL: the
+      failures survived `git status` coming back CLEAN and a fresh `npm run e2e:build`, which
+      together rule out both source residue and a stale artifact — at which point the only
+      remaining candidate is that the thing under test is not the thing being served.
+      `lsof -nP -iTCP:3100 -sTCP:LISTEN` settled it in one command. ⚠️ A THIRD `next-server`
+      was found alongside it dated **2026-08-20** — a 3.5-week-old orphan from an unrelated
+      session, i.e. this accumulates silently on a long-lived machine. Worth a one-line
+      pre-flight in the E2E README ("check 3100 before believing a failure"); the repo already
+      records the class ("a stale next-server squatting port 3100 silently hijacks the whole
+      E2E suite") but nothing checks it.
+
+      (10) 📣 THE SHARED `FreemiumBoundary` ADVERTISES "the market ADP beside it" ON A PAGE
+      WITH NO ADP. Visible in the rendered capture: the weekly page carries the canonical
+      product-level freemium block, whose copy enumerates "every ranking, every 80% range and
+      the market ADP" — true of the season board, not of this surface. ⛔ NOT CHANGED HERE ON
+      PURPOSE: it is one shared component rendered identically on Projections, Rankings and
+      Player Search, the spec says the season surfaces are untouched, and its wording is
+      screened marketing copy. ⇒ a PM call: either accept it as product-level copy that
+      describes the free TIER rather than the page, or give the block a per-surface variant.
+      (The adjacent "no number quietly withheld" clause is NOT a new inconsistency — the
+      season stat line has been paid since NF-EPIC 1 and the same block ships there.)
