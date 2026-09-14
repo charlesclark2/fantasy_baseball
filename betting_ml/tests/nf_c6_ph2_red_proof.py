@@ -266,6 +266,46 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "        if False:",
      f"{_G_SERVING}::test_the_stripper_actually_removes_prose_or_these_guards_are_vacuous"),
 
+
+    # ── NF-WK-FE1 follow-up: the NOTHING-PUBLISHED escalation ────────────────────────────────
+    # The gap these cover cost 2026 week 1: before a first publish, WRONG_WEEK / STALE /
+    # STALE_INTO_KICKOFF all read a field off an artifact that does not exist, so the verdict was
+    # pinned at UNKNOWN/WARN however close the slate got.
+    ("the no-artifact case can no longer escalate as kickoff approaches",
+     _FRESH,
+     "        if (expected_kickoff is not None\n                and now >= expected_kickoff - timedelta(hours=NOTHING_PUBLISHED_CRITICAL_HOURS)):",
+     "        if False:",
+     f"{_G_SERVING}::test_nothing_published_escalates_as_the_expected_kickoff_approaches"),
+
+    ("the freshness op stops passing the kickoff, stranding the escalation in production",
+     _OP,
+     ",\n                          expected_kickoff=expected_kickoff)",
+     ")",
+     f"{_G_SERVING}::test_the_freshness_op_actually_supplies_the_expected_kickoff"),
+
+    ("the kickoff is hard-coded rather than derived from the resolved target week",
+     _OP,
+     '        expected_kickoff = getattr(target.first_kickoff, "to_pydatetime",\n                                   lambda: target.first_kickoff)()',
+     "        expected_kickoff = None",
+     f"{_G_SERVING}::test_the_freshness_op_actually_supplies_the_expected_kickoff"),
+
+    ("the escalation threshold drifts away from the kickoff bar it is derived from",
+     _FRESH,
+     "NOTHING_PUBLISHED_CRITICAL_HOURS = STALE_BEFORE_KICKOFF_HOURS",
+     "NOTHING_PUBLISHED_CRITICAL_HOURS = 6.0",
+     f"{_G_SERVING}::test_the_escalation_threshold_is_derived_from_the_existing_kickoff_bar"),
+
+    ("the page stops naming the half of the diagnosis that is actionable",
+     _FRESH,
+     "`sports_nfl_weekly_serving_schedule` is RUNNING and firing.\")}",
+     "the schedule is healthy.\")}",
+     f"{_G_SERVING}::test_the_escalation_names_the_actionable_half_of_the_diagnosis"),
+
+    ("the off-season stops being exempt, so a static artifact pages all winter",
+     _FRESH,
+     "    return expected_week is not None",
+     "    return True",
+     f"{_G_SERVING}::test_the_off_season_is_still_silent_even_with_nothing_published"),
 ]
 
 #: The NOT-SELECTED control: a test that must stay GREEN under every mutation above, so a red

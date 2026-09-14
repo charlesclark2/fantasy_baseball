@@ -1,0 +1,162 @@
+# Plan spec — NCAAB-P0 (FULL tier: the NCAAB data foundation — free-source audit with a
+# paid-necessity verdict, lake layout, and the now-or-never odds captures)
+# Authored by PM 2026-09-14. EPIC NCAAB, phase 1 of 4; launch target first D-I tip ~2026-11-03.
+# Operator rulings embedded: paid data spend decided AFTER this audit; MVP = NCAAF parity.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaab-p0
+  vertical: ncaab
+  card: https://trello.com/c/ItLo7klu
+  status: ACCEPTED
+spec:
+  description: >
+    Stand up the NCAAB data foundation the way NCAAF's was stood up,
+    on a 7-week clock: (A) a FREE-SOURCE AUDIT with a paid-necessity
+    VERDICT — the operator decides spend on this audit's evidence,
+    not on assumption; (B) the lake + entity foundation mirroring
+    ncaaf/ (schedules, results, a D-I team dimension with SCD-correct
+    conference membership, box-score staging); (C) ⏱️ THE ODDS
+    CAPTURES, enabled EARLY and operator-gated on spend — plus a
+    HISTORICAL-DEPTH PROBE (operator correction 2026-09-14): The Odds
+    API's /historical endpoint IS point-in-time (that is what its
+    ~10x credit multiplier prices — the NF-CAP1 measurement), so PIT
+    historical NCAAB lines are recoverable; the audit must measure
+    HOW FAR BACK. Forward capture remains ~10x cheaper than
+    historical recovery, so the early-enablement priority stands —
+    but a priced backfill option replaces "permanently gone" in the
+    calculus. best_alpha=0;
+    the vertical is a transparency product (win prob + distributions
+    + model-vs-market as context, never picks). Reuse over invention
+    everywhere: the NCAAF ingestion/capture/serving patterns are the
+    template, extended per-sport, never forked (the INC-42
+    one-logical-thing-many-owners lesson applies from day one).
+  acceptanceCriteria:
+    - description: >
+        (A) THE SOURCE AUDIT, evidence not vibes, reported as a
+        decision document for the operator: for each candidate free
+        source (hoopR/sportsdataverse, ESPN public endpoints, NCAA
+        stats, The Odds API's own event/score feeds) measure — actual
+        pulls, not doc reading — coverage (all ~360 D-I teams? full
+        schedules? historical seasons for model training — how many,
+        how complete?), field inventory vs what the NCAAF-parity MVP
+        needs (results, scores, pace-computable box lines, venue/
+        neutral-site flags), update cadence and PIT properties (does
+        a source revise history? is there an as-of anywhere?), and
+        terms-of-use fit for our display use. VERDICT: free sources
+        SUFFICE for P1's strength model + P2's calibration, or a
+        NAMED gap only a paid source closes (which source, what it
+        costs, what specifically it adds) — the operator decides
+        spend on that verdict. No paid signup happens in this story.
+    - description: >
+        (B) LAKE + ENTITY FOUNDATION: ncaab/ lake layout mirroring
+        ncaaf/'s raw/derived split; ingestion jobs on the existing
+        per-sport job pattern with content-timestamped Delta writes
+        (INC-41 from day one); dim_ncaab_team with SCD-correct
+        conference membership (the realignment discipline NCAAF
+        proved — 2026 movers are test cases); dbt staging + marts for
+        schedule/results sufficient for P1 to fit on. Historical
+        backfill depth per the audit's findings (enough seasons for
+        an honest strength prior — state how many and why). Schedules
+        ship with the deliberate default_status posture RECORDED
+        (RUNNING for free ingestion + heartbeat, per the NF-CAP1/
+        P1.2W lessons — a STOPPED default is invisible to the revert
+        heartbeat); freshness contracts sized to real cadence with
+        active-season semantics.
+    - description: >
+        (C) THE CAPTURES, first in calendar priority and OPERATOR-
+        GATED on spend: extend the odds capture pattern to
+        basketball_ncaab — futures (title/conference) now, game lines
+        as they post, the T-1 snapshot discipline NCAAF proved.
+        BEFORE any schedule turns on: MEASURE credits on live
+        x-requests-remaining headers (never a price sheet — the
+        10x lesson), then present the operator the arithmetic for
+        the NCAAB slate (~50+ games/night in season, ~360 teams of
+        futures — a different budget class than NCAAF Saturdays)
+        with a proposed cadence + a FAN-OUT CEILING from day one
+        (the props budget-guard lesson: an unbounded per-event loop
+        over a board this size is the exposure; refuse loudly over
+        the cap, never truncate silently). Schedule enablement +
+        cadence choice are operator steps, paste-ready. Capture
+        artifacts get freshness coverage + the schedules join the
+        heartbeat. HISTORICAL PROBE (same node, small spend —
+        a handful of measured probe calls, operator-acknowledged):
+        against /historical for basketball_ncaab, measure (a) DEPTH —
+        the earliest date returning real NCAAB snapshots, and whether
+        prior full seasons are covered; (b) GRANULARITY — snapshot
+        spacing through a game day (can a T-1-equivalent be
+        reconstructed?); (c) MARKETS — h2h/spreads/totals coverage
+        (props?); (d) COST — measured credits per historical snapshot
+        via the live header. Deliverable: the BACKFILL ARITHMETIC as
+        an operator spend option (N seasons x M snapshots x measured
+        cost), beside the forward-capture cost, so training-data
+        depth for P1/P2 and any CLV-style honesty reads are a priced
+        DECISION, not an assumption in either direction.
+    - description: >
+        Standing disciplines from the program's whole record, binding
+        from this vertical's first commit: content timestamps never
+        mtimes; per-source parsers (a reused regex matching 0 rows
+        silently is a named failure); zero-row landings on an
+        expected-data day escalate loudly; an artifact that records
+        only successes gets a named execution witness; guards
+        RED-proven with unique anchors + baseline-pass + NOT-SELECTED
+        + resolve-every-node; >2-min commands operator paste-ready;
+        worktree; PR -> dev; no Trello; roadmap files frozen; no
+        serving, no frontend, no model fitting in this story (P1-P3
+        own those). Closeout carries the audit verdict, the measured
+        credit arithmetic, and the P1 readiness statement (what P1
+        can fit on, from which marts, at what depth).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaab-p0
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NCAAB" / "basketball" (board Credence Sports, 2026-09-14)'
+    duplicates: []
+    adjacent:
+      - "EPIC NCAAB (ItLo7klu) — the parent; P1 (strength model) / P2 (calibration) / P3 (serving+cards) are gated on this story's closeout."
+      - "NCAAF P0.x/P1.x lineage — the template; ingestion/capture/dim patterns EXTENDED per-sport, never forked; the SCD conference discipline inherited."
+      - "The Odds API budget surface (BOX_OPERATIONS §10 + the NF-CAP1 corrected figures + the 9/15 range derivation) — NCAAB's arithmetic joins that ledger; one credits ledger, not two."
+      - "Props budget-guard card (r75h9vf0) — the fan-out ceiling here is the same design; mirror, don't fork."
+      - "NF-WK-MT1 / MLB-LAKE2 (IN FLIGHT) — disjoint verticals and files; pipeline/ rebase discipline."
+  triedLedger:
+    files:
+      - "The NCAAF program's records: P0.6c (T-1 capture), P3.1b/ODDS-LIVE (live serving + the :55 collision lesson), P1.2/P1.2W (strength model + refit), dim conference SCD"
+      - "NF-CAP1 (the capture-health playbook: flag owners, three-state declarations, execution witnesses, measured credits)"
+      - "compact_lakehouse_raw / INC-42 (append-only stores need compaction OWNERSHIP declared at creation, not discovered at 2,000 files)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "NCAAB-P1 (strength model) -> P2 (calibration) -> P3 (serving + cards) -> tip-off launch ~Nov 3; the operator's paid-data decision; the captures that make any future NCAAB market work possible"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaab-p0-plan
+spec:
+  goalRef: { name: ncaab-p0 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-captures-first
+        desc: "⏱️ Credits measured live -> operator arithmetic + cadence proposal + fan-out ceiling -> operator enables. Calendar-priority: futures/early lines are now-or-never."
+      - id: 2-source-audit
+        desc: "Measured audit of the free sources -> the paid-necessity VERDICT document for the operator."
+      - id: 3-lake-entities
+        desc: "ncaab/ lake + ingestion jobs + dim_ncaab_team (SCD) + staging/marts; backfill per audit; monitoring posture recorded."
+      - id: 4-verify
+        desc: "Runtime gate: real box ingestion runs + capture rows verified from artifact content; guards RED-proven."
+      - id: 5-closeout
+        desc: "Audit verdict + credit arithmetic + P1 readiness statement into closeout.followUps; operator summary."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
