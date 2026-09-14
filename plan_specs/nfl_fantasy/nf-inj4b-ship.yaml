@@ -169,6 +169,41 @@ spec:
       unrecoverable — FantasyPros serves only the current snapshot) and remains the
       operator's step, so every packet figure is FIRST-ORDER and says so.
       best_alpha = 0; nothing was published.
+    nextActions: >
+      ⏱️ TIME-CRITICAL — THE PUBLISH CADENCE FALLS OFF A CLIFF ON 2026-09-15.
+      `is_draft_season` is Aug 1 → Sep 15, so `sports_nfl_board_publish_schedule`
+      fires DAILY at 07:15 America/Los_Angeles only through Tue 2026-09-15 and then
+      drops to WEEKLY (Mondays). Remaining daily fires: Mon 2026-09-14 and Tue
+      2026-09-15. The next one after that is Mon 2026-09-21. Every action below is
+      dated against that, not against "the next publish".
+
+      (A) CLOSE THE PER-ROW VERIFICATION — operator, LAPTOP, ~30 s. ⛔ BLOCKED until
+      NF-INJ4b-VERIFY (PR #1104) is promoted dev → main AND the Orchestration CD
+      deploy completes: `rows_discounted` is written by the BUILD, so it first
+      appears on the first publish from an image carrying that code, and MERGING TO
+      dev IS NOT ENOUGH — the box image ships from main. Then, after the next 07:15
+      PT publish:
+      `uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_nf_inj4b_ship_battery --verify-published`
+      EXPECT `the discount moved N of N designated row(s) at build time` ⇒ the four
+      rows flagged on 2026-09-13 were BASE DRIFT and this story closes clean. If N is
+      short of the designated count there IS a per-row gap and the check now names it
+      instead of gesturing at the whole board. ⚠️ If the promotion misses both 09-14
+      and 09-15, the next opportunity is 09-21 — a full week of the season served on
+      a per-row claim nobody has checked, which is the whole reason this is dated.
+
+      (B) DECIDE `DNR` / `NA` — PM. No hard deadline, but it costs continuously: the
+      build logs 16 player(s) carrying game-status tokens it cannot read (NA ×14, DNR
+      ×2). They render "unknown" and take NO discount, which is safe by construction
+      — but if either is a real designation we are declining to price 16 live rows
+      every week of the season, and that ALERT line is the only place it surfaces.
+      Resolution is one entry in `sleeper_injuries_source.WEEKLY_DESIGNATIONS` plus a
+      constant, or an explicit decision that the token is not priceable.
+
+      (C) NOTHING IS BLOCKING AND NOTHING NEEDS ROLLING BACK. The board serving today
+      is correct: the manifest reports `serving_enabled: true` / `feed_readable: true`
+      / 60 eligible rows, and 54 of 58 scoreable captured rows moved. (A) settles a
+      MEASUREMENT question about four rows, not the ship.
+
     followUps: >
       (0) ⭐⭐ A POST-PUBLISH CHECK THAT INFERS FROM A CAPTURED BASELINE WILL EVENTUALLY
       ACCUSE THE SHIP IT GUARDS. This one did, on its first real run, four hours after
