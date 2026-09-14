@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-09-14",
+    "items": [
+      {
+        "tag": "fixed",
+        "text": "The draft board is rebuilding daily again. The automated rebuild that runs each morning stopped before it could publish, so for one cycle the board you were reading was the one built the previous evening \u2014 correct as far as it went, but missing that morning's weekly game-status listings, which change daily during the season, and the latest market data. Nothing was wrong with the projections themselves and no number has been revised; the rebuild simply could not finish, and rather than publish something incomplete it published nothing and kept serving the previous board. It is advancing again, and the checks that decide whether a board is fit to publish are unchanged."
+      }
+    ]
+  },
+  {
     "week": "2026-09-07",
     "items": [
       {

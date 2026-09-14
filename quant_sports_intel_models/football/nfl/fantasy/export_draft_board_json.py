@@ -2135,7 +2135,7 @@ def main(argv: list[str] | None = None) -> int:
     # D6). The decisive per-row evidence is the expected-effect artifact the ship battery emits,
     # which is checked against the PUBLISHED board after the fact.
     manifest["designationDiscountStamp"] = designation_discount_stamp(
-        pdf, designations, season=season)
+        pdf, designations, season=args.season)
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
     # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45) — gated behind
