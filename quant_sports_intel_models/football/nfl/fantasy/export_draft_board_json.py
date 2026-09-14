@@ -954,7 +954,42 @@ _INJURY_GAMES_COLUMNS: dict[str, str] = {
 }
 
 
-def designation_discount_stamp(pdf, designations) -> dict | None:
+def _designation_apply_record(pdf, season: int | None = None) -> dict:
+    """What the designation discount DID to the build that produced this board, or `{}`.
+
+    Read from `nf1_5_projection_summary_<season>.json` — the sidecar the build writes and the
+    freshness block already reads — so the manifest reports the BUILD's own count rather than one
+    re-derived here at export time against whatever the lake now holds.
+
+    ⚠️ Returns `{}` for every "we do not know" case (no summary, unreadable, an older summary
+    written before this field existed, a historical season where the channel never ran). The caller
+    maps that to `None`, i.e. UNKNOWN — ⛔ never to 0, which would assert that the discount ran and
+    moved nothing."""
+    # ⛔ NO FALLBACK YEAR. A guessed season reads a DIFFERENT season's summary and reports its
+    #    count as this build's — a wrong answer dressed as a measurement, strictly worse than the
+    #    honest UNKNOWN. If the caller did not say which season this is, we do not know.
+    if season is None:
+        try:
+            season = (int(pdf["season"].iloc[0])
+                      if (pdf is not None and "season" in getattr(pdf, "columns", [])) else None)
+        except Exception:  # noqa: BLE001
+            season = None
+    if season is None:
+        return {}
+    path = _ARTIFACTS / f"nf1_5_projection_summary_{int(season)}.json"
+    try:
+        if not path.exists():
+            return {}
+        rec = json.loads(path.read_text()).get("designation_discount")
+        return rec if isinstance(rec, dict) else {}
+    except Exception as e:  # noqa: BLE001 — provenance must never fail an export
+        log.warning("[ALERT] NF-INJ4b: could not read the build's designation record from %s "
+                    "(%s: %s) — the manifest will say UNKNOWN, not zero", path.name,
+                    type(e).__name__, e)
+        return {}
+
+
+def designation_discount_stamp(pdf, designations, season: int | None = None) -> dict | None:
     """NF-INJ4b-SHIP — WHICH designation model this build was configured to serve, plus how many
     rows were ELIGIBLE for it.
 
@@ -980,8 +1015,24 @@ def designation_discount_stamp(pdf, designations) -> dict | None:
             None if (designations is None or pdf is None)
             else int(sum(1 for pid in pdf["player_id"].astype(str)
                          if designations.get(_norm_player_id(pid)) is not None)))
-        stamp["records_what"] = ("the CONFIGURED policy plus the ELIGIBLE population — NOT what "
-                                 "the build moved; see nf_inj4b_ship_expected_effect.json")
+        # ⭐ NF-INJ4b-VERIFY (2026-09-14) — WHAT THE BUILD ACTUALLY DID, read off the summary the
+        #    build itself wrote. Same principle as `input_vintage` twenty lines up and for the same
+        #    reason: re-deriving it here would report what the lake holds NOW, a different and more
+        #    flattering question. ⛔ This is NOT cosmetic — without it, the post-publish check had to
+        #    INFER application by asking "did this player's games move off a figure captured days
+        #    ago?", and on 2026-09-13 that inference produced a false ⛔ on four rows whose BASE had
+        #    drifted (fresh depth charts + market) by more than their discount. A build that states
+        #    its own row count removes the inference entirely.
+        #    ⚠️ ABSENT / EMPTY IS `None` = UNKNOWN, NEVER 0 — a summary that predates this change,
+        #    or a historical season where the channel never ran, must not render as "moved nothing"
+        #    (NF1.7 (a): a check that did not run is not a check that failed).
+        applied = _designation_apply_record(pdf, season)
+        stamp["rows_discounted"] = applied.get("rows_moved")
+        stamp["designated_rows_at_build"] = applied.get("designated_rows_on_frame")
+        stamp["feed_readable_at_build"] = applied.get("feed_readable")
+        stamp["records_what"] = ("the CONFIGURED policy, the ELIGIBLE population, AND — from the "
+                                 "build's own summary — how many rows the discount actually moved; "
+                                 "`rows_discounted: null` means UNKNOWN, never zero")
         return stamp
     except Exception as e:  # noqa: BLE001 — a provenance stamp must never fail a board export
         log.warning("[ALERT] NF-INJ4b: designation stamp unavailable (%s: %s) — the manifest will "
@@ -2083,7 +2134,8 @@ def main(argv: list[str] | None = None) -> int:
     # stamp records what a build was CONFIGURED to do, never what it DID (NF-C0e / NF-INJ3b-SHIP
     # D6). The decisive per-row evidence is the expected-effect artifact the ship battery emits,
     # which is checked against the PUBLISHED board after the fact.
-    manifest["designationDiscountStamp"] = designation_discount_stamp(pdf, designations)
+    manifest["designationDiscountStamp"] = designation_discount_stamp(
+        pdf, designations, season=season)
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
     # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45) — gated behind

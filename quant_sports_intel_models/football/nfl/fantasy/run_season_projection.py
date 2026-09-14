@@ -1159,6 +1159,7 @@ def fit_serving_level(panel: pd.DataFrame | None, projection_season: int) -> tup
 
 
 def build_projection(con, base_season: int, projection_season: int, schema: str,
+                     desig_log: dict | None = None,
                      usage_role_blend: float | None = None,
                      mover_opportunity_blend: float | None = None,
                      env_tilt_blend: float | None = None,
@@ -1222,6 +1223,12 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     #    figures it was graded on — a designation feed read TODAY and applied to a 2019 board would
     #    regrade the past against a status that did not exist when the projection was made (the
     #    `market_freshness` hindsight boundary, on the availability channel).
+    # ⭐ NF-INJ4b-VERIFY: `desig_log` is an OUT-PARAM, not a return value — the repo's established
+    #    shape for this (`row_log` one module over; INC-41's `run_ref`), chosen so the ten existing
+    #    callers are untouched. It carries what the discount ACTUALLY DID to this build, so the
+    #    served manifest can record it and the post-publish check can read GROUND TRUTH instead of
+    #    inferring application from a board whose BASE has drifted since the expectation was
+    #    captured. That inference is what produced a false ⛔ on 2026-09-13.
     _desig_log: dict = {}
     _designation_games = (
         _DDS.designation_games_callable(int(projection_season), row_log=_desig_log)
@@ -1369,6 +1376,12 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     if len(proj) < before:
         log.warning("grain guard dropped %d duplicate player_id row(s) — an upstream join fanned a "
                     "player; investigate (the role/depth-chart merge is the usual culprit)", before - len(proj))
+    # ⭐ NF-INJ4b-VERIFY — hand the caller what the designation discount actually did. Populated
+    #    AFTER both the veteran and rookie legs, because `row_log["rows_moved"]` accumulates across
+    #    them. ⚠️ An EMPTY dict here means the channel never ran (a historical season, per the
+    #    boundary above) — which the manifest must render as UNKNOWN, never as zero (NF1.7(a)).
+    if desig_log is not None:
+        desig_log.update(_desig_log)
     return proj
 
 
