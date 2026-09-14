@@ -879,3 +879,141 @@ def test_the_cadence_check_fires_on_an_unpublished_week_and_passes_on_a_publishe
     except WS.WeeklyRostersNotPublished as exc:
         assert "weekly_rosters" in str(exc) and "newest week present: 6" in str(exc)
         assert "cadence, not a defect" in str(exc)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 8b. NOTHING EVER PUBLISHED — the one state in which every other check is unreachable
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⭐ WHY THIS SECTION EXISTS. 2026 lost week 1 quietly: the schedule was wired STOPPED on 09-05 and
+# only flipped RUNNING on 09-13, by which time `resolve_target_week` had advanced past week 1's
+# kickoff. Nothing was ever published, and the daily monitor's answer — UNKNOWN/WARN — was byte
+# identical on the benign morning and on the morning the slate was being played, because
+# WRONG_WEEK, STALE and STALE_INTO_KICKOFF all read a field off an artifact that did not exist.
+
+_WK2_KICKOFF = datetime.fromisoformat("2026-09-17T00:00:00+00:00")
+
+
+def _nothing_published():
+    """The reading the op actually produces when the manifest 404s: `read()` returns None."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    return F.reading_from_manifest(2026, None)
+
+
+def test_nothing_published_escalates_as_the_expected_kickoff_approaches():
+    """The verdict must CHANGE as the deadline closes — that is the whole defect being fixed."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    r = _nothing_published()
+
+    # Far out: benign and expected. Still never healthy (NF1.7(a)), but not a page-at-3am.
+    early = F.classify(r, expected_week=2, expected_kickoff=_WK2_KICKOFF,
+                       now=_now("2026-09-13T15:00:00+00:00"))
+    assert early["verdict"] == "UNKNOWN" and early["severity"] == "WARN"
+
+    # Inside the window: CRITICAL, and under a DIFFERENT verdict so the page's dedup key differs
+    # from the benign one an operator has already learned to scroll past.
+    late = F.classify(r, expected_week=2, expected_kickoff=_WK2_KICKOFF,
+                      now=_now("2026-09-16T12:00:00+00:00"))
+    assert late["verdict"] == "NOTHING_PUBLISHED" and late["severity"] == "CRITICAL"
+    assert late["verdict"] != early["verdict"]
+
+    # And it does not quietly lapse once the slate starts — that is when it matters most.
+    missed = F.classify(r, expected_week=2, expected_kickoff=_WK2_KICKOFF,
+                        now=_now("2026-09-20T17:00:00+00:00"))
+    assert missed["verdict"] == "NOTHING_PUBLISHED" and missed["severity"] == "CRITICAL"
+    assert "kicked off" in missed["detail"]
+
+
+def test_the_escalation_names_the_actionable_half_of_the_diagnosis():
+    """A page that cannot be acted on gets muted. Upstream rosters being late is NOT actionable;
+    our own ingest not advancing is — so the detail must name both and say which."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(_nothing_published(), expected_week=2, expected_kickoff=_WK2_KICKOFF,
+                   now=_now("2026-09-16T12:00:00+00:00"))
+    assert "weekly_rosters" in v["detail"]
+    assert "sports_nfl_weekly_serving_schedule" in v["detail"]
+
+
+def test_nothing_published_stays_warn_when_no_kickoff_can_be_established():
+    """NF1.7(a) in BOTH directions: an unestablished deadline must not clear the finding, and must
+    not manufacture a CRITICAL either."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(_nothing_published(), expected_week=2, expected_kickoff=None,
+                   now=_now("2026-09-20T17:00:00+00:00"))
+    assert v["verdict"] == "UNKNOWN" and v["severity"] == "WARN"
+    assert F.is_problem(v)
+
+
+def test_the_kickoff_escalation_cannot_fire_once_something_is_published():
+    """No regression on the steady state: a readable artifact is judged by the existing checks, and
+    a healthy one sitting right on top of its kickoff is still OK, not NOTHING_PUBLISHED."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    healthy = F.classify(F.reading_from_manifest(2026, _manifest()), expected_week=3,
+                         expected_kickoff=_now("2026-09-27T17:00:00+00:00"),
+                         now=_now("2026-09-22T18:00:00+00:00"))
+    assert healthy["verdict"] == "OK" and healthy["severity"] is None
+
+    # And the benign one-week-behind cadence keeps its own verdict rather than being escalated.
+    cadence = F.classify(F.reading_from_manifest(2026, _serving_wk2()), expected_week=3,
+                         served_slate_ends=_WK2_SLATE_END,
+                         expected_kickoff=_now("2026-09-24T00:00:00+00:00"),
+                         now=_now("2026-09-19T18:00:00+00:00"))
+    assert cadence["verdict"] == "AWAITING_NEXT_WEEK" and cadence["severity"] is None
+
+
+def test_the_off_season_is_still_silent_even_with_nothing_published():
+    """INC-45: no SLA on a deliberately-static artifact. The escalation must not reintroduce one."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    v = F.classify(_nothing_published(), expected_week=None, expected_kickoff=_WK2_KICKOFF,
+                   now=_now("2026-09-20T17:00:00+00:00"))
+    assert v["verdict"] == "OFF_SEASON" and v["severity"] is None
+    assert not F.is_problem(v)
+
+
+def test_the_escalation_threshold_is_derived_from_the_existing_kickoff_bar():
+    """A second hand-picked number is a second thing to keep true — they must not drift apart."""
+    from betting_ml.monitoring import nfl_weekly_freshness as F
+
+    assert F.NOTHING_PUBLISHED_CRITICAL_HOURS == F.STALE_BEFORE_KICKOFF_HOURS
+
+
+def test_the_freshness_op_actually_supplies_the_expected_kickoff():
+    """⭐ THE WIRED-≠-INVOKED HALF, and the one that matters most: a classifier that CAN escalate
+    is worth nothing if its only caller never passes the input that lets it.
+
+    AST, not a grep — this module's own explanatory comments name `expected_kickoff` several times,
+    so a substring scan would stay green with the argument deleted (the INC-38 prose-satisfies-the-
+    guard class)."""
+    import ast
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2] / "pipeline/jobs/sports_nfl_weekly_serving_job.py"
+    tree = ast.parse(src.read_text())
+
+    calls = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+             and n.func.attr == "classify"]
+    assert calls, "no WF.classify(...) call found in the freshness op — the guard would pass on nothing"
+
+    for call in calls:
+        kw = {k.arg: k.value for k in call.keywords}
+        assert "expected_kickoff" in kw, (
+            "the freshness op calls classify() without expected_kickoff — the NOTHING_PUBLISHED "
+            "escalation is then unreachable in production, which is exactly how 2026 week 1 was lost")
+        # It must be a real value, not a placeholder that can never escalate.
+        assert not (isinstance(kw["expected_kickoff"], ast.Constant)
+                    and kw["expected_kickoff"].value is None), \
+            "expected_kickoff is hard-coded None — the escalation can never fire"
+
+    # …and the value must come from the SCHEDULE's resolved target, never off the artifact.
+    assigned = [n for n in ast.walk(tree)
+                if isinstance(n, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == "expected_kickoff" for t in n.targets)]
+    assert any("first_kickoff" in ast.dump(n.value) for n in assigned), \
+        "expected_kickoff is not derived from the resolved target week's first_kickoff"
