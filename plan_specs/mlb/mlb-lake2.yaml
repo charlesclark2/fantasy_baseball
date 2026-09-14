@@ -1,0 +1,129 @@
+# Plan spec — MLB-LAKE2 (MINI tier: take the W3pre intraday tier back under its budget —
+# compact derivative_odds_raw + verify-then-move the daily-cadence odds staging)
+# Authored by PM 2026-09-14 per MLB-INC-0904 triage ①+②+⑤ (card K2zbMQuo). The tier measured
+# ~459s of a 480s cap on a QUIET tick (2026-09-04) with DuckDB bind cost ~linear in file count
+# over append-only stores (INC-42) — growth is monotone; the #1076 threshold buys warning, not headroom.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: mlb-lake2
+  vertical: mlb
+  card: https://trello.com/c/K2zbMQuo
+  status: ACCEPTED
+spec:
+  description: >
+    Restore real headroom to the W3pre intraday tick. The 09-04
+    incident measured the two odds flattens at ~447s of the 480s cap
+    (stg_derivative_odds alone 299s over 2,063 files) against a
+    12-second serving-critical table; #1076 inverted the build order
+    and added the w3pre_tier_verdict threshold, but the tier still
+    runs at WARN and file counts only grow. Two levers, strictly
+    ordered: ① COMPACT derivative_odds_raw (INC-42's cure, applied to
+    the second of two identical append-only stores — the biggest
+    single win); ② VERIFY-THEN-MOVE the three daily-cadence odds
+    staging models off the intraday tick. RE-MEASURE FIRST: ten days
+    have passed since the incident's numbers — pull current per-table
+    costs from the S3 output write timestamps (the incident's own
+    no-box-needed method) before touching anything, and let today's
+    numbers, not the 09-04 ones, size the work. best_alpha=0; no
+    model, board, or serving change; the E11.26 budget constants are
+    NOT touched (the raise was refuted by arithmetic in the incident
+    record — do not reopen it).
+  acceptanceCriteria:
+    - description: >
+        LEVER ① — COMPACTION, gated on the reader sign-off the
+        incident named: mart_derivative_closes is duplicate-idempotent
+        (row_number()=1 over its six-key) so the promote-then-delete
+        window is a no-op for it — but stg_derivative_odds has NO
+        dedup and eval_cross_market.py reads its parquet doing its own
+        closing selection. VERIFY that reader's behavior under the
+        compaction's duplicate window (measure on a real duplicate,
+        not by argument) BEFORE allowlisting the source —
+        compact_lakehouse_raw.py deliberately refuses a borrowed
+        rationale; honor that by giving derivative_odds_raw its own
+        stated rationale in COMPACTABLE_SOURCES. Then: the operator
+        --apply run + the capture.crontab line (both operator steps,
+        paste-ready), and the post-compaction per-table cost
+        re-measured and recorded (expected: the 299s collapses the
+        way mlb_odds_raw's did at 1,859→225 files).
+    - description: >
+        LEVER ② — THE MOVE, blocked on a fact to verify FIRST:
+        W11_W3PRE_DAILY is default-OFF and not in env.required, so the
+        daily w3pre build may be skipped and the intraday tick may be
+        the three odds staging tables' ONLY builder — removing them
+        then would freeze them (the exact silent-freeze class this
+        repo keeps paying for). Verify on the box (operator Dagit/env
+        read, paste-ready): if the daily build runs, move the three
+        models out of the intraday tier and let daily own them; if it
+        does not, enabling it is an operator .env/schedule step that
+        PRECEDES the move, with the moved tables joining freshness
+        coverage at their new cadence so a stopped daily builder
+        pages. ⛔ Recent-scoping the flattens is NOT a substitute
+        (full-history tables; a recent-scoped write to the same key
+        truncates history). If ① alone takes the tier comfortably
+        under budget (measured, e.g. verdict OK with >30% headroom),
+        ② may be recorded as PREPARED-NOT-EXECUTED with the
+        verification results — the PM decides whether to spend it.
+    - description: >
+        ⑤ Fix compact_lakehouse_raw.py's docstring (mlb_odds_raw
+        1,859 → 225 post-compaction) in the same pass, and update the
+        per-table figures the incident doc/threshold comments carry to
+        the RE-MEASURED numbers with their read date (the
+        re-measure-before-citing rule — a load-bearing number carries
+        its vintage).
+    - description: >
+        VERIFICATION: the w3pre_tier_verdict on the first post-change
+        tick reads OK (not WARN) with the margin recorded — read from
+        the tick's step log (operator, paste-ready); the freshness
+        SLAs for every touched table stay green at their owning
+        cadence; INC-41 content-timestamp semantics untouched; no
+        alert silenced. Guards RED-proven both ways with unique
+        anchors + baseline-pass + NOT-SELECTED + resolve-every-node;
+        a compaction that would orphan a reader must refuse. Standing:
+        worktree; PR -> dev; box ops operator-run; >2-min commands
+        operator paste-ready; no Trello; roadmap frozen. Disjoint
+        from NF-INJ4b-SHIP / NF-WK-FE1 (NFL lanes).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: mlb-lake2
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "W3pre" / "compact" / "lakehouse" (board Credence Sports, 2026-09-14)'
+    duplicates: []
+    adjacent:
+      - "MLB-INC-0904 (Done) — the diagnosis this executes; its record's numbers are re-measured, not trusted (10 days of growth)."
+      - "INC-42 (Done) — built compact_lakehouse_raw + the rationale-refusal discipline; extended, not forked."
+      - "Leaf-run detector card (ZPmBj8PF, To Do) — daily_ingestion_job census; disjoint; if ② adds a daily builder dependency, note it for that story."
+      - "eval_cross_market.py + the CLV chain — READ-ONLY consumers whose semantics gate lever ①; never modified to make compaction easy."
+      - "NF-INJ4b-SHIP / NF-WK-FE1 (IN FLIGHT) — NFL; disjoint files."
+  triedLedger:
+    files:
+      - "docs/mlb_inc_0904_w3pre_tick_timeout_and_ref_players_sla.md §3/§7 (the measured costs, the INC-42 bind-linearity, the refuted budget raise)"
+      - "betting_ml/monitoring/intraday_tick_budget.py (the threshold + [METRIC] lines this story should flip from WARN to OK)"
+      - "compact_lakehouse_raw.py + COMPACTABLE_SOURCES + capture.crontab (the compaction machinery + the one-of-two-stores gap)"
+      - "run_w1_lakehouse.py W3PRE_STG_MODELS (the reordered tier)"
+    recordedNulls:
+      - "The E11.26 budget-raise option — REFUTED by arithmetic in the incident record (max +25% vs monotone growth, spends anti-stacking slack); not reopened here."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "post_lineup predictions staying live through the September/October MLB slates with real headroom, not a threshold's warning"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: mlb-lake2-plan
+spec:
+  goalRef: { name: mlb-lake2 }
+  graph:
+    nodes: []   # MINI tier — re-measure -> lever ① (reader sign-off -> allowlist -> operator apply+cron) -> lever ② (verify fact -> move or PREPARED) -> docstring/vintage fixes -> OK-verdict verification -> closeout
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
