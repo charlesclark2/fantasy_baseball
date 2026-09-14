@@ -167,23 +167,29 @@ recoverable; a silent partial is not.
 Nothing below has been run. All are laptop commands; none exceeds ~2 minutes.
 
 ```bash
-# 0. Re-verify the balance and the measured prices at any time (spends 392 credits).
+# 0. Re-verify the balance and the measured prices at any time.
+#    Costs ~122 credits: 2 pre-archive probes bill 0, one in-archive depth probe 30,
+#    one board-shape probe 30, three single-market probes 30, historical /events 1,
+#    live futures 1 (live game lines bill 0 while the board is empty).
 cd <repo> && set -a && source .env && set +a
 uv run python -m quant_sports_intel_models.basketball.ncaab.ingest.credit_probe \
   --dates "2018-02-01T18:00:00Z,2020-11-16T09:15:00Z,2026-02-01T18:00:00Z" \
   --shape-dates "2026-02-07T23:00:00Z" \
   --markets-date "2026-02-07T23:00:00Z" \
   --out quant_sports_intel_models/basketball/ncaab/ablation_results/ncaab_p0_credit_probe.json
+```
 
-# 1. Confirm the ONE derived price on the first in-season day (~1 call, 3 credits expected).
-uv run python -m quant_sports_intel_models.basketball.ncaab.ingest.credit_probe --no-live \
-  --dates "" --shape-dates "" 2>/dev/null; \
+```bash
+# 1. Confirm the ONE DERIVED price (§1) on the first in-season day. One call, 3 credits
+#    expected. This is the only figure in this document that was not measured directly,
+#    because the board was empty out of season and an empty board bills 0.
+cd <repo> && set -a && source .env && set +a
 uv run python -c "
-import os,requests
-k=os.environ['ODDS_API_KEY']
-r=requests.get('https://api.the-odds-api.com/v4/sports/basketball_ncaab/odds',
-  params={'apiKey':k,'regions':'us','markets':'h2h,spreads,totals','oddsFormat':'american'})
-print('events:',len(r.json()),'cost:',r.headers['x-requests-last'],'(expect 3)')"
+import os, requests
+r = requests.get('https://api.the-odds-api.com/v4/sports/basketball_ncaab/odds',
+                 params={'apiKey': os.environ['ODDS_API_KEY'], 'regions': 'us',
+                         'markets': 'h2h,spreads,totals', 'oddsFormat': 'american'})
+print('events:', len(r.json()), '| cost:', r.headers['x-requests-last'], '(expect 3)')"
 ```
 
 ```
