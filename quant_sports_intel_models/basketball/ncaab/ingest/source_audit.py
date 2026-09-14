@@ -278,23 +278,34 @@ def _robots_verdict(txt: str, agents: tuple[str, ...]) -> dict:
     """
     lines = [l.strip() for l in txt.splitlines()]
     group: list[str] = []
+    in_rules = False           # have we seen a rule line for the CURRENT group yet?
     hits: dict[str, list[str]] = {}
     for line in lines:
         if not line or line.startswith("#"):
             continue
         low = line.lower()
         if low.startswith("user-agent:"):
-            name = line.split(":", 1)[1].strip()
-            group.append(name)
+            # ⚠️ A User-agent line AFTER a rule line starts a NEW group. Without this reset the
+            # previous group's agents stay in scope and inherit the next group's rules, which
+            # produces a FALSE "DISALLOWED": measured on a synthetic case where an unrelated bot
+            # is blanket-disallowed, our agent is then explicitly ALLOWED, and a third bot is
+            # blanket-disallowed — the leak attributed that third Disallow to our agent and the
+            # verdict inverted. It did not change the real ESPN/NCAA readings (both genuinely
+            # disallow us), which is exactly why it could have shipped unnoticed.
+            if in_rules:
+                group = []
+                in_rules = False
+            group.append(line.split(":", 1)[1].strip())
             continue
         if low.startswith(("disallow:", "allow:")):
+            in_rules = True
             for a in agents:
                 if any(g.lower() == a.lower() for g in group):
                     hits.setdefault(a, []).append(line)
-        else:
-            group = []
             continue
-        # a rule line ends the "collecting agents" run but keeps the group active
+        # Anything else (Sitemap:, Crawl-delay:, junk) ends the group outright.
+        group = []
+        in_rules = False
     disallowed = {a: rs for a, rs in hits.items()
                   if any(r.lower().replace(" ", "") == "disallow:/" for r in rs)}
     return {

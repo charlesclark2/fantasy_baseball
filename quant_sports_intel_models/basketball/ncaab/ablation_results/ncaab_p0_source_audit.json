@@ -1,6 +1,6 @@
 {
   "audit": "ncaab_p0_source_audit",
-  "generated_at": "2026-09-14T06:42:03.429722+00:00",
+  "generated_at": "2026-09-14T07:07:45.159701+00:00",
   "coverage": [
     {
       "season": 2003,
@@ -314,9 +314,6 @@
       ],
       "rules_seen": {
         "anthropic-ai": [
-          "Disallow: /",
-          "Disallow: /",
-          "Disallow: /",
           "Disallow: /"
         ]
       },
@@ -334,15 +331,12 @@
       ],
       "rules_seen": {
         "anthropic-ai": [
-          "Disallow: /",
           "Disallow: /"
         ],
         "ClaudeBot": [
-          "Disallow: /",
           "Disallow: /"
         ],
         "Claude-Web": [
-          "Disallow: /",
           "Disallow: /"
         ]
       },

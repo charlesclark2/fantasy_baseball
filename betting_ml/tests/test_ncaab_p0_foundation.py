@@ -20,6 +20,7 @@ import pytest
 from betting_ml.monitoring import ncaab_freshness as nf
 from betting_ml.monitoring import sports_delta_freshness as sdf
 from quant_sports_intel_models.basketball.ncaab.ingest import budget, sources as S
+from quant_sports_intel_models.basketball.ncaab.ingest import source_audit as sa
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 NCAAB = REPO / "quant_sports_intel_models" / "basketball" / "ncaab"
@@ -182,6 +183,50 @@ class TestFreshnessContractsAreDeclaredNotArmed:
         # day-granular ingest window, never narrower, or it blinds the monitor during live play.
         ok, missing = nf.season_month_containment_holds()
         assert ok, f"months live in the ingest layer but absent from SEASON_MONTHS: {missing}"
+
+
+# ── 6b. the robots parser honours GROUPED User-agent lines, in BOTH directions ──────────
+class TestRobotsGroupingIsParsedCorrectly:
+    """The terms verdict decided this vertical's architecture (build on the licensed
+    redistribution, not on scraping), so the parser that produced it has to be right in both
+    directions — and its first cut was wrong in one of them."""
+
+    def test_a_grouped_block_closed_by_one_disallow_blocks_every_agent_in_it(self):
+        # ncaa.com lists 20+ AI agents as consecutive User-agent lines closed by a single
+        # `Disallow: /`. A per-line parse reads those agents as having NO rules and reports the
+        # site as permitted — the exact inversion.
+        txt = (
+            "User-agent: AI2Bot\n"
+            "User-agent: anthropic-ai\n"
+            "User-agent: ClaudeBot\n"
+            "Disallow: /\n"
+        )
+        v = sa._robots_verdict(txt, ("anthropic-ai", "ClaudeBot"))
+        assert set(v["blanket_disallowed"]) == {"anthropic-ai", "ClaudeBot"}
+
+    def test_a_later_groups_disallow_does_not_leak_onto_an_earlier_allowed_agent(self):
+        # ⭐ THE CLAUSE THE FIRST CUT FAILED. Without resetting the group when a User-agent line
+        # follows a rule line, the trailing bot's `Disallow: /` was attributed to our agent and
+        # the verdict inverted to a FALSE "DISALLOWED". It did not change the real ESPN/NCAA
+        # readings (both genuinely disallow us), which is exactly why it could have shipped.
+        txt = (
+            "User-agent: BadBot\n"
+            "Disallow: /\n"
+            "\n"
+            "User-agent: anthropic-ai\n"
+            "Allow: /\n"
+            "\n"
+            "User-agent: OtherBot\n"
+            "Disallow: /\n"
+        )
+        v = sa._robots_verdict(txt, ("anthropic-ai",))
+        assert v["blanket_disallowed"] == [], v
+
+    def test_an_unnamed_agent_reports_that_the_wildcard_governs(self):
+        # "not named" and "named and permitted" are different findings and must not collapse.
+        txt = "User-agent: *\nDisallow: /admin/\n"
+        v = sa._robots_verdict(txt, ("anthropic-ai",))
+        assert "not named" in v["verdict"]
 
 
 # ── 7. the paid feeds cannot run by accident ────────────────────────────────────────────

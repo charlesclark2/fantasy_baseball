@@ -113,6 +113,17 @@ BREAKS: tuple[Break, ...] = (
         why="the monitor would be blind on live April game days",
     ),
     Break(
+        label="the robots parser lets a later group's Disallow leak onto our agent",
+        path="quant_sports_intel_models/basketball/ncaab/ingest/source_audit.py",
+        old="            if in_rules:\n                group = []\n                in_rules = False",
+        new="            if False:\n                group = []\n                in_rules = False",
+        node=f"{GUARDS}::TestRobotsGroupingIsParsedCorrectly::"
+             "test_a_later_groups_disallow_does_not_leak_onto_an_earlier_allowed_agent",
+        why="a site that explicitly PERMITS us would be read as blocking us, and the "
+            "architecture decision that rests on the terms verdict would be made on a "
+            "false reading",
+    ),
+    Break(
         label="NCAAB grows its own fork of the shared lake layer",
         path="quant_sports_intel_models/basketball/ncaab/ingest/sources.py",
         # ⚠️ This break REPLACES the seam import rather than adding a line beside it. The first

@@ -101,6 +101,15 @@ Two traps worth recording, because the naive read is wrong in both:
    the site as permitted — the exact inversion. The audit's parser honours the grouping, and
    the reason is written above the code so it cannot be "simplified" back into the bug.
 
+   ⚠️ **The first cut of that parser had the opposite bug and it is worth recording**, because
+   it is the shape that ships unnoticed: it never reset the group when a new `User-agent`
+   block began after a rule line, so a *later* group's `Disallow: /` leaked onto an agent an
+   *earlier* group had explicitly allowed — a **false DISALLOWED**. It did not change either
+   real reading here (ESPN and NCAA both genuinely block us, confirmed by reading the raw
+   files by hand), which is exactly why nothing about the verdict would have looked wrong.
+   Found by feeding the parser a synthetic site that permits us; both directions are now
+   guarded and RED-proven.
+
 **Architectural consequence:** we build on the **licensed redistribution** (hoopR, CC BY 4.0),
 not on scraping ESPN or NCAA. The ESPN core API is used for **nothing** in the shipped pipeline —
 it appears in the audit only as an independent corroboration of the team count. Attribution is
