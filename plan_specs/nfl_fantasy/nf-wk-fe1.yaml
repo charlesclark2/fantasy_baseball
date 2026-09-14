@@ -9,7 +9,7 @@ metadata:
   name: nf-wk-fe1
   vertical: nfl_fantasy
   card: https://trello.com/c/HvVAWD9f   # C6-PH2 record; FE card linked at kickoff
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The weekly model finally reaches users: a weekly projections page
