@@ -9,7 +9,7 @@ metadata:
   name: nf-inc-0914
   vertical: nfl_fantasy
   card: https://trello.com/c/PENDING
-  status: IN_PROGRESS
+  status: SHIPPED_PENDING_VERIFICATION  # fix + entrypoint smoke complete and CI-green; the RESTORE (re-run the publish job, confirm the board advanced by content timestamp, then the chained NF-INJ4b per-row verify) is the operator step in the handoff. PM flips DONE once the board has advanced.
 spec:
   description: >
     sports_nfl_board_publish_job run dd44e28e failed in
@@ -102,8 +102,76 @@ spec:
   graph:
     nodes: []   # MINI incident — diagnose fork -> minimal fix + entrypoint smoke -> operator re-publish + verify + chained per-row check -> closeout
   closeout:
-    verdict: null
+    verdict: >
+      FIXED + CLASS CLOSED; restore is an operator step (paste-ready below).
+      THE FORK, NAMED: there wasn't one. The crash line sits at main()'s TOP
+      LEVEL inside no if/try/with, and `season` is bound nowhere in scope
+      (AST-verified: not a local, not a parameter, not a module global) — so
+      main() crashed UNCONDITIONALLY, on every flag combination, on every
+      path. No entrypoint fork, no flag fork, no scheduled-only branch. The
+      divergence was purely TEMPORAL: the introducing commit is c10e1486
+      (PR #1104 NF-INJ4b-VERIFY, authored 2026-09-14 00:14, merged to main
+      00:27) — NOT #1100, whose call was the correct two-arg
+      `designation_discount_stamp(pdf, designations)`. The operator's 09-13
+      manual publish ran code predating the break; the 07:15 PT scheduled
+      fire was simply THE FIRST EXECUTION OF main() BY ANYTHING, ANYWHERE,
+      after the break landed — because nothing in CI executes it (31 test
+      files import the module; the only two that touch main() read it as
+      TEXT via `assert call in src` and `inspect.getsource(EX.main)`) and
+      the ship battery imports it for helpers only, its --verify-published
+      arm being DOWNSTREAM of the step that crashed.
+      FIX: one token, `season=season` -> `season=args.season`. A scope check
+      over the whole module confirms it was the only name in the file that
+      resolved nowhere. Nothing else about the call changed; best_alpha=0.
+      NF-INJ1 [ALERT]: 11 coherence-violating players — UNCHANGED against
+      the 11 recorded in nf_inj2b_preregistration.md (2026-08-27). Not
+      chased, not suppressed, no tolerance touched.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      (1) ⭐ THE FINDING THAT OUTLIVES THE INCIDENT — A FIX CAN RELOCATE A
+      BLIND SPOT INSTEAD OF CLOSING IT, AND THE NEXT EDIT FINDS IT. The
+      IMMEDIATELY PRECEDING commit (392e1083, PR #1100, "make the manifest
+      stamp a function something actually invokes") had ALREADY diagnosed
+      this exact hazard in its own message — "the stamp block sat inside
+      main(), where every symbol it uses resolves statically and NOTHING in
+      the suite executes it... precisely the shape NF-TR2 shipped a
+      NameError in" — and remedied it by EXTRACTING THE BODY into a
+      directly-testable function. That was right about the danger and it
+      shrank the un-executed surface from the whole block to the single line
+      that hands the function its arguments. The very next commit changed
+      exactly that line, and put a NameError there. ⇒ EXTRACTING LOGIC OUT
+      OF AN UN-EXECUTED ENTRYPOINT MOVES THE UNTESTED SURFACE TO THE CALL
+      SITE; it does not remove it. The only remedy that closes the class is
+      one that RUNS the entrypoint. Generalises to every `main()` in the
+      repo — a sibling audit of export_player_history_json.py /
+      export_track_record_json.py (both have a main() and, on the same
+      search, no executing caller) is the obvious next sweep. PM: worth a
+      card.
+      (2) A SOURCE-TEXT GUARD CANNOT SEE A NAME RESOLVE. Two existing
+      guards asserted on main()'s TEXT and stayed green through an outage
+      that stopped every publish: `assert call in src`
+      (test_nf_k1_kdst_board_coverage.py:170, the repo's own "wired ≠
+      invoked" clause) and `inspect.getsource(EX.main)`
+      (test_nf_inj3b_ship_stamp_guard.py:162). Both remain USEFUL for what
+      they assert (ordering/wiring) and are untouched here — but neither is
+      evidence the entrypoint runs, and the incident shows they were being
+      read as though they were. PM: consider a standing note that a
+      source-inspection guard over an entrypoint must be PAIRED with an
+      executing smoke.
+      (3) SCOPE OF THE NEW GUARD, STATED HONESTLY. The smoke covers the
+      path it executes; the static scope clause covers the branches it does
+      not. MEASURED complementary, not assumed: under an unbound name
+      planted in `_maybe_publish` (stubbed by the smoke) the smoke PASSES
+      and only the scope clause fails. Neither clause sees a defect that is
+      not a name-resolution failure — this closes the NameError/scope class
+      on the publish path, not "all publish bugs".
+      (4) The `--verify-published` arm cannot run until a publish succeeds,
+      so the NF-INJ4b per-row evidence (card 31EMmr9B) is chained into the
+      restore step below rather than tracked separately. If the operator
+      defers the re-run to the Tue 09-15 07:15 PT fire, that is the LAST
+      daily one — the cadence falls to weekly Mondays after it, so a missed
+      Tuesday costs a week of verify window, which is why re-running TODAY
+      is the recommendation.
+      (5) Pre-existing, NOT touched: a SyntaxWarning-raising regex fragment
+      in test_nf_c8_availability_flag_copy.py:211's docstring, surfaced
+      (not caused) by the new guard's sibling-file AST scan; suppressed
+      locally rather than editing another story's file.
