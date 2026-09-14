@@ -141,9 +141,32 @@ def designation_games_callable(season: int, *, designations=_UNSET,
                 moved += 1
             out[i] = capped
         if row_log is not None:
+            designated = int(label.notna().sum())
+            # ⛔ EVERY COUNTER IN THIS RECORD ACCUMULATES, because this callable is invoked ONCE PER
+            #    LEG (veteran, then rookie — `run_season_projection` passes the same `row_log` to
+            #    both) and the record is read as ONE build-level fact.
+            #    🔴 NF-INC-0914 FOLLOW-UP: `designated_rows_on_frame` used `=` while `rows_moved`
+            #    beside it used `+=`, so the last leg OVERWROTE the total. On 2026-09-14 the served
+            #    manifest published `rows_moved: 86` beside `designated_rows_on_frame: 0` — the
+            #    rookie leg, which carried no designated rows, had clobbered the veteran leg's 86.
+            #    ⭐ THAT IS PROVABLY AN OVERWRITE, NOT A MISFIRE: within ONE call `moved` only
+            #    increments after the null-label guard, so `moved <= designated` is structural and
+            #    86-beside-0 is impossible in a single pass. The consequence was not cosmetic —
+            #    `run_nf_inj4b_ship_battery --verify-published` short-circuits on
+            #    `designated in (None, 0)` and returned a FALSE `UNVERIFIABLE`, disabling the only
+            #    automated per-row check the discount has.
             row_log["feed_readable"] = True
-            row_log["designated_rows_on_frame"] = int(label.notna().sum())
+            row_log["designated_rows_on_frame"] = (
+                int(row_log.get("designated_rows_on_frame", 0)) + designated)
             row_log["rows_moved"] = int(row_log.get("rows_moved", 0)) + moved
+            # ⛔ NO "reached but unmoved" BUCKET, and that is a MEASURED choice rather than an
+            #    omission: `remaining_season_rate_cap` is a RATE
+            #    (`current x (17 - missed)/17`), not a ceiling — the PM ruled the ceiling form OUT
+            #    on 2026-08-23 because it moved 5 of 6 real rows by zero. So a designated row with
+            #    a priceable label and a finite, positive projection ALWAYS moves, and
+            #    `designated - moved` stays an honest miss count. ⛔ Do not "fix" the consumer's
+            #    strict `moved < designated` clause on the theory that rows can sit at their cap;
+            #    under a rate they cannot.
         log.info("NF-INJ4b: designation discount applied to %d of %d rows (%d carried a "
                  "designation)", moved, len(frame), int(label.notna().sum()))
         return out

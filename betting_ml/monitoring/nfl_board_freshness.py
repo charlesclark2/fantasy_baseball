@@ -114,6 +114,25 @@ def cadence_hours(today: date) -> float:
     return WEEKLY_CADENCE_HOURS
 
 
+def market_inputs_matter(today: date) -> bool:
+    """Do the board's MARKET vintages (ADP/ECR) still reach a user decision on `today`?
+
+    They are inputs to a DRAFT board. `is_draft_season` already encodes the end of drafting — its
+    window deliberately runs past the opener "because leagues keep drafting through week 1" — so
+    this reuses that ONE owner rather than inventing a second seasonal boundary (the INC-30/36/38
+    one-logical-thing-many-owners shape).
+
+    ⭐ `any`, DELIBERATELY — the MIRROR IMAGE of `cadence_hours`' `all`, and for the same reason
+    read in the opposite direction. There, erring toward the LOOSER bar at a boundary is safe.
+    Here the alert is what is at stake, so the safe direction is to keep PAGING: market inputs are
+    treated as live if ANY day in the lookback was draft season, which keeps the page armed for two
+    extra days rather than going quiet one day early. That also absorbs the UTC-vs-Pacific skew
+    between this monitor's clock and the publish schedule's `America/Los_Angeles` execution
+    timezone, so neither needs to own a timezone conversion."""
+    return any(is_draft_season(today - timedelta(days=d))
+               for d in range(CADENCE_BOUNDARY_LOOKBACK_DAYS + 1))
+
+
 def sla_hours(today: date) -> float:
     """The staleness bar for a board judged on `today` — cadence + its grace."""
     if cadence_hours(today) == DAILY_CADENCE_HOURS:
@@ -291,6 +310,13 @@ class FeedStamp:
     path: tuple[str, ...]        # where it lives in the manifest blob
     max_lag_hours: float
     why: str                     # what degrades when this feed freezes
+    #: ⭐ DRAFT-SEASON-ONLY feeds (NF-INC-0914 follow-up, operator 2026-09-14). ADP and ECR are
+    #: MARKET inputs to a DRAFT board; once week 1 kicks off nobody is drafting off it, so a stale
+    #: market cannot reach a user decision. Outside the window the lag is still MEASURED and still
+    #: published on the `[METRIC]` line — it is only the PAGE that is withheld, so this suppresses
+    #: alert fatigue without creating a blind spot (NF1.7 (a): the check still runs and still
+    #: reports). ⛔ NOT a bar that was loosened: inside draft season it is unchanged.
+    draft_season_only: bool = False
 
 
 #: ⚠️ Deliberately small, and every entry is a stamp we have OBSERVED on a real published board
@@ -306,10 +332,20 @@ REQUIRED_FEED_STAMPS: tuple[FeedStamp, ...] = (
         name="adp_as_of", path=("adp_as_of",), max_lag_hours=96.0,
         why=("the market half of the board — ADP drives every board's ordering reference and the "
              "`--market-refresh` chain that NF-FRESH2 P1 exists to keep live"),
+        draft_season_only=True,
     ),
     FeedStamp(
         name="ecr_as_of", path=("ecr_as_of",), max_lag_hours=96.0,
-        why="the expert-consensus reference column shown beside every projection",
+        # 🔴 NF-INC-0914 follow-up — THIS TEXT USED TO READ "the expert-consensus reference column
+        #    shown beside every projection", which UNDERSTATES it. ECR is not a display column: it
+        #    is ECR-PRIMARY in the model's ordering feature — `nf1_3_model` builds
+        #    `market_rank = ecr.where(ecr.notna(), adp)`, and `nf1_5_model` imports that module, so
+        #    a stale ECR shifts WITHIN-POSITION ORDERING at all four positions. An alert that
+        #    understates its own blast radius invites under-reaction.
+        why=("ECR-PRIMARY in the model's `market_rank` ordering feature (`nf1_3_model`, consumed "
+             "by `nf1_5_model`) — a stale ECR shifts within-position ORDERING, it is not merely a "
+             "reference column beside the projection"),
+        draft_season_only=True,
     ),
     FeedStamp(
         name="depth_chart_as_of", path=("freshness", "input_vintage", "depth_chart_as_of"),
@@ -393,6 +429,13 @@ def verify_manifest(blob: object, *, started: datetime,
             continue
         lag = round((now - parsed).total_seconds() / 3600.0, 2)
         stamps[stamp.name] = lag
+        # ⭐ MEASURED ALWAYS, PAGED SEASONALLY. The lag is already recorded on `stamps` above, so
+        #    it stays on the `[METRIC]` line and in the served vintage block year-round; only the
+        #    alert is withheld. A draft board's market vintage cannot reach a user decision once
+        #    drafting is over, and paging weekly about it from mid-September to August is the
+        #    muted-monitor pattern this repo has paid for before.
+        if stamp.draft_season_only and not market_inputs_matter(now.date()):
+            continue
         if lag > stamp.max_lag_hours:
             alerts.append(
                 f"{stamp.name}={value} is {lag}h old, over its {stamp.max_lag_hours}h bar. "
