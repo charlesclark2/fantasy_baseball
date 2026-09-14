@@ -27,7 +27,6 @@ from pipeline.jobs.sports_nfl_board_publish_job import sports_nfl_board_publish_
 from pipeline.jobs.sports_nfl_weekly_serving_job import (
     sports_nfl_weekly_freshness_job,
     sports_nfl_weekly_serving_job,
-    sports_nfl_weekly_freshness_job,
 )
 from pipeline.jobs.sports_nfl_rollforward_job import sports_nfl_roll_forward_job
 # NF-D5: daily (through camp) Sleeper forward-availability capture — continues NF-D2 slice 5.
@@ -81,6 +80,14 @@ all_jobs = [
     sports_ncaaf_roll_forward_job,
     sports_nfl_board_publish_job,
     sports_nfl_weekly_serving_job,
+    # ⭐ THE OFF-CYCLE READER. Imported since NF-C6-PH2 (d7fbf7e5) but never listed here,
+    # so `Definitions(jobs=all_jobs)` never saw it and it has never been launchable in
+    # Dagit — the wired-≠-invoked class, on the job registry itself. Daily coverage was
+    # never affected (`nfl_weekly_freshness_op` runs inside the Sleeper job); what was
+    # missing is the ON-DEMAND run, which is exactly what an operator reaches for when a
+    # weekly publish is in doubt. Now pinned exhaustively by
+    # `test_pipeline_job_registry.py`.
+    sports_nfl_weekly_freshness_job,
     sports_nfl_roll_forward_job,
     sports_nfl_sleeper_injuries_job,
     sports_ncaaf_odds_capture_job,
