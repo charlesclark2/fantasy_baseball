@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: dim_ncaab_team
+    description: >
+      SCD-2 team dimension. One row per (team_id, contiguous run of seasons with an identical
+      (name, conference_id) payload). Conference realignment is the drift this exists for —
+      52 teams changed conference in 2023-2027 alone.
+    columns:
+      - name: team_id
+        tests: [not_null]
+      - name: valid_from_season
+        tests: [not_null]
+      - name: valid_to_season
+        tests: [not_null]
+      - name: conference_id
+        tests: [not_null]
+    tests:
+      # The SCD's identity key. `unique` on an expression needs no dbt_utils — this project
+      # has no packages.yml and its existing models deliberately avoid that dependency.
+      - unique:
+          column_name: "team_id || '-' || version_number"
+
+  - name: dim_ncaab_conference
+    description: >
+      Conference identity and lifespan. Membership deliberately lives on dim_ncaab_team.
+      A defunct conference resolves no name (name_unresolved = true) rather than being
+      dropped — historical Pac-12 games must stay attributable.
+    columns:
+      - name: conference_id
+        tests: [not_null, unique]
+
+  - name: fact_ncaab_team_game
+    description: >
+      The team-game fact P1 fits on: box line, the shared possession estimate, per-100
+      efficiency, and the POINT-IN-TIME conference resolved through the SCD.
+    columns:
+      - name: game_id
+        tests: [not_null]
+      - name: team_id
+        tests: [not_null]
+      - name: possessions_unusable
+        description: >
+          TRUE where possessions_est is NULL or below the 20-possession floor, so a
+          suppressed rate is countable instead of silently absent.
+        tests: [not_null]

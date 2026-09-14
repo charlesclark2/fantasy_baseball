@@ -1,0 +1,456 @@
+{
+  "audit": "ncaab_p0_source_audit",
+  "generated_at": "2026-09-14T07:07:45.159701+00:00",
+  "coverage": [
+    {
+      "season": 2003,
+      "games": 4990,
+      "home_teams": 337,
+      "scored": 4990,
+      "scored_pct": 100.0,
+      "neutral_site_games": 0,
+      "conferences": 32,
+      "venue_pct": 87.05
+    },
+    {
+      "season": 2004,
+      "games": 4983,
+      "home_teams": 334,
+      "scored": 4983,
+      "scored_pct": 100.0,
+      "neutral_site_games": 0,
+      "conferences": 32,
+      "venue_pct": 88.82
+    },
+    {
+      "season": 2005,
+      "games": 5048,
+      "home_teams": 341,
+      "scored": 5048,
+      "scored_pct": 100.0,
+      "neutral_site_games": 0,
+      "conferences": 32,
+      "venue_pct": 89.48
+    },
+    {
+      "season": 2006,
+      "games": 5172,
+      "home_teams": 344,
+      "scored": 5172,
+      "scored_pct": 100.0,
+      "neutral_site_games": 0,
+      "conferences": 32,
+      "venue_pct": 89.62
+    },
+    {
+      "season": 2007,
+      "games": 5480,
+      "home_teams": 342,
+      "scored": 5480,
+      "scored_pct": 100.0,
+      "neutral_site_games": 0,
+      "conferences": 32,
+      "venue_pct": 91.0
+    },
+    {
+      "season": 2008,
+      "games": 5590,
+      "home_teams": 348,
+      "scored": 5590,
+      "scored_pct": 100.0,
+      "neutral_site_games": 798,
+      "conferences": 32,
+      "venue_pct": 90.47
+    },
+    {
+      "season": 2009,
+      "games": 5726,
+      "home_teams": 362,
+      "scored": 5726,
+      "scored_pct": 100.0,
+      "neutral_site_games": 556,
+      "conferences": 32,
+      "venue_pct": 90.48
+    },
+    {
+      "season": 2010,
+      "games": 5622,
+      "home_teams": 352,
+      "scored": 5622,
+      "scored_pct": 100.0,
+      "neutral_site_games": 572,
+      "conferences": 32,
+      "venue_pct": 89.45
+    },
+    {
+      "season": 2011,
+      "games": 5771,
+      "home_teams": 366,
+      "scored": 5771,
+      "scored_pct": 100.0,
+      "neutral_site_games": 614,
+      "conferences": 32,
+      "venue_pct": 92.91
+    },
+    {
+      "season": 2012,
+      "games": 5776,
+      "home_teams": 359,
+      "scored": 5776,
+      "scored_pct": 100.0,
+      "neutral_site_games": 599,
+      "conferences": 32,
+      "venue_pct": 92.97
+    },
+    {
+      "season": 2013,
+      "games": 5817,
+      "home_teams": 352,
+      "scored": 5817,
+      "scored_pct": 100.0,
+      "neutral_site_games": 639,
+      "conferences": 32,
+      "venue_pct": 91.03
+    },
+    {
+      "season": 2014,
+      "games": 5948,
+      "home_teams": 362,
+      "scored": 5948,
+      "scored_pct": 100.0,
+      "neutral_site_games": 677,
+      "conferences": 33,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2015,
+      "games": 5932,
+      "home_teams": 354,
+      "scored": 5932,
+      "scored_pct": 100.0,
+      "neutral_site_games": 640,
+      "conferences": 33,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2016,
+      "games": 5893,
+      "home_teams": 357,
+      "scored": 5893,
+      "scored_pct": 100.0,
+      "neutral_site_games": 644,
+      "conferences": 32,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2017,
+      "games": 5960,
+      "home_teams": 354,
+      "scored": 5960,
+      "scored_pct": 100.0,
+      "neutral_site_games": 655,
+      "conferences": 32,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2018,
+      "games": 6003,
+      "home_teams": 354,
+      "scored": 6003,
+      "scored_pct": 100.0,
+      "neutral_site_games": 680,
+      "conferences": 32,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2019,
+      "games": 6049,
+      "home_teams": 355,
+      "scored": 6049,
+      "scored_pct": 100.0,
+      "neutral_site_games": 665,
+      "conferences": 32,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2020,
+      "games": 5767,
+      "home_teams": 354,
+      "scored": 5767,
+      "scored_pct": 100.0,
+      "neutral_site_games": 459,
+      "conferences": 32,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2021,
+      "games": 4285,
+      "home_teams": 352,
+      "scored": 4285,
+      "scored_pct": 100.0,
+      "neutral_site_games": 502,
+      "conferences": 31,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2022,
+      "games": 5976,
+      "home_teams": 362,
+      "scored": 5976,
+      "scored_pct": 100.0,
+      "neutral_site_games": 694,
+      "conferences": 32,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2023,
+      "games": 6261,
+      "home_teams": 366,
+      "scored": 6261,
+      "scored_pct": 100.0,
+      "neutral_site_games": 769,
+      "conferences": 33,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2024,
+      "games": 6249,
+      "home_teams": 365,
+      "scored": 6249,
+      "scored_pct": 100.0,
+      "neutral_site_games": 746,
+      "conferences": 33,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2025,
+      "games": 6299,
+      "home_teams": 370,
+      "scored": 6299,
+      "scored_pct": 100.0,
+      "neutral_site_games": 747,
+      "conferences": 31,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2026,
+      "games": 6318,
+      "home_teams": 366,
+      "scored": 6318,
+      "scored_pct": 100.0,
+      "neutral_site_games": 709,
+      "conferences": 31,
+      "venue_pct": 100.0
+    },
+    {
+      "season": 2027,
+      "games": 1629,
+      "home_teams": 227,
+      "scored": 1629,
+      "scored_pct": 100.0,
+      "neutral_site_games": 84,
+      "conferences": 29,
+      "venue_pct": 99.88
+    }
+  ],
+  "fields": {
+    "schedule_n_columns": 86,
+    "team_box_n_columns": 59,
+    "mvp": {
+      "result_score_home": true,
+      "result_score_away": true,
+      "result_winner": true,
+      "game_date": true,
+      "season": true,
+      "season_type": true,
+      "neutral_site": true,
+      "venue_id": true,
+      "home_team_id": true,
+      "away_team_id": true,
+      "home_conference": true,
+      "away_conference": true,
+      "completed_flag": true
+    },
+    "mvp_missing": []
+  },
+  "pace": {
+    "operands": {
+      "FGA": true,
+      "ORB": true,
+      "TO": true,
+      "FTA": true
+    },
+    "computable": true,
+    "identity": "possessions ~= FGA - ORB + TO + 0.475*FTA",
+    "earliest_season_with_all_operands": 2003
+  },
+  "point_in_time": {
+    "completed_season_2015": {
+      "commits_seen": 3,
+      "newest": "2023-04-10T21:21:25Z",
+      "oldest": "2023-04-10T10:46:38Z",
+      "capped_at_page_size": false
+    },
+    "recent_season_2026": {
+      "commits_seen": 100,
+      "newest": "2026-08-02T00:10:39Z",
+      "oldest": "2026-02-26T12:33:00Z",
+      "capped_at_page_size": true
+    },
+    "upcoming_season_2027": {
+      "commits_seen": 1,
+      "newest": "2026-08-19T01:58:42Z",
+      "oldest": "2026-08-19T01:58:42Z",
+      "capped_at_page_size": false
+    },
+    "as_of_field_available": false,
+    "interpretation": "A COMPLETED season's file is stable (2015: 3 commits, all on its load date). The CURRENT season's file is rewritten continuously (2026: >=100 commits across the season). The source therefore offers NO as-of and no vintage: an in-season read is an overwrite of the same path. \u21d2 point-in-time is OURS to create \u2014 every ingest must stamp its own capture time and land a content-timestamped Delta version, which is exactly what makes Delta time-travel the as-of this source lacks."
+  },
+  "terms": {
+    "https://www.espn.com": {
+      "robots_readable": true,
+      "our_agents_matched": [
+        "anthropic-ai"
+      ],
+      "rules_seen": {
+        "anthropic-ai": [
+          "Disallow: /"
+        ]
+      },
+      "blanket_disallowed": [
+        "anthropic-ai"
+      ],
+      "verdict": "DISALLOWED for our agent class"
+    },
+    "https://www.ncaa.com": {
+      "robots_readable": true,
+      "our_agents_matched": [
+        "Claude-Web",
+        "ClaudeBot",
+        "anthropic-ai"
+      ],
+      "rules_seen": {
+        "anthropic-ai": [
+          "Disallow: /"
+        ],
+        "ClaudeBot": [
+          "Disallow: /"
+        ],
+        "Claude-Web": [
+          "Disallow: /"
+        ]
+      },
+      "blanket_disallowed": [
+        "Claude-Web",
+        "ClaudeBot",
+        "anthropic-ai"
+      ],
+      "verdict": "DISALLOWED for our agent class"
+    },
+    "https://stats.ncaa.org": {
+      "robots_readable": true,
+      "our_agents_matched": [],
+      "rules_seen": {},
+      "blanket_disallowed": [],
+      "verdict": "our agent class is not named; the wildcard group governs"
+    },
+    "https://site.api.espn.com": {
+      "robots_readable": false,
+      "status": 403,
+      "verdict": "UNDECLARED \u2014 robots.txt itself is not served, so no directive can be read either way"
+    },
+    "https://sports.core.api.espn.com": {
+      "robots_readable": false,
+      "status": 403,
+      "verdict": "UNDECLARED \u2014 robots.txt itself is not served, so no directive can be read either way"
+    },
+    "hoopr_licence": {
+      "github_api_says": "NOASSERTION",
+      "DESCRIPTION_declares": "CC BY 4.0",
+      "verdict": "CC BY 4.0 \u2014 share and adapt, including commercially, WITH ATTRIBUTION. \u26a0\ufe0f GitHub's licence API reports NOASSERTION because the R convention puts only the year and copyright holder in LICENSE; the licence itself is named in DESCRIPTION and spelled out in LICENSE.md. Trusting the API field alone would have wrongly disqualified this source."
+    }
+  },
+  "corroboration": {
+    "espn_core_di_team_count": 366,
+    "hoopr_2026_distinct_home_teams": 366,
+    "agree": true,
+    "interpretation": "Two INDEPENDENT sources agreeing on the D-I team count is what makes ~360 a measured figure rather than a repeated one. ESPN's `site.api` host 403s for us on every path and user agent tried, while `sports.core.api` answers normally \u2014 so 'ESPN has a public API' is true and not actionable; the reachable host is the finding."
+  },
+  "notes": [
+    "neutral_site is populated from season 2008 onward; it is identically 0 for every earlier season. That is an ABSENCE, not 'no neutral games were played' \u2014 any training window reaching before 2008 must treat the flag as missing rather than False (the MH2.1 per-column-absence lesson)."
+  ],
+  "probes": [
+    {
+      "label": "robots:https://www.espn.com",
+      "url": "https://www.espn.com/robots.txt",
+      "status": 200,
+      "bytes_": 3223,
+      "content_type": "text/plain",
+      "note": "",
+      "error": null
+    },
+    {
+      "label": "robots:https://www.ncaa.com",
+      "url": "https://www.ncaa.com/robots.txt",
+      "status": 200,
+      "bytes_": 4649,
+      "content_type": "text/plain",
+      "note": "",
+      "error": null
+    },
+    {
+      "label": "robots:https://stats.ncaa.org",
+      "url": "https://stats.ncaa.org/robots.txt",
+      "status": 200,
+      "bytes_": 202,
+      "content_type": "text/plain; charset=UTF-8",
+      "note": "",
+      "error": null
+    },
+    {
+      "label": "robots:https://site.api.espn.com",
+      "url": "https://site.api.espn.com/robots.txt",
+      "status": 403,
+      "bytes_": null,
+      "content_type": "",
+      "note": "",
+      "error": "HTTP 403 Forbidden"
+    },
+    {
+      "label": "robots:https://sports.core.api.espn.com",
+      "url": "https://sports.core.api.espn.com/robots.txt",
+      "status": 403,
+      "bytes_": null,
+      "content_type": "",
+      "note": "",
+      "error": "HTTP 403 Forbidden"
+    },
+    {
+      "label": "hoopr:DESCRIPTION",
+      "url": "https://raw.githubusercontent.com/sportsdataverse/hoopR-mbb-data/main/DESCRIPTION",
+      "status": 200,
+      "bytes_": 2360,
+      "content_type": "text/plain; charset=utf-8",
+      "note": "",
+      "error": null
+    },
+    {
+      "label": "espn:site.api scoreboard",
+      "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=20260207&groups=50&limit=500",
+      "status": 403,
+      "bytes_": null,
+      "content_type": "",
+      "note": "",
+      "error": "HTTP 403 Forbidden"
+    },
+    {
+      "label": "espn:core.api D-I teams",
+      "url": "https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/seasons/2026/types/2/groups/50/teams?limit=500",
+      "status": 200,
+      "bytes_": 50348,
+      "content_type": "application/json;charset=utf-8",
+      "note": "",
+      "error": null
+    }
+  ]
+}

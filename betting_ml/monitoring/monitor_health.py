@@ -60,6 +60,9 @@ CRITICAL_SCHEDULES = frozenset({
     # ⛔ Do NOT add the NCAAF schedules (sports_ncaaf_dbt_schedule /
     # sports_ncaaf_roll_forward_schedule) here — they are intentionally STOPPED until the
     # NCAAF-on-box card turns them on; adding them now would false-page every evaluation.
+    # NCAAB-P0: the free daily hoopR ingest ships RUNNING (no cost gate, no season gate), so
+    # it belongs here — this set is what makes a manual STOP visible instead of silent.
+    "sports_ncaab_ingest_schedule",
     "sports_nfl_board_publish_schedule",
     "sports_nfl_sleeper_injuries_schedule",
     # NF-C6-PH2 (2026-09-13) — the WEEKLY serving cadence. Added the day the operator enabled it,

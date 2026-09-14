@@ -1,0 +1,672 @@
+{
+  "probe": "ncaab_p0_credit_probe",
+  "started_at": "2026-09-14T06:33:26.292416+00:00",
+  "finished_at": "2026-09-14T06:33:53.197228+00:00",
+  "sport_keys": {
+    "game_lines": "basketball_ncaab",
+    "title_futures": "basketball_ncaab_championship_winner"
+  },
+  "reconciliation": {
+    "state": "AGREE",
+    "header_total": 392,
+    "bracket_total": 392,
+    "detail": "per-call headers and the free-read bracket agree exactly"
+  },
+  "bracket_open_remaining": 4812596,
+  "bracket_close_remaining": 4812204,
+  "refusals": [],
+  "board_shapes": {
+    "2025-11-15T23:00:00Z": {
+      "events": 56,
+      "distinct_commence_times": 31,
+      "commence_span_hours": 28.5,
+      "distinct_commence_times_within_24h": 16,
+      "books": [
+        "betmgm",
+        "betonlineag",
+        "betrivers",
+        "betus",
+        "bovada",
+        "draftkings",
+        "fanatics",
+        "fanduel",
+        "lowvig",
+        "williamhill_us"
+      ],
+      "n_books": 10,
+      "markets_present": [
+        "h2h",
+        "spreads",
+        "totals"
+      ],
+      "max_books_on_one_event": 9
+    },
+    "2026-01-17T23:00:00Z": {
+      "events": 90,
+      "distinct_commence_times": 58,
+      "commence_span_hours": 27.0,
+      "distinct_commence_times_within_24h": 20,
+      "books": [
+        "betmgm",
+        "betonlineag",
+        "betrivers",
+        "betus",
+        "bovada",
+        "draftkings",
+        "fanatics",
+        "fanduel",
+        "lowvig",
+        "williamhill_us"
+      ],
+      "n_books": 10,
+      "markets_present": [
+        "h2h",
+        "spreads",
+        "totals"
+      ],
+      "max_books_on_one_event": 10
+    },
+    "2026-02-07T23:00:00Z": {
+      "events": 105,
+      "distinct_commence_times": 45,
+      "commence_span_hours": 25.1,
+      "distinct_commence_times_within_24h": 24,
+      "books": [
+        "betmgm",
+        "betonlineag",
+        "betrivers",
+        "betus",
+        "bovada",
+        "draftkings",
+        "fanatics",
+        "fanduel",
+        "lowvig",
+        "williamhill_us"
+      ],
+      "n_books": 10,
+      "markets_present": [
+        "h2h",
+        "spreads",
+        "totals"
+      ],
+      "max_books_on_one_event": 9
+    },
+    "2026-03-07T23:00:00Z": {
+      "events": 68,
+      "distinct_commence_times": 41,
+      "commence_span_hours": 27.5,
+      "distinct_commence_times_within_24h": 30,
+      "books": [
+        "betmgm",
+        "betonlineag",
+        "betrivers",
+        "betus",
+        "bovada",
+        "draftkings",
+        "fanatics",
+        "fanduel",
+        "lowvig",
+        "williamhill_us"
+      ],
+      "n_books": 10,
+      "markets_present": [
+        "h2h",
+        "spreads",
+        "totals"
+      ],
+      "max_books_on_one_event": 10
+    },
+    "2026-03-19T18:00:00Z": {
+      "events": 40,
+      "distinct_commence_times": 40,
+      "commence_span_hours": 80.7,
+      "distinct_commence_times_within_24h": 16,
+      "books": [
+        "betmgm",
+        "betonlineag",
+        "betrivers",
+        "betus",
+        "bovada",
+        "draftkings",
+        "fanatics",
+        "fanduel",
+        "lowvig",
+        "mybookieag",
+        "williamhill_us"
+      ],
+      "n_books": 11,
+      "markets_present": [
+        "h2h",
+        "spreads",
+        "totals"
+      ],
+      "max_books_on_one_event": 11
+    }
+  },
+  "calls": [
+    {
+      "label": "bracket:open",
+      "path": "sports/",
+      "params": {
+        "all": "true"
+      },
+      "paid": false,
+      "http_status": 200,
+      "x_requests_last": 0,
+      "x_requests_remaining": 4812596,
+      "x_requests_used": 187404,
+      "rows": 178,
+      "snapshot_ts": null,
+      "previous_timestamp": null,
+      "next_timestamp": null,
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:26.369667+00:00"
+    },
+    {
+      "label": "live/events/game_lines",
+      "path": "sports/basketball_ncaab/events",
+      "params": {},
+      "paid": false,
+      "http_status": 200,
+      "x_requests_last": 0,
+      "x_requests_remaining": 4812596,
+      "x_requests_used": 187404,
+      "rows": 0,
+      "snapshot_ts": null,
+      "previous_timestamp": null,
+      "next_timestamp": null,
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:26.816971+00:00"
+    },
+    {
+      "label": "live/events/title_futures",
+      "path": "sports/basketball_ncaab_championship_winner/events",
+      "params": {},
+      "paid": false,
+      "http_status": 200,
+      "x_requests_last": 0,
+      "x_requests_remaining": 4812596,
+      "x_requests_used": 187404,
+      "rows": 1,
+      "snapshot_ts": null,
+      "previous_timestamp": null,
+      "next_timestamp": null,
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:27.246706+00:00"
+    },
+    {
+      "label": "live/odds/title_futures",
+      "path": "sports/basketball_ncaab_championship_winner/odds",
+      "params": {
+        "regions": "us",
+        "markets": "outrights",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 1,
+      "x_requests_remaining": 4812595,
+      "x_requests_used": 187405,
+      "rows": 1,
+      "snapshot_ts": null,
+      "previous_timestamp": null,
+      "next_timestamp": null,
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:27.701333+00:00"
+    },
+    {
+      "label": "live/odds/game_lines_offseason",
+      "path": "sports/basketball_ncaab/odds",
+      "params": {
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 0,
+      "x_requests_remaining": 4812595,
+      "x_requests_used": 187405,
+      "rows": 0,
+      "snapshot_ts": null,
+      "previous_timestamp": null,
+      "next_timestamp": null,
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:28.134710+00:00"
+    },
+    {
+      "label": "historical/depth/2018-02-01",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2018-02-01T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 0,
+      "x_requests_remaining": 4812595,
+      "x_requests_used": 187405,
+      "rows": 0,
+      "snapshot_ts": null,
+      "previous_timestamp": null,
+      "next_timestamp": "2020-11-16T09:15:00Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:28.567419+00:00"
+    },
+    {
+      "label": "historical/depth/2019-02-01",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2019-02-01T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 0,
+      "x_requests_remaining": 4812595,
+      "x_requests_used": 187405,
+      "rows": 0,
+      "snapshot_ts": null,
+      "previous_timestamp": null,
+      "next_timestamp": "2020-11-16T09:15:00Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:29.046746+00:00"
+    },
+    {
+      "label": "historical/depth/2020-02-01",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2020-02-01T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 0,
+      "x_requests_remaining": 4812595,
+      "x_requests_used": 187405,
+      "rows": 0,
+      "snapshot_ts": null,
+      "previous_timestamp": null,
+      "next_timestamp": "2020-11-16T09:15:00Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:29.499880+00:00"
+    },
+    {
+      "label": "historical/depth/2020-11-16",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2020-11-16T09:15:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812565,
+      "x_requests_used": 187435,
+      "rows": 25,
+      "snapshot_ts": "2020-11-16T09:15:00Z",
+      "previous_timestamp": null,
+      "next_timestamp": "2020-11-16T09:25:00Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:29.973548+00:00"
+    },
+    {
+      "label": "historical/depth/2021-02-01",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2021-02-01T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812535,
+      "x_requests_used": 187465,
+      "rows": 20,
+      "snapshot_ts": "2021-02-01T17:55:00Z",
+      "previous_timestamp": "2021-02-01T17:45:00Z",
+      "next_timestamp": "2021-02-01T18:05:00Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:30.628362+00:00"
+    },
+    {
+      "label": "historical/depth/2022-02-01",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2022-02-01T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812505,
+      "x_requests_used": 187495,
+      "rows": 28,
+      "snapshot_ts": "2022-02-01T17:55:00Z",
+      "previous_timestamp": "2022-02-01T17:45:00Z",
+      "next_timestamp": "2022-02-01T18:05:00Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:31.706306+00:00"
+    },
+    {
+      "label": "historical/depth/2023-02-01",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2023-02-01T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812475,
+      "x_requests_used": 187525,
+      "rows": 47,
+      "snapshot_ts": "2023-02-01T17:55:38Z",
+      "previous_timestamp": "2023-02-01T17:50:41Z",
+      "next_timestamp": "2023-02-01T18:00:38Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:32.468206+00:00"
+    },
+    {
+      "label": "historical/depth/2024-02-01",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2024-02-01T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812445,
+      "x_requests_used": 187555,
+      "rows": 66,
+      "snapshot_ts": "2024-02-01T17:55:39Z",
+      "previous_timestamp": "2024-02-01T17:50:39Z",
+      "next_timestamp": "2024-02-01T18:00:39Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:33.746584+00:00"
+    },
+    {
+      "label": "historical/depth/2025-02-01",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2025-02-01T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812415,
+      "x_requests_used": 187585,
+      "rows": 165,
+      "snapshot_ts": "2025-02-01T17:55:38Z",
+      "previous_timestamp": "2025-02-01T17:50:38Z",
+      "next_timestamp": "2025-02-01T18:00:38Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:35.198016+00:00"
+    },
+    {
+      "label": "historical/depth/2026-02-01",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2026-02-01T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812385,
+      "x_requests_used": 187615,
+      "rows": 27,
+      "snapshot_ts": "2026-02-01T17:55:37Z",
+      "previous_timestamp": "2026-02-01T17:50:37Z",
+      "next_timestamp": "2026-02-01T18:00:37Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:38.220060+00:00"
+    },
+    {
+      "label": "shape/2025-11-15",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2025-11-15T23:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812355,
+      "x_requests_used": null,
+      "rows": 56,
+      "snapshot_ts": "2025-11-15T22:55:38Z",
+      "previous_timestamp": "2025-11-15T22:50:38Z",
+      "next_timestamp": "2025-11-15T23:00:39Z",
+      "note": "56 events / 31 tip slots / 10 books / markets=h2h,spreads,totals",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:39.164968+00:00"
+    },
+    {
+      "label": "shape/2026-01-17",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2026-01-17T23:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812325,
+      "x_requests_used": null,
+      "rows": 90,
+      "snapshot_ts": "2026-01-17T22:55:38Z",
+      "previous_timestamp": "2026-01-17T22:50:40Z",
+      "next_timestamp": "2026-01-17T23:00:56Z",
+      "note": "90 events / 58 tip slots / 10 books / markets=h2h,spreads,totals",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:40.191176+00:00"
+    },
+    {
+      "label": "shape/2026-02-07",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2026-02-07T23:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812295,
+      "x_requests_used": null,
+      "rows": 105,
+      "snapshot_ts": "2026-02-07T22:55:37Z",
+      "previous_timestamp": "2026-02-07T22:50:37Z",
+      "next_timestamp": "2026-02-07T23:00:37Z",
+      "note": "105 events / 45 tip slots / 10 books / markets=h2h,spreads,totals",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:41.867721+00:00"
+    },
+    {
+      "label": "shape/2026-03-07",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2026-03-07T23:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812265,
+      "x_requests_used": null,
+      "rows": 68,
+      "snapshot_ts": "2026-03-07T22:55:37Z",
+      "previous_timestamp": "2026-03-07T22:50:37Z",
+      "next_timestamp": "2026-03-07T23:00:41Z",
+      "note": "68 events / 41 tip slots / 10 books / markets=h2h,spreads,totals",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:43.453307+00:00"
+    },
+    {
+      "label": "shape/2026-03-19",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2026-03-19T18:00:00Z",
+        "regions": "us",
+        "markets": "h2h,spreads,totals"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 30,
+      "x_requests_remaining": 4812235,
+      "x_requests_used": null,
+      "rows": 40,
+      "snapshot_ts": "2026-03-19T17:55:38Z",
+      "previous_timestamp": "2026-03-19T17:50:38Z",
+      "next_timestamp": "2026-03-19T18:00:48Z",
+      "note": "40 events / 40 tip slots / 11 books / markets=h2h,spreads,totals",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:44.933953+00:00"
+    },
+    {
+      "label": "historical/market/h2h",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2026-02-07T23:00:00Z",
+        "regions": "us",
+        "markets": "h2h",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 10,
+      "x_requests_remaining": 4812225,
+      "x_requests_used": 187775,
+      "rows": 105,
+      "snapshot_ts": "2026-02-07T22:55:37Z",
+      "previous_timestamp": "2026-02-07T22:50:37Z",
+      "next_timestamp": "2026-02-07T23:00:37Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:46.310059+00:00"
+    },
+    {
+      "label": "historical/market/spreads",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2026-02-07T23:00:00Z",
+        "regions": "us",
+        "markets": "spreads",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 10,
+      "x_requests_remaining": 4812215,
+      "x_requests_used": 187785,
+      "rows": 105,
+      "snapshot_ts": "2026-02-07T22:55:37Z",
+      "previous_timestamp": "2026-02-07T22:50:37Z",
+      "next_timestamp": "2026-02-07T23:00:37Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:47.711428+00:00"
+    },
+    {
+      "label": "historical/market/totals",
+      "path": "historical/sports/basketball_ncaab/odds",
+      "params": {
+        "date": "2026-02-07T23:00:00Z",
+        "regions": "us",
+        "markets": "totals",
+        "oddsFormat": "american"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 10,
+      "x_requests_remaining": 4812205,
+      "x_requests_used": 187795,
+      "rows": 105,
+      "snapshot_ts": "2026-02-07T22:55:37Z",
+      "previous_timestamp": "2026-02-07T22:50:37Z",
+      "next_timestamp": "2026-02-07T23:00:37Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:49.551467+00:00"
+    },
+    {
+      "label": "historical/events",
+      "path": "historical/sports/basketball_ncaab/events",
+      "params": {
+        "date": "2026-02-07T23:00:00Z"
+      },
+      "paid": true,
+      "http_status": 200,
+      "x_requests_last": 1,
+      "x_requests_remaining": 4812204,
+      "x_requests_used": 187796,
+      "rows": 105,
+      "snapshot_ts": "2026-02-07T22:55:37Z",
+      "previous_timestamp": "2026-02-07T22:50:37Z",
+      "next_timestamp": "2026-02-07T23:00:37Z",
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:51.189472+00:00"
+    },
+    {
+      "label": "bracket:close",
+      "path": "sports/",
+      "params": {
+        "all": "true"
+      },
+      "paid": false,
+      "http_status": 200,
+      "x_requests_last": 0,
+      "x_requests_remaining": 4812204,
+      "x_requests_used": 187796,
+      "rows": 178,
+      "snapshot_ts": null,
+      "previous_timestamp": null,
+      "next_timestamp": null,
+      "note": "",
+      "error": null,
+      "fetched_at": "2026-09-14T06:33:52.749901+00:00"
+    }
+  ]
+}
