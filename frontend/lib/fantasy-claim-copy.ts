@@ -1155,3 +1155,189 @@ export function unmatchedFootnote(
   })
   return [head, ...parts].join(" ")
 }
+
+// ══ NF-WK-FE1 — THE WEEKLY SURFACE ══════════════════════════════════════════════════════════════
+//
+// The in-season page: what we think a player scores THIS WEEK, with the range around it, and what
+// is left of his season. It is a different question from the season board (which answers "who do I
+// draft") and the copy has to say so, or the two surfaces read as one number rendered twice.
+//
+// ⛔⛔ NO "MATCHUP" CLAIM, ANYWHERE, AND IT IS A MEASURED PROHIBITION RATHER THAN A STYLE RULE.
+// NF-W1 ran the matchup story as a real candidate — `foil_matchup`, "season ÷ games spread by a
+// matchup adjustment" — and it LOST at every projected position, and lost to the FLAT foil too. So
+// "matchup-based" is a claim our own field contradicts. The edge is USAGE / SNAP conditioning, and
+// that is what the copy below says. `nfl_weekly.assert_no_matchup_claim` is EXPORTED for exactly
+// this purpose ("one owner, two consumers") and `test_nf_wk_fe1_weekly_page.py` points it at every
+// string in this section — so the prohibition is enforced by the contract's own instrument rather
+// than by a second token list that could drift away from it.
+//
+// ⛔ NO MEASURED FIGURE, same rule as the rest of this file and mechanically enforced here
+// (`test_the_canonical_copy_module_carries_no_measured_figure` refuses any decimal with two or more
+// places). That is the binding reason the stat-substrate note below describes the component head's
+// relationship to the points head in WORDS rather than quoting the coherence measurement: those
+// figures live in the promotion review, nothing on the wire carries them, and a number typed here
+// could never be reconciled against the re-score that moved it. See `WEEKLY_STAT_LINE_NOTE`.
+
+/** The page's own name, and the standfirst that separates it from the season board. */
+export const WEEKLY_PAGE_TITLE = "This week's NFL projections"
+
+/** ⚠️ "recent usage" IS THE HONEST MECHANISM and is load-bearing, not flavour — see the matchup
+ *  note above. It is also what distinguishes this page from the season board in one phrase: the
+ *  season number is a whole-year expectation, this one moves with how a player is being used now. */
+export const WEEKLY_PAGE_STANDFIRST =
+  "What we project each player to score in the coming week, with the 80% range around it and what is left of his season beside it. These are conditioned on how players are actually being used — snaps, carries and targets in the weeks just gone — not on who they line up against."
+
+/** The nav label. Deliberately "This Week" rather than "Weekly": the season board and the draft
+ *  tools are also weekly in the sense of being updated weekly, and the one thing a reader needs to
+ *  know from a menu is WHICH HORIZON this surface answers for. */
+export const WEEKLY_NAV_LABEL = "This Week"
+
+// ── the columns ─────────────────────────────────────────────────────────────────────────────────
+
+export const WEEKLY_POINTS_LABEL = "This week"
+
+/** ⚠️ THE SECOND SENTENCE IS THE ONE THAT MATTERS and must not be trimmed for length. A weekly
+ *  point is a MEAN over a distribution whose mass sits well below it — a receiver's median week is
+ *  under his average week — and a reader who takes the number as a forecast of what will happen has
+ *  been misled by us rather than by the model. That is what the range beside it is for. */
+export const WEEKLY_POINTS_DEFINITION =
+  "Our expected PPR points for this player in the coming week. It is an average across everything that could happen to him — the quiet games and the big ones — so it is not a prediction of what he will actually score, and most weeks land either side of it. Read it with the range next to it, which is where that spread is shown."
+
+export const WEEKLY_RANGE_LABEL = "80% range"
+
+/** ⚠️ "measured coverage floor, not a promise" MIRRORS the wording the manifest itself carries in
+ *  `framing.interval_note`, which the page ALSO renders verbatim. Two renderings of one fact, and
+ *  they have to agree: this is the column-level version a reader meets while scanning, the served
+ *  one is the page-level version with the measurement behind it. */
+export const WEEKLY_RANGE_DEFINITION =
+  "The middle 80% of what we think this week could look like for him — one week in ten we would expect him above the top of it, and one in ten below the bottom. It is a measured floor rather than a promise: held-out weeks landed inside this range at least as often as it says, and at some positions more often."
+
+export const WEEKLY_ROS_LABEL = "Rest of season"
+
+export const WEEKLY_ROS_DEFINITION =
+  "What we expect this player to score across the weeks still to come, summed from a projection for each of them. Byes are included as zeros, because a week off is part of what you get. Its range is wider in reality than we draw it — see the note below the table."
+
+/** The evidence base. ⭐ This column exists because a week-1 rookie's projection is built on his
+ *  position and a rookie flag and NOTHING ELSE, and a reader is entitled to know that before he
+ *  trusts the number — rather than meeting a confident-looking figure with no way to tell it from
+ *  one standing on twenty games of usage. */
+export const WEEKLY_HIST_LABEL = "Weeks of form"
+
+export const WEEKLY_HIST_DEFINITION =
+  "How many past weeks of this player's own usage the projection could learn from. A high number means the model has watched him take snaps and touches recently. Zero means it has not: early in a rookie's career there is no usage history at all, and his projection rests on his position and the fact that he is a rookie — a much thinner base, and the range beside it is correspondingly wide."
+
+// ── the two statuses, and the absences that are NOT statuses ─────────────────────────────────────
+
+/** A bye is a DETERMINISTIC zero, knowable the day the schedule came out — not a missing
+ *  projection, and the difference is the whole reason the contract emits an identity zero for it
+ *  rather than leaving the row out. The copy has to carry that distinction or the page reproduces
+ *  the merged empty state the absence counts exist to prevent. */
+export const WEEKLY_BYE_LABEL = "Bye"
+
+export const WEEKLY_BYE_DEFINITION =
+  "This player's team is not playing this week, so he scores nothing — a certainty, not a projection we are missing. His rest-of-season number beside it is unaffected: it covers the weeks he does play."
+
+/** The human reading of each machine-readable `absences[].reason`. ⭐ The served `detail` is
+ *  rendered VERBATIM beside these — this is the SHORT label a reader scans, never a paraphrase that
+ *  replaces the served sentence. Keyed on the contract's own reason strings
+ *  (`nfl_weekly.ABSENCE_REASONS`), and `test_nf_wk_fe1_weekly_page.py` asserts the key sets match,
+ *  so a reason added on the server surfaces as a failing test rather than as an unlabelled row. */
+export const WEEKLY_ABSENCE_LABEL: Record<string, string> = {
+  position_not_projected: "Positions we do not project",
+  no_gameday_roster_row: "Not on a game-day roster this week",
+  pit_gate_dropped: "Held back by our point-in-time check",
+}
+
+/** The heading over the absence counts. ⚠️ "who is NOT here, and why" is the point: three different
+ *  causes rendered as one empty state is what cost the same D/ST symptom two separate
+ *  investigations, and the counts exist so a reader never has to guess which one he is looking at. */
+export const WEEKLY_ABSENCE_HEADING = "Who is not on this page, and why"
+
+// ── the pre-publish state, which is a STATED ABSENCE and not an error ────────────────────────────
+
+/**
+ * ⭐ THE ORDINARY STATE OF THIS SURFACE BETWEEN BUILDS, and it must never render as a spinner or as
+ * a fault. Measured on the live API 2026-09-13: both free weekly routes answer 404 with
+ * `{"detail":"Weekly projection not found"}` — the route is anonymously reachable (the gateway
+ * authorizer is already NONE) and simply has nothing behind it yet, because the build waits on the
+ * week's game-day rosters being published.
+ *
+ * ⛔ It does NOT promise a date. The build is gated on an upstream feed landing, not on a calendar,
+ * and a page that named a day would be making a delivery commitment out of an inference about
+ * someone else's publishing schedule.
+ */
+export const WEEKLY_AWAITING_PUBLISH_TITLE = "This week's projections have not published yet"
+
+export const WEEKLY_AWAITING_PUBLISH_DETAIL =
+  "We build the week once the game-day rosters for it are out, so there is a gap between the end of one week and the start of the next. Nothing is wrong — there is simply nothing to show for this week yet. The season board is up to date in the meantime."
+
+/** A DIFFERENT FACT from the one above, and the page says so: "we have not published this" is our
+ *  publishing cadence, "we could not reach the model" is a problem on our side. Rendering them
+ *  identically is what sends the next investigation to the wrong place. */
+export const WEEKLY_READ_FAILED =
+  "We could not load this week's projections. That is a problem on our side rather than a gap in what we publish — please try again shortly."
+
+// ── the PPR-native framing, and why there is no format picker ────────────────────────────────────
+
+/**
+ * ⭐⭐ THE PRICING SENTENCE, AND THE ONE THING IT MUST NOT DO.
+ *
+ * The season board has thirteen formats, one free and the rest behind the membership. The weekly
+ * point has exactly ONE format and it is NOT a paywall: the number is the champion's own PPR-native
+ * output, not a re-scoring of a stat line, so other presets DO NOT EXIST YET rather than sitting
+ * withheld. Re-scoring an arbitrary league needs the per-stat line and a scorer — the deferred
+ * gate-3 story — and until it lands there is nothing to serve at any price.
+ *
+ * ⛔ SO THIS COPY MAY NEVER READ AS "one free format" — that sentence implies twelve locked ones and
+ * would be selling something we cannot deliver. It says what is true: this is the format we can
+ * compute today. That is also why the routes carry no `config`/`size` parameter (the contract's own
+ * note: "a parameter that does nothing today is declaration outrunning production, and it would
+ * invite the client to render locks over formats we cannot compute").
+ */
+export const WEEKLY_PPR_NATIVE_TITLE = "These are PPR points"
+
+export const WEEKLY_PPR_NATIVE_DETAIL =
+  "The weekly number is PPR by construction — the model predicts PPR points directly rather than projecting a stat line and scoring it, which is why there is no format picker here. Other scoring formats are not being withheld; they do not exist for the weekly projection yet. Giving you one for your own league means projecting each statistic separately and scoring those, and that is the piece we are still building. The season board already covers your league's format."
+
+// ── the paid half: stat substrate, never a second total ──────────────────────────────────────────
+
+export const WEEKLY_STAT_LINE_HEADING = "Projected stat line"
+
+/**
+ * ⭐⭐⭐ THE MOST IMPORTANT STRING ON THIS PAGE, and the acceptance criterion it satisfies is worth
+ * stating because it is easy to satisfy the wrong half.
+ *
+ * The weekly points head and the weekly component head are INDEPENDENT models fitted side by side.
+ * The point is NOT derived from the line, so scoring the line does not reproduce the point — the
+ * promotion review measured the gap on real rows and it is not zero. The spec's rule is therefore
+ * that a surface showing both either DOES NOT SUM the components, or DISCLOSES the discrepancy.
+ *
+ * ⭐ WE TAKE THE FIRST BRANCH, and it is the stronger one rather than the lazier one. This page
+ * never totals the stat line — no derived points figure is computed anywhere in the weekly tree —
+ * so there is no second number for a reader to reconcile against the first. Disclosing a magnitude
+ * would ALSO have required typing the measurement into this module, which
+ * `test_the_canonical_copy_module_carries_no_measured_figure` refuses outright and which the wire
+ * cannot supply (the manifest carries no coherence block). One branch was compliant and one was
+ * not; that is what decided it, and a follow-up records what serving the figure would take.
+ *
+ * ⚠️ "advisory" IS NOT SOFTENING. `lineage.component_head_status` is literally `"advisory_ungated"`
+ * on the wire: the component head was never independently gated, while the points distribution was.
+ * The copy says out loud what the payload already stamps.
+ */
+export const WEEKLY_STAT_LINE_NOTE =
+  "These are our projected statistics for the week. They come from a separate model that runs alongside the points projection rather than underneath it, so scoring this line yourself will not give you the points number above — the two are produced independently and they will not agree exactly. The points projection is the one that has been through our validation; treat the stat line as supporting detail for it, not as a second opinion on the total."
+
+/** What a non-member sees where the stat line would be. ⚠️ It states what is BEHIND the membership,
+ *  never that the page is broken, and it does NOT claim the line would improve the points number —
+ *  it would not; it is a different question about the same week. */
+export const WEEKLY_STAT_LINE_LOCK_TITLE = "The projected stat line is part of a membership"
+
+export const WEEKLY_STAT_LINE_LOCK_DETAIL =
+  "Members also see the projected statistics behind each week — passing, rushing and receiving lines — plus the full shape of the distribution rather than its middle 80%. The points projection and its range on this page are free, and they are the same numbers a member sees."
+
+/** A row whose paid detail is genuinely EMPTY. ⚠️ A THIRD state, distinct from both "you may not see
+ *  this" and "the page failed": the component head is independent, so it can legitimately have
+ *  produced nothing for a player the points head projected. Rendering that as zeros would be
+ *  fabricating a line; rendering it as the lock would be lying about why it is not there. */
+export const WEEKLY_STAT_LINE_ABSENT =
+  "No projected stat line was produced for this player this week. The points projection above is unaffected — the two come from separate models, and this one had nothing to say about him."

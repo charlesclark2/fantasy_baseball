@@ -623,6 +623,20 @@ _PUBLIC_PAGES = {
     "app/fantasy/projections/page.tsx",
     "app/fantasy/rankings/page.tsx",
     "app/fantasy/players/page.tsx",
+    # ⭐ NF-WK-FE1 — the WEEKLY surface. It qualifies on the same test the three above do, and the
+    # test is about the ENDPOINTS rather than about the product tier: `/fantasy/nfl/weekly/manifest`
+    # and `/fantasy/nfl/weekly/projections` are `Capability.GENERIC_BOARD` and take NO `Request`
+    # parameter at all, so they cannot branch on the caller and are byte-identical for everyone.
+    # A public wrapper therefore renders the real page for a logged-out visitor rather than a
+    # permanently broken one — which is precisely what disqualifies League Board and the draft
+    # tools below, whose endpoints 403 a free caller.
+    #
+    # ⚠️ THE PAID HALF OF THIS PAGE IS STILL PAID, and it is gated where the freemium build says a
+    # gate belongs: in the COMPONENT that would print it. `/fantasy/nfl/weekly/projections-full` is
+    # never fetched for an unentitled caller and never rendered by one, and the E2E proves both
+    # directions (`weekly-projections.spec.ts`). Being on this list is a statement about the page's
+    # GUARD, not a claim that everything it can show is free.
+    "app/fantasy/weekly/page.tsx",
 }
 
 #: PERSONALIZATION + DECISION SUPPORT. Listed per page so a failure names the surface that leaked.

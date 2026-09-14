@@ -66,7 +66,15 @@ export default defineConfig({
       // proving nothing about the viewport they exist for.
       // ⭐ E5.10 joins for the same reason: `props-slate-nav-mobile.spec.ts` drives the game-header
       // accordion and the Sort Picker with `page.tap()`, which throws on a touch-incapable browser.
-      testIgnore: /(home-mobile|props-slate-nav-mobile|ncaaf-games-mobile)\.spec\.ts/,
+      // ⭐ NF-WK-FE1's mobile file joins this ignore list for the documented reason: it drives
+      // `page.tap()`, which throws outright on `Desktop Chrome` ("The page does not support tap"),
+      // and its layout clauses are meaningless at 1280px.
+      //
+      // ⚠️ `ncaaf-team-mobile` is DELIBERATELY NOT HERE, though its name suggests it belongs: it
+      // uses no `tap()`, so it runs on BOTH projects today and adding it would silently cut its
+      // desktop coverage. The list is "specs a desktop browser cannot run", not "specs with mobile
+      // in the name".
+      testIgnore: /(home-mobile|props-slate-nav-mobile|ncaaf-games-mobile|weekly-projections-mobile)\.spec\.ts/,
     },
     // E9.58's second defect was mobile-only — the logged-out nav had no signup affordance on a
     // small screen because the whole block was `hidden sm:flex`. A desktop-only suite cannot see
@@ -127,8 +135,16 @@ export default defineConfig({
     // point-prediction one at exactly the width most readers use, while every desktop assertion
     // stayed green. `ncaaf-team-mobile.spec.ts` is scoped to what only a small viewport can tell
     // you.
+    // ⭐ NF-WK-FE1 joins for BOTH of the reasons already on this list, which is unusual enough to
+    // say. Its four `InfoTip` definitions are the `expected-points-label` case verbatim — the tap
+    // test is VACUOUS on desktop, and the RANGE definition is where "this number is an average,
+    // most weeks land either side of it" lives, so a phone reader who cannot open it meets a
+    // confident point projection with its honest framing unreachable. And its table is
+    // DELIBERATELY wider than a phone, which is the `fantasy-my-teams-mobile` case: safe only if
+    // it scrolls inside its own box, and a contained overflow leaves the document tidy so no
+    // desktop assertion can tell a correct one from a page that drags sideways.
       testMatch:
-        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|reported-absence|stat-line-suppression|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile|ncaaf-games-mobile|ncaaf-team-mobile)\.spec\.ts/,
+        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|weekly-projections-mobile|reported-absence|stat-line-suppression|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile|ncaaf-games-mobile|ncaaf-team-mobile)\.spec\.ts/,
     },
   ],
 
