@@ -89,10 +89,59 @@ squarely in the real NCAAB range. Per-100 efficiency is NULL below a 20-possessi
 rate divided by a near-zero possession count is finite, enormous and completely fake, and no
 NULL check catches it (hoopR's own repo records a model incident from one zero-possession row).
 
-## 8. What P1 can fit on
+## 8. P1 readiness statement
 
-`fact_ncaab_team_game` — box line, shared possession estimate, per-100 efficiency, and the
-**point-in-time-correct** conference from the SCD. 24 seasons available; 6 ingested.
-**Suggested training depth: 10–15 seasons** — the data supports 24, but the 2008 neutral-site
-flag, the 2015 shot-clock reduction and the 2023–25 realignment wave make the older seasons a
-different game. That is a modelling judgment for P1 to test, not a data limit.
+*Mirrors the canonical copy in `plan_specs/ncaab/ncaab-p0.yaml` → `closeout.followUps` item 8.
+Keep them in step.*
+
+**The fitting surface.** `fact_ncaab_team_game` — box line, shared possession estimate, per-100
+efficiency, and the **point-in-time-correct** conference from the SCD. 24 seasons available;
+6 ingested. Extending is a re-run, not a code change.
+
+### ⭐ Registration constraint — binding, not advisory
+
+> **Any P1/P2 clause that touches market data declares its window INSIDE the 2020-11-16 archive
+> floor, and no story is ever scoped around a longer one.**
+
+Game data reaches **24 seasons** free; market data reaches **6**, at any spend. The bound is the
+vendor's archive, not the budget, so the window is a **design input you declare**, not something
+discovered mid-story. The historical backfill is priced but deliberately unpurchased
+(DEFERRED-ON-DEMAND) precisely so that a registered design names its window and the purchase buys
+exactly that — see `docs/ncaab_p0_credit_arithmetic.md` §4.
+
+### ⭐ The training window is a DECLARE-FORWARD choice
+
+**10–15 seasons is a suggestion from P0 and carries no authority.** P1's pre-registration must
+**declare its window family forward**, citing the *mechanism* for each candidate cut:
+
+| Candidate boundary | Mechanism |
+|---|---|
+| ≥ 2008 | the **birth of the `neutral_site` flag** — before it, the field is an absence, not a False |
+| ≥ 2015 | the **shot-clock reduction to 30 seconds** — a direct, deliberate change to possession count |
+| ≥ 2023 | the **realignment wave** — 52 teams changed conference 2023–2027 |
+
+A window chosen *after* seeing fits is the E2.1-r inversion in its most literal form. The data
+supports all 24 seasons either way; **which of them are the same game** is the modelling question
+P1 registers and TESTS, not one P0 settles.
+
+### ⚠️ Two honest-absence caveats P1 inherits
+
+Both are already surfaced in the models, so neither can be read wrong by accident — but a design
+that ignores them will mis-specify silently rather than fail:
+
+- **`neutral_site` is identically 0 for every season before 2008.** That is the flag *not
+  existing*, not "no neutral-site games were played" — and 2008–2026 average ~650 neutral games a
+  season, so reading the earlier zeros as `False` would silently mis-specify every pre-2008 game.
+  Surfaced as an explicit `neutral_site_is_trustworthy` column on `stg_ncaab_schedule` so a
+  training window cannot read missing as False.
+- **Per-100 efficiency is NULL below a 20-possession floor**, because a rate divided by a
+  near-zero possession count is finite, enormous and completely fake, and no NULL check catches it
+  (hoopR's own repo records a model incident from one zero-possession row). The row is kept and
+  flagged `possessions_unusable` rather than dropped, so the absence is countable.
+
+### ⏳ One caveat about the lake itself
+
+P1 can design against this surface **today** — the audit verdict and the schema are final. But the
+box runtime gate has not yet been verified (see `ncaab_guide.md` Status), so **do not assume a
+live, daily-advancing lake** until the first real `sports_ncaab_ingest_schedule` fire is confirmed
+from artifact content. The 6 ingested seasons were landed and verified locally; S3 is unproven.
