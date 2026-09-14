@@ -31,6 +31,8 @@ import {
   FORMAT_LOCK_EXPLANATION,
   FORMAT_LOCK_SUFFIX,
   FREE_TIER_SUMMARY,
+  freeTierDetail,
+  type FreeTierSurface,
   FULL_SEASON_RATE_DEFINITION,
   FULL_SEASON_RATE_LABEL,
   FULL_SEASON_RATE_WITHHELD_DETAIL,
@@ -487,7 +489,14 @@ export function UpgradeBanner({
  * outcome claim, and the record is a LINK. Every string comes from `fantasy-claim-copy.ts` so the
  * denylist screening covers it; `test_freemium_tier.py` fails the build on a literal written here.
  */
-export function FreemiumBoundary({ entitled }: { entitled: boolean }) {
+// ⭐ `surface` IS REQUIRED ON PURPOSE (PM 2026-09-14, finding 11 → b′). A default would let the
+// NEXT surface that adopts this block inherit another surface's list silently — which is exactly
+// how the weekly page came to advertise a market ADP it does not carry. With no default, `tsc`
+// refuses the omission, so the guarantee is compile-time rather than a test someone must remember
+// to extend.
+export function FreemiumBoundary(
+  { entitled, surface }: { entitled: boolean; surface: FreeTierSurface },
+) {
   if (entitled) return null
   return (
     <section
@@ -499,7 +508,7 @@ export function FreemiumBoundary({ entitled }: { entitled: boolean }) {
         {FREE_TIER_SUMMARY.title}
       </h2>
       <p className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-gray-400">
-        {FREE_TIER_SUMMARY.detail}
+        {freeTierDetail(surface)}
       </p>
 
       <div className="mt-5 border-t border-[#1f1f1f] pt-4">

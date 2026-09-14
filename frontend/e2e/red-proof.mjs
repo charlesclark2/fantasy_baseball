@@ -556,7 +556,7 @@ const CASES = [
     // asks whether the page works, because it does.
     detail: "Removes the free/paid boundary block from below the rankings board.",
     file: "components/fantasy/rankings-board.tsx",
-    from: "          <FreemiumBoundary entitled={entitled} />",
+    from: "          <FreemiumBoundary entitled={entitled} surface=\"season\" />",
     to: "",
     grep: "states what a membership adds",
   },

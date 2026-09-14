@@ -564,7 +564,7 @@ export function WeeklyProjectionsPage() {
         </p>
       )}
 
-      <FreemiumBoundary entitled={entitled && !!accessToken} />
+      <FreemiumBoundary entitled={entitled && !!accessToken} surface="weekly" />
     </main>
   )
 }
