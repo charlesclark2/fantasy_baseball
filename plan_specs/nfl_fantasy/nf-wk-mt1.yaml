@@ -65,12 +65,58 @@ spec:
         team — each starter/bench slot: league-scored weekly point,
         the band (labeled honestly per boundary (b)), designation
         badge where the feed carries one (the served status — no
-        forecast language), bye/absent states; weekly ROS renders
-        league-scored the same way. Copy through the claim-copy
-        conventions: no start/sit imperatives, no matchup language;
-        the PPR-band label states its scope in plain words. The
-        season my-teams view, scorer, and entitlement gates are
-        untouched; the lens is additive navigation within my-teams.
+        forecast language), bye/absent states; weekly ROS renders as
+        the model's own PPR rest-of-season figure, carried unchanged
+        and labelled — the SAME treatment as the band, and NOT
+        league-scored.
+        # ⭐ AMENDED 2026-09-14 (PM disposition ①), and it is a
+        # CORRECTION rather than a descoping: the clause previously
+        # read "weekly ROS renders league-scored the same way", which
+        # is not satisfiable. THE REASON, quoted so it is not
+        # re-litigated: "the weekly payload carries no ROS component
+        # line; league-scored ROS requires a backend emission story;
+        # until then ROS renders as the model's PPR figure, labelled."
+        # ⛔ The tempting middle — scaling the PPR ROS by the ratio the
+        # weekly point moved — is the SAME fabrication boundary (b)
+        # refuses for the range, and allowing it here while refusing it
+        # there would be incoherent. ⚠️ Registered LOUDLY rather than
+        # left implicit because the scaled version is PLAUSIBLE: the
+        # frozen-form ROS basis holds each player's stat mix roughly
+        # constant across the horizon, so the fabrication would look
+        # defensible to a future reader who did not know it had been
+        # considered and refused.
+        Each rostered player renders TWO numbers and the PPR one may
+        never be hidden where the band renders: league points are the
+        headline, the PPR point is the band's ANCHOR (visually bound
+        to the band), and one line states that the two are independent
+        outputs of one model — neither correcting the other.
+        # ⭐ BINDING RATIONALE (PM disposition ③, 2026-09-14): a band
+        # rendered beside a league-scored point with no PPR point in
+        # sight reads as THAT point's band, which is false. ⛔ No copy
+        # may imply a rank-ordering or a correction between the two.
+        The per-league SCORING COVERAGE the endpoint already reports is
+        a FIRST-CLASS element of the view — not a tooltip and not a
+        footnote glyph alone.
+        # ⭐ PM disposition ② (2026-09-14): VISIBLE. "Your fumble
+        # scoring isn't in this number" is true; "contributed nothing"
+        # is false, and only a visible disclosure separates them. Shape:
+        # a plain per-team statement, e.g. "8 of your league's 28
+        # scoring terms apply to weekly stats; the rest (fumbles, 2-pt,
+        # K/DST, …) are not in this number." ⚠️ The DIRECTION of the
+        # bias may be stated ONLY where it is derivable per-league from
+        # the served coverage list — never as a blanket claim.
+        A caller without the membership capability meets a STATED
+        BOUNDARY in the tab itself ("the weekly lens is a membership
+        feature"), never a dead end that reads as a bug.
+        # ⭐ PM disposition ④ (2026-09-14): KEEP PAID. The weekly lens
+        # stays behind the membership capability; the free league's
+        # SEASON board is untouched and route mounting stays where the
+        # entitlement standard puts it. No widening.
+        Copy through the claim-copy conventions: no start/sit
+        imperatives, no matchup language; the PPR-band label states its
+        scope in plain words. The season my-teams view, scorer, and
+        entitlement gates are untouched; the lens is additive
+        navigation within my-teams.
     - description: >
         TIMING + FIXTURES: Phase A can build now (the box artifact
         exists; the first weekly publish is imminent) but its runtime
@@ -152,10 +198,11 @@ spec:
       reads. No scorer file outside `app/backend/services` is touched; the NF-EPIC 1
       three-implementation parity merge gate passes unchanged (290 neighbouring clauses
       green, including it).
-      PARITY, MEASURED NOT ASSERTED: our full-PPR scoring of the weekly component line
-      agrees with NF-C6-PH2's INDEPENDENT full-PPR implementation at `max_abs_diff =
-      0.0` over the fixture. The oracle is USED rather than copied, so the clause cannot
-      be a restatement of the code it checks.
+      ⭐ PARITY, MEASURED NOT ASSERTED — AND RATIFIED: our full-PPR scoring of the weekly
+      component line agrees with NF-C6-PH2's INDEPENDENT full-PPR implementation at
+      `max_abs_diff = 0.0` over the fixture. The oracle is USED rather than copied, so
+      the clause cannot be a restatement of the code it checks. The PM recorded this on
+      2026-09-14 as "exactly the proof the spec wanted", carried here verbatim.
       ⛔ THE RUNTIME GATE CANNOT BE RUN THIS SESSION and no page code was written.
       Measured 2026-09-14, cache-busted: `/fantasy/nfl/weekly/manifest` and
       `/…/projections` both answer 404 `{"detail":"Weekly projection not found"}` from
@@ -174,6 +221,28 @@ spec:
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      ✅ PM DISPOSITION (2026-09-14) — RULED (a), AND THE SPEC AMENDED RATHER THAN THE
+      CLAUSE SKIPPED. Criterion 2 now says what is actually satisfiable, with the reason
+      quoted in a dated comment on the clause itself: "the weekly payload carries no ROS
+      component line; league-scored ROS requires a backend emission story; until then ROS
+      renders as the model's PPR figure, labelled." The refusal of the ratio-scaled
+      pseudo-value is ratified as the record: it is the same fabrication boundary (b)
+      refuses for the range, and allowing it here while refusing it there would be
+      incoherent.
+      ⚠️ THE NEAR-MISS, RECORDED LOUDLY BECAUSE IT IS WHAT MAKES THE "NO" FRAGILE: the
+      scaled version is PLAUSIBLE, and plausible for a real reason — the frozen-form ROS
+      basis copies the target week's feature row forward, so each player's stat MIX is
+      roughly constant across the horizon and a ratio scale would look defensible. A
+      future reader who did not know it had been considered and refused could adopt it in
+      good faith. That is precisely why the refusal is written on the clause rather than
+      left to be re-derived.
+      ⛔ OPTION (b) IS NOT CARDED — the PM will decide whether to fund it if the lens's
+      usage shows ROS is load-bearing. Recorded here so the option is not lost: it would
+      take ONE backend emission story — have `weekly_serving` sum the component head
+      across the frozen-form remaining weeks and declare that per-player ROS component
+      line on `NflWeeklyPlayer`, after which the EXISTING scorer produces a league-scored
+      ROS with no change to this endpoint, the adapter or the lens.
 
       (1) ⭐⭐ CRITERION 2'S ROS CLAUSE IS NOT SATISFIABLE AGAINST THIS SUBSTRATE, and the
       honest answer is the same shape as NF-WK-FE1's finding (1). The criterion says
@@ -194,6 +263,19 @@ spec:
       (b) exists to refuse. Recording the argument so a successor does not have to
       rediscover it, NOT as a licence to take it.
 
+      ✅ PM DISPOSITION (2026-09-14) — VISIBLE, FIRST-CLASS. The framing is ratified as the
+      ruling: "your fumble scoring isn't in this number" is TRUE, "contributed nothing" is
+      FALSE, and only a visible disclosure separates them. The per-league coverage the
+      endpoint already reports renders as a first-class element of the lens — NOT a
+      tooltip, NOT a footnote glyph alone. Shape: a plain per-team statement, e.g. "8 of
+      your league's 28 scoring terms apply to weekly stats; the rest (fumbles, 2-pt,
+      K/DST, …) are not in this number", worded through the `fantasy-claim-copy.ts`
+      conventions. ⚠️ The DIRECTION of the bias may be stated ONLY where it is derivable
+      PER-LEAGUE from the served coverage list (e.g. a league weighting turnovers sees
+      weekly totals run slightly high vs its season scoring) — ⛔ never as a blanket
+      claim. Structurally free-safe copy, but it lives on a paid surface, so no freemium
+      concern arises.
+
       (2) ⭐ A LEAGUE SCORES FEWER TERMS WEEKLY THAN IT DOES SEASONALLY, AND THIS IS A
       PRODUCT FACT, NOT AN IMPLEMENTATION DETAIL. The champion's component head emits
       ELEVEN stats. The shipped `full_ppr` preset also weights `fumbles_lost` (-2) and
@@ -207,6 +289,13 @@ spec:
       fumble scoring is not in this number"), and the PM may want to know that a
       fumble-heavy or 2-pt-heavy league's weekly total is structurally a little high.
 
+      ✅ PM DISPOSITION (2026-09-14) — CONFIRMED AS STATED, and the rationale is now
+      BINDING in the amended criterion: league points are the headline, the PPR point
+      renders as the band's ANCHOR (visually bound to it, so the band can never be read
+      as the league point's band), and one line states the two are independent outputs of
+      one model differing ~0.75 pts on average, neither correcting the other. ⛔ No copy
+      may imply a rank-ordering or a correction between them.
+
       (3) ⭐ A PPR BAND BESIDE A LEAGUE-SCORED POINT IS A FALSE CLAIM UNLESS THE PPR POINT
       IS RENDERED WITH IT. The band brackets `pprPts`, not `leaguePts`; a reader shown
       only the league point and a range will read the range as that point's. So `pprPts`
@@ -215,6 +304,13 @@ spec:
       renders the band MUST render `pprPts` beside it. (Same family as NF-WK-FE1's
       finding (10b): a state that means something UNTRUE is strictly worse than one that
       is merely ambiguous.)
+
+      ✅ PM DISPOSITION (2026-09-14) — KEEP PAID, HONEST WALL (option a). The weekly lens
+      stays behind the membership capability; the free league's SEASON board is untouched
+      and route mounting stays where the entitlement standard puts it — no widening.
+      Phase B's refusal state must say plainly IN THE TAB ITSELF that the weekly lens is a
+      membership feature: a STATED BOUNDARY, never a dead end that reads as a bug. ⇒ this
+      is now a Phase B deliverable, not an open question.
 
       (4) 🔒 AN ENTITLEMENT ASYMMETRY THE PM MAY WANT TO REVISIT — implemented as the spec
       ruled ("a paid endpoint"), flagged because it is a PRICING question rather than an
