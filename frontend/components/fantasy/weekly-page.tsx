@@ -98,6 +98,27 @@ import {
  *  zero, which would be a different (and false) claim. */
 const fmt = (v: number | null | undefined) => (v == null ? "—" : num(v, 1))
 
+/**
+ * An input vintage, in the reader's own locale.
+ *
+ * ⭐ THE WHOLE POINT OF SHOWING PER-INPUT VINTAGES IS THAT STALENESS IS LEGIBLE AT A GLANCE
+ * (NF-FRESH2: one build date rendered over inputs of several vintages HIDES staleness). A raw
+ * `2026-09-16T09:02:11+00:00` is visible but not legible — a reader cannot tell at a glance that it
+ * is three days old, and printing it beside a locale-formatted build time makes the line read as
+ * two different kinds of fact. Same formatting for every timestamp on the line, or the comparison
+ * the line exists to support has to be done in the reader's head.
+ *
+ * ⚠️ FAILS TOWARD THE RAW STRING RATHER THAN TOWARD "unknown". An unparseable vintage is still
+ * INFORMATION — it is what the builder stamped — and replacing it with a friendly word would
+ * discard the only evidence of whatever went wrong upstream. A genuinely absent one is `null` on
+ * the wire and says "unknown", which is a different fact and reads as one.
+ */
+function vintage(iso: string | null | undefined): string {
+  if (!iso) return "unknown"
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
+}
+
 /** The shared domain every row's band is drawn on, so two bars are comparable at a glance.
  *
  * ⚠️ COMPUTED OVER THE ROWS ACTUALLY SHOWN, not over a constant. A fixed domain would squash a
@@ -510,10 +531,10 @@ export function WeeklyProjectionsPage() {
           the audience. */}
       {manifest.data && (
         <p data-testid="weekly-provenance" className="mt-6 text-[11px] text-gray-600">
-          Week {manifest.data.week} built {new Date(manifest.data.generated_at).toLocaleString()} ·
-          rosters {manifest.data.input_vintage.rosters_as_of ?? "unknown"} · schedule{" "}
-          {manifest.data.input_vintage.schedule_as_of ?? "unknown"} · stats{" "}
-          {manifest.data.input_vintage.stats_as_of ?? "unknown"} · trained through{" "}
+          Week {manifest.data.week} built {vintage(manifest.data.generated_at)} · rosters{" "}
+          {vintage(manifest.data.input_vintage.rosters_as_of)} · schedule{" "}
+          {vintage(manifest.data.input_vintage.schedule_as_of)} · stats{" "}
+          {vintage(manifest.data.input_vintage.stats_as_of)} · trained through{" "}
           {manifest.data.input_vintage.train_through_season ?? "—"} week{" "}
           {manifest.data.input_vintage.train_through_week ?? "—"} ·{" "}
           {manifest.data.lineage.served_version}

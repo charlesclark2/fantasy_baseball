@@ -380,6 +380,26 @@ test("the served interval notes are rendered verbatim, not paraphrased", async (
   expect(ros.trim()).toBe(MANIFEST.framing.ros_interval_note)
 })
 
+// ══ 8b — provenance: every vintage on one line, in one format ═══════════════════════════════════
+
+test("the provenance line renders every input vintage in one readable format", async ({ page }) => {
+  await openWeekly(page)
+  const line = await page.locator('[data-testid="weekly-provenance"]').innerText()
+
+  // ⭐ THE LINE EXISTS SO STALENESS IS LEGIBLE AT A GLANCE (NF-FRESH2). A raw ISO timestamp beside
+  // a locale-formatted build time is visible but not legible, and makes the line read as two
+  // different kinds of fact — so no raw ISO may survive into the rendered text.
+  const rawIso = line.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/g) ?? []
+  expect(rawIso, `the provenance line still carries raw ISO timestamps: ${rawIso.join(", ")}`).toEqual([])
+
+  // …and it still NAMES each input, rather than collapsing them into one build date — which is the
+  // defect NF-FRESH2 exists to prevent and which "no raw ISO" would also be satisfied by.
+  for (const label of ["rosters", "schedule", "stats", "trained through"]) {
+    expect(line.toLowerCase()).toContain(label)
+  }
+  expect(line).toContain(MANIFEST.lineage.served_version)
+})
+
 // ══ 9 — the nav door ════════════════════════════════════════════════════════════════════════════
 
 /**
