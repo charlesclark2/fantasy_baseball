@@ -93,7 +93,7 @@ _W6_INTRADAY_ENABLED = os.environ.get("W6_LAKEHOUSE_INTRADAY", "0") == "1"
 #
 # FIX (this helper): after the native capture, run the proven daily chain scoped to the
 # schedule tier — export today's monthly_schedule raw → S3, rebuild the W3pre flatten
-# (--w3pre-only rebuilds stg_statsapi_games' output parquet from that raw), then refresh
+# (--w3pre-serving-only rebuilds stg_statsapi_games' output parquet from that raw), then refresh
 # the external-table metadata so Snowflake serves the fresh game-state immediately.
 #
 # Gated OFF by default (clean no-op until the operator validates on the box) and ALERT-tier
@@ -160,7 +160,7 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
     stops serving a day-stale 'Preview' game-state and TODAY's confirmed lineups are actually seen.
 
     Sequence mirrors the daily run_w1_lakehouse_op for this tier, scoped to today's raw:
-      run_w1_lakehouse.py --w3pre-only                                     (rebuild games flatten)
+      run_w1_lakehouse.py --w3pre-serving-only                              (rebuild games flatten)
       run_w1_lakehouse.py --w7b-only                                       (rebuild lineups_wide etc.)
       refresh_w1_external_tables.py                                        (refresh ext-table metadata)
 
@@ -171,7 +171,7 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
     monthly_schedule raw to S3 — so the export bridge was a redundant SECOND writer of the same key
     (INC-31 clobber shape) AND a per-tick Snowflake READ of the now-frozen SF table (a warehouse
     wake). Dropping it makes the writer the sole S3 author and removes one tick SF touch; the
-    --w3pre/--w7b rebuilds below read the S3 raw the writer just wrote.
+    --w3pre-serving/--w7b rebuilds below read the S3 raw the writer just wrote.
 
     INC-31 (2026-07-10) — WHY --w7b-only is here: the S3 stg_statsapi_lineups_wide parquet is
     otherwise rebuilt ONLY by the once-daily (morning) run, but a slate's lineups post through the
@@ -201,7 +201,15 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
     # feeds and serve different consumers. Each leg now gets its own try/except so one poisoned
     # vendor price can cost at most its own table.
     _legs_failed: list[tuple[str, str]] = []
-    for _flag, _what in (("--w3pre-only", "game-state + odds flatten"),
+    # MLB-LAKE2 (2026-09-14) — the tick builds only what a consumer reads intraday.
+    # `--w3pre-only` builds all four W3pre models; three of them are daily-cadence odds staging
+    # with no intraday reader, and by 09-14 they cost ~163 s of the 480 s leg while
+    # stg_derivative_odds was being KILLED at the cap on every tick (measured from the S3 promote
+    # timestamps; its last successful build was the DAILY one). `--w3pre-serving-only` builds the
+    # serving-critical member alone (~12 s). The DAILY lakehouse_w3pre_flatten_op still builds the
+    # full tier, and the two moved-and-still-live tables carry INC-41 freshness SLAs at that
+    # cadence, so a stopped daily builder pages instead of freezing them silently.
+    for _flag, _what in (("--w3pre-serving-only", "game-state flatten"),
                          ("--w7b-only", "lineups_wide / probable_pitchers")):
         try:
             _run_script(context, "run_w1_lakehouse.py", [_flag], timeout=_TICK_LEG_TIMEOUT)

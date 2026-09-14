@@ -38,6 +38,8 @@ objects it fed are DROPPED; W1_SF_COMPAT_MIRROR=1 resumes it (rollback only).
   python3 scripts/run_w1_lakehouse.py --w3-only   # only the W3 marts (reuse existing W1+W2 parquet)
   python3 scripts/run_w1_lakehouse.py --w3pre     # W1 + W2 + W3 + the W3pre odds/staging tier (opt-in)
   python3 scripts/run_w1_lakehouse.py --w3pre-only # only the W3pre odds/staging flatten tier
+  python3 scripts/run_w1_lakehouse.py --w3pre-serving-only  # the 30-min tick's scope: the
+                                                  #   W3pre models with an intraday consumer
   python3 scripts/run_w1_lakehouse.py --w4         # W1 + W2 + W3 + the W4 FanGraphs/posteriors/savant marts (opt-in)
   python3 scripts/run_w1_lakehouse.py --w4-only    # only the W4 marts + FanGraphs precursors (reuse W1 parquet)
 
@@ -79,7 +81,11 @@ try:
     # MLB-INC-0904: the intraday leg cap this tier must fit in, + the grading policy. Imported
     # from the SINGLE OWNER rather than re-stated here — a second copy of 480 is how a budget
     # and the thing it budgets drift apart (also pure stdlib, so it adds no import weight).
-    from betting_ml.monitoring.intraday_tick_budget import w3pre_tier_verdict
+    from betting_ml.monitoring.intraday_tick_budget import (
+        LEG_TIMEOUT_SECONDS,
+        W3PRE_DAILY_TIMEOUT_SECONDS,
+        w3pre_tier_verdict,
+    )
 except ModuleNotFoundError:  # bare invocation without the project on sys.path
     sys.path.insert(0, str(REPO_ROOT))
     from betting_ml.utils.delta_lakehouse import (
@@ -88,7 +94,11 @@ except ModuleNotFoundError:  # bare invocation without the project on sys.path
         delta_read_enabled,
         delta_w1_mode,
     )
-    from betting_ml.monitoring.intraday_tick_budget import w3pre_tier_verdict
+    from betting_ml.monitoring.intraday_tick_budget import (
+        LEG_TIMEOUT_SECONDS,
+        W3PRE_DAILY_TIMEOUT_SECONDS,
+        w3pre_tier_verdict,
+    )
 
 # ── S3 locations (mirrors lakehouse_loc() macro in dbt/macros/lakehouse.sql) ──
 BUCKET = "s3://baseball-betting-ml-artifacts"
@@ -224,6 +234,42 @@ W3PRE_STG_MODELS = [
     "stg_oddsapi_odds",      # ← lakehouse_raw/mlb_odds_raw       (daily cadence; no intraday reader)
     "stg_oddsapi_events",    # ← lakehouse_raw/mlb_events_raw     (daily cadence)
     "stg_derivative_odds",   # ← lakehouse_raw/derivative_odds_raw (eval/CLV only — daily)
+]
+
+# MLB-LAKE2 (2026-09-14) — WHAT THE 30-MIN TICK ACTUALLY BUILDS.
+#
+# MLB-INC-0904 put the serving-critical model FIRST so a timeout could not starve it. That
+# inverted the failure mode but did not remove it: ten days later the tier no longer fits AT ALL.
+# Measured from the S3 promote timestamps of the 2026-09-14 03:30Z tick (a QUIET overnight tick,
+# the favourable case) — read 04:41Z:
+#
+#     stg_statsapi_games     promoted 03:30:42   (~12 s, unchanged)
+#     stg_oddsapi_odds       promoted 03:33:19   157.0 s   ← 235 raw files / 162.6 MB
+#     stg_oddsapi_events     promoted 03:33:25     6.0 s   ← 39 raw files, CONTENT FROZEN 2026-06-04
+#     stg_derivative_odds    NEVER PROMOTED — killed at the 480 s leg cap
+#
+# `stg_derivative_odds`' last successful build is 2026-09-13 12:22:41Z, which is not a tick time
+# (the tick crons are `*/30 14-23` and `0,30 0-3` UTC): it is the DAILY build. So the intraday
+# tick has stopped completing this tier altogether, and the only thing still building the odds
+# staging is the daily `lakehouse_w3pre_flatten_op` — which has `timeout=1800` and finishes fine.
+#
+# ⇒ The tick is paying ~163 s every 30 minutes to rebuild daily-cadence staging that NOTHING
+# reads intraday, and then being killed. Verified against the code, not inherited from the
+# incident: the intraday odds path (`--w6-odds-current`) does NOT read these outputs — it
+# re-registers `stg_oddsapi_odds` as a RECENT-scoped flatten straight off the raw store
+# (_register_recent_stg_oddsapi_odds), and `stg_oddsapi_events` / `stg_derivative_odds` feed only
+# DAILY marts (mart_odds_events, mart_derivative_closes) plus the offline cross-market eval.
+#
+# So the tick builds only what a consumer reads intraday. The DAILY build keeps building the full
+# W3PRE_STG_MODELS tier above, so nothing is orphaned, and the two moved-and-still-live tables
+# join INC-41 freshness coverage at their daily cadence so a stopped daily builder pages rather
+# than freezing them silently (betting_ml/monitoring/artifact_freshness.py).
+#
+# ⛔ NOT a recent-scoping of the odds flattens: those are FULL-HISTORY tables written to a single
+# key, so a recent-scoped write would TRUNCATE history (unlike mart_odds_outcomes, which is
+# bucketed into _history/_current precisely so its intraday pass can be recent-scoped safely).
+W3PRE_INTRADAY_MODELS = [
+    "stg_statsapi_games",    # the ONLY member with an intraday consumer (90-min freshness SLA)
 ]
 
 # E11.1-W5: the seeds + the mart_game_results / mart_game_spine team/game chain (10
@@ -1171,12 +1217,22 @@ def _raw_source_for(model: str) -> str:
     return m.group(1) if m else model
 
 
-def _build_w3pre(conn, dry_run: bool) -> None:
+def _build_w3pre(conn, dry_run: bool, models: list[str] | None = None,
+                 leg_timeout_seconds: int = W3PRE_DAILY_TIMEOUT_SECONDS) -> None:
     """Build the W3pre staging tier (each model flattens its raw JSON parquet directly;
     no W1/W2 view dependency, so this runs standalone). A source whose raw tier has no
     parquet yet (export not run) is SKIPPED with a warning rather than crashing the build
-    — important because this op is HALT-tier on the daily path once wired in."""
-    print("\nW3pre staging (odds/CLV-feeding flatten):")
+    — important because this op is HALT-tier on the daily path once wired in.
+
+    `models` defaults to the full tier (the DAILY build's scope) and `leg_timeout_seconds` to the
+    DAILY cap, so the only way to be graded against the 30-min tick's 480 s is to ask for it — the
+    intraday caller passes both explicitly. Defaulting the other way would make every manual and
+    daily run report OVER against a cap it does not run under, and a permanently-wrong verdict is
+    how a monitor gets ignored (MLB-LAKE2).
+    """
+    models = list(W3PRE_STG_MODELS if models is None else models)
+    scope = "" if models == list(W3PRE_STG_MODELS) else f" [scoped: {', '.join(models)}]"
+    print(f"\nW3pre staging (odds/CLV-feeding flatten){scope}:")
     # E11.1-W3pre: monthly_schedule blobs are large (~1.4 MB each, ~2.4 GB total) and the
     # stg_statsapi_games flatten explodes them in parallel — that parallelism multiplied peak
     # RAM and OOM'd even with spilling. Cap threads so only a couple of big blobs inflate at
@@ -1195,7 +1251,7 @@ def _build_w3pre(conn, dry_run: bool) -> None:
     # to fit in, so a season of monotonic growth crossed 480 s unannounced. [METRIC] lines make
     # the trend machine-readable for a future monitor (the repo's send_alert convention).
     timings: dict[str, float] = {}
-    for model in W3PRE_STG_MODELS:
+    for model in models:
         source = _raw_source_for(model)
         glob = f"{LAKEHOUSE_RAW}/{source}/**/*.parquet"
         try:
@@ -1215,7 +1271,7 @@ def _build_w3pre(conn, dry_run: bool) -> None:
         print(f"[METRIC] w3pre_model_seconds_{model}={_elapsed:.1f} raw_files={has_files}",
               flush=True)
 
-    _v = w3pre_tier_verdict(timings)
+    _v = w3pre_tier_verdict(timings, leg_timeout_seconds=leg_timeout_seconds)
     print(f"[METRIC] w3pre_tier_seconds={_v.total_seconds:.1f}", flush=True)
     print(f"[METRIC] w3pre_tier_budget_fraction={_v.fraction:.3f}", flush=True)
     print(f"[METRIC] w3pre_tier_verdict={_v.verdict}", flush=True)
@@ -2509,6 +2565,7 @@ def run(
     delta_only: bool = False,
     w3pre: bool = False,
     w3pre_only: bool = False,
+    w3pre_serving_only: bool = False,
     w3_only: bool = False,
     w4: bool = False,
     w4_only: bool = False,
@@ -2618,10 +2675,18 @@ def run(
 
     # E11.1-W3pre: --w3pre-only flattens the odds/staging tier from lakehouse_raw/ without
     # touching the pitch marts (lets the operator iterate on W3pre after a raw export).
-    if w3pre_only:
-        _build_w3pre(conn, dry_run)
+    if w3pre_only or w3pre_serving_only:
+        # MLB-LAKE2: --w3pre-serving-only is the 30-MIN TICK's scope (the models with an intraday
+        # consumer); --w3pre-only is the full tier, which the DAILY build and operator runs use.
+        # Each is graded against the cap of the leg it actually runs in.
+        if w3pre_serving_only:
+            _build_w3pre(conn, dry_run, models=W3PRE_INTRADAY_MODELS,
+                         leg_timeout_seconds=LEG_TIMEOUT_SECONDS)
+        else:
+            _build_w3pre(conn, dry_run, leg_timeout_seconds=W3PRE_DAILY_TIMEOUT_SECONDS)
         conn.close()
-        print("\nW3pre staging run complete (--w3pre-only).")
+        flag = "--w3pre-serving-only" if w3pre_serving_only else "--w3pre-only"
+        print(f"\nW3pre staging run complete ({flag}).")
         return
 
     # E11.1-W6 INTRADAY: --w6-odds-current rewrites ONLY mart_odds_outcomes' _current bucket
@@ -3003,6 +3068,7 @@ if __name__ == "__main__":
         delta_only="--delta-only" in sys.argv,
         w3pre="--w3pre" in sys.argv,
         w3pre_only="--w3pre-only" in sys.argv,
+        w3pre_serving_only="--w3pre-serving-only" in sys.argv,
         w3_only="--w3-only" in sys.argv,
         w4="--w4" in sys.argv,
         w4_only="--w4-only" in sys.argv,
