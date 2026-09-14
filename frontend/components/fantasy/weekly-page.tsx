@@ -173,7 +173,18 @@ function OpponentCell({ p }: { p: NflWeeklyPlayer }) {
  *
  * ⛔ IT NEVER SUMS. There is no total here and no derived points figure anywhere in this tree.
  */
-function StatLinePanel({ player, paid }: { player: NflWeeklyPlayer; paid: NflWeeklyPlayer | null }) {
+function StatLinePanel({ player, paid, loading }: {
+  player: NflWeeklyPlayer
+  paid: NflWeeklyPlayer | null
+  /** ⚠️ THE PAID READ IS A SEPARATE QUERY, so "it has not arrived yet" is a FOURTH state here and
+   *  it must not borrow the third one's sentence. Without this an entitled reader who opens a row
+   *  before `/weekly/projections-full` resolves is told "no projected stat line was produced for
+   *  this player" — which is not a slow render, it is a FALSE CLAIM about the model, shown for as
+   *  long as the fetch takes. The whole page is built on the rule that an empty state meaning
+   *  several things costs an investigation every time it recurs; a state that means something
+   *  untrue is worse than one that is merely ambiguous. */
+  loading: boolean
+}) {
   const { groups } = useAuth()
   const entitled = canUse("decision_support", groups)
 
@@ -189,6 +200,15 @@ function StatLinePanel({ player, paid }: { player: NflWeeklyPlayer; paid: NflWee
           See membership options
         </a>
       </div>
+    )
+  }
+
+  // Still in flight — say so rather than asserting an absence that has not been established.
+  if (loading && !hasStatLine(paid)) {
+    return (
+      <p data-testid="weekly-stat-line-loading" className="rounded-md border border-[#262626] bg-[#101010] p-3 text-[11px] text-gray-500" aria-busy="true">
+        Loading the projected stat line…
+      </p>
     )
   }
 
@@ -234,12 +254,14 @@ function StatLinePanel({ player, paid }: { player: NflWeeklyPlayer; paid: NflWee
 function PlayerRow({
   p,
   paid,
+  paidLoading,
   domain,
   open,
   onToggle,
 }: {
   p: NflWeeklyPlayer
   paid: NflWeeklyPlayer | null
+  paidLoading: boolean
   domain: { min: number; max: number }
   open: boolean
   onToggle: () => void
@@ -298,7 +320,7 @@ function PlayerRow({
       {open && (
         <tr data-testid="weekly-detail" data-player-id={p.id} className="border-t border-[#141414] bg-[#0c0c0c]">
           <td colSpan={9} className="px-3 py-3">
-            <StatLinePanel player={p} paid={paid} />
+            <StatLinePanel player={p} paid={paid} loading={paidLoading} />
           </td>
         </tr>
       )}
@@ -486,6 +508,7 @@ export function WeeklyProjectionsPage() {
                     key={p.id}
                     p={p}
                     paid={paidById.get(p.id) ?? null}
+                    paidLoading={full.isLoading}
                     domain={domain}
                     open={open === p.id}
                     onToggle={() => setOpen(open === p.id ? null : p.id)}

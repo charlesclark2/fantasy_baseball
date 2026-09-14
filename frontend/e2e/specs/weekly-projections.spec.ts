@@ -307,6 +307,33 @@ test("an entitled caller sees the projected stat line, and it is never totalled"
   await expectNoNaN(page)
 })
 
+test("an in-flight paid read says so, and does not claim the stat line is absent", async ({ page }) => {
+  await signIn(page, { groups: ["subscriber"] })
+  // ⭐ DELAY ONLY THE PAID READ, so the page renders its rows normally and the row-detail panel is
+  // genuinely mid-fetch when it is opened — which is the real sequence a subscriber hits, not a
+  // simulated flag. The free reads are untouched, so nothing else on the page is in a fake state.
+  const { mock } = await openWeekly(page, {
+    entitlement: "entitled",
+    delay: { paths: ["/fantasy/nfl/weekly/projections-full"], ms: 4000 },
+  })
+  await expect(page.locator('[data-testid="weekly-row"]').first()).toBeVisible()
+
+  await page.locator(`[data-testid="weekly-row"][data-player-id="${projectedRow.id}"]`)
+    .locator('[data-testid="weekly-detail-toggle"]').click()
+
+  // ⛔ THE ASSERTION THAT MATTERS IS THE NEGATIVE ONE. "No projected stat line was produced for
+  // this player" is a claim about the MODEL; rendering it while the fetch is still in flight makes
+  // it FALSE for as long as the network takes. A slow render is acceptable, an untrue sentence is
+  // not — and the two are indistinguishable to a reader.
+  await expect(page.locator('[data-testid="weekly-stat-line-loading"]')).toBeVisible()
+  await expect(page.locator('[data-testid="weekly-stat-line-absent"]')).toHaveCount(0)
+
+  // …and once it lands, the real panel replaces it — so the loading state is not a dead end.
+  await expect(page.locator('[data-testid="weekly-stat-line"]')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('[data-testid="weekly-stat-line-loading"]')).toHaveCount(0)
+  expectApiFullyMocked(mock)
+})
+
 test("a player with no component line gets a stated absence, not zeros and not the lock", async ({ page }) => {
   await signIn(page, { groups: ["subscriber"] })
   await openWeekly(page, { entitlement: "entitled" })
