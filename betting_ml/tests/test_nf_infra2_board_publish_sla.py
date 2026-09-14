@@ -221,6 +221,15 @@ def test_a_STALE_but_present_stamp_ALERTS_and_does_NOT_block_the_publish(stamp):
     block reports it. ⇒ page, publish anyway."""
     blob = _real_manifest()
     now = _at(blob, stamp.max_lag_hours + 24)
+    # ⛔ NF-INC-0914: a `draft_season_only` stamp pages only while market inputs can still reach a
+    #    user decision, and `now` here is derived from the FIXTURE's own date (an August board).
+    #    This case therefore passes because of the fixture's vintage, not by intent — re-capturing
+    #    it from an out-of-season board would make the ADP/ECR cases silently vacuous. Asserted so
+    #    that would fail loudly, naming the reason, instead of quietly asserting nothing.
+    if stamp.draft_season_only:
+        assert NBF.market_inputs_matter(now.date()), (
+            f"{stamp.name} only pages in draft season, and this fixture's date is outside it — "
+            "re-pin the fixture or this case asserts nothing")
     res = NBF.verify_manifest(blob, started=_at(blob, -0.5), now=now)
     assert any(stamp.name in a for a in res["alerts"]), res
     assert res["fatal"] == [], (
