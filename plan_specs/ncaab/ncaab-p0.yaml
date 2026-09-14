@@ -9,7 +9,7 @@ metadata:
   name: ncaab-p0
   vertical: ncaab
   card: https://trello.com/c/ItLo7klu
-  status: DONE
+  status: IN_PROGRESS
 spec:
   description: >
     Stand up the NCAAB data foundation the way NCAAF's was stood up,
@@ -156,8 +156,19 @@ spec:
         desc: "Audit verdict + credit arithmetic + P1 readiness statement into closeout.followUps; operator summary."
   closeout:
     verdict: >
-      SHIPPED. All five nodes complete, verified against real data rather than
-      fixtures. (1) CAPTURES: every Odds-API unit price measured on live
+      ⏸️ HELD OPEN AT IN_PROGRESS BY PM RULING (2026-09-14), AND THE REASON IS THE
+      ONE THING THIS STORY CANNOT VERIFY ITSELF. All five nodes are complete and
+      the audit verdict is ACCEPTED as measured, but CI mocks all IO, so the first
+      write to the ncaab/ S3 prefix has never executed. Green CI is
+      necessary-not-sufficient for exactly this class (E8.5: a first write to a
+      prefix a role has only ever READ needs a fresh IAM grant, and it is invisible
+      until a live run). The spec closes when a real
+      sports_ncaab_ingest_schedule fire lands rows and the marts build over them —
+      verified from ARTIFACT CONTENT, never from a green run status. Everything
+      below is the record of what was built and measured.
+
+      SHIPPED (pending that gate). All five nodes complete, verified against real
+      data rather than fixtures. (1) CAPTURES: every Odds-API unit price measured on live
       x-requests headers and reconciled against an independent free-/sports
       bracket — the two instruments AGREED exactly on every leg. 787 credits
       spent total (0.0164% of a 4,812,933 balance — the session balance delta;
@@ -216,11 +227,25 @@ spec:
       ncaab_guide.md is blocked at the SOURCE, not a budget question. Neither is
       purchasable.
 
+      PM DISPOSITION (2026-09-14), both accepted: the props track is NOT deleted
+      from ncaab_guide.md — it is marked BLOCKED-AT-SOURCE carrying the dated
+      measurement, because a REMOVED section reads as never-considered while a
+      BLOCKED one reads as answered, and the next reader must inherit the evidence
+      rather than an absence. And the spec's own "futures (title/conference)"
+      clause is SUPERSEDED BY MEASUREMENT: conference futures do not exist at this
+      vendor, so the deliverable is title-only and the spec text is the stale half.
+
       3) ⭐ THE BINDING CONSTRAINT ON MARKET-RELATIVE WORK IS AN ARCHIVE LIMIT,
       NOT A BUDGET ONE: game data reaches 24 seasons free, market data 6. Any
       P1/P2 design that needs the market in its training window is capped at 6
-      seasons at ANY spend. Worth stating before a story is scoped around a
-      longer one.
+      seasons at ANY spend.
+
+      ⭐ PM RULING (2026-09-14) — THIS IS NOW A RECORDED REGISTRATION CONSTRAINT,
+      not an advisory: **any P1/P2 clause that touches market data declares its
+      window INSIDE the 2020-11-16 archive floor, and no story is ever scoped
+      around a longer one.** Carried verbatim in the P1 readiness statement
+      (followUp 8) and in ncaab_data_inventory.md §8, which is where a P1 spec
+      author actually arrives.
 
       4) 🔧 THE SHARED LAKE LAYER HAS ALREADY FORKED, and NCAAB declined to make
       it a third fork. s3io.py differs by 216 lines between the NCAAF and NFL
@@ -252,16 +277,55 @@ spec:
       30-minute grace. A narrower monitor window would have blinded it on live
       April game days. Now explicit and guarded.
 
-      7) 📋 OPERATOR DECISIONS OPEN: (a) capture enablement + cadence
-      (docs/ncaab_p0_credit_arithmetic.md §3, recommendation stated); (b) the
-      historical backfill (§4, recommendation stated); (c) the box runtime gate —
-      watch the first sports_ncaab_ingest_schedule fire and confirm the ncaab/
-      S3 prefix is writable by the instance role.
+      7) 📋 OPERATOR DECISIONS — PM-DISPOSITIONED 2026-09-14, operator acts
+      separately. (a) FORWARD CAPTURE: RECOMMENDED ON NOW. This story's own
+      measurement removed the reason to wait — an empty board bills 0, so ticks
+      before the season posts lines are free — 0.31%/season is trivial, and
+      forward capture remains the only way to hold THIS week at 1x rather than
+      10x. (b) THE HISTORICAL BACKFILL: DEFERRED-ON-DEMAND, explicitly NOT
+      approved as a block. The archive is not going anywhere, so the honest
+      sequencing is that P1/P2's REGISTERED DESIGNS NAME the market window they
+      need and the purchase buys exactly that window — never a speculative 6
+      seasons ahead of a design that consumes it. Recorded with its reasoning in
+      docs/ncaab_p0_credit_arithmetic.md §4 so the decision travels with its own
+      justification rather than as a bare "deferred". (c) THE BOX RUNTIME GATE:
+      the only calendar-bound item and the one this spec is held open on — see
+      the verdict.
 
-      8) 📈 P1 READINESS: fact_ncaab_team_game is the fitting surface (box line,
-      shared possession estimate, per-100 efficiency, point-in-time-correct
-      conference). 24 seasons available, 6 ingested; extending is a re-run, not
-      a code change. Suggested depth 10-15 seasons — the data supports 24, but
-      the 2008 neutral-site flag, the 2015 shot-clock change and the 2023-25
-      realignment wave make older seasons a different game. That is a modelling
-      judgment for P1 to TEST, not a data constraint.
+      8) 📈 P1 READINESS STATEMENT — the canonical copy. Mirrored into
+      ncaab_data_inventory.md §8; keep them in step.
+
+      THE FITTING SURFACE: fact_ncaab_team_game (box line, shared possession
+      estimate, per-100 efficiency, point-in-time-correct conference resolved
+      through the SCD). 24 seasons available, 6 ingested; extending is a re-run,
+      not a code change.
+
+      ⭐ REGISTRATION CONSTRAINT (PM ruling, binding): ANY P1/P2 CLAUSE THAT
+      TOUCHES MARKET DATA DECLARES ITS WINDOW INSIDE THE 2020-11-16 ARCHIVE
+      FLOOR, AND NO STORY IS EVER SCOPED AROUND A LONGER ONE. Game data reaches
+      24 seasons free; market data reaches 6, at any spend. A design that needs
+      the market in its training window is bounded there by the vendor's archive,
+      not by budget — so the window is a design input, not a discovery.
+
+      ⭐ THE TRAINING WINDOW IS A DECLARE-FORWARD CHOICE, NOT A POST-FIT ONE (PM
+      sharpening). 10-15 seasons is this story's SUGGESTION and nothing more; P1's
+      pre-registration must DECLARE ITS WINDOW FAMILY FORWARD, citing the
+      MECHANISM for each candidate cut — the 2008 birth of the neutral-site flag,
+      the 2015 shot-clock reduction to 30 seconds, and the 2023-25 realignment
+      wave. A window chosen after seeing fits is the E2.1-r inversion in its most
+      literal form. The data supports 24 seasons either way; which of them are the
+      SAME GAME is the modelling question P1 registers and TESTS.
+
+      ⚠️ TWO HONEST-ABSENCE CAVEATS P1 INHERITS, both already surfaced in the
+      models so neither can be read wrong by accident:
+        • `neutral_site` is identically 0 for every season before 2008. That is
+          the flag NOT EXISTING, not "no neutral-site games were played" — and
+          2008-2026 average ~650 neutral games a season, so reading the earlier
+          zeros as False would silently mis-specify every pre-2008 game. Surfaced
+          as an explicit `neutral_site_is_trustworthy` column on
+          stg_ncaab_schedule so a training window cannot read missing as False.
+        • Per-100 efficiency is NULL below a 20-possession floor, because a rate
+          divided by a near-zero possession count is finite, enormous and
+          completely fake, and no NULL check catches it (hoopR's own repo records
+          a model incident from one zero-possession row). The row is kept and
+          flagged `possessions_unusable` rather than dropped.
