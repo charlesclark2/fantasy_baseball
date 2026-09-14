@@ -12,6 +12,7 @@ dbt manifest that is absent in the fast CI job).
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 _REPO = Path(__file__).parents[2]
@@ -25,12 +26,23 @@ def _slice(src: str, start: str, end: str) -> str:
     return src[i:j]
 
 
+def _decommented(src: str) -> str:
+    """Strip `#` comment lines — INC-38: a guard a COMMENT can satisfy is not a guard.
+
+    MLB-LAKE2 found this the honest way: its RED proof deleted the W3pre leg from the tick's loop
+    and this test stayed GREEN, because the explanatory comment above the loop still contained the
+    flag literal. The ordering assertion below must read CODE.
+    """
+    return re.sub(r"^\s*#.*$", "", src, flags=re.MULTILINE)
+
+
 def test_intraday_schedule_rebuilds_lineups_wide_after_games_and_before_refresh():
     src = _INTRADAY.read_text()
-    body = _slice(src, "def _schedule_lakehouse_intraday", "\ndef _w6_lakehouse_intraday")
+    body = _decommented(
+        _slice(src, "def _schedule_lakehouse_intraday", "\ndef _w6_lakehouse_intraday"))
     # The wide-lineup rebuild must be present…
     assert '"--w7b-only"' in body, "intraday schedule capture must rebuild stg_statsapi_lineups_wide (--w7b-only)"
-    # …and ordered: games flatten (--w3pre-only) → lineups (--w7b-only) → ext refresh.
+    # …and ordered: games flatten (--w3pre-serving-only) → lineups (--w7b-only) → ext refresh.
     #
     # INC-41 (2026-08-06): the two rebuilds moved from consecutive bare `_run_script(...)` calls
     # under ONE try block into a per-leg loop, so that a failure in the odds/game flatten can no
@@ -39,12 +51,23 @@ def test_intraday_schedule_rebuilds_lineups_wide_after_games_and_before_refresh(
     # ordered — so we anchor on the flag literals rather than the old call syntax. Deliberately
     # matched WITHOUT the surrounding `["..."]` so this keeps passing whether the flags are
     # written as literal call args or as loop items.
-    i_w3 = body.index('"--w3pre-only"')
+    # MLB-LAKE2 re-anchor (2026-09-14): the tick now asks for the SCOPED W3pre build
+    # (--w3pre-serving-only) — it stopped paying ~163 s for daily-cadence odds staging inside a
+    # 480 s leg, which by then was killing the tier outright. The ORDERING invariant this test
+    # exists for is UNCHANGED and still load-bearing; only the flag's name moved. Requiring
+    # EXACTLY ONE known W3pre flag keeps this strict — it cannot pass on a leg that has no W3pre
+    # build at all, which a bare prefix match would allow.
+    w3_flags = [f for f in ('"--w3pre-serving-only"', '"--w3pre-only"') if f in body]
+    assert len(w3_flags) == 1, (
+        f"expected exactly one W3pre flag in the intraday schedule leg, found {w3_flags}"
+    )
+    i_w3 = body.index(w3_flags[0])
     i_w7 = body.index('"--w7b-only"')
     # E11.26 re-anchor: the refresh call gained `timeout=_TICK_LEG_TIMEOUT`, so the trailing `)`
     # is no longer adjacent. The ORDERING invariant this test exists for is untouched.
     i_refresh = body.index('"refresh_w1_external_tables.py"')
-    assert i_w3 < i_w7 < i_refresh, "order must be --w3pre-only → --w7b-only → refresh"
+    assert i_w3 < i_w7 < i_refresh, (
+        f"order must be {w3_flags[0]} → --w7b-only → refresh")
 
 
 def test_default_refresh_covers_lineups_wide_ext_table():

@@ -242,6 +242,82 @@ REGISTRY: tuple[FreshnessContract, ...] = (
         ),
         remediate="check the daily job's W8a step, then rebuild: run_w1_lakehouse.py --w8a-only",
     ),
+    # ── MLB-LAKE2 (2026-09-14): the odds staging the 30-min tick stopped building ───────────
+    # These two used to be rebuilt every 30 minutes as a side effect of the W3pre tick leg. They
+    # have no intraday consumer, they were ~163 s of a 480 s cap, and by 09-14 the tier no longer
+    # fit at all — stg_derivative_odds was being KILLED on every tick and was in fact being kept
+    # alive only by the DAILY build. The tick now builds only the serving-critical member, which
+    # makes the once-daily `lakehouse_w3pre_flatten_op` their SOLE builder. That op is gated on
+    # W11_W3PRE_DAILY, a flag that is default-OFF and not in env.required — exactly the
+    # "documented but never set" shape this repo keeps paying for — so these contracts exist to
+    # make a stopped daily builder PAGE rather than freeze them silently.
+    #
+    # ⚠️ `ingestion_ts` is a FEED stamp, not a build stamp — the trap that got
+    # feature_pregame_game_features_raw REJECTED from this registry. It is admissible HERE, and
+    # the reason is specific: both flattens are FULL-HISTORY rebuilds over the whole raw glob, so
+    # the value they emit is "the newest captured row that existed AT BUILD TIME". If the build
+    # stops, it freezes while the raw store keeps advancing. What it costs is that the SLA must
+    # also absorb the CAPTURE's own gaps, which is what the numbers below are derived from — and
+    # it means a page here says "the build OR the capture stopped", both of which are real.
+    FreshnessContract(
+        name="stg_oddsapi_odds",
+        ts_table="stg_oddsapi_odds",
+        ts_expr="max(try_cast(ingestion_ts as timestamp))",
+        # ⏱️ DERIVED. Measured 2026-09-14: this value trails its own build by 3.2 min (build
+        # 03:33:19Z, max ingestion_ts 03:30:04Z) because odds capture fires `*/30` 24/7 and its
+        # worst observed 7-day gap is 30.3 min. Worst HEALTHY lag post-move is therefore one
+        # daily cadence plus one capture gap ~= 24.5 h; 30 h admits a late or slow daily run (the
+        # stg_ref_players precedent) and still catches one missed daily build at 48 h+.
+        max_lag_minutes=30 * 60,
+        active_hours_utc=ALWAYS,
+        cadence="daily (lakehouse_w3pre_flatten_op in the 12:00 UTC daily_ingestion_job)",
+        why=(
+            "the full-history odds snapshot table. mart_odds_outcomes' _history bucket and "
+            "mart_odds_line_movement are built from it, so a freeze silently stops CLV/line "
+            "history advancing. ⛔ NOT the intraday odds path — that one re-derives a "
+            "recent-scoped flatten straight off lakehouse_raw (--w6-odds-current), which is "
+            "precisely why this table could leave the 30-min tick without a serving consequence"
+        ),
+        remediate=(
+            "check W11_W3PRE_DAILY is '1' in the box's live .env and that "
+            "lakehouse_w3pre_flatten_op ran in the last daily job; then rebuild: "
+            "run_w1_lakehouse.py --w3pre-only"
+        ),
+    ),
+    FreshnessContract(
+        name="stg_derivative_odds",
+        ts_table="stg_derivative_odds",
+        ts_expr="max(try_cast(ingestion_ts as timestamp))",
+        # ⏱️ DERIVED, and LOOSER than its sibling for a measured reason: derivative capture fires
+        # `*/30` 24/7 too, but only writes when there is something to fetch, so its worst observed
+        # 7-day intra-day gap is 540 min (9 h) against odds capture's 30.3 min. Measured
+        # 2026-09-14: this value trailed its 09-13 12:22:41Z build by 22.6 min. Worst HEALTHY lag
+        # is one daily cadence plus one capture gap ~= 33 h, so 40 h leaves ~7 h of headroom and
+        # still pages during the second day of a stopped builder (one missed run is 48 h+).
+        # ⛔ Do not tighten toward the 33 h it would false-page on.
+        max_lag_minutes=40 * 60,
+        active_hours_utc=ALWAYS,
+        cadence="daily (lakehouse_w3pre_flatten_op in the 12:00 UTC daily_ingestion_job)",
+        why=(
+            "the derivative-market snapshot table mart_derivative_closes is built from (the E13.14 "
+            "CLV chain) and eval_cross_market.py reads directly. Eval/CLV only — never a training "
+            "feature and not on the live serving path, which is why it is a 40 h SLA and not a "
+            "90-minute one"
+        ),
+        remediate=(
+            "check W11_W3PRE_DAILY is '1' in the box's live .env and that "
+            "lakehouse_w3pre_flatten_op ran in the last daily job; then rebuild: "
+            "run_w1_lakehouse.py --w3pre-only"
+        ),
+    ),
+    # ⛔ stg_oddsapi_events is DELIBERATELY ABSENT, and that is a measurement rather than an
+    # oversight (NF1.7 (a): say why, or an absence reads as a miss). Its raw source
+    # `mlb_events_raw` is RETIRED — the last partition is dt=2026-06-04 and no object has been
+    # written since 2026-06-28 — so `max(ingestion_ts)` on it reads 2026-06-04T23:25:12, i.e.
+    # ~102 days stale on a perfectly healthy system. An SLA here would be RED FOREVER, which is
+    # the "over-paging monitor gets muted" failure mode, and it would say nothing about whether
+    # the daily builder ran. The model itself is a candidate for retirement (the tick was
+    # rebuilding a frozen 39-file store every 30 minutes); that is a PM decision, not an SLA.
     FreshnessContract(
         name="stg_ref_players",
         ts_table="stg_ref_players",

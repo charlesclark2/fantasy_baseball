@@ -127,9 +127,10 @@ def _live_keys(s3: FakeS3, dt: str) -> list[str]:
 # 1. The allowlist — an unvetted source must be refused, not compacted by analogy
 # ────────────────────────────────────────────────────────────────────────────────
 def test_only_allowlisted_sources_may_be_compacted():
-    assert set(clr.COMPACTABLE_SOURCES) == {"mlb_odds_raw"}, (
-        "adding a source here asserts that EVERY reader of its glob is duplicate-idempotent; "
-        "state that rationale in the registry value and extend the reader guards below"
+    assert set(clr.COMPACTABLE_SOURCES) == {"mlb_odds_raw", "derivative_odds_raw"}, (
+        "adding a source here asserts that the promote-then-delete duplicate window is a no-op "
+        "for EVERY consumer of its glob — proven, per source, not by analogy. State that "
+        "rationale in the registry value and extend the reader guards below."
     )
 
 
@@ -228,8 +229,8 @@ def test_each_mlb_odds_raw_reader_still_dedups(rel):
     )
 
 
-def _detect_glob_readers() -> set[str]:
-    """Files whose LIVE CODE binds the mlb_odds_raw glob (comments and docstrings excluded)."""
+def _detect_glob_readers(source: str = "mlb_odds_raw") -> set[str]:
+    """Files whose LIVE CODE binds a raw source's glob (comments and docstrings excluded)."""
     found: set[str] = set()
     for root in ("dbt/models", "pipeline", "scripts", "betting_ml"):
         for path in (REPO_ROOT / root).rglob("*"):
@@ -239,7 +240,7 @@ def _detect_glob_readers() -> set[str]:
                 continue                      # this script — the compactor, not a consumer
             lines = _code_only(path).splitlines()
             for i, line in enumerate(lines):
-                if "mlb_odds_raw" not in line:
+                if source not in line:
                     continue
                 window = "\n".join(lines[max(0, i - _READ_WINDOW): i + _READ_WINDOW + 1])
                 if _READ_CONSTRUCT.search(window):
@@ -263,6 +264,125 @@ def test_the_reader_list_is_still_exhaustive():
         f"new reader(s) of the mlb_odds_raw glob: {sorted(unregistered)}. Prove each is "
         f"duplicate-idempotent and register it in _MLB_ODDS_RAW_READERS, or compaction's "
         f"promote-then-delete order is no longer safe for this source."
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────────
+# 2b. derivative_odds_raw — the SECOND store, whose chain is NOT mlb_odds_raw's shape
+# ────────────────────────────────────────────────────────────────────────────────
+# MLB-LAKE2 (2026-09-14). The only reader of THIS glob does not dedup, so the duplicate window is
+# not absorbed at the first hop: it propagates into `stg_derivative_odds` and is absorbed one
+# level down, by that table's readers. Both halves are therefore pinned — the flatten's
+# row-preserving shape, and the downstream closing selections.
+#
+#   path -> (why it is safe, regex proving it, on comment-stripped source)
+_DERIVATIVE_ODDS_RAW_READERS: dict[str, tuple[str, str]] = {
+    "dbt/models/staging/stg_derivative_odds.sql": (
+        "the sole reader of the raw glob; a pure unnest chain that neither dedups (so the "
+        "duplication reaches its readers) nor joins (so it propagates 2x, not squared) — "
+        "measured 24,942 -> 49,884 rows on real partition dt=2026-08-16, 2026-09-14",
+        r"read_parquet\(\s*'\{\{\s*lakehouse_raw_loc\(\s*\"derivative_odds_raw\"\s*\)",
+    ),
+}
+
+#: The readers of the FLATTENED output — this is where derivative_odds_raw's duplicate window is
+#: actually absorbed, so these dedups are the load-bearing claim in COMPACTABLE_SOURCES.
+_STG_DERIVATIVE_ODDS_READERS: dict[str, tuple[str, str]] = {
+    "dbt/models/mart/mart_derivative_closes.sql": (
+        "row_number()=1 over (event, market, book, outcome_name, outcome_description, "
+        "outcome_point) ordered by actual_snapshot_ts desc",
+        r"row_number\(\)\s+over\s*\(\s*\n?\s*partition\s+by\s+event_id,\s*market_key",
+    ),
+    "betting_ml/scripts/cross_market_eval/eval_cross_market.py": (
+        "its OWN closing selection: row_number()=1 over (event, book, outcome_description, "
+        "outcome_name) ordered by actual_snapshot_ts desc, then max()-aggregated",
+        r"row_number\(\)\s+OVER\s*\(\s*\n?\s*PARTITION\s+BY\s+event_id,\s*bookmaker_key,"
+        r"\s*outcome_description",
+    ),
+}
+
+# A READ of the flattened table, as opposed to a mention of its name. The build list in
+# run_w1_lakehouse, the generated Snowflake DDL, the ext-table refresh and the parity tool all
+# NAME stg_derivative_odds without ever selecting from it.
+_STG_READ_CONSTRUCT = re.compile(
+    r"(from|join)\s+stg_derivative_odds\b|read_parquet\([^)]*stg_derivative_odds", re.IGNORECASE
+)
+
+
+@pytest.mark.parametrize("rel", sorted(_DERIVATIVE_ODDS_RAW_READERS))
+def test_each_derivative_odds_raw_reader_is_still_row_preserving(rel):
+    why, pattern = _DERIVATIVE_ODDS_RAW_READERS[rel]
+    src = _decommented(REPO_ROOT / rel)
+    assert re.search(pattern, src, re.IGNORECASE), (
+        f"{rel} no longer matches /{pattern}/ — it was the sole reader of the "
+        f"derivative_odds_raw glob ({why}). Re-derive that source's COMPACTABLE_SOURCES "
+        f"rationale against the new code before trusting promote-then-delete."
+    )
+
+
+@pytest.mark.parametrize("rel", sorted(_STG_DERIVATIVE_ODDS_READERS))
+def test_each_stg_derivative_odds_reader_still_dedups(rel):
+    """derivative_odds_raw's duplicate window is absorbed HERE, not at the flatten."""
+    why, pattern = _STG_DERIVATIVE_ODDS_READERS[rel]
+    src = _decommented(REPO_ROOT / rel)
+    assert re.search(pattern, src, re.IGNORECASE), (
+        f"{rel} no longer matches /{pattern}/.\n"
+        f"derivative_odds_raw is compacted promote-then-delete, and the flatten between the raw "
+        f"glob and this reader does NOT dedup — so this reader's own closing selection ({why}) "
+        f"is what makes that write order safe. If it is genuinely gone, derivative_odds_raw must "
+        f"leave COMPACTABLE_SOURCES; do not loosen this guard."
+    )
+
+
+def _detect_stg_derivative_odds_readers() -> set[str]:
+    """Files whose LIVE CODE selects from the flattened table (comments/docstrings excluded)."""
+    found: set[str] = set()
+    for root in ("dbt/models", "pipeline", "scripts", "betting_ml"):
+        for path in (REPO_ROOT / root).rglob("*"):
+            if path.suffix not in (".sql", ".py") or "tests" in path.parts:
+                continue
+            if _STG_READ_CONSTRUCT.search(_code_only(path)):
+                found.add(str(path.relative_to(REPO_ROOT)))
+    return found
+
+
+def test_the_derivative_reader_lists_are_still_exhaustive():
+    """A NEW reader on EITHER hop must be vetted — otherwise compaction orphans it silently."""
+    raw_found = _detect_glob_readers("derivative_odds_raw")
+    assert raw_found >= set(_DERIVATIVE_ODDS_RAW_READERS), (
+        f"the detector stopped finding known raw-glob readers: missing "
+        f"{sorted(set(_DERIVATIVE_ODDS_RAW_READERS) - raw_found)}"
+    )
+    unregistered_raw = raw_found - set(_DERIVATIVE_ODDS_RAW_READERS)
+    assert not unregistered_raw, (
+        f"new reader(s) of the derivative_odds_raw glob: {sorted(unregistered_raw)}. Unlike "
+        f"mlb_odds_raw, nothing on this hop dedups — vet each one and register it, or "
+        f"promote-then-delete is no longer safe for this source."
+    )
+
+    stg_found = _detect_stg_derivative_odds_readers()
+    # Non-vacuity (NF1.7 (a)): a detector that matches nothing would report "no new readers".
+    assert stg_found >= set(_STG_DERIVATIVE_ODDS_READERS), (
+        f"the detector stopped finding known stg_derivative_odds readers: missing "
+        f"{sorted(set(_STG_DERIVATIVE_ODDS_READERS) - stg_found)}"
+    )
+    unregistered = stg_found - set(_STG_DERIVATIVE_ODDS_READERS)
+    assert not unregistered, (
+        f"new reader(s) of stg_derivative_odds: {sorted(unregistered)}. derivative_odds_raw's "
+        f"compaction is safe only because EVERY reader of this table dedups an exact duplicate. "
+        f"Prove it for the new one and register it in _STG_DERIVATIVE_ODDS_READERS, or remove "
+        f"derivative_odds_raw from COMPACTABLE_SOURCES."
+    )
+
+
+def test_parity_check_still_skips_derivative_odds_raw():
+    """Same collision as mlb_odds_raw's: parity's duplicate pre-flight vs. a compaction window."""
+    src = _decommented(REPO_ROOT / "scripts/parity_check_w3pre.py")
+    frozen = re.search(r"FROZEN_SOURCES\s*=\s*\{(.*?)\n\}", src, re.DOTALL)
+    assert frozen, "FROZEN_SOURCES not found in parity_check_w3pre.py"
+    assert re.search(r'"derivative_odds_raw"\s*:', frozen.group(1)), (
+        "derivative_odds_raw left parity_check_w3pre's FROZEN_SOURCES — re-check how its "
+        "duplicate pre-flight interacts with compaction before allowing this"
     )
 
 
