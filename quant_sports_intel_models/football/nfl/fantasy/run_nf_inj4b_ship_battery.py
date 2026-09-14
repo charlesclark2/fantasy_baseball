@@ -795,16 +795,108 @@ def render_packet(s: dict) -> str:
 
 
 
+#: The states one CAPTURED expectation can be in when re-read against a LIVE board and a LIVE feed.
+#: ⛔ SIX, NOT TWO. Every one of these is a different fact about the world, and the whole defect this
+#: block exists to fix was two of them rendering identically (see `classify_verification`).
+VERIFY_MOVED = "MOVED"
+VERIFY_UNMOVED = "UNMOVED"
+VERIFY_BELOW_ROUNDING = "BELOW_ROUNDING"
+VERIFY_NO_LONGER_DESIGNATED = "NO_LONGER_DESIGNATED"
+VERIFY_DESIGNATION_CHANGED = "DESIGNATION_CHANGED"
+VERIFY_ABSENT = "ABSENT_FROM_BOARD"
+
+#: The published board rounds `g` to ONE DECIMAL, so a row whose whole discount is smaller than that
+#: cannot be told apart from an un-discounted one. ⛔ Those rows are their own state, not a pass:
+#: counting them as 'moved' once reported 2 successes against a board that had not shipped at all.
+VERIFY_ROUND_TOL = 0.051
+
+
+def classify_verification(expected_rows, live_games, live_designations, *, round_tol=VERIFY_ROUND_TOL):
+    """Classify each CAPTURED expectation against the LIVE board and the LIVE designation feed.
+
+    ⭐ WHY THIS READS THE LIVE FEED, AND THE INCIDENT THAT PUT IT HERE (2026-09-13, the first
+    post-publish run of this check). `verify_published` joined the served board to a FROZEN
+    expectation captured three days earlier and asked one question — "did this player's games move
+    off the pre-ship figure?" It reported `⛔ 4 of 58 ... the discount is not reaching the served
+    board` and exited 1. The discount was reaching the board perfectly. All four players had been
+    **cleared of their designation** between the capture and the publish: absent from the live feed,
+    correctly carrying no discount, and therefore correctly sitting at the undiscounted base — which
+    is the very number the frozen expectation calls "pre-ship".
+
+    ⛔ SO THE CHECK RENDERED "this player got better" AND "the wiring is broken" IDENTICALLY, and
+    resolved the ambiguity toward the alarming one. That is this repo's most-repeated lesson landing
+    on the guard written to honour it: a check whose failure state is indistinguishable from a
+    healthy state has not verified anything (G100-D1), and an expectation pinned to a live vendor
+    snapshot expires (NF-INJ2b/2c — a pin binds on the vintage of its inputs, not just the artifact).
+
+    ⭐ THE CURE IS THE THREE-STATE DISCIPLINE `weekly_designation_map` ALREADY USES one module over:
+    a designation that is ABSENT, one that is PRESENT-BUT-DIFFERENT, and one that is present and
+    unchanged are three different facts, and only the third licenses any verdict about the wiring.
+    A row whose designation has left or changed is EXPIRED EVIDENCE — it is reported, never scored.
+
+    Returns `(rows, counts)`: per-row `(state, name, designation, live_designation, g, expected)`
+    tuples and a `{state: count}` tally. PURE — no network, no lake, no clock. The IO lives in
+    `verify_published`, so this classification is exercisable by a test (the NF-TR2 lesson: a block
+    nothing can invoke is a block nothing has checked).
+    """
+    missing = object()
+    out, counts = [], {s: 0 for s in (
+        VERIFY_MOVED, VERIFY_UNMOVED, VERIFY_BELOW_ROUNDING,
+        VERIFY_NO_LONGER_DESIGNATED, VERIFY_DESIGNATION_CHANGED, VERIFY_ABSENT)}
+
+    def _norm_label(v):
+        return None if v is None else str(v).strip().lower()
+
+    for e in expected_rows:
+        pid = EX._norm_player_id(e["id"])
+        captured = e.get("designation")
+        live_label = live_designations.get(pid, missing)
+        g = live_games.get(pid)
+
+        if live_label is missing:
+            # He is no longer on the feed at all — cleared, or his status is no longer disclosable.
+            # Carrying NO discount is the CORRECT serving behaviour for him, so his games sitting at
+            # the undiscounted base is evidence the system works, not evidence it is broken.
+            state, shown = VERIFY_NO_LONGER_DESIGNATED, "—"
+        elif _norm_label(live_label) != _norm_label(captured):
+            # Still designated, but not as what we captured (Questionable → Out, or a token this
+            # build cannot price, which serves NO discount by design). A different constant applies,
+            # so the captured `games_after` is simply the wrong number to compare against.
+            state, shown = VERIFY_DESIGNATION_CHANGED, (live_label if live_label is not None
+                                                        else "<unreadable token>")
+        elif g is None:
+            state, shown = VERIFY_ABSENT, str(live_label)
+        elif abs(float(e["games_after"]) - float(e["games_before"])) <= round_tol:
+            state, shown = VERIFY_BELOW_ROUNDING, str(live_label)
+        elif abs(float(g) - float(e["games_before"])) <= 1e-6:
+            state, shown = VERIFY_UNMOVED, str(live_label)
+        else:
+            # Moved — though not necessarily TO the captured figure. A rebuild refreshes depth
+            # charts, rosters and the market, so the BASE drifts (measured 2026-09-13: ±0.07 games
+            # across 54 rows). Landing near-but-not-on the first-order number is expected.
+            state, shown = VERIFY_MOVED, str(live_label)
+
+        counts[state] += 1
+        out.append((state, e.get("name"), captured, shown, g, e.get("games_after")))
+    return out, counts
+
+
 def verify_published(season: int) -> int:
     """⭐ THE POST-PUBLISH CHECK THE OPERATOR RUNS — did the SERVED board actually move?
 
-    Fetches the live `projections.json` and joins it to this story's committed expected-effect
-    artifact by NORMALISED player id (NF-C9: 275 of 2,501 live feed rows carry a leading space, and
-    a silent non-match is indistinguishable from 'the feed said nothing about him').
+    Fetches the live `projections.json` AND the live designation feed, then joins this story's
+    committed expected-effect artifact to both by NORMALISED player id (NF-C9: 275 of 2,501 live
+    feed rows carry a leading space, and a silent non-match is indistinguishable from 'the feed said
+    nothing about him').
 
-    ⛔ It reports THREE states, never two. `MOVED` / `UNMOVED` / `UNVERIFIABLE` — because a board
-    that could not be fetched, or a player who has left it, is not evidence either way, and
-    collapsing that into 'unmoved' would report a publishing failure as a policy failure."""
+    ⛔ READING THE LIVE FEED IS NOT OPTIONAL — see `classify_verification` for the incident. Without
+    it this check cannot tell a CLEARED PLAYER from BROKEN WIRING, and it resolves that ambiguity
+    toward the alarm.
+
+    ⚠️ AN UNREADABLE FEED IS `UNVERIFIABLE` (exit 2), NEVER A PASS AND NEVER A FAILURE (NF1.7(a)):
+    with no live designations every row looks cleared, so a check that fell back to 'no feed, assume
+    unchanged' would report a GREEN over a board it could not assess — the one direction that must
+    never be reachable."""
     import subprocess
 
     art = _ART / "nf_inj4b_ship_expected_effect.json"
@@ -812,6 +904,7 @@ def verify_published(season: int) -> int:
         print(f"⛔ {art.name} is absent — run the battery first; there is nothing to verify against")
         return 2
     expected = json.loads(art.read_text())
+
     # ⚠️ CREDENTIALED, not a public HTTPS GET — the api-cache bucket is not world-readable, and an
     #    anonymous fetch returns 403, which is UNVERIFIABLE rather than a verdict either way.
     uri = f"s3://credence-prod-s3-api-cache/fantasy/nfl/{season}/projections.json"
@@ -825,42 +918,109 @@ def verify_published(season: int) -> int:
         print(f"⛔ UNVERIFIABLE — could not fetch the published board ({type(e).__name__}: {e}). "
               f"That is not evidence the discount failed to serve.")
         return 2
-    rows = live.get("players") if isinstance(live, dict) else live
-    by_id = {EX._norm_player_id(r.get("id")): r for r in rows}
-    #: the published board rounds `g` to ONE DECIMAL, so a row whose whole discount is smaller than
-    #: that cannot be told apart from an un-discounted one. ⛔ Those rows are a FOURTH state, not a
-    #: pass: counting them as 'moved' reported 2 successes against a board that had not shipped at
-    #: all, which is the direction that would have let a failed publish read as a partial one.
-    ROUND = 0.051
-    moved = unmoved = absent = below = 0
-    for e in expected["rows"]:
-        r = by_id.get(EX._norm_player_id(e["id"]))
-        if r is None or r.get("g") is None:
-            absent += 1
-            continue
-        g = float(r["g"])
-        if abs(e["games_after"] - e["games_before"]) <= ROUND:
-            below += 1                       # the discount is below the board's own precision
-        elif abs(g - e["games_before"]) <= 1e-6:
-            unmoved += 1
-            print(f"  UNMOVED  {e['name']:26s} {e['designation']:13s} "
-                  f"g={g} (pre-ship {e['games_before']}, expected {e['games_after']})")
-        else:
-            moved += 1      # moved; not necessarily TO the first-order figure (a rebuild differs)
-    n = len(expected["rows"])
-    print(f"\nexpected {n} designated row(s) · moved {moved} · UNMOVED {unmoved} · "
-          f"below the board's rounding {below} · absent/unscoreable {absent}")
-    scoreable = moved + unmoved
-    if not scoreable:
-        print(f"⛔ UNVERIFIABLE — no expected player is individually scoreable on the published "
-              f"board ({absent} absent, {below} below its 1-decimal rounding). That is not "
-              f"evidence either way.")
+
+    # ⭐ GROUND TRUTH — the build's own record of what the discount did, carried on the served
+    #    manifest (NF-INJ4b-VERIFY). Absent on any board published before that change, in which case
+    #    this check falls back to per-row INFERENCE and says so.
+    built = {}
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            mdst = pathlib.Path(td) / "manifest.json"
+            subprocess.run(["aws", "s3", "cp",
+                            f"s3://credence-prod-s3-api-cache/fantasy/nfl/{season}/manifest.json",
+                            str(mdst), "--region", "us-east-1", "--quiet"], check=True, timeout=300)
+            built = (json.loads(mdst.read_text()) or {}).get("designationDiscountStamp") or {}
+    except Exception as e:  # noqa: BLE001
+        print(f"  (could not read the served manifest: {type(e).__name__}: {e})")
+
+    live_designations = EX.weekly_designation_map(int(season))
+    if live_designations is None:
+        print("⛔ UNVERIFIABLE — the live designation feed is unreadable, so a player who was "
+              "CLEARED cannot be told apart from one the discount failed to reach. Refusing to "
+              "return a verdict rather than scoring every row against an expired expectation.")
         return 2
-    if unmoved:
-        print(f"⛔ {unmoved} of {scoreable} scoreable designated player(s) still carry their "
-              f"PRE-SHIP games — the discount is not reaching the served board")
+
+    rows = live.get("projections") or live.get("players") if isinstance(live, dict) else live
+    live_games = {EX._norm_player_id(r.get("id")): (None if r.get("g") is None else float(r["g"]))
+                  for r in (rows or []) if r.get("id") is not None}
+
+    detail, c = classify_verification(expected["rows"], live_games, live_designations)
+
+    for state, name, captured, shown, g, exp_g in detail:
+        if state == VERIFY_UNMOVED:
+            print(f"  UNMOVED              {name:26s} {str(captured):13s} "
+                  f"g={g} (pre-ship {exp_g} expected)")
+        elif state == VERIFY_NO_LONGER_DESIGNATED:
+            print(f"  no longer designated {name:26s} was {str(captured):13s} "
+                  f"— cleared since the capture; carrying no discount is CORRECT")
+        elif state == VERIFY_DESIGNATION_CHANGED:
+            print(f"  designation changed  {name:26s} {str(captured):13s} -> {shown}")
+
+    n = len(expected["rows"])
+    captured_at = expected.get("generated_at", "unknown")
+    print(f"\ncaptured {n} designated row(s) at {captured_at}")
+    print(f"  still designated as captured : moved {c[VERIFY_MOVED]} · UNMOVED {c[VERIFY_UNMOVED]} "
+          f"· below the board's rounding {c[VERIFY_BELOW_ROUNDING]} · absent {c[VERIFY_ABSENT]}")
+    print(f"  expectation EXPIRED          : no longer designated {c[VERIFY_NO_LONGER_DESIGNATED]} "
+          f"· designation changed {c[VERIFY_DESIGNATION_CHANGED]}")
+
+    # ⭐ The capture's population ages too, in BOTH directions. Rows that have entered the feed since
+    #    are outside this artifact entirely — not a failure, but the number that tells the operator
+    #    how stale the expectation has become, which is the thing that made this check misfire.
+    fresh = sum(1 for pid in live_designations if pid in live_games)
+    print(f"  live feed now designates {fresh} board row(s) "
+          f"({max(0, fresh - n)} of them outside the capture)")
+
+    scoreable = c[VERIFY_MOVED] + c[VERIFY_UNMOVED]
+    moved_at_build = built.get("rows_discounted")
+    designated_at_build = built.get("designated_rows_at_build")
+
+    # ── the verdict, keyed on GROUND TRUTH where the board carries it ──────────────────────────
+    # ⭐ WHY THIS OUTRANKS THE PER-ROW READ. The per-row read asks "did this player's games move off
+    #    a figure captured earlier?", which conflates TWO causes whenever the capture and the build
+    #    are different vintages: the discount not reaching the row, and the row's BASE drifting by
+    #    more than the discount (fresh depth charts, rosters and market). On 2026-09-13 four rows
+    #    with the four SMALLEST discounts in the set read as failures for the second reason. The
+    #    build's own count cannot be confused that way — it records what the code did, at the moment
+    #    it did it.
+    if isinstance(moved_at_build, int):
+        print(f"\nGROUND TRUTH (the build's own record, on the served manifest):")
+        print(f"  the discount moved {moved_at_build} of {designated_at_build} designated row(s) "
+              f"at build time")
+        if designated_at_build in (None, 0):
+            print("⛔ UNVERIFIABLE — the build recorded no designated population to move.")
+            return 2
+        if moved_at_build == 0:
+            print("⛔ the build moved ZERO rows — the discount is not reaching the served board")
+            return 1
+        if moved_at_build < designated_at_build:
+            print(f"⛔ {designated_at_build - moved_at_build} designated row(s) were NOT discounted "
+                  f"by the build — the channel is reaching some rows and not others")
+            return 1
+        if c[VERIFY_UNMOVED]:
+            print(f"ℹ️  {c[VERIFY_UNMOVED]} captured row(s) show the SAME 1-decimal games as the "
+                  f"capture. The build discounted every designated row, so this is BASE DRIFT "
+                  f"between the two vintages, not a missed discount — the board rounds `g` to one "
+                  f"decimal and these carry the smallest discounts in the set.")
+        print(f"✅ the build applied the discount to every designated row "
+              f"({moved_at_build}/{designated_at_build})")
+        return 0
+
+    # ── fallback: no ground truth on this board, so INFER, and label it as inference ───────────
+    print("\n⚠️  This board carries no build-time discount record (published before "
+          "NF-INJ4b-VERIFY), so the verdict below is INFERRED from a capture of a different "
+          "vintage and an UNMOVED row is AMBIGUOUS — either a missed discount, or base drift "
+          "larger than the discount. Re-publish to get a board that states its own count.")
+    if not scoreable:
+        print(f"⛔ UNVERIFIABLE — no captured player is still designated AND individually scoreable "
+              f"on the published board. That is not evidence either way; re-run the battery to "
+              f"re-capture the expectation against the current feed.")
+        return 2
+    if c[VERIFY_UNMOVED]:
+        print(f"⛔ {c[VERIFY_UNMOVED]} of {scoreable} scoreable player(s) are STILL designated as "
+              f"captured yet still carry their PRE-SHIP games — AMBIGUOUS, see above")
         return 1
-    print(f"✅ all {scoreable} scoreable designated player(s) moved off their pre-ship games")
+    print(f"✅ all {scoreable} still-designated scoreable player(s) moved off their pre-ship games")
     return 0
 
 

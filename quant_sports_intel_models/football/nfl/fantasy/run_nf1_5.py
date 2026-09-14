@@ -708,6 +708,7 @@ def build_season_projection(con, base_season: int, projection_season: int, schem
                             market_refresh: bool = False,
                             arm: str | None = None,
                             capture: dict | None = None,
+                            desig_log: dict | None = None,
                             score_target: str = "points") -> pd.DataFrame:
     """The NF1.5 refined board = **the SHIPPED MVP-1 board with the veteran ORDER re-assigned**.
 
@@ -784,6 +785,7 @@ def build_season_projection(con, base_season: int, projection_season: int, schem
         return SP.attach_season_interval(out, band_model=band_model)
 
     proj = build_projection(con, base_season, projection_season, schema,
+                            desig_log=desig_log,
                             band_panel=band_panel, veteran_postprocess=_reorder)
 
     # ── provenance: which learner ordered each row, and how market-leaning it is ───────────────
@@ -1180,8 +1182,13 @@ def main(argv: list[str] | None = None) -> int:
             inputs = load_inputs(con, sorted(set(base_seasons + [base_season])), args.schema)
             # NF1.5b: no κ to fit — the band is MVP-1's own NF1.9 per-player band, re-derived at the
             # re-assigned level. The held-out coverage VERIFY lives in `--mode grade`.
+            # ⭐ NF-INJ4b-VERIFY: capture what the designation discount DID to this build, so the
+            #    served manifest can state it. The post-publish check then reads ground truth
+            #    rather than inferring application from a board whose base has drifted.
+            _desig_applied: dict = {}
             proj = build_season_projection(con, base_season, proj_season, args.schema, selections,
                                            inputs, base_from=args.base_from,
+                                           desig_log=_desig_applied,
                                            market_refresh=args.market_refresh)
             cal = {"note": "band inherited from the shipped NF1.9 per-player fit; "
                            "held-out coverage verified in --mode grade",
@@ -1220,6 +1227,9 @@ def main(argv: list[str] | None = None) -> int:
                 "market_refresh": bool(args.market_refresh),
                 "market_as_of": market_stamp,
                 "input_vintage": vintage,
+                # ⚠️ `{}` means the channel never ran for this season (the historical-season
+                #    boundary) — the exporter must render that as UNKNOWN, never as zero.
+                "designation_discount": _desig_applied,
             }, indent=2, default=float))
             print(f"NF1.5 {proj_season} built (board={args.board}); interval tiers "
                   f"{cal['uncertainty_tiers']}; top: "
