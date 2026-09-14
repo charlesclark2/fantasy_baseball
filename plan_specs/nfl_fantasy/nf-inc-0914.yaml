@@ -9,7 +9,7 @@ metadata:
   name: nf-inc-0914
   vertical: nfl_fantasy
   card: https://trello.com/c/PENDING
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     sports_nfl_board_publish_job run dd44e28e failed in
