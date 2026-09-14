@@ -834,7 +834,7 @@ function PlayerView({ playerId }: { playerId: string }) {
           {/* The boundary, below the complete page. This surface makes the paid half unusually
               concrete: the "your league" tile above already shows a PRESET, so "what changes when
               it is really your league" is the question the reader is holding when they reach it. */}
-          <FreemiumBoundary entitled={entitled} />
+          <FreemiumBoundary entitled={entitled} surface="season" />
         </>
       )}
 

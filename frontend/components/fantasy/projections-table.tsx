@@ -490,7 +490,7 @@ export function ProjectionsTable() {
 
           {/* Below the complete table, for the reason given on the rankings board: the boundary
               only means something once the visitor has seen that nothing is withheld. */}
-          <FreemiumBoundary entitled={entitled} />
+          <FreemiumBoundary entitled={entitled} surface="season" />
         </>
       )}
     </div>
