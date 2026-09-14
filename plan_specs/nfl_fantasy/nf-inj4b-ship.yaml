@@ -10,7 +10,7 @@ metadata:
   name: nf-inj4b-ship
   vertical: nfl_fantasy
   card: https://trello.com/c/8tgfKzkw   # NF-INJ4b record; SHIP card linked at kickoff
-  status: AWAITING_OPERATOR_DECISION
+  status: SHIPPED_PENDING_VERIFICATION
 spec:
   description: >
     NF-INJ4b closed SHIP_CANDIDATE with a STRUCTURAL hold: 9/9 gates
@@ -139,7 +139,23 @@ spec:
     nodes: []   # MINI tier — precondition verify -> wiring+NF-C9 (one PR) -> measurement battery -> operator packet -> publish is the operator's -> closeout
   closeout:
     verdict: >
-      WIRED_AND_MEASURED — awaiting the operator's ship decision. The precondition
+      SHIPPED 2026-09-14 — the operator said YES, merged to dev then main, and fired
+      `sports_nfl_board_publish_job` by hand rather than waiting for the 07:15 PT
+      schedule. The served board carries the discount: the manifest stamp reports
+      `serving_enabled: true`, `feed_readable: true` and 60 eligible rows, and 54 of
+      58 scoreable captured rows moved (45 exactly onto the first-order figure, 9
+      within the measured base-drift envelope of a three-days-fresher rebuild).
+      ⚠️ VERIFICATION IS NOT YET CLEAN, AND THE GAP IS IN THE CHECK, NOT THE SHIP:
+      `--verify-published` flagged 4 rows and asserted "the discount is not reaching
+      the served board", a claim it could not support — it compares the live board to
+      an expectation captured three days earlier, so it cannot tell a missed discount
+      from a BASE that drifted by more than the discount, and those 4 carry the four
+      SMALLEST discounts in the set (0.067-0.152 games against a board rounded to one
+      decimal). NF-INJ4b-VERIFY (this follow-up) makes the build RECORD what it moved
+      and the check read that, so the next publish settles it from ground truth rather
+      than inference. Until that board is published the per-row question is OPEN and
+      is reported as AMBIGUOUS, never as a pass.
+      The ORIGINAL verdict, unchanged: WIRED_AND_MEASURED. The precondition
       PASSED on all three clauses (counterfactual exists; §3 no-op control PASSED
       across 14 boards at 0 max rank move / 1.0000 agreement; the run priced the
       CERTIFIED winner `desig_x_practice`, whose constants re-derive exactly and in
@@ -154,6 +170,23 @@ spec:
       operator's step, so every packet figure is FIRST-ORDER and says so.
       best_alpha = 0; nothing was published.
     followUps: >
+      (0) ⭐⭐ A POST-PUBLISH CHECK THAT INFERS FROM A CAPTURED BASELINE WILL EVENTUALLY
+      ACCUSE THE SHIP IT GUARDS. This one did, on its first real run, four hours after
+      merge — it rendered "this row's base drifted" and "the wiring is broken"
+      identically and resolved the ambiguity toward the alarm. Two separate causes,
+      both now fixed: it had no state for a player CLEARED since the capture (carrying
+      no discount is CORRECT for him), and it inferred application from a board whose
+      pre-discount base it cannot observe. The cure is the principle the exporter's own
+      freshness block already states one function over — read what the BUILD wrote,
+      never re-derive at read time, because re-deriving answers a different and more
+      flattering question. `rows_discounted` now rides the served manifest; an absent
+      one is UNKNOWN, ⛔ never zero. ⚠️ A SECOND FINDING FROM THE SAME RUN: the build
+      logs `[ALERT] NF-C9: 16 player(s) carry a game-status value this build does not
+      recognise {'NA': 14, 'DNR': 2}`. Those 16 render "unknown" and take NO discount
+      (safe by construction), but if DNR/NA are real designations we are declining to
+      price 16 live rows, and that log line is the only place it surfaces — a PM call,
+      carded rather than decided here.
+
       (1) ⭐⭐ GUARD THE WIRING, NOT TOKEN SPELLINGS — the whole 52-clause NF-C9 suite
       passed GREEN over the wired discount that made its copy false, because its
       boundary clause scanned three token spellings in `season_projection.py` while

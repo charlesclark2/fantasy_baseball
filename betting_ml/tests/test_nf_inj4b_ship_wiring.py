@@ -376,8 +376,21 @@ def test_the_manifest_stamp_is_actually_EXERCISED_and_says_what_it_does_not_know
     assert stamp["eligible_rows_on_projections"] == 2, (
         "the eligible count did not normalise the padded feed id — the same silent-miss that cost "
         "Josh Jacobs and DK Metcalf their disclosure on a published board (NF-C9)")
-    assert "NOT what the build moved" in stamp["records_what"], (
-        "the stamp no longer states that it records a CONFIGURATION rather than an outcome")
+    # ⭐ RE-ANCHORED, NOT WEAKENED (NF-INJ4b-VERIFY, 2026-09-14). The clause used to require the
+    #    stamp to say it records "NOT what the build moved", which was true when the stamp carried
+    #    only a configuration. The stamp now ALSO carries the build's own moved-row count, so that
+    #    exact sentence is retired — but the PROPERTY it defended is not, and is asserted harder
+    #    here: the payload must still distinguish what was CONFIGURED and ELIGIBLE from what the
+    #    build actually DID, and must state that an absent count means UNKNOWN rather than zero.
+    #    (MH2.7: a guard suite can encode a retired world — re-anchor it, never delete it.)
+    rw = stamp["records_what"]
+    assert "CONFIGURED" in rw and "ELIGIBLE" in rw, (
+        "the stamp no longer distinguishes the configuration it records from an outcome")
+    assert "actually moved" in rw, "the stamp no longer names the build's own moved-row count"
+    assert "UNKNOWN, never zero" in rw, (
+        "the stamp no longer says that an absent count is UNKNOWN — a reader would take a missing "
+        "`rows_discounted` for 'the discount moved nothing', which is a claim about the world")
+    assert "rows_discounted" in stamp, "the served stamp dropped the build's moved-row count"
 
     # ⛔ an unreadable feed must not be scored as 'nothing was eligible'
     blind = EX.designation_discount_stamp(pdf, None)
