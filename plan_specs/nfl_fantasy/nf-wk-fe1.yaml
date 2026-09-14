@@ -117,8 +117,101 @@ spec:
   graph:
     nodes: []   # MINI tier — fixtures from contract -> page + entitlement + copy -> guards -> live re-capture + verify + changelog -> closeout
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED-PENDING-PUBLISH. The page, its nav door, the entitlement seam and every
+      guard are built and green; the LIVE-DATA half of the DONE gate is OPEN and
+      calendar-bound. Measured 2026-09-14 04:57Z, cache-busted: both free weekly routes
+      still answer 404 `{"detail":"Weekly projection not found"}` — from the LAMBDA, not
+      the gateway, so the authorizer flip is already done and the routes are anonymously
+      reachable with nothing behind them. The paid route answers 401 AT the gateway.
+      ⛔ THE CHANGELOG ENTRY IS DELIBERATELY NOT WRITTEN: this is the weekly product's
+      debut line and the spec's own rule is that declaration never outruns production.
+      It, the raw fixture re-capture and the live content verification are listed as
+      post-publish operator steps below.
+      Guards: E2E 16 desktop + 4 mobile, full frontend suite 709 passed / 0 failed;
+      Python 24 clauses; RED proofs 16/16 (Python) and 6/6 (frontend), both attributable
+      with baseline-pass, NOT-SELECTED and resolve-every-node legs; fast gate 12,666
+      passed / 0 failed.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) ⭐ THE COHERENCE FIGURE IS NOT ON THE WIRE, AND THAT DECIDED CRITERION 1(a).
+      The criterion allows either NOT SUMMING the components or DISCLOSING the
+      discrepancy. Only the first was available: `test_nf_tr1_claim_copy.py::
+      test_the_canonical_copy_module_carries_no_measured_figure` mechanically REFUSES any
+      decimal with two or more places in `fantasy-claim-copy.ts`, and the manifest carries
+      no coherence block to read one from — so a disclosed magnitude could only ever have
+      been a typed figure that drifts silently on the next re-score. The page therefore
+      sums nothing (guarded statement-level) and states the independent-heads mechanism in
+      words. ⇒ IF THE PM WANTS THE MAGNITUDE SHOWN, that is a CONTRACT addition (a
+      coherence block on `NflWeeklyManifest.framing`, written by the box beside the figures
+      `run_nf_c6_ph2_promotion_review.component_coherence` already computes) and therefore
+      a BACKEND story, not a copy edit.
+
+      (2) ⚠️ THIS SPEC'S OWN FIGURES ARE MISLABELLED — worth correcting on the card so the
+      error does not propagate by copy. The spec says "median offset 0.77, p95 3.71". The
+      measured record (`nf_c6_ph2_promotion_review.json`, n=503) says `mean_signed_diff =
+      -0.7709`, `median_abs_diff = 0.6016`, `p95_abs_diff = 3.7101`. So 0.77 is the MEAN
+      SIGNED difference (and it is negative), not the median; the median absolute
+      difference is 0.60. Only p95 was quoted correctly. Nothing shipped depends on this —
+      no figure was rendered — but the card is the source a future story would copy from.
+
+      (3) 🚪 THE PAGE IS PUBLIC AND INDEXED BUT HAS NO SIGNED-OUT NAV DOOR, and that is a
+      PM DECISION I deliberately did not make. It joins `SPORTS` (the signed-in fantasy
+      menu, beside Projections) as the spec asks. `SIGNED_OUT_NAV` in `positioning-copy.ts`
+      is a separate, authored positioning surface where EVERY entry carries a recorded
+      PM/operator ruling, so adding one is a positioning change rather than nav wiring.
+      ⚠️ The consequence is concrete and is the NCAAF-P3.9 shape: a logged-out visitor can
+      reach the page from search (it is `index: true`) or from the signed-in menu, but
+      cannot DISCOVER it from the nav — and "what does my guy do this week" is the highest-
+      volume recurring query in fantasy football. Recommend a `desktop: false` entry beside
+      the existing "Projections" one.
+
+      (4) 🐛 A DEFECT FOUND AND FIXED, and the class is worth carrying: Tailwind's `sr-only`
+      is `position: absolute`, so inside a scroll container whose ancestors are all `static`
+      its containing block is the INITIAL one — it escapes the container entirely. The last
+      column header's accessible name laid out at x=864 and inflated
+      `documentElement.scrollWidth` to 866 in a 412px viewport while the container itself
+      measured a correct 378/860. Invisible at desktop width, to `tsc` and to `next build`;
+      caught on the mobile spec's FIRST run. ⭐ The tell that it was real rather than a
+      measurement quirk: the shipped season tables use the identical pattern with WIDER
+      tables (980px, 954px) and measure 412 — a NARROWER table leaking is backwards for any
+      overflow explanation, which is what pointed at an escaping absolute child. Fixed by
+      containment (`relative`), not by deleting the span, which is the column's only
+      accessible name. A repo-wide scan finds no other component combining `overflow-x-auto`
+      with `sr-only`, so it is not latent elsewhere TODAY — but the next wide table with a
+      screen-reader-only header will reproduce it.
+
+      (5) ⛔ A PRE-EXISTING RED ON `dev`, REPAIRED IN A SEPARATE COMMIT (4cd5de4e) AND
+      FLAGGED RATHER THAN SMUGGLED. NF-C6-PH2 (`be1fb87c`) added `nfl_weekly_freshness_op`
+      to `sports_nfl_sleeper_injuries_job` without moving
+      `test_nf_infra1_sleeper_hardening.py`'s exhaustive node-set assertion, so that clause
+      has been failing on `dev` since — verified at base commit 04fd0059, failing
+      identically with this branch checked out or not, and NF-WK-FE1 touches no pipeline,
+      monitoring or Sleeper file. Repaired the STRONGER way: the op joins the node set AND
+      gains the same no-dependencies assertion its sibling has (measured: it already has
+      none). RED-proven two-sided. PM may split this commit out if it belongs to another
+      story's ledger.
+
+      (6) 🗓️ FIXTURE RETIREMENT TRIPWIRE. The three weekly fixtures are GENERATED by the
+      shipping writer + reducer (`frontend/e2e/fixtures/build-nfl-weekly.py`) because
+      nothing weekly has ever published and there is nothing to capture. A fixture derived
+      from the writer can only confirm the shape we already assumed (E9.64b) — so on the
+      first real publish they must be RETIRED and re-captured RAW from the live API. The
+      builder's header says so; this is the PM-visible copy of it.
+
+      (7) 📋 RED-PROOF BOARD DRIFT, PRE-EXISTING AND DOCUMENTED, reported rather than
+      "fixed": `e2e/red-proof.mjs` now holds 246 cases against a `RECORDED_BOARD` of 207.
+      207 is correct BY THE FILE'S OWN CONVENTION (the last measured board, 201, plus this
+      story's 6); the gap is ~39 cases of compounded projection from stories that added
+      cases without a full board run. ⛔ Writing 246 would assert a red/not-observable split
+      nobody has measured. A full run is what reconciles it.
+
+      (8) 🧪 A HARNESS FOOTGUN PAID FOR IN THIS SESSION: `e2e/red-proof.mjs` is a SCRIPT with
+      top-level side effects, so `import()`-ing it to syntax-check STARTS A FULL RUN. Killing
+      that left `app/subscribe/page.tsx` mutated in the working tree — exactly the residue
+      the file's own header warns about. Restored via `git checkout --`; nothing reached a
+      commit, because staging by explicit path rather than `git add -A` is what kept it out.
+      Use `node --check` to validate that file.
