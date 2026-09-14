@@ -9,7 +9,7 @@ metadata:
   name: ncaaf-inc-0914
   vertical: ncaaf
   card: https://trello.com/c/l8Rjkh8j
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     sports_ncaaf_dbt_build_job run 06d7352c-5744-4902-b42d-a0c8aa4a43ba
