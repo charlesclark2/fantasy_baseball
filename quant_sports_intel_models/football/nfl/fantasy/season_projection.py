@@ -1234,6 +1234,10 @@ def project_veterans(
     # returns the frame and the decisions must survive even when a later step raises —
     # the same shape `_dbt_exec._run_dbt` uses for its `run_ref` (E11.24/INC-41).
     reported_absence_log=None,
+    # NF-INJ4b-SHIP — the WEEKLY-DESIGNATION cap, a callable `frame -> np.ndarray` exactly like
+    # `formal_games`. None ⇒ this channel is absent and `apply_availability_chain` takes its
+    # no-designation branch, which is byte-identical to the pre-NF-INJ4b board BY CONSTRUCTION.
+    designation_games=None,
     xfp_td_blend: float = _XFP_TD_BLEND,
     absence_prior: "AbsenceReturnPrior | None" = None,
     absence_prior_blend: float = _ABSENCE_PRIOR_BLEND,
@@ -1419,6 +1423,9 @@ def project_veterans(
     df = apply_availability_chain(
         df,
         formal_games=_formal_games,
+        # NF-INJ4b-SHIP: the weekly-designation cap, COMPOSED with the formal one as a single
+        # strongest min-cap from the same baseline (never stacked — 9.06, not 7.83).
+        designation_games=designation_games,
         # NF-D11: the veteran population is the one this prior was fitted on and the only one that
         # can carry `seasons_missed` at all (see `project_rookies` for the rookie ruling).
         absence_prior=absence_prior, absence_prior_blend=absence_prior_blend,
@@ -3309,6 +3316,11 @@ def project_rookies(
     # behaviour, byte-identical), which is the honest state for a caller with no roster feed.
     roster_status: "pd.DataFrame | None" = None,
     injury_override_blend: float = _INJURY_OVERRIDE_BLEND,
+    # NF-INJ4b-SHIP — the same weekly-designation callable the veteran frame receives. A rookie can
+    # be listed Questionable in week 1 exactly like anyone else, and the availability owner is
+    # shared, so withholding it here would make the discount a property of DRAFT YEAR rather than
+    # of the designation (the NF-INJ3c rookie-boundary lesson, in its other direction).
+    designation_games=None,
 ) -> pd.DataFrame:
     """Project the incoming rookie class (skill positions) from the slot curve, nudged by the P1A
     residual (talent the draft board under/over-rated) and widened for rookie uncertainty.
@@ -3456,6 +3468,12 @@ def project_rookies(
     df = apply_availability_chain(
         df,
         formal_games=_rookie_formal,
+        # NF-INJ4b-SHIP: the weekly-designation cap reaches BOTH populations. Unlike the formal
+        # cap — where the rookie frame deliberately routes the INCUMBENT constants rather than
+        # NF-INJ3b's veteran-certified hurdle — this channel is keyed on a designation the club
+        # filed, not on a fitted per-population model, so there is no rookie/veteran boundary for
+        # it to respect and withholding it would make the discount depend on draft year.
+        designation_games=designation_games,
         absence_prior=None, absence_prior_blend=0.0,   # NF-D11: not-applicable-by-construction
         reported_absence_rows=reported_absence_rows,
         reported_absence_log=reported_absence_log,

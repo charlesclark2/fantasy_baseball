@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-09-07",
+    "items": [
+      {
+        "tag": "changed",
+        "text": "Projected games now take a club's weekly game-status listing into account. When a player is listed Out, Doubtful or Questionable on the most recent report our injury feed carries, we discount his projected games by a measured average of what past listings like it have cost \u2014 about a tenth of a season for Out, and considerably less for the softer designations. It is an average over past filings, not a read on any individual. Until now we showed the listing beside a player and said plainly that we did not act on it; that note has been replaced with one describing what we now do. A formal roster move \u2014 injured reserve, PUP, the non-football-injury list or a suspension \u2014 is still priced separately and more heavily, and a player caught by more than one takes the largest single discount rather than both."
+      }
+    ]
+  },
+  {
     "week": "2026-08-31",
     "items": [
       {

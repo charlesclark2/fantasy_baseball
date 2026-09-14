@@ -1,0 +1,502 @@
+{
+ "story": "NF-INJ4b-SHIP",
+ "generated_at": "2026-09-13T22:26:28+00:00",
+ "baseline_board_generated_at": "2026-09-13T14:19:12.836904+00:00",
+ "constants": {
+  "out": {
+   "expected_games_missed": 2.3145,
+   "rate_multiplier": 0.8639
+  },
+  "doubtful": {
+   "expected_games_missed": 0.8052,
+   "rate_multiplier": 0.9526
+  },
+  "questionable": {
+   "expected_games_missed": 0.6301,
+   "rate_multiplier": 0.9629
+  }
+ },
+ "what_it_is": "for every player the live feed designated at capture time: the games the PRE-SHIP board published, and the games a board serving the discount must publish for him. \u26a0\ufe0f `games_after` is FIRST-ORDER \u2014 a real rebuild re-runs NF1.5's ordering permutation, so treat a mismatch as a signal to read, not as a failure on its own.",
+ "rows": [
+  {
+   "id": "00-0034869",
+   "name": "Sam Darnold",
+   "pos": "QB",
+   "designation": "Out",
+   "games_before": 16.5,
+   "games_after": 14.2544
+  },
+  {
+   "id": "00-0039337",
+   "name": "Malik Nabers",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 11.9,
+   "games_after": 11.4585
+  },
+  {
+   "id": "00-0039338",
+   "name": "Brock Bowers",
+   "pos": "TE",
+   "designation": "Out",
+   "games_before": 15.1,
+   "games_after": 13.0449
+  },
+  {
+   "id": "00-0040734",
+   "name": "TreVeyon Henderson",
+   "pos": "RB",
+   "designation": "Out",
+   "games_before": 12.0,
+   "games_after": 10.3668
+  },
+  {
+   "id": "00-0039919",
+   "name": "Rome Odunze",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 14.8,
+   "games_after": 14.2509
+  },
+  {
+   "id": "00-0036212",
+   "name": "Tua Tagovailoa",
+   "pos": "QB",
+   "designation": "Out",
+   "games_before": 15.0,
+   "games_after": 12.9585
+  },
+  {
+   "id": "00-0039855",
+   "name": "Jalen McMillan",
+   "pos": "WR",
+   "designation": "Doubtful",
+   "games_before": 8.2,
+   "games_after": 7.8113
+  },
+  {
+   "id": "00-0039917",
+   "name": "Michael Penix Jr.",
+   "pos": "QB",
+   "designation": "Out",
+   "games_before": 6.5,
+   "games_after": 5.6154
+  },
+  {
+   "id": "00-0033906",
+   "name": "Alvin Kamara",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 11.5,
+   "games_after": 11.0733
+  },
+  {
+   "id": "00-0038951",
+   "name": "Sean Tucker",
+   "pos": "RB",
+   "designation": "Doubtful",
+   "games_before": 9.3,
+   "games_after": 8.8592
+  },
+  {
+   "id": "00-0037112",
+   "name": "Jake Tonges",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 11.7,
+   "games_after": 11.2659
+  },
+  {
+   "id": "00-0040648",
+   "name": "Tory Horton",
+   "pos": "WR",
+   "designation": "Out",
+   "games_before": 7.5,
+   "games_after": 6.4793
+  },
+  {
+   "id": "00-0035537",
+   "name": "Ty Johnson",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 10.0,
+   "games_after": 9.629
+  },
+  {
+   "id": "00-0040238",
+   "name": "LeQuint Allen Jr.",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 9.7,
+   "games_after": 9.3401
+  },
+  {
+   "id": "00-0040177",
+   "name": "Jordan James",
+   "pos": "RB",
+   "designation": "Out",
+   "games_before": 5.6,
+   "games_after": 4.8378
+  },
+  {
+   "id": "00-0040202",
+   "name": "Devin Neal",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 4.1,
+   "games_after": 3.9479
+  },
+  {
+   "id": "00-0036849",
+   "name": "Tutu Atwell",
+   "pos": "WR",
+   "designation": "Out",
+   "games_before": 7.9,
+   "games_after": 6.8248
+  },
+  {
+   "id": "00-0034159",
+   "name": "Will Dissly",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 9.3,
+   "games_after": 8.955
+  },
+  {
+   "id": "00-0037306",
+   "name": "John FitzPatrick",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 10.7,
+   "games_after": 10.303
+  },
+  {
+   "id": "00-0039074",
+   "name": "Davis Allen",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 9.5,
+   "games_after": 9.1475
+  },
+  {
+   "id": "00-0033857",
+   "name": "JuJu Smith-Schuster",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 10.6,
+   "games_after": 10.2067
+  },
+  {
+   "id": "00-0039792",
+   "name": "Devontez Walker",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 7.4,
+   "games_after": 7.1255
+  },
+  {
+   "id": "00-0037267",
+   "name": "Jerome Ford",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 8.7,
+   "games_after": 8.3772
+  },
+  {
+   "id": "00-0039747",
+   "name": "Ainias Smith",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 2.7,
+   "games_after": 2.5998
+  },
+  {
+   "id": "00-0035973",
+   "name": "Patrick Taylor Jr.",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 4.3,
+   "games_after": 4.1405
+  },
+  {
+   "id": "00-0031687",
+   "name": "Raheem Mostert",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 9.9,
+   "games_after": 9.5327
+  },
+  {
+   "id": "00-0037429",
+   "name": "Raheem Blackshear",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 4.1,
+   "games_after": 3.9479
+  },
+  {
+   "id": "00-0033455",
+   "name": "Anthony Firkser",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 6.4,
+   "games_after": 6.1626
+  },
+  {
+   "id": "00-0039379",
+   "name": "Jamari Thrash",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 6.8,
+   "games_after": 6.5477
+  },
+  {
+   "id": "00-0037324",
+   "name": "Chris Oladokun",
+   "pos": "QB",
+   "designation": "Questionable",
+   "games_before": 1.8,
+   "games_after": 1.7332
+  },
+  {
+   "id": "00-0036670",
+   "name": "Jermar Jefferson",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 3.5,
+   "games_after": 3.3701
+  },
+  {
+   "id": "00-0039230",
+   "name": "Dante Miller",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 1.3,
+   "games_after": 1.2518
+  },
+  {
+   "id": "00-0036196",
+   "name": "Gabe Davis",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 8.4,
+   "games_after": 8.0884
+  },
+  {
+   "id": "00-0039521",
+   "name": "Xavier Weaver",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 8.0,
+   "games_after": 7.7032
+  },
+  {
+   "id": "00-0040629",
+   "name": "Dalevon Campbell",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 3.7,
+   "games_after": 3.5627
+  },
+  {
+   "id": "00-0036328",
+   "name": "Antonio Gibson",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 6.6,
+   "games_after": 6.3551
+  },
+  {
+   "id": "00-0034407",
+   "name": "Ray-Ray McCloud III",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 2.5,
+   "games_after": 2.4072
+  },
+  {
+   "id": "00-0038098",
+   "name": "Pierre Strong Jr.",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 4.1,
+   "games_after": 3.9479
+  },
+  {
+   "id": "00-0038416",
+   "name": "Tyson Bagent",
+   "pos": "QB",
+   "designation": "Questionable",
+   "games_before": 3.5,
+   "games_after": 3.3701
+  },
+  {
+   "id": "00-0036032",
+   "name": "Sean McKeon",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 4.0,
+   "games_after": 3.8516
+  },
+  {
+   "id": "00-0033572",
+   "name": "Jamal Agnew",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 6.2,
+   "games_after": 5.97
+  },
+  {
+   "id": "00-0036510",
+   "name": "Kenny Yeboah",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 3.6,
+   "games_after": 3.4664
+  },
+  {
+   "id": "00-0040352",
+   "name": "Coleman Owen",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 1.1,
+   "games_after": 1.0592
+  },
+  {
+   "id": "00-0034054",
+   "name": "River Cracraft",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 4.3,
+   "games_after": 4.1405
+  },
+  {
+   "id": "00-0034418",
+   "name": "Cedrick Wilson Jr.",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 7.8,
+   "games_after": 7.5106
+  },
+  {
+   "id": "00-0039757",
+   "name": "Terrell Jennings",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 5.3,
+   "games_after": 5.1034
+  },
+  {
+   "id": "00-0035876",
+   "name": "Andre Baccellia",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 5.7,
+   "games_after": 5.4885
+  },
+  {
+   "id": "00-0035976",
+   "name": "Dan Chisena",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 3.0,
+   "games_after": 2.8887
+  },
+  {
+   "id": "00-0040673",
+   "name": "Jalen Milroe",
+   "pos": "QB",
+   "designation": "Out",
+   "games_before": 2.5,
+   "games_after": 2.1597
+  },
+  {
+   "id": "00-0036527",
+   "name": "DJ Turner",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 4.5,
+   "games_after": 4.3331
+  },
+  {
+   "id": "00-0036232",
+   "name": "Harrison Bryant",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 8.3,
+   "games_after": 7.9921
+  },
+  {
+   "id": "00-0039458",
+   "name": "Brenden Bates",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 6.7,
+   "games_after": 6.4514
+  },
+  {
+   "id": "00-0036842",
+   "name": "Kene Nwangwu",
+   "pos": "RB",
+   "designation": "Out",
+   "games_before": 6.8,
+   "games_after": 5.8745
+  },
+  {
+   "id": "00-0037387",
+   "name": "Jalen Virgil",
+   "pos": "WR",
+   "designation": "Questionable",
+   "games_before": 2.3,
+   "games_after": 2.2147
+  },
+  {
+   "id": "00-0039399",
+   "name": "Tanner McLachlan",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 2.2,
+   "games_after": 2.1184
+  },
+  {
+   "id": "00-0038809",
+   "name": "Ben Sims",
+   "pos": "TE",
+   "designation": "Questionable",
+   "games_before": 7.2,
+   "games_after": 6.9329
+  },
+  {
+   "id": "00-0040058",
+   "name": "Nick Kallerup",
+   "pos": "TE",
+   "designation": "Out",
+   "games_before": 7.1,
+   "games_after": 6.1337
+  },
+  {
+   "id": "00-0036567",
+   "name": "Elijah Mitchell",
+   "pos": "RB",
+   "designation": "Questionable",
+   "games_before": 3.8,
+   "games_after": 3.659
+  },
+  {
+   "id": "00-0040172",
+   "name": "Jordan Watkins",
+   "pos": "WR",
+   "designation": "Out",
+   "games_before": 4.2,
+   "games_after": 3.6284
+  },
+  {
+   "id": "00-0040563",
+   "name": "Efton Chism III",
+   "pos": "WR",
+   "designation": "Out",
+   "games_before": 6.5,
+   "games_after": 5.6154
+  }
+ ]
+}

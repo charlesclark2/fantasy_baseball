@@ -10,7 +10,7 @@ metadata:
   name: nf-inj4b-ship
   vertical: nfl_fantasy
   card: https://trello.com/c/8tgfKzkw   # NF-INJ4b record; SHIP card linked at kickoff
-  status: ACCEPTED
+  status: AWAITING_OPERATOR_DECISION
 spec:
   description: >
     NF-INJ4b closed SHIP_CANDIDATE with a STRUCTURAL hold: 9/9 gates
@@ -138,8 +138,50 @@ spec:
   graph:
     nodes: []   # MINI tier — precondition verify -> wiring+NF-C9 (one PR) -> measurement battery -> operator packet -> publish is the operator's -> closeout
   closeout:
-    verdict: null
+    verdict: >
+      WIRED_AND_MEASURED — awaiting the operator's ship decision. The precondition
+      PASSED on all three clauses (counterfactual exists; §3 no-op control PASSED
+      across 14 boards at 0 max rank move / 1.0000 agreement; the run priced the
+      CERTIFIED winner `desig_x_practice`, whose constants re-derive exactly and in
+      which the registered-arm ×0.8682 appears nowhere). The wiring, the NF-C9
+      retirement and the changelog ship as ONE PR; the battery ran on the captured
+      publish candidate and the operator packet is generated from it. ⚠️ MERGING THE
+      PR IS THE DEPLOY — the board is published by a RUNNING Dagster schedule off the
+      box image, so there is no later publish gate; that is why the copy rides the
+      same PR. The capture-pinned REBUILD is NOT reachable from a laptop (the D3
+      precondition was RUN and REFUSED; the served board's ecr_as_of 2026-09-10 is
+      unrecoverable — FantasyPros serves only the current snapshot) and remains the
+      operator's step, so every packet figure is FIRST-ORDER and says so.
+      best_alpha = 0; nothing was published.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      (1) ⭐⭐ GUARD THE WIRING, NOT TOKEN SPELLINGS — the whole 52-clause NF-C9 suite
+      passed GREEN over the wired discount that made its copy false, because its
+      boundary clause scanned three token spellings in `season_projection.py` while
+      the feed read and the caller live one and two modules over. Re-keyed here; the
+      class is worth a sweep of other "the code form of the copy clause" guards.
+      (2) ⚠️ `run_nf_inj4b_counterfactual`'s RENDERER prints PRESEASON prose over
+      IN-SEASON data — §1 says "-4 days before Week 1" and "the preseason shape" for a
+      run four days after kickoff, and §5's "Today's zero is the SCOPE RULE refusing
+      every row" is emitted UNCONDITIONALLY and is false on a run that moved 549–640
+      ranks per board. The JSON is correct throughout. Deliberately NOT edited (a
+      decided story's artifact; re-running it is the operator's command), and this
+      story quotes the JSON instead — but a reader trusting the narrative over the
+      table reaches the opposite conclusion. Needs a PM call: fix the renderer, or
+      annotate the artifact.
+      (3) `assert_vintages_match` is pinned to NF-INJ2c's baseline directory, so its
+      refusal quotes THAT manifest's vintages rather than the caller's capture. The
+      verdict stays right; the quoted figures describe a different board. Worth a
+      `manifest_path=` parameter so a later story's pin reports its own capture.
+      (4) The market caches are gitignored, so a fresh worktree reads every vintage as
+      None and a pin is unreachable there. The durable habit — capture the board AND
+      its market inputs together, promptly after a publish — is recorded in the battery.
+      (5) Population facts for the next designation story: no rookie on the current
+      board carries a weekly designation (all 60 designated rows are veterans), and 16
+      players carry a feed value we cannot interpret (disclosed as unknown, priced at
+      nothing).
+      (6) The manifest's new `designationDiscountStamp` records the CONFIGURED policy
+      and the ELIGIBLE population only. The decisive per-row evidence is
+      `nf_inj4b_ship_expected_effect.json` + `--verify-published`; if a future story
+      wants the stamp to say what the build DID, the per-row
+      `_designation_discount_applied` column would have to reach the artifact (it is
+      currently build-time scaffolding, deliberately excluded from OUTPUT_COLS).

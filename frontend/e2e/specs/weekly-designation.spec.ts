@@ -216,15 +216,29 @@ test.describe("the weekly designation — what it says", () => {
       `listed ${OUT.status.toLowerCase()}`,
     )
 
-    // ⛔⛔ THE SENTENCE THE WHOLE STORY IS FOR. A chip beside a games figure reads as an adjustment
-    // by POSITION alone, whatever the words omit — so the words have to refuse it. This is the
-    // clause that would go quietly missing in a copy trim, and its absence would be invisible:
-    // the chip renders perfectly well without it.
+    // ⛔⛔ THE SENTENCE THE WHOLE STORY IS FOR — RE-ANCHORED BY NF-INJ4b-SHIP, and the claim it
+    // must make is now the OPPOSITE one. NF-C9 required the words "does not take this into
+    // account" because the projection applied a discount of exactly zero and a chip beside a games
+    // figure reads as an adjustment by POSITION alone. The certified NF-INJ4b model now prices
+    // Out / Doubtful / Questionable, so the refusal became the false statement: it would tell a
+    // reader we had left undone work we had in fact done, and nothing on the rendered board could
+    // contradict it, because a games figure looks the same either way.
+    //
+    // ⭐ THIS IS THE GUARD THAT CAUGHT THE INVERSION. The Python suite scans SOURCE for the copy
+    // constant by NAME; this one reads the RENDERED popover and pins the STRING. A rename sweep
+    // keyed on the symbol is structurally blind to it — which is exactly why it is kept, and why
+    // it is re-anchored here rather than relaxed (MH2.7).
     expect(
       text,
-      "the disclaimer no longer says our projected-games figure is unaffected — the chip then " +
-        "reads as a discount we applied, which is exactly the false impression NF-C8 found",
-    ).toContain("does not take this into account")
+      "the disclosure no longer says our projected-games figure takes the designation into " +
+        "account — the discount is live, so silence here reads as a denial of work actually done",
+    ).toContain("takes this into account")
+
+    expect(
+      text,
+      'the RETIRED NF-C9 disclaimer ("does not take this into account") is still rendered — it is ' +
+        "now false on every surface that shows it",
+    ).not.toContain("does not take this into account")
 
     expect(text, "the disclaimer no longer states it is not a diagnosis").toContain(
       "not a diagnosis",
@@ -250,9 +264,10 @@ test.describe("the weekly designation — what it says", () => {
   test("NF-C10: the disclosure stamps the FEED's vintage, never the player's status", async ({
     page,
   }) => {
-    // ⭐⭐ THE CONTRADICTION NF-C10 REMOVES, PINNED WHERE IT WAS LIVE. This popover says, in the
-    // paragraph above, that we hold this designation and our projected-games figure DOES NOT take
-    // it into account — and then stamped a line reading "Injury and roster STATUS as of {date}"
+    // ⭐⭐ THE CONTRADICTION NF-C10 REMOVES, PINNED WHERE IT WAS LIVE. In the paragraph above, this
+    // popover USED TO SAY we held the designation and our projected-games figure did NOT take it
+    // into account (NF-INJ4b-SHIP has since inverted that sentence — we do act on it now) — and
+    // then stamped a line reading "Injury and roster STATUS as of {date}"
     // directly beneath it. "Status as of" reads as "we know his standing and applied it": the two
     // sentences contradicted each other, inside one tooltip, on every surface they share.
     //
@@ -277,17 +292,19 @@ test.describe("the weekly designation — what it says", () => {
     await expect(definition).toBeVisible()
 
     // Non-vacuity first: the disclosure's own sentence must be present, so this cannot pass on a
-    // popover that failed to open or rendered empty.
-    await expect(definition).toContainText(/does not take this into account/i)
+    // popover that failed to open or rendered empty. ⭐ Re-anchored with the claim it probes for
+    // (NF-INJ4b-SHIP): the sentence is now the POSITIVE one.
+    await expect(definition).toContainText(/takes this into account/i)
     await expect(
       definition,
       "the disclosure carries no feed vintage — the stamp is planted, so it should render",
     ).toContainText(/injury\/roster feed as of\s*8\/19/i)
     await expect(
       definition,
-      'the RETIRED "Injury and roster status as of" wording is still rendered here — beneath a ' +
-        "sentence saying we do NOT act on this designation, which is the contradiction NF-C10 " +
-        "exists to remove",
+      'the RETIRED "Injury and roster status as of" wording is still rendered here — NF-C10 ' +
+        "replaced it with the feed-vintage line above. (Its ORIGINAL reason — that it sat beneath " +
+        "a sentence saying we do NOT act on this designation — no longer holds since " +
+        "NF-INJ4b-SHIP: we do act on it. The wording is still retired; only the rationale moved.)",
     ).not.toContainText(/injury and roster status as of/i)
 
     expectApiFullyMocked(mock)
@@ -312,9 +329,9 @@ test.describe("the weekly designation — what it says", () => {
     )
     expect(
       text,
-      "an unreadable designation renders with no disclaimer — a reader cannot tell whether it " +
+      "an unreadable designation renders with no disclosure — a reader cannot tell whether it " +
         "moved the projection",
-    ).toContain("does not take this into account")
+    ).toContain("takes this into account")
 
     // ⛔ And it must not print the raw token it declined to interpret: publishing a code we refuse
     // to define asks the reader to interpret it for us.

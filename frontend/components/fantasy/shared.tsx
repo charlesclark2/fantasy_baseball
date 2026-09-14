@@ -48,7 +48,7 @@ import {
   WEEKLY_DESIGNATION_CODE,
   WEEKLY_DESIGNATION_LABEL,
   WEEKLY_DESIGNATION_NOT_A_DIAGNOSIS,
-  WEEKLY_DESIGNATION_NOT_MODELLED,
+  WEEKLY_DESIGNATION_HOW_MODELLED,
   WEEKLY_DESIGNATION_SUMMARY,
   WEEKLY_DESIGNATION_UNKNOWN,
   REPORTED_ABSENCE_LABEL,
@@ -994,7 +994,7 @@ export function WeeklyDesignation({
       {/* ⭐⭐ THE LINE THE STORY IS FOR. It renders on BOTH branches — an unrecognised value is
           exactly as un-modelled as a recognised one, and a reader who meets "unknown" with no
           disclaimer would have no way to tell. */}
-      <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>
+      <p className="mt-2">{WEEKLY_DESIGNATION_HOW_MODELLED}</p>
       <p className="mt-2">{WEEKLY_DESIGNATION_NOT_A_DIAGNOSIS}</p>
       {asOf && <p className="mt-2 text-gray-500">{asOf}</p>}
     </InfoTip>
