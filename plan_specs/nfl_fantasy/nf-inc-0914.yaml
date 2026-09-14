@@ -9,7 +9,7 @@ metadata:
   name: nf-inc-0914
   vertical: nfl_fantasy
   card: https://trello.com/c/PENDING
-  status: SHIPPED_PENDING_VERIFICATION  # fix + entrypoint smoke complete and CI-green; the RESTORE (re-run the publish job, confirm the board advanced by content timestamp, then the chained NF-INJ4b per-row verify) is the operator step in the handoff. PM flips DONE once the board has advanced.
+  status: DONE  # VALIDATED IN PROD 2026-09-14: board advanced (generated_at 22:41:57Z), the fixed code is proven to have run (`rows_discounted` present), the follow-up counter is coherent (86 designated == 86 moved), and the per-row check returns a real verdict (`the build applied the discount to every designated row (86/86)`, exit 0) instead of the false UNVERIFIABLE. Card 31EMmr9B closes with it.
 spec:
   description: >
     sports_nfl_board_publish_job run dd44e28e failed in
@@ -189,6 +189,30 @@ spec:
       daily one — the cadence falls to weekly Mondays after it, so a missed
       Tuesday costs a week of verify window, which is why re-running TODAY
       is the recommendation.
+      (0) ✅ CLOSED IN PROD 2026-09-14, and the follow-ups with it. The
+      restore published at 22:41:57Z; `rows_discounted` present proves the
+      FIXED code ran; the follow-up counter reads 86 designated == 86
+      moved (it read `86 of 0` before it); and
+      `run_nf_inj4b_ship_battery --verify-published` returned exit 0 with
+      "the build applied the discount to every designated row (86/86)",
+      where the same command had returned a FALSE `UNVERIFIABLE` hours
+      earlier. That last transition is the one that matters: the per-row
+      check the discount depends on is functional again, so card 31EMmr9B
+      closes here rather than waiting on a further publish. The 4 rows
+      reported UNMOVED are correctly explained by the check itself as base
+      drift between capture and publish, not missed discounts.
+      (0b) ⚠️ A CORRECTION THIS SESSION MADE AGAINST ITSELF, recorded
+      because the wrong version was stated to the operator first: ECR not
+      advancing across two `--market-refresh` publishes was called a
+      "confirmed broken refresh leg". That is WRONG. `market_freshness.
+      ecr_as_of` derives `as_of` from FantasyPros' OWN `last_updated_ts`
+      inside the snapshot, not from our fetch time — so a frozen stamp
+      means the VENDOR stopped publishing, which is exactly what a DRAFT
+      ranking does once the season starts (operator, 2026-09-14). Our
+      refresh can be running perfectly and re-fetching the same snapshot.
+      ⇒ NO card, no chase. It also strengthens follow-up 2: the 96h bar
+      would page from mid-September to August on the VENDOR's cadence
+      alone, with no action available at any point.
       (5) ⭐ THE RESTORE HAS A CONTENT-BASED SUCCESS SIGNAL STRONGER THAN A
       TIMESTAMP, and the BEFORE snapshot is recorded here so the operator
       has something to compare against. Read at 2026-09-14T17:2xZ, the
