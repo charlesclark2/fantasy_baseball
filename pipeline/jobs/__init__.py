@@ -41,6 +41,9 @@ from pipeline.jobs.sports_ncaaf_odds_live_job import sports_ncaaf_odds_live_job
 from pipeline.jobs.sports_ncaaf_prediction_snapshot_job import (
     sports_ncaaf_prediction_snapshot_job,
 )
+from pipeline.jobs.sports_ncaaf_strength_refit_job import (
+    sports_ncaaf_strength_refit_job,
+)
 from pipeline.jobs.sports_ncaaf_serving_write_job import (
     sports_ncaaf_serving_write_job,
 )
@@ -84,6 +87,7 @@ all_jobs = [
     sports_ncaaf_odds_live_job,
     sports_ncaaf_prediction_snapshot_job,
     sports_ncaaf_serving_write_job,
+    sports_ncaaf_strength_refit_job,
     sports_nfl_pit_weather_job,
     sports_nfl_pit_metadata_job,
     sports_nfl_pit_market_job,

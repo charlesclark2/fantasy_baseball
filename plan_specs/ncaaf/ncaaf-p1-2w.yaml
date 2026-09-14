@@ -12,7 +12,7 @@ metadata:
   name: ncaaf-p1-2w
   vertical: ncaaf
   card: https://trello.com/c/7cDvCT4W
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The live Team Stats and game surfaces serve strength ratings frozen
@@ -132,8 +132,110 @@ spec:
   graph:
     nodes: []   # MINI tier — job (marts->fit->snapshot + discriminator) -> monitoring -> operator first run -> stamp activation -> closeout
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED, DEPLOY-HELD. `sports_ncaaf_strength_refit_job` +
+      `sports_ncaaf_strength_refit_schedule` (Mon 07:30 PT, Aug-Jan) schedule the
+      documented runbook: preconditions -> NCAAF mart rebuild -> `run_team_strength
+      --s3` -> VERIFY -> serving publish. The fit is untouched; nothing was
+      re-selected and no P1.x verdict re-read. The stamp's "next update" half is
+      activated. PR #1097 -> dev. ⛔ NOT RUNNING ON MERGE: the schedule
+      self-starts but every tick SKIPS until the operator sets
+      `NCAAF_STRENGTH_REFIT_ENABLED=1` on the box, and the first run is
+      operator-supervised (`docs/ncaaf_p1_2w_weekly_strength_refit.md`).
+      Premise re-verified live 2026-09-13 before building: ratings newest commit
+      2026-08-18 (v67), `as_of_week` = {1} on all 138 teams, `ncaaf/raw/games`
+      at 2026-09-07.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      ① ⭐ THE COVARIATE DISCRIMINATOR ALONE CERTIFIES THE BUG — measured, not
+      argued. The NCAAF-PS report's operator SQL ("0/0/138 cold, 136/136/138
+      real") is the obvious check to schedule, and on the frozen 2026-09-13
+      artifact it reads roster_flux 136 / coaching 136 / 138 teams. A verification
+      built only from that record would have passed on an artifact that had not
+      moved in 26 days. Three readings are needed (covariates; a CONTENT vintage
+      advance from inside `_delta_log`; a week index that must advance when the
+      marts hold completed games, and declares itself INACTIVE pre-season rather
+      than passing). Transferable to any "did the refresh land?" story.
+      ② ⭐ A `default_status=STOPPED` SCHEDULE IN `CRITICAL_SCHEDULES` IS VACUOUS,
+      and it also breaks E11.23's ratified `test_critical_instigators_self_start`.
+      `stopped_critical_instigators` flags only a PERSISTED STOPPED row, so a
+      schedule at its STOPPED default is invisible to the revert that matters (a
+      volume reset wiping the toggle) — the NF-CAP1 reading. Resolution shipped
+      here: `RUNNING` + a declared env-flag skip gate, with the flag's own drift
+      watched from the ARTIFACT side so it cannot become the `W7B_LAKEHOUSE_S3`
+      class. ⚠️ THE SAME TRAP IS WAITING FOR `sports_nfl_weekly_serving_schedule`,
+      whose own docstring says it should join the heartbeat "in the same change"
+      when the operator enables it — it ships STOPPED, so that entry would be
+      vacuous. Worth a checklist item on whichever card enables it. Candidate for
+      the CLAUDE.md landmine list.
+      ③ ⭐ A SEASONAL (month-scoped) FRESHNESS SLA MUST RESTART ITS CLOCK EACH
+      ACTIVE WINDOW. INC-41's active-HOURS lag never had to decide whether lag
+      carries across the gap (an overnight window is ~10h); a season gap is six
+      months, and the tail of the last active month carries into the next season
+      — measured: a last-Monday-of-January fit carries 152 active hours into
+      August and breaches a 192h SLA about an hour after the season's first
+      scheduled fire, i.e. a systematic false page every opening week. Fixed in
+      the SHARED instrument (`sports_delta_freshness.active_lag_hours` /
+      `active_window_start`); any future seasonal contract inherits it. Pre-existing
+      contracts are byte-identical (`active_months=None` defaults to wall-clock),
+      pinned by a clause.
+      ④ THREE GUARDS WERE VACUOUS ON FIRST CUT AND NONE WAS FOUND BY READING THEM.
+      Two were satisfied by DOCSTRING PROSE — a ban on `LastModified` by the
+      module docstring saying it never reads an mtime, a ban on `raise` by one
+      saying "never raises" — which is INC-38 in a new costume: the prose that
+      EXPLAINS the rule satisfies a scan for the rule's own forbidden token. The
+      third was an `and`-composed clause satisfied by a DIFFERENT refusal in the
+      same op (NF-D17). The `_code_only` helper (strips comments AND docstrings
+      via AST) is worth promoting to a shared test helper — every source-scanning
+      guard in the repo that bans a token is exposed to this.
+      ⑤ DELIBERATE DEPARTURE FROM THE SPEC'S LITERAL CHAIN, recorded so the PM can
+      reverse it in one line: the SERVING WRITE is chained into the weekly job
+      (the team pages read the ratings straight from the lake, so it is a direct
+      consumer — INC-25), but the PREDICTION SNAPSHOT is NOT. It is a different
+      artifact with its own deadline semantics (immutable, append-only) and
+      already has an owner in `sports_ncaaf_prediction_snapshot_schedule` firing
+      Tuesday — i.e. downstream of this job in time, reading the fresh ratings.
+      Chaining it would give one immutable weekly track record two cadence owners
+      (INC-30/36/38).
+      ⑥ THE STAMP PRINTS A DATE FROM THE LIVE `ScheduleDefinition` REGARDLESS OF
+      THE ENABLE FLAG, so an armed-but-not-firing schedule would have the page
+      promising a refresh that is not coming. Closed here by deploy ORDER (set
+      the flag BEFORE the deploy, which leaves no window) rather than structurally,
+      because making `next_ratings_update` flag-aware means editing the module
+      this story was told to touch in one line only. If the PM wants it
+      structural, it is a small follow-up on `ncaaf_ratings_vintage`.
+      ⑦ A CALIBRATION QUESTION RAISED, NOT CHASED (per the story's own rule). Every
+      P1.4/VAL1/VAL3b calibration verdict was measured on a population where the
+      season's ratings were re-fit ONCE. Weekly in-season re-fitting changes the
+      strength feature between snapshots, and whether that moves the game model's
+      PIT / vs-close calibration is a real question this story deliberately did not
+      open. It is a NEW story, not a re-read of an existing verdict (E2.1-r).
+      ⑧ NOT MEASURED, AND SAYING SO: the fit and the marts rebuild were NOT timed
+      — they are >2-min box steps and operator-run by rule. The job's
+      `dagster/max_runtime` (10800s) was sized from the LEG CAPS (2400 + 2400 +
+      3600 + 900 = 9300s), not from a measured run. The runbook asks the operator
+      to record actuals on the supervised first run so the ceiling can be tightened
+      against evidence.
+      ⑩ ⭐ THE E11.23 FAST-GATE LANDMINE IS INVISIBLE IN A WORKTREE THAT CARRIES THE
+      MANIFEST SYMLINK. Two non-slow clauses imported `pipeline` (one directly, one
+      because a POPULATED registry makes `next_ratings_update` resolve a live
+      `ScheduleDefinition`), which reads the gitignored `dbt/target/manifest.json`
+      at import. They passed locally — this worktree has a SYMLINK to the main
+      checkout's manifest, left by the P3.3b session — and went red on the first
+      CI run. Two things worth carrying: (a) the cure is to move the PURE
+      predicate to `betting_ml` (the NF-INFRA2 `is_draft_season` split), not to
+      skip the clause; (b) for a clause that genuinely must import `pipeline`,
+      `@pytest.mark.slow` BEATS `@needs_pipeline` — the slow gate builds the
+      manifest with an offline `dbtf parse` so the clause RUNS, while skipif means
+      it never runs in CI at all. The existing `needs_pipeline`-marked P3.3b
+      clauses are in that never-runs-in-CI state and could be converted. (c) A
+      local repro is one command: move the manifest aside and run the shard.
+      ⑪ `_code_only` (strip comments AND docstrings via AST) now exists TWICE —
+      here and as `_executable_source` in the P3.3b suite, written independently
+      for the same reason days apart. That is the shared-helper case making itself;
+      see finding ④.
+      ⑨ THE SLA'S HOST MUST BE ON. The ratings freshness contract is evaluated by an
+      unbound leaf on `sports_ncaaf_prediction_snapshot_job`; if that schedule is
+      STOPPED, the ratings monitor does not run. That placement is correct (a
+      monitor inside its own subject cannot see its subject stop — NF-INFRA2) but
+      it is a dependency the operator should confirm, and BOX_OPERATIONS §10 now
+      says to stop the two together at season end for the same reason.

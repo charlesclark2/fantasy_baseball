@@ -170,19 +170,80 @@ def test_the_vintage_is_not_derived_from_the_week_index_or_the_write_clock():
 
 # ── the owner, and the premise it corrects ───────────────────────────────────────────────────
 
-def test_no_schedule_is_registered_as_refreshing_the_ratings():
-    """The MEASUREMENT, pinned so a future edit has to argue with it.
+def test_the_registry_holds_exactly_the_schedules_whose_job_rewrites_the_ratings():
+    """The MEASUREMENT, updated with its evidence rather than deleted (as the original clause
+    instructed the next reader to do).
 
-    ⛔ An entry here is a claim that the named schedule's JOB REWRITES `team_strength_week`. Nothing
-    does today: the P1.2 re-fit is an operator laptop step. An empty registry is therefore a
-    measured fact, and `next_ratings_update` returning None from it is the honest answer the
-    surface renders as a stated absence.
+    ⛔ An entry here is a claim that the named schedule's JOB REWRITES `team_strength_week`. On
+    2026-09-04 nothing did — the P1.2 re-fit was an operator laptop step — and the empty tuple was
+    a measured fact. NCAAF-P1.2W built the schedule the absence was waiting for, and the claim is
+    VERIFIED rather than inferred: the clause below walks from the registered name to the Dagster
+    schedule, to its job, to the op that runs the CLI, to the module constants naming the very
+    artifact `RATINGS_ARTIFACT` declares. That chain is what "verify it writes, do not infer it
+    from the job sounding related" means in code.
     """
-    assert vintage.RATINGS_REFRESH_SCHEDULES == (), (
-        "a schedule was registered as refreshing the NCAAF ratings — verify its JOB actually "
-        "writes ncaaf/derived/team_strength_week before trusting this, and update this clause "
-        "with the evidence rather than deleting it")
-    assert vintage.next_ratings_update() is None
+    assert vintage.RATINGS_REFRESH_SCHEDULES == ("sports_ncaaf_strength_refit_schedule",), (
+        "the set of schedules claimed to refresh the NCAAF ratings changed — verify the JOB "
+        "actually writes ncaaf/derived/team_strength_week before trusting it, and update this "
+        "clause with the evidence rather than deleting it")
+
+
+@pytest.mark.slow
+def test_every_registered_schedule_really_does_rewrite_the_ratings_artifact():
+    """⭐ NON-VACUITY FOR THE REGISTRY ITSELF. A name in a tuple is a claim; this resolves it.
+
+    The chain: the registered name → a real Dagster schedule → the job it fires → an op invoking
+    `run_team_strength` → that module's `LAKE_SOURCE`/`LAKE_TIER`, which must be the artifact
+    `RATINGS_ARTIFACT` declares. Every link is read from the live definition or the source, so a
+    schedule that merely SOUNDS related cannot satisfy it — which is the error the whole module
+    exists to correct.
+    """
+    pipeline = pytest.importorskip("pipeline")
+    import inspect
+
+    from quant_sports_intel_models.football.ncaaf.models import run_team_strength as CLI
+
+    assert (CLI.LAKE_SOURCE, CLI.LAKE_TIER) == (vintage.RATINGS_ARTIFACT.source,
+                                                vintage.RATINGS_ARTIFACT.tier)
+    for name in vintage.RATINGS_REFRESH_SCHEDULES:
+        sched = pipeline.defs.get_schedule_def(name)
+        job_src = inspect.getsource(inspect.getmodule(
+            pipeline.defs.get_job_def(sched.job_name).graph.node_defs[0].compute_fn.decorated_fn))
+        assert "run_team_strength" in job_src, (
+            f"{name} is registered as refreshing the ratings, but its job "
+            f"({sched.job_name}) never invokes run_team_strength — the ONLY writer of "
+            f"{vintage.RATINGS_ARTIFACT.source}")
+
+
+def test_an_empty_registry_renders_the_stated_absence():
+    """The absence arm, and it stays in the FAST gate because it needs no schedule lookup: an
+    empty registry short-circuits before `_schedule_cron` ever imports `pipeline`."""
+    at = datetime(2026, 9, 13, 20, 0, tzinfo=timezone.utc)
+    assert vintage.next_ratings_update(at, schedules=()) is None, (
+        "an empty registry must render the STATED ABSENCE — inventing a date is the overclaim "
+        "this module was built to refuse")
+
+
+@pytest.mark.slow
+def test_a_populated_registry_renders_a_real_next_update():
+    """The PRESENT arm — the half NCAAF-P1.2W activated.
+
+    ⚠️ `@pytest.mark.slow` RATHER THAN `@needs_pipeline`, deliberately. With the registry populated
+    this resolves the cron from the live `ScheduleDefinition`, which imports `pipeline` and so
+    reads the gitignored dbt manifest. `needs_pipeline` would SKIP it on every CI runner, i.e. it
+    would never run in CI at all; the SLOW gate builds that manifest with an offline `dbtf parse`
+    precisely so pipeline-importing clauses can run. A clause that runs is worth more than one that
+    skips politely.
+    """
+    at = datetime(2026, 9, 13, 20, 0, tzinfo=timezone.utc)
+    populated = vintage.next_ratings_update(at)
+    assert populated is not None, (
+        "the registry is populated and the stamp still says 'we cannot say' — the live page's "
+        "'next update' half would print nothing while a real weekly cadence exists")
+    assert populated > at
+    assert populated - at < timedelta(days=8), (
+        f"the resolved next update is {populated - at} away, which no weekly cadence produces")
+    assert populated.weekday() == 0, "the next NCAAF ratings update is expected on a Monday"
 
 
 def test_the_roll_forward_schedule_is_refused_by_name():

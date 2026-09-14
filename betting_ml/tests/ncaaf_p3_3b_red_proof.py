@@ -54,9 +54,34 @@ CASES: list[tuple[str, Path, str, str, str]] = [
     # commit message says so outright. It just does not rewrite THIS artifact.
     ("the roll-forward is registered as refreshing the ratings",
      OWNER,
-     "RATINGS_REFRESH_SCHEDULES: tuple[str, ...] = ()",
+     'RATINGS_REFRESH_SCHEDULES: tuple[str, ...] = ("sports_ncaaf_strength_refit_schedule",)',
      'RATINGS_REFRESH_SCHEDULES: tuple[str, ...] = ("sports_ncaaf_roll_forward_schedule",)',
      "test_the_roll_forward_schedule_is_refused_by_name"),
+
+    # NCAAF-P1.2W populated the registry. The refusal above still has to hold, and these two add
+    # what the populated state introduced: a name that does NOT write the artifact must be caught
+    # by the resolve-the-chain clause, and emptying the registry must take the stamp back to the
+    # stated absence rather than leaving a stale date rendering.
+    ("a schedule that does not write the ratings is registered",
+     OWNER,
+     '("sports_ncaaf_strength_refit_schedule",)',
+     '("sports_ncaaf_serving_write_schedule",)',
+     "test_every_registered_schedule_really_does_rewrite_the_ratings_artifact"),
+
+    ("the populated registry stops resolving a real next update",
+     OWNER,
+     '("sports_ncaaf_strength_refit_schedule",)',
+     "()",
+     "test_a_populated_registry_renders_a_real_next_update"),
+
+    # The absence arm is a SEPARATE clause because it must stay in the FAST gate (it needs no
+    # schedule lookup, so it never imports `pipeline`). Its break is the overclaim itself:
+    # inventing a date when nothing is registered.
+    ("an empty registry invents a date instead of stating the absence",
+     OWNER,
+     "    names = RATINGS_REFRESH_SCHEDULES if schedules is None else schedules\n    if not names:\n        return None",
+     "    names = RATINGS_REFRESH_SCHEDULES if schedules is None else schedules\n    if not names:\n        return (now or datetime.now(timezone.utc))",
+     "test_an_empty_registry_renders_the_stated_absence"),
 
     # E9.41: an undeclared field is stripped on serialize — the store is right and the page is not.
     ("the vintage is dropped from the served contract",

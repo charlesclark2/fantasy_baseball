@@ -62,17 +62,25 @@ RATINGS_ARTIFACT = RatingsArtifact(sport="ncaaf", source="team_strength_week", t
 
 #: The Dagster schedules that REWRITE `RATINGS_ARTIFACT`, by name.
 #:
-#: ⛔ MEASURED EMPTY 2026-09-04 — see the module docstring. Nothing in `pipeline/` calls
-#: `run_team_strength`; the P1.2 re-fit is an operator laptop step. An EMPTY tuple is therefore a
-#: measurement, not a stub, and `next_ratings_update` returns None from it so the surface states an
-#: absence rather than inventing a date.
+#: ⛔ MEASURED EMPTY 2026-09-04 — see the module docstring. At that point nothing in `pipeline/`
+#: called `run_team_strength`; the P1.2 re-fit was an operator laptop step, and an EMPTY tuple was
+#: a measurement rather than a stub.
+#:
+#: ✅ POPULATED 2026-09-13 by NCAAF-P1.2W, which built the schedule the absence was waiting for.
+#: `sports_ncaaf_strength_refit_schedule` fires `sports_ncaaf_strength_refit_job`, whose graph is
+#: preconditions → NCAAF mart rebuild → `run_team_strength --s3` → a verification that FAILS the
+#: run if the artifact did not advance. That job's fit op invokes the same CLI whose `LAKE_SOURCE`/
+#: `LAKE_TIER` name `RATINGS_ARTIFACT` above, so the entry is a VERIFIED write rather than an
+#: inferred one — which is the standard the note below sets.
 #:
 #: ⚠️ ⛔ DO NOT ADD `sports_ncaaf_roll_forward_schedule` HERE. That is the exact error this module
 #: exists to correct, it is the one a future reader is most likely to make (the claim is still
 #: sitting in #1081's commit message), and `test_ncaaf_p3_3b_ratings_stamp.py` refuses it by name.
-#: An entry here is a claim that the named schedule's JOB writes the ratings table — verify it
-#: writes, do not infer it from the job sounding related.
-RATINGS_REFRESH_SCHEDULES: tuple[str, ...] = ()
+#: It remains true after this change: the roll-forward ingests `ROLL_FORWARD_SOURCES` and rebuilds
+#: marts, and `team_strength_week` is still neither. An entry here is a claim that the named
+#: schedule's JOB writes the ratings table — verify it writes, do not infer it from the job
+#: sounding related.
+RATINGS_REFRESH_SCHEDULES: tuple[str, ...] = ("sports_ncaaf_strength_refit_schedule",)
 
 
 def read_ratings_vintage(*, bucket: str | None = None,
