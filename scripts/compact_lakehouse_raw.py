@@ -5,7 +5,9 @@ WHY (INC-42, 2026-08-11)
 ------------------------
 `lakehouse_raw/mlb_odds_raw` is an APPEND-ONLY store with no compaction and no retention: the
 30-min host-cron odds capture writes ONE `part-<uuid>.parquet` per fire, so the glob every reader
-binds grows by **48 files/day, forever**. Measured 2026-08-12: 97 partitions / **1,859 files** /
+binds grows by **48 files/day, forever**. (There are TWO such stores; the second,
+`derivative_odds_raw`, was left out of the allowlist and the cron when INC-42 shipped and grew to
+**2,451 files / 80 partitions** by 2026-09-14 — see MLB-INC-0904 and the entry below.) Measured 2026-08-12: 97 partitions / **1,859 files** /
 129.5 MB, of which 1,800 files sit in the 38 partitions written since the 2026-07-05 S3-native
 flip (`dt=2026-07-05` holds exactly 1 file — the flip date).
 
@@ -19,7 +21,11 @@ its own merits regardless of whether it turns out to be INC-42's cause.
 Compaction is **row-preserving**: every row of every file is kept. ⛔ This is NOT retention —
 nothing is dropped. The odds snapshot TRAJECTORY is the signal (`mart_odds_line_movement`,
 `mart_bookmaker_disagreement`), so deleting old snapshots would destroy data the program uses.
-1,859 files → ~97, with byte-for-byte the same rows.
+1,859 files → **225**, with byte-for-byte the same rows (MEASURED 2026-09-04, after the
+daily cron had been running a while; 235 files / 130 `dt=` partitions on 2026-09-14 — the
+steady state is one file per closed partition plus the `--min-age-days` live tail, so the
+count tracks the partition count, not the fire count). An earlier draft of this line
+predicted "~97"; that was the partition count of the day, not a measurement.
 
 WHY THE WRITE ORDER IS "PROMOTE, THEN DELETE" (measured, not assumed)
 --------------------------------------------------------------------
@@ -32,7 +38,8 @@ transient window:
     silently sees a partition's rows ZERO times.
 
 Which is safe is a property of the READERS, so it was measured rather than reasoned about. All
-three readers of this glob are DUPLICATE-IDEMPOTENT and none is missing-row-idempotent:
+three readers of the `mlb_odds_raw` glob are DUPLICATE-IDEMPOTENT and none is
+missing-row-idempotent:
 
   1. `dbt/models/staging/stg_oddsapi_odds.sql` — `qualify row_number() over (partition by
      load_id, event_id, bookmaker_key, market_key, outcome_name order by ingestion_ts) = 1`
@@ -50,6 +57,17 @@ do not dedup needs the opposite order or no compaction at all — so `COMPACTABL
 an allowlist, and an unvetted source is REFUSED rather than compacted with a borrowed rationale.
 `scripts/tests/test_compact_lakehouse_raw.py` pins both the allowlist and the reader claim (it
 greps the real reader files for their dedup, so removing a `qualify` fails the build).
+
+⭐ WHY THAT "PER-SOURCE" CLAUSE IS NOT CEREMONY — the second source proves it (MLB-LAKE2,
+2026-09-14). `derivative_odds_raw` looks like the same shape (an append-only 30-minute odds
+capture) and is NOT: the only reader of its glob is the `stg_derivative_odds` flatten, and that
+flatten does **not** dedup, so the duplication is NOT absorbed at the first hop the way
+`stg_oddsapi_odds` absorbs it. It is a pure unnest chain with no join, so it propagates EXACTLY
+2x (measured: 24,942 → 49,884 rows), and what makes promote-then-delete safe lives one level
+DOWN — in the two readers of the flattened output, which each do their own closing selection.
+Both were driven for real over a duplicated input and returned byte-identical results. Had this
+source been added "because it looks like the same shape", the allowlist would have carried a
+rationale that is false about its own first hop.
 
 CRASH SEMANTICS
 ---------------
@@ -119,6 +137,25 @@ COMPACTABLE_SOURCES: dict[str, str] = {
         "commence years 2021-2025, excluding every partition this touches); "
         "odds_freshness_alert_sensor reads MAX(ingestion_ts) / ORDER BY ... LIMIT 1. "
         "So the promote-then-delete duplicate window is a no-op for every consumer."
+    ),
+    "derivative_odds_raw": (
+        "NOT mlb_odds_raw's rationale — this source's chain is a different shape and had to be "
+        "measured separately (MLB-LAKE2, 2026-09-14). The ONLY reader of this glob is the "
+        "stg_derivative_odds flatten, and that flatten does NOT dedup, so unlike mlb_odds_raw the "
+        "duplication is not absorbed at the first hop: it is a pure unnest chain with no join, so "
+        "it propagates EXACTLY 2x into the staging parquet (measured on real partition "
+        "dt=2026-08-16: 24,942 -> 49,884 rows). Safety therefore rests one level DOWN, on the two "
+        "readers of that staging output, and BOTH dedup with their own closing selection: "
+        "mart_derivative_closes qualifies row_number()=1 over (event, market, book, outcome_name, "
+        "outcome_description, outcome_point); eval_cross_market._read_team_totals takes "
+        "row_number()=1 over (event, book, outcome_description, outcome_name) ordered by "
+        "actual_snapshot_ts DESC, then max()-aggregates. Both were driven for real over a "
+        "duplicated input and returned byte-identical output (390 and 7,412 rows unchanged) — "
+        "betting_ml/tests/test_mlb_lake2_w3pre_tier.py re-runs that measurement offline. "
+        "NOTE the eval reader is idempotent REDUNDANTLY: row_number()=1 keeps one row per key "
+        "however many copies exist, AND max() is invariant over a doubled multiset; each was "
+        "broken alone in the RED proof and the output stayed identical both times, so this "
+        "sign-off survives either half being edited."
     ),
 }
 

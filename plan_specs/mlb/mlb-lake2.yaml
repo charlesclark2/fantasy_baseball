@@ -10,7 +10,7 @@ metadata:
   name: mlb-lake2
   vertical: mlb
   card: https://trello.com/c/K2zbMQuo
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Restore real headroom to the W3pre intraday tick. The 09-04
@@ -122,8 +122,64 @@ spec:
   graph:
     nodes: []   # MINI tier — re-measure -> lever ① (reader sign-off -> allowlist -> operator apply+cron) -> lever ② (verify fact -> move or PREPARED) -> docstring/vintage fixes -> OK-verdict verification -> closeout
   closeout:
-    verdict: null
+    verdict: >
+      BOTH LEVERS EXECUTED — and the re-measurement changed the shape of the job. RE-MEASURE
+      FIRST (2026-09-14, read 04:41Z, S3 promote timestamps, the incident's own method): the tier
+      is no longer at 96% of its cap, it NO LONGER FITS. On the 09-14 03:30Z quiet tick
+      stg_statsapi_games promoted 03:30:42 (~12s), stg_oddsapi_odds 03:33:19 (157.0s),
+      stg_oddsapi_events 03:33:25 (6.0s), and stg_derivative_odds NEVER PROMOTED — killed at the
+      480s cap. Its last successful build, 2026-09-13 12:22:41Z, is outside every tick window
+      (crons */30 14-23 and 0,30 0-3 UTC) and is corroborated by its downstream chain in the same
+      window (mart_odds_outcomes/_history 12:23:36Z, mart_derivative_closes 12:29:29Z) ⇒ the DAILY
+      build was the only thing still building it. derivative_odds_raw grew 2,063 → 2,451 files
+      (+18.8%) in ten days, zero compacted, across 80 partitions.
+      ① COMPACTION — SHIPPED, gated on a MEASURED reader sign-off, not an argument. Driven over a
+      REAL duplicated partition (dt=2026-08-16, 42 real files) through the REAL SQL: the flatten
+      propagates duplication EXACTLY 2.00x (24,942 → 49,884 rows — no dedup, no amplification, so
+      it is NOT absorbed at the first hop the way mlb_odds_raw's is), and both readers of the
+      flattened output returned BYTE-IDENTICAL results (eval_cross_market 390 rows;
+      mart_derivative_closes 7,412). The 2.00x is the two-sided control that makes "identical" a
+      measurement rather than a vacuous pass. derivative_odds_raw therefore joins
+      COMPACTABLE_SOURCES with its OWN stated rationale (the script refuses a borrowed one), plus
+      a 09:10 UTC capture.crontab line. Dry-run proven on real partitions: 83 files → 2, 698 rows
+      preserved. Expected steady state ~2,451 → ~160 files (~15x).
+      ② THE MOVE — EXECUTED, not PREPARED: the spec's off-ramp ("if ① alone takes the tier
+      comfortably under budget") is REFUTED BY ARITHMETIC. OK needs <288s (60% of 480);
+      games+odds+events alone measure 175.0s, so ① would have to take stg_derivative_odds under
+      113s from >300s, and compaction removes only the BIND component while the flatten WORK
+      remains. The blocking fact resolved YES from CODE + measurement, not timing alone:
+      --w3pre-only has EXACTLY TWO callers (the tick leg and the daily lakehouse_w3pre_flatten_op),
+      so a 12:22Z build can only be the daily one ⇒ W11_W3PRE_DAILY is set on the box. Verified
+      independently that no intraday consumer is orphaned: --w6-odds-current re-registers
+      stg_oddsapi_odds as a RECENT-scoped flatten straight off the raw store, and events/derivative
+      feed only DAILY marts. The tick now passes --w3pre-serving-only (stg_statsapi_games alone);
+      the daily keeps the full tier; the two moved tables whose content is live join INC-41
+      freshness coverage at derived SLAs (odds 30h, derivative 40h) so a stopped daily builder
+      PAGES. ⛔ No recent-scoping (full-history tables). E11.26 budget constants untouched.
+      PROJECTED verdicts: intraday OK at 2.5% (12s of 480 — 97.5% headroom); daily OK at 26.4%
+      (475s of 1800). ⏭️ The DONE-MEANS-MEASURED confirmation is an operator step: the first
+      post-deploy tick's w3pre_tier_verdict read from the step log (§ handoff).
+      GUARDS: 16/16 breaks RED, 4/4 NOT-SELECTED controls GREEN, baseline green, unique anchors,
+      mutation-landed + token-gone checks. best_alpha=0; no model/board/serving change.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      (1) ⭐ THE THRESHOLD CANNOT FIRE IN THE STATE IT WAS BUILT FOR. w3pre_tier_verdict is
+      printed AFTER the model loop in _build_w3pre, so a leg KILLED at the cap never reaches it —
+      it warns on the way UP and goes SILENT once the tier is genuinely over, which is exactly
+      what 09-14 looked like. The #1076 threshold is therefore a leading indicator only; nothing
+      grades a TRUNCATED leg. Fix belongs in the intraday op (grade the leg when it times out) or
+      by emitting a partial verdict from the kill path. Recorded in the module comment, not built
+      here. (2) stg_oddsapi_events REBUILDS A FROZEN STORE: mlb_events_raw's last partition is
+      dt=2026-06-04 and no object has been written since 2026-06-28, yet the tick rebuilt it ~288
+      times/day and the daily still will. It is deliberately given NO freshness SLA (one would be
+      red forever), so it is now moved-but-unwatched BY DESIGN — a retirement candidate, and a PM
+      decision rather than an SLA. (3) A per-source SWEEP found a THIRD potential reader the
+      incident had not named (eval_derivatives.py) — it turned out to read mlb/props, not this
+      table, but the reader registries are now mechanical (raw-glob AND flattened-output) so a new
+      one must be vetted rather than inherited. (4) eval_cross_market is duplicate-idempotent
+      REDUNDANTLY (rn=1 AND max()); each was broken alone and the output stayed identical, so the
+      sign-off survives either half being edited — worth knowing before anyone "simplifies" it.
+      (5) test_lineup_intraday_wide_rebuild's ordering guard was COMMENT-SATISFIABLE (INC-38): the
+      RED proof deleted the W3pre leg and it stayed GREEN off a comment. Fixed here (comment
+      stripping); sibling source-inspection guards likely share the latent weakness. (6) Cosmetic:
+      compact_lakehouse_raw prints the POST-truncation count as "N eligible" when --max-partitions
+      is passed, so "3 eligible" can mean "78 eligible, 3 selected".

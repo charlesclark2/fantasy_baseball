@@ -72,6 +72,7 @@ __all__ = [
     "LIVE_LEGS",
     "RETIRED_LEGS",
     "invariant_failures",
+    "W3PRE_DAILY_TIMEOUT_SECONDS",
     "W3PRE_TIER_WARN_FRACTION",
     "W3preTierVerdict",
     "w3pre_tier_verdict",
@@ -155,7 +156,28 @@ def invariant_failures() -> list[str]:
 #: (stg_derivative_odds went 211.4 s → 299.0 s inside this incident) rather than minutes. It is
 #: deliberately NOT reverse-engineered from the observed 459 s: a threshold set just under the
 #: number that broke would fire only once, on the way past.
+#:
+#: ⚠️ RE-MEASURED 2026-09-14 (MLB-LAKE2): "days-to-weeks" was the right order of magnitude — the
+#: tier crossed the cap within ten days. On the 09-14 03:30Z tick `stg_derivative_odds` was KILLED
+#: at 480 s and never promoted (`derivative_odds_raw` had grown 2,063 → 2,451 files), so the tier
+#: was OVER, not merely WARN. ⭐ AND THE THRESHOLD CANNOT SAY SO IN THAT STATE: it is printed
+#: after the model loop in _build_w3pre, so a leg killed mid-tier never reaches it. This warns on
+#: the way UP and goes SILENT once the tier is genuinely over — do not read a quiet log as a
+#: healthy one. Making a killed leg still report is carded, not built here.
 W3PRE_TIER_WARN_FRACTION = 0.60
+
+#: The cap the W3pre tier is graded against on the DAILY path, mirroring the `timeout=` that
+#: `pipeline/ops/daily_ingestion_ops.lakehouse_w3pre_flatten_op` actually passes.
+#:
+#: ⚠️ NOT an intraday quantity and deliberately OUTSIDE the I1/I2/I3 invariants above: the daily
+#: build is a different job with a different ceiling, so bounding it by the 30-min tick's cadence
+#: would be meaningless. It is here because MLB-LAKE2 moved the daily-cadence odds staging off the
+#: tick, and a tier graded against the INTRADAY cap on the daily path would report OVER every day
+#: — a permanently-wrong signal, which is how a monitor gets ignored.
+#:
+#: This is the repo's "one logical thing, two owners" shape (INC-30 crontab, INC-36 concurrency),
+#: so the two are pinned equal by test_mlb_lake2_w3pre_tier.py rather than left to drift.
+W3PRE_DAILY_TIMEOUT_SECONDS = 1800
 
 
 class W3preTierVerdict(NamedTuple):

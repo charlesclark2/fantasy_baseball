@@ -62,6 +62,34 @@ tick — the favourable case):
 | **`stg_statsapi_games`** | **12 s** | `monthly_schedule` — 6 files | **yes — 90-min SLA** |
 | | **~459 s of a 480 s cap** | | |
 
+#### 3.1b RE-MEASURED 2026-09-14 (read 04:41Z) — the tier stopped fitting
+
+MLB-LAKE2 re-ran the same reconstruction ten days later, on the 2026-09-14 03:30Z tick (again a
+quiet overnight tick). **The prediction in §3.1 held and then some: the tier no longer fits at
+all.**
+
+| model | promoted (UTC) | cost | raw input, 2026-09-14 |
+|---|---|---|---|
+| `stg_statsapi_games` | 03:30:42 | ~12 s (unchanged) | `monthly_schedule` — 6 files / 67.6 MB |
+| `stg_oddsapi_odds` | 03:33:19 | **157.0 s** (was ~140) | `mlb_odds_raw` — 235 files / 162.6 MB / 130 parts |
+| `stg_oddsapi_events` | 03:33:25 | **6.0 s** | `mlb_events_raw` — 39 files / 1.7 MB ⚠️ **content frozen 2026-06-04** |
+| **`stg_derivative_odds`** | **never promoted** | **KILLED at the 480 s cap** | `derivative_odds_raw` — **2,451 files** (+18.8 % in 10 days) / 148.4 MB / 80 parts |
+
+⭐ **`stg_derivative_odds`' last successful build is 2026-09-13 12:22:41Z**, which is not a tick
+time (the tick crons are `*/30 14-23` and `0,30 0-3` UTC) — it is the **daily** build, corroborated
+by its downstream chain in the same window (`mart_odds_outcomes/_history` 12:23:36Z,
+`mart_derivative_closes` 12:29:29Z). So the intraday tick had stopped completing this tier
+altogether and the daily build was the only thing keeping the table alive.
+
+Two consequences the incident could not see yet:
+
+* **The `w3pre_tier_verdict` threshold shipped in §5 cannot fire in this state.** It is printed
+  *after* the model loop, so a leg killed mid-tier never reaches it. The threshold warns on the
+  way UP to the cap and goes silent once the tier is actually over it — worth knowing before
+  reading a quiet log as a healthy one.
+* **`stg_oddsapi_events` is rebuilt every 30 minutes from a store whose last partition is
+  `dt=2026-06-04`** (no object written since 2026-06-28). ~288 rebuilds/day of frozen data.
+
 **The serving-critical table costs 12 seconds.** It was killed because `W3PRE_STG_MODELS` built it
 **last**, behind ~447 s of staging that nothing reads intraday.
 
@@ -81,8 +109,12 @@ tick — the favourable case):
 ### 3.3 Why the growth is asymmetric between the two odds stores
 
 `mlb_odds_raw` **is** compacted — `compact_lakehouse_raw.py` runs daily at 08:40 UTC via
-`capture.crontab` and has taken it 1,859 → 225 files. `derivative_odds_raw` is **not**: it is
-absent from `COMPACTABLE_SOURCES` and from the cron, and has grown 6 → 813 → 1,123 objects/month.
+`capture.crontab` and has taken it 1,859 → 225 files (2026-09-04; **235 files / 130 `dt=`
+partitions** on 2026-09-14 — the steady state is one file per closed partition plus the
+`--min-age-days` live tail, so the count tracks the partition count, not the fire count).
+`derivative_odds_raw` is **not**: it is absent from `COMPACTABLE_SOURCES` and from the cron, and
+has grown 6 → 813 → 1,123 objects/month (**2,451 files across 80 partitions, zero compacted**, on
+2026-09-14).
 INC-42 built the cure and applied it to one of the two append-only 30-minute capture stores. This
 is the repo's recurring **one logical thing, many owners** shape (INC-30 crontab, INC-36
 concurrency, INC-38 per-caller flags), here as a compaction allowlist.
@@ -160,7 +192,13 @@ season. It would be consumed in weeks, and it would spend the slack that stops t
 
 ## 7. Follow-ups (PM triage)
 
-1. **`derivative_odds_raw` compaction** — the largest single cost in the tier (299 s, 2,063 files).
+> ✅ **1 and 2 below are DONE — MLB-LAKE2, 2026-09-14** (see §3.1b for the re-measurement that
+> sized them). `derivative_odds_raw` is allowlisted for compaction after a MEASURED reader
+> sign-off, and the three daily-cadence odds models have left the 30-min tick, with the two whose
+> content is live joining INC-41 freshness coverage at their daily cadence. 3 and 4 remain open.
+
+1. ~~**`derivative_odds_raw` compaction**~~ — **DONE (MLB-LAKE2).** The largest single cost in the
+   tier (299 s, 2,063 files; **2,451 files by 09-14**).
    Requires: a per-source reader argument (the script **refuses a borrowed rationale**), an
    allowlist entry, an operator `--apply`, and a crontab line. **Partial analysis done:**
    `mart_derivative_closes` *is* duplicate-idempotent (`row_number() ... = 1` over
@@ -168,7 +206,12 @@ season. It would be consumed in weeks, and it would spend the slack that stops t
    the promote-then-delete duplicate window is a no-op for it. ⚠️ But `stg_derivative_odds` itself
    has **no dedup**, and `eval_cross_market.py` reads its parquet and does its own closing
    selection — that reader must be signed off before the source is allowlisted.
-2. **Move the three odds staging models out of the intraday tick entirely.** They are daily-cadence.
+2. ~~**Move the three odds staging models out of the intraday tick entirely.**~~ — **DONE
+   (MLB-LAKE2).** The fact below was verified from the code + the S3 timestamps: `--w3pre-only`
+   has exactly two callers, and the 09-13 12:22:41Z build of `stg_derivative_odds` is outside
+   every tick window, so it can only be `lakehouse_w3pre_flatten_op` — i.e. the daily build DOES
+   run. The tick now passes `--w3pre-serving-only`; the daily keeps the full tier; the moved
+   tables page if that daily builder stops. They are daily-cadence.
    ⚠️ **Blocked on a fact to verify first:** `W11_W3PRE_DAILY` is default-OFF and **not in
    `env.required`**, so the daily w3pre build may be skipped — in which case the intraday tick is
    currently the *only* builder and removing them would freeze them. Check the box's live value

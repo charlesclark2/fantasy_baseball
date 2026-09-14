@@ -154,6 +154,9 @@ SHELL=/bin/bash
 # for the small w3pre sources. That bind is INC-42's standing lead (both RequestTimeTooSkewed
 # failures were on this source, both at :00) and an unbounded-growth defect in its own right.
 # After the first full pass: 1,859 files → 98, and the same bind measured 1.57s.
+# (Steady state MEASURED 2026-09-04: 225 files; 2026-09-14: 235 files / 130 dt= partitions —
+#  one file per closed partition plus the --min-age-days live tail, so the count tracks the
+#  PARTITION count, not the fire count.)
 # ⛔ ROW-PRESERVING, NOT RETENTION — nothing is deleted. The odds snapshot TRAJECTORY is the
 # signal (mart_odds_line_movement / mart_bookmaker_disagreement), so dropping old snapshots would
 # destroy data the program uses; this only collapses many files into one.
@@ -167,6 +170,27 @@ SHELL=/bin/bash
 # compaction to tomorrow's run, and the guards mean a failed run cannot cost data (originals are
 # deleted only after the compacted object is re-read from S3 and verified).
 40 8 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/compact_lakehouse_raw.py --source mlb_odds_raw --apply >> /home/ec2-user/capture-cron.log 2>&1
+
+# ── the SECOND append-only odds store (MLB-LAKE2, 2026-09-14) ────────────────
+# INC-42 built the cure above and applied it to ONE of the two 30-min odds captures. The
+# derivative capture (the */30 line further up) appends the same way, was never allowlisted and
+# never crontabbed, and by 2026-09-14 lakehouse_raw/derivative_odds_raw held 2,451 files across
+# 80 partitions with ZERO compacted — the largest single cost in the W3pre tier and the reason
+# MLB-INC-0904's 480 s leg stopped fitting (measured: stg_derivative_odds KILLED at the cap on
+# the 09-14 03:30Z tick). This is the repo's "one logical thing, many owners" shape (INC-30
+# crontab, INC-36 concurrency, INC-38 per-caller flags) wearing an allowlist as its costume.
+# ⚠️ THE WRITE-ORDER RATIONALE IS THIS SOURCE'S OWN, NOT mlb_odds_raw's. The only reader of this
+# glob is the stg_derivative_odds flatten and it does NOT dedup, so the promote-then-delete
+# duplicate window is absorbed one level DOWN, by mart_derivative_closes and
+# eval_cross_market.py — both measured over a real duplicated partition, both byte-identical.
+# See COMPACTABLE_SOURCES in compact_lakehouse_raw.py.
+# 09:10 UTC: 30 min after the mlb_odds_raw pass so the two never contend on a 2-vCPU box, still
+# inside the INC-36 quiet window, and clear of the intraday tick windows (*/30 14-23, 0,30 0-3)
+# and the ~12:00 daily build. --min-age-days 2 keeps the live partition out of scope.
+# ⏭️ The FIRST pass (66 partitions / ~2,437 files) is an OPERATOR run, not this cron's job —
+# steady state here is ~1 partition/run.
+# TIER: maintenance / log-only, exactly as above — a failure defers compaction to tomorrow.
+10 9 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/compact_lakehouse_raw.py --source derivative_odds_raw --apply >> /home/ec2-user/capture-cron.log 2>&1
 
 # ── OPTIONAL (interim, until P4): refresh SERVED odds prices ──────────────────
 # P3 restores the RAW odds feed (above) → mlb_odds_raw is current. But DISPLAYED
