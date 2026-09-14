@@ -6,7 +6,7 @@ changes no data, `aws s3 ls` prints SHELL-LOCAL time (a ~5-6h phantom staleness)
 server-side copy refreshes an mtime even when the bytes are unchanged. The timestamps used here are
 the ones the BUILDER wrote into the manifest.
 
-⭐ TWO DIFFERENT FAILURES, AND THE SECOND IS THE DANGEROUS ONE.
+⭐ THREE DIFFERENT FAILURES, AND THE LAST TWO ARE THE DANGEROUS ONES.
 
   * `generated_at` frozen ⇒ the build stopped running. A staleness bar catches this.
   * `week` BEHIND the schedule ⇒ the build is running fine and serving LAST WEEK'S projection. Every
@@ -14,6 +14,11 @@ the ones the BUILDER wrote into the manifest.
     played. This is the INC-37 shape — a month-boundary hole that made every clock-based instrument
     read green while the served universe was a month stale — and no staleness bar can see it,
     because the artifact IS advancing. `week_behind` is the check that can.
+  * NOTHING ever published ⇒ there is no artifact to read a week or a timestamp off, so neither of
+    the checks above can fire — they are BOTH unreachable in the state a season's first publish is
+    in. `NOTHING_PUBLISHED` is the check that can, and it exists because 2026 week 1 was lost in
+    exactly that gap: a daily WARN whose text, severity and dedup key were identical on the benign
+    morning and on the morning the slate was already being played.
 
 ⚠️ ACTIVE ONLY WHEN THERE IS A WEEK TO PROJECT. The NFL REG season runs ~September to early January;
 for the other seven months there is no upcoming week and the artifact SHOULD be static. An SLA that
@@ -62,6 +67,23 @@ STALE_BEFORE_KICKOFF_HOURS = 48.0
 #: while the Monday nighter is in play, which is the false alarm this whole change exists to
 #: remove. When one direction is cheap and the other is the bug, size for the cheap one.
 SLATE_COMPLETE_GRACE_HOURS = 30.0
+
+#: How close to the expected week's FIRST KICKOFF "we have published nothing at all" stops being a
+#: cadence note and becomes CRITICAL.
+#:
+#: ⭐ DERIVED, NOT INVENTED. `STALE_BEFORE_KICKOFF_HOURS` already states the program's position that
+#: a PUBLISHED projection which has not been rebuilt inside that window of kickoff is stale. Having
+#: NO servable artifact at all inside the same window is at least as serious, so the two share one
+#: number BY CONSTRUCTION and cannot drift into disagreeing. A second hand-picked threshold would be
+#: a second thing to keep true, and the repo's own rule is to derive a bar from a design quantity
+#: rather than pick one.
+#:
+#: ⚠️ `schedules.gameday` is a DATE, so the kickoff this is measured against is midnight UTC on the
+#: slate's first day — roughly 20h EARLIER than a real Thursday-night kickoff. The window is
+#: therefore ~68h of true lead time, not 48h. That errs EARLY, which is the cheap direction here:
+#: an extra day of notice on a genuine miss costs nothing, and this verdict cannot fire at all once
+#: anything has been published.
+NOTHING_PUBLISHED_CRITICAL_HOURS = STALE_BEFORE_KICKOFF_HOURS
 
 
 def sla_hours() -> float:
@@ -125,6 +147,7 @@ def is_active_window(expected_week: int | None) -> bool:
 
 def classify(reading: WeeklyReading, *, expected_week: int | None,
              served_slate_ends: datetime | None = None,
+             expected_kickoff: datetime | None = None,
              now: datetime | None = None) -> dict:
     """The verdict. Never raises, never pages — the caller decides what to do with it.
 
@@ -145,6 +168,12 @@ def classify(reading: WeeklyReading, *, expected_week: int | None,
 
     ⚠️ ABSENT ⇒ NOT BENIGN (NF1.7(a)). With no slate end the mismatch is judged exactly as before —
     a check that cannot establish the benign case must not assume it.
+
+    ⭐ `expected_kickoff` IS WHAT LETS THE NO-ARTIFACT CASE ESCALATE. It is optional, and when it is
+    absent the unreadable case stays WARN — never silently cleared, and never escalated on a
+    deadline this call could not establish (NF1.7(a) in both directions). Supplying it is the
+    caller's job precisely because it must come from the SCHEDULE and not from the artifact being
+    judged, which does not exist in the case it governs.
     """
     now = now or datetime.now(timezone.utc)
 
@@ -155,10 +184,44 @@ def classify(reading: WeeklyReading, *, expected_week: int | None,
 
     if not reading.readable:
         # ⛔ UNREADABLE IS NEVER HEALTHY (NF1.7(a)).
+        #
+        # ⭐⭐ AND IT MUST BE ABLE TO ESCALATE, which until NF-WK-FE1 it could not. Every other
+        # finding this module makes — WRONG_WEEK, STALE, STALE_INTO_KICKOFF — reads a field OFF the
+        # artifact, so all three are structurally unreachable while there IS no artifact. That is
+        # precisely the state a season's FIRST publish is in, and it is the state in which 2026 lost
+        # week 1: the builder skipped `EXIT_AWAITING_ROSTERS` every morning (correctly, and never
+        # silently), while this check answered UNKNOWN/WARN with the same text, the same severity and
+        # the same dedup key on the benign day AND on the day that slate was already being played.
+        # A verdict that cannot change as its deadline approaches teaches the operator to ignore it —
+        # the muted-monitor pattern this module's own docstring warns about, reached from the one
+        # direction it had not covered. The build op's comment names this check as the thing that
+        # "escalates if it persists"; before this branch, that was true only after a first publish.
+        #
+        # Malformed counts the same as absent on purpose: approaching kickoff, "we cannot read it"
+        # and "it is not there" have one product outcome — nothing servable.
+        if (expected_kickoff is not None
+                and now >= expected_kickoff - timedelta(hours=NOTHING_PUBLISHED_CRITICAL_HOURS)):
+            to_kick = (expected_kickoff - now).total_seconds() / 3600.0
+            when = (f"kicks off in {to_kick:.1f}h" if to_kick > 0
+                    else f"kicked off {abs(to_kick):.1f}h ago")
+            return {"verdict": "NOTHING_PUBLISHED", "severity": "CRITICAL", "lag_hours": None,
+                    "detail": (f"NOTHING is published for {reading.season} and week "
+                               f"{expected_week} {when} — the weekly page has no projection to "
+                               f"serve. Read: {reading.error or 'no generated_at'}. The daily build "
+                               "declines to publish until the target week's game-day rosters land, "
+                               "so the likely causes are (a) those rosters have genuinely not "
+                               "published upstream yet, or (b) our own ingest/schedule is not "
+                               "advancing — and (b) is the one that is actionable now. Check the "
+                               "newest week present in `weekly_rosters` and that "
+                               "`sports_nfl_weekly_serving_schedule` is RUNNING and firing.")}
         return {"verdict": "UNKNOWN", "severity": "WARN", "lag_hours": None,
                 "detail": (f"could not read the published weekly manifest for {reading.season}: "
                            f"{reading.error or 'no generated_at'}. Reported UNVERIFIED rather than "
-                           "healthy — a check that could not run is not a check that passed.")}
+                           "healthy — a check that could not run is not a check that passed."
+                           + ("" if expected_kickoff is not None else
+                              " ⚠️ No expected kickoff was supplied, so this could not be judged "
+                              "against week " f"{expected_week}'s deadline; it stays WARN rather "
+                              "than being escalated OR cleared."))}
 
     lag = (now - reading.generated_at).total_seconds() / 3600.0
 

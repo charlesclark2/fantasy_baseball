@@ -243,13 +243,23 @@ def nfl_weekly_freshness_op(context):
     # staleness bar can make, because a build that runs fine on last week's slate has every
     # timestamp healthy while serving a played game.
     expected_week = None
+    expected_kickoff = None
     sched = None
     try:
         from quant_sports_intel_models.football.nfl.ingest.query_lake import delta, q
 
         sched = q(f"select season, week, gameday from {delta('schedules')} "
                   f"where season = {season} and game_type = 'REG'")
-        expected_week = WS.resolve_target_week(sched).week
+        target = WS.resolve_target_week(sched)
+        expected_week = target.week
+        # ⭐ THE KICKOFF IS CARRIED, NOT DISCARDED — it is what lets `classify` escalate the
+        # NOTHING-PUBLISHED case. Before a season's first successful publish, every other finding
+        # the monitor can make reads a field off an artifact that does not exist yet, so without
+        # this the verdict is pinned at UNKNOWN/WARN no matter how close the slate is. That is how
+        # 2026 week 1 was lost quietly. `resolve_target_week` already computed it; only the `.week`
+        # was being kept.
+        expected_kickoff = getattr(target.first_kickoff, "to_pydatetime",
+                                   lambda: target.first_kickoff)()
     except WS.WeeklyServingError:
         # No upcoming REG week: the artifact is correctly static and no SLA applies.
         expected_week = None
@@ -280,7 +290,8 @@ def nfl_weekly_freshness_op(context):
                                 "wk %s (%s) — judging the mismatch without it", reading.week, exc)
 
     verdict = WF.classify(reading, expected_week=expected_week,
-                          served_slate_ends=served_slate_ends)
+                          served_slate_ends=served_slate_ends,
+                          expected_kickoff=expected_kickoff)
 
     context.log.info("[METRIC] nfl_weekly_freshness=%s lag_hours=%s",
                      verdict["verdict"], verdict["lag_hours"])
