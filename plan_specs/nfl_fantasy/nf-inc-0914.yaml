@@ -189,7 +189,20 @@ spec:
       daily one — the cadence falls to weekly Mondays after it, so a missed
       Tuesday costs a week of verify window, which is why re-running TODAY
       is the recommendation.
-      (5) Pre-existing, NOT touched: a SyntaxWarning-raising regex fragment
+      (5) ⭐ THE RESTORE HAS A CONTENT-BASED SUCCESS SIGNAL STRONGER THAN A
+      TIMESTAMP, and the BEFORE snapshot is recorded here so the operator
+      has something to compare against. Read at 2026-09-14T17:2xZ, the
+      SERVED manifest was: generated_at 2026-09-14T04:46:10Z (~12.6h old),
+      `designationDiscountStamp` PRESENT but carrying `records_what` and NO
+      `rows_discounted` key, eligible_rows 60, coherence.violating_players
+      8, adp_as_of 2026-09-13, ecr_as_of 2026-09-10. AFTER a successful
+      restore, `rows_discounted` MUST BE PRESENT on the stamp — that key
+      exists only on the #1104 code path, so its presence proves THE FIXED
+      CODE RAN, which a `generated_at` advance alone does not (a re-publish
+      of older code would also move the timestamp). Check the key, then the
+      timestamp. ⛔ Never an S3 `LastModified` — shell-local time, and a
+      server-side copy refreshes the mtime without changing the data.
+      (6) Pre-existing, NOT touched: a SyntaxWarning-raising regex fragment
       in test_nf_c8_availability_flag_copy.py:211's docstring, surfaced
       (not caused) by the new guard's sibling-file AST scan; suppressed
       locally rather than editing another story's file.
