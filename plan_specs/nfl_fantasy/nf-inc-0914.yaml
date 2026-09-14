@@ -120,12 +120,30 @@ spec:
       TEXT via `assert call in src` and `inspect.getsource(EX.main)`) and
       the ship battery imports it for helpers only, its --verify-published
       arm being DOWNSTREAM of the step that crashed.
+      ⭐ PROVEN BY THE SERVED ARTIFACT, NOT ONLY BY COMMIT TIMESTAMPS: the
+      live board (`generated_at` 2026-09-14T04:46:10Z = 09-13 21:46 PT)
+      carries a `designationDiscountStamp` whose only extra key is
+      `records_what` — the #1100 field — and carries NONE of the keys #1104
+      added (`rows_discounted`, `designated_rows_at_build`,
+      `feed_readable_at_build`). The break was AUTHORED 28 minutes after
+      that publish finished and merged to main 42 minutes after it. The
+      served bytes date themselves to pre-#1104 code.
       FIX: one token, `season=season` -> `season=args.season`. A scope check
       over the whole module confirms it was the only name in the file that
       resolved nowhere. Nothing else about the call changed; best_alpha=0.
-      NF-INJ1 [ALERT]: 11 coherence-violating players — UNCHANGED against
-      the 11 recorded in nf_inj2b_preregistration.md (2026-08-27). Not
-      chased, not suppressed, no tolerance touched.
+      NF-INJ1 [ALERT]: 11 coherence-violating players on the crashed run
+      against **8** on the last board that actually published (read from
+      the SERVED manifest's `coherence.violating_players`, generated
+      2026-09-14T04:46:10Z) — so the count MOVED +3. Context, not a
+      conclusion: nf_inj2b_preregistration.md recorded 11 on 2026-08-27, so
+      11 is inside the range this give-back has already been observed at.
+      Per the spec the number is NOTED AND STOPPED THERE — not chased, not
+      suppressed, no tolerance touched; its owning thread is the
+      calendar-parked NF-INJ2c re-test. ⚠️ A first pass compared 11 against
+      the PRE-REGISTRATION's 11 and read it as unchanged; the spec asks for
+      the comparison against THE LAST PUBLISH, which is the served board,
+      and that is 8. Recorded because the wrong baseline made a moving
+      count look static.
     followUps: >
       (1) ⭐ THE FINDING THAT OUTLIVES THE INCIDENT — A FIX CAN RELOCATE A
       BLIND SPOT INSTEAD OF CLOSING IT, AND THE NEXT EDIT FINDS IT. The
