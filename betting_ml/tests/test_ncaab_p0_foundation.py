@@ -288,6 +288,52 @@ class TestOddsCaptureMergeCannotDestroyHistory:
         assert sum(fires) == 1, f"expected exactly one futures tick a day, got {sum(fires)}"
 
 
+# ── 6b. a current-season-only upstream must not page daily ──────────────────────────────
+class TestTheCrosswalkAbsenceIsNotAnEscalation:
+    """NCAAB-P0 runtime gate. MEASURED 2026-09-14: hoopR publishes the team crosswalk for
+    exactly ONE season at a time — only `2026` existed; 2024, 2025 AND 2027 were all 404.
+
+    So for that source a 404 carries no information about health, and escalating on it was
+    harmful in two measured ways: a historical backfill escalated on 4 of 5 seasons and exited
+    1 on a completely healthy run, and from the season's first tip the DAILY job would have
+    raised every day until hoopR rolled the file forward — paging CRITICAL through
+    `run_failure_alert_sensor` on a benign upstream lag, for weeks, right when the season starts.
+    """
+
+    def test_the_crosswalk_is_declared_current_season_only(self):
+        assert S.SOURCES["team_crosswalk"].current_season_only is True
+
+    @pytest.mark.parametrize("season,when,label", [
+        (2027, date(2026, 11, 3), "at first tip — the daily-page case"),
+        (2027, date(2027, 2, 1), "mid-season"),
+        (2022, date(2026, 9, 14), "a historical backfill"),
+    ])
+    def test_a_404_never_escalates_for_it(self, season, when, label):
+        assert S.classify_absence(S.SOURCES["team_crosswalk"], season, when=when) is None, label
+
+    @pytest.mark.parametrize("name", ["schedules", "team_box"])
+    def test_BUT_an_ordinary_source_still_escalates_in_season(self, name):
+        """⭐ THE LOAD-BEARING HALF. A one-sided test would pass just as happily on a
+        `classify_absence` that had been blanket-disabled, which is the NF1.7(a) vacuous-anchor
+        class — the exemption must be scoped to the sources that earned it."""
+        msg = S.classify_absence(S.SOURCES[name], 2027, when=date(2026, 11, 3))
+        assert msg is not None and "ABSENT" in msg
+
+    def test_only_the_crosswalk_carries_the_exemption(self):
+        """Pin the registry: a future source must not pick this up by copy-paste."""
+        exempt = {n for n, spec in S.SOURCES.items() if spec.current_season_only}
+        assert exempt == {"team_crosswalk"}, f"unexpected exemption(s): {exempt}"
+
+    def test_the_crosswalk_has_NO_freshness_contract_and_that_is_deliberate(self):
+        """The obvious follow-on ("move the watching to a freshness SLA") is wrong, and INC-45
+        already paid for it: an SLA on a deliberately-static artifact pages on a healthy file.
+        Between hoopR's rolls NOTHING writes this table, legitimately, for weeks. The reasoning
+        is recorded in ncaab_freshness.py so the gap is not read as an oversight."""
+        assert "ncaab_team_crosswalk" not in {c.name for c in nf.DECLARED}
+        src = (REPO / "betting_ml/monitoring/ncaab_freshness.py").read_text()
+        assert "HAS NO CONTRACT HERE, AND THAT IS A DECISION" in src
+
+
 # ── 7. the paid feeds cannot run by accident ────────────────────────────────────────────
 #
 # 🔴 THE FIRST VERSION OF THIS CLASS COULD NOT FAIL, and it let a real defect ship. It asserted

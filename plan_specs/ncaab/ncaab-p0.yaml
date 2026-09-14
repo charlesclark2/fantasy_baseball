@@ -9,7 +9,7 @@ metadata:
   name: ncaab-p0
   vertical: ncaab
   card: https://trello.com/c/ItLo7klu
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     Stand up the NCAAB data foundation the way NCAAF's was stood up,
@@ -156,19 +156,25 @@ spec:
         desc: "Audit verdict + credit arithmetic + P1 readiness statement into closeout.followUps; operator summary."
   closeout:
     verdict: >
-      ⏸️ HELD OPEN AT IN_PROGRESS BY PM RULING (2026-09-14), AND THE REASON IS THE
-      ONE THING THIS STORY CANNOT VERIFY ITSELF. All five nodes are complete and
-      the audit verdict is ACCEPTED as measured, but CI mocks all IO, so the first
-      write to the ncaab/ S3 prefix has never executed. Green CI is
-      necessary-not-sufficient for exactly this class (E8.5: a first write to a
-      prefix a role has only ever READ needs a fresh IAM grant, and it is invisible
-      until a live run). The spec closes when a real
-      sports_ncaab_ingest_schedule fire lands rows and the marts build over them —
-      verified from ARTIFACT CONTENT, never from a green run status. Everything
-      below is the record of what was built and measured.
+      ✅ RUNTIME GATE PASSED 2026-09-14 — verified from ARTIFACT CONTENT, never from a
+      green run status. The box wrote the ncaab/ S3 prefix on its first attempt
+      (`Found credentials from IAM Role: credence-dagster-ec2-role` -> 1,629 rows),
+      so NO IAM grant was needed and the E8.5 risk did not materialise; the box's
+      DuckDB reaches hoopR over HTTPS; the lake reads back with a capture_timestamp
+      from the firing hour; and the full mart chain builds — 6 models, 23 tests,
+      22 success + 1 warn (28 passes + 1 warn), reproducing the recorded
+      PASS=28/WARN=1/ERROR=0 exactly. The P1 surface is real: 69.1-69.6
+      possessions/team-game across 2022-26 with zero possessions_unusable rows,
+      off-rating rising 101.8 -> 108.1 by season (and ORtg == DRtg per season, which
+      is the correct identity — league-wide every possession scored is one allowed),
+      454 team-versions with 80 teams multi-version, and Arizona correctly reading
+      Pac-12 (21) for 2022-24 then Big 12 (8) from 2025.
 
-      SHIPPED (pending that gate). All five nodes complete, verified against real
-      data rather than fixtures. (1) CAPTURES: every Odds-API unit price measured on live
+      ⭐ THE GATE EARNED ITS KEEP: it found THREE defects, none of which any gate
+      that runs before merge could see (CI mocks all IO). See followUp 10.
+
+      SHIPPED. All five nodes complete, verified against real data rather than
+      fixtures. (1) CAPTURES: every Odds-API unit price measured on live
       x-requests headers and reconciled against an independent free-/sports
       bracket — the two instruments AGREED exactly on every leg. 787 credits
       spent total (0.0164% of a 4,812,933 balance — the session balance delta;
@@ -206,10 +212,9 @@ spec:
       the same catastrophe reached by the error path). Re-verified on a real
       Delta tree: three captures, 3 rows, 3 distinct stamps, re-merge idempotent.
 
-      ⚠️ TWO THINGS ARE NOT DONE AND ARE NAMED RATHER THAN IMPLIED: the box
-      runtime gate (CI mocks all IO, so the first write to the ncaab/ S3 prefix
-      is unverified and may need an IAM grant — the E8.5 class), and the capture
-      enablement itself.
+      ⚠️ ONE THING IS NOT DONE AND IS NAMED RATHER THAN IMPLIED: the capture
+      enablement (PM-recommended ON; the operator's action). The box runtime gate
+      is now PASSED — see the top of this verdict.
     followUps: >
       1) ⭐ THE BRIEF'S "NOW-OR-NEVER" FRAMING FOR FUTURES IS CORRECTED BY
       MEASUREMENT, and it changes the decision calculus rather than just a
@@ -291,6 +296,62 @@ spec:
       justification rather than as a bare "deferred". (c) THE BOX RUNTIME GATE:
       the only calendar-bound item and the one this spec is held open on — see
       the verdict.
+
+      10) 🔬 WHAT THE RUNTIME GATE ITSELF FOUND — three defects, and the common
+      shape is that each is invisible to every gate that runs before merge.
+
+      (a) 💣 THE DELTA SCHEMA IS DONATED BY WHICHEVER SEASON IS WRITTEN FIRST, AND
+      PRODUCTION WRITES THE WORST POSSIBLE DONOR. The daily job writes
+      season_for() — the CURRENT season, which out of season has no games played.
+      hoopR's pre-season 2027 schedule file has 83 columns instead of 86 and carries
+      game_json_url as an all-null INT32 (it is VARCHAR in every played season). Our
+      first S3 write was 2027, so the Delta column pinned to Int32 and EVERY real
+      season then failed: "Cannot cast string 'https://...' to value of Int32 type".
+      A whole backfill blocked by one degenerate column. ⭐ IT HID BECAUSE
+      DEVELOPMENT WROTE ASCENDING (2022 -> 2027) — a complete season donated the
+      schema and the pre-season file conformed — WHILE PRODUCTION WRITE ORDER IS THE
+      REVERSE. Blast radius measured at exactly ONE column (all 83 checked); the
+      three MISSING columns were absorbed correctly by schema_mode="merge", so only
+      the TYPE conflict errored. FIXED in the SHARED write path
+      (s3io._stabilise_all_null_columns): an all-null column carries no values, so
+      its declared type is meaningless and must never decide anything — adopt the
+      existing table's type when the table exists (which can only turn a would-be
+      conflict into a no-op, hence safe for the in-season NFL/NCAAF tables), and
+      fall back to string when it does not. RED-proven: removing the call reproduces
+      the production error verbatim.
+
+      (b) 📅 A CURRENT-SEASON-ONLY UPSTREAM WOULD HAVE PAGED CRITICAL EVERY DAY FROM
+      FIRST TIP. MEASURED: hoopR publishes the team crosswalk for exactly ONE season
+      at a time (only 2026 existed; 2024, 2025 AND 2027 all 404). classify_absence
+      escalates any in-season 404, so from ~2026-11-03 the daily job would have
+      raised every day until hoopR rolled the file — and a historical backfill
+      already escalated on 4 of 5 seasons, exiting 1 on a healthy run. FIXED with a
+      SourceSpec.current_season_only flag, pinned two-sided (schedules/team_box must
+      STILL escalate in season — a one-sided test passes just as happily on a
+      blanket-disabled classifier). ⛔ AND THE OBVIOUS FOLLOW-ON IS REFUSED ON
+      PURPOSE: no freshness contract was added for the crosswalk, because between
+      hoopR's rolls NOTHING writes it, legitimately, for weeks — an SLA there pages
+      on a healthy file (INC-45's deliberately-static lesson). The instrument that
+      actually answers the question is dim_ncaab_conference.name_unresolved, a
+      CONTENT check at the point of use. Recorded in ncaab_freshness.py so the gap
+      is not later "fixed" into a false page.
+
+      (c) 🧨 `dbt build --select ncaab` SEGFAULTS dbt-fusion 2.0.0-preview.218, and
+      it is NOT our SQL and NOT the data. Compile is 29/29 on both targets,
+      deterministically; the EXACT compiled SQL over the SAME S3 Delta tables runs
+      3/3 clean on one python DuckDB 1.5.3 connection with correct row counts. The
+      fusion binary crashes nondeterministically (SIGSEGV 139 / SIGTRAP 133).
+      ⭐ TWO KNOBS ARE NOT THE FIX AND BOTH LOOK LIKE IT: --threads 1 still crashes,
+      and memory_limit reads as a clean OOM story off a single run (2GB passed once)
+      until you re-run it — 2GB then crashed 2 of 3 and 4GB PASSED 1 of 3. A single
+      green run "proves" whichever knob you happened to turn; this was one edit away
+      from shipping as a recommendation. WORKING RECIPE (deterministic, 2/2 trials
+      plus the operator's confirming run): one model per invocation, in dependency
+      order. docs/ncaab_p0_dbt_build.md. ⚠️ NOT SOLVED, and named rather than
+      implied: there is NO NCAAB Dagster dbt job at all, so the marts never rebuild
+      on the box; a future one cannot use a single dbt build; and whether the box's
+      dbt-runner container crashes on this workload is UNKNOWN AND UNTESTED —
+      establish it before anything serves off these marts.
 
       9) 🚨 A DEFECT FOUND WHILE WRITING THE RUNTIME-GATE HANDOFF, and it would have
       fired on the first deploy. The free daily ingest job's docstring says "The
