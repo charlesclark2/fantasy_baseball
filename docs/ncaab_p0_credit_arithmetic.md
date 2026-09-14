@@ -18,8 +18,14 @@ Every paid call was measured **twice, independently**:
 That agreement is the evidence. This discipline exists because NF-CAP1 recorded figures that
 were **10× too high** by reasoning from the vendor's documented multiplier instead of measuring.
 
-**Total spent establishing all of this: 775 credits — 0.016% of the balance.**
-Balance at probe open: **4,812,933** remaining (187,067 used).
+**Total spent establishing all of this: 787 credits — 0.0164% of the balance.**
+Balance at probe open **4,812,933**; balance after the whole session **4,812,146**.
+
+> That 787 is the BALANCE DELTA across the session, not a sum of the per-leg brackets. A
+> first draft of this line said 775 by adding the legs up, and re-reading the live balance
+> showed 12 credits the leg-sums did not account for — calls made between brackets while
+> exploring. The delta is the figure to trust: it cannot miss a call, and a spend figure that
+> is reconstructed rather than measured is exactly the habit this document exists to break.
 
 ## 1. Measured unit prices
 
