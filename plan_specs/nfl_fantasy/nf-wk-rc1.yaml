@@ -473,3 +473,42 @@ spec:
       chain was driven end-to-end (see the ③ block above for the four hops).
       followUp 3 is PM-carded as yOhLHprC; its consequence for this story is
       handled per ④.
+
+      ── ⑪ ⚠️ THE BOX EXECUTES `app/backend` CODE, AND THE BOX DEPLOY IS NOT
+      TRIGGERED BY IT — A DECISION FOR THE PM, BECAUSE THE FIX AMENDS ANOTHER
+      STORY'S RATIFIED CLAUSE. `orchestration_cd.yml` deliberately excludes
+      `app/backend/**`, pinned by
+      `test_orchestration_cd_paths.py::test_the_lambda_and_frontend_are_not_wired_to_the_box_deploy`,
+      on the reasoning that the API ships via `deploy.sh` and wiring it to the box
+      would read as though merging deployed the API (the NF-C0 skew
+      misconception, which has cost real outages). ⛔ That clause's premise —
+      "a change the box does not run" — IS NO LONGER TRUE, and THIS STORY is what
+      made it untrue. MEASURED by transitive import closure, not read: before
+      RC1 the box reached TWO `app/backend` modules (`models/nfl_weekly.py`,
+      `services/projection_fields.py`, via `run_weekly_serving`, so the gap
+      itself dates to NF-C6-PH2); RC1's `realized_week.py` widened that to SIX
+      by importing the scorer and the recap adapter.
+      ⭐ THE LIVE EXPOSURE IS NARROWER THAN IT SOUNDS, and the honest version is
+      the useful one: a ONE-SCORER change necessarily also touches
+      `quant_sports_intel_models/fantasy_engine/`, which IS a trigger path, so
+      the box rebuilds anyway and the scorer is largely self-protecting. What is
+      genuinely unprotected is a change touching ONLY
+      `app/backend/{services,models}` — and there is a concrete one:
+      `EXPLANATION_COLUMNS` derives from `EXPLAINABLE_CAPTURED_TERMS` in
+      `weekly_recap.py`, and `realized_week.required_columns()` reads it to
+      decide which lake columns the published artifact CARRIES. A box on a stale
+      image would publish an artifact missing a column, silently — which
+      `realized_week`'s own header records as "how the split shipped as a no-op
+      once".
+      ⇒ THE OPTIONS, neither of which is safe as stated: (a) add
+      `app/backend/{services,models}/**` to the trigger set and AMEND the NF-K1
+      clause to forbid the ROUTER/API-only paths rather than all of
+      `app/backend` — keeps the NF-C0 intent (merging still does not deploy the
+      API, because the routers are not there) while closing the staleness, at the
+      cost of API-only service edits rebuilding the box; (b) leave it and accept
+      that those six modules can go stale on the box while CI is green.
+      ⛔ I DID NOT TAKE IT. What ships instead is a TRIPWIRE
+      (`test_the_box_reached_app_backend_surface_has_not_widened`) pinning the
+      measured closure, so a SEVENTH module becomes a loud decision rather than a
+      silent one, plus its two-sided partner that retires the section if the
+      exclusion is ever lifted.

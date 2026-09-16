@@ -569,3 +569,111 @@ def test_the_two_totals_keep_different_names_on_the_wire():
         "RecapTeam grew a bare `total`. One name for two different facts is how the standings "
         "record and our explanation of it get treated as interchangeable."
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 8 — THE BOX EXECUTES `app/backend` CODE, AND THE BOX DEPLOY IS NOT TRIGGERED BY IT
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⚠️ A TRIPWIRE, NOT A FIX — and the distinction is the point, because the fix is a decision this
+# story does not get to take alone.
+#
+# `orchestration_cd.yml` deliberately EXCLUDES `app/backend/**`, and
+# `test_orchestration_cd_paths.py::test_the_lambda_and_frontend_are_not_wired_to_the_box_deploy`
+# pins that exclusion with a good reason: the API ships via `infrastructure/lambda/deploy.sh`, and
+# wiring it to the box deploy would read as though merging deployed the API — the NF-C0 skew
+# misconception, which has cost this repo real outages.
+#
+# ⛔ BUT THAT CLAUSE'S PREMISE — "a change the box does not run" — IS NO LONGER TRUE, and NF-WK-RC1
+# is what made it untrue. Measured: before this story the box reached TWO `app/backend` modules
+# (`models/nfl_weekly.py`, `services/projection_fields.py`, via `run_weekly_serving`); RC1's
+# `realized_week.py` widened that to SIX by importing the scorer and the recap adapter.
+#
+# ⭐ THE LIVE EXPOSURE IS NARROWER THAN IT FIRST LOOKS, and saying so is what keeps this from being
+# alarmism. A ONE-SCORER change necessarily also touches `quant_sports_intel_models/fantasy_engine/`,
+# which IS a trigger path, so the box rebuilds anyway. What is genuinely unprotected is a change
+# touching ONLY `app/backend/{services,models}` — and there is a concrete one: `EXPLANATION_COLUMNS`
+# derives from `EXPLAINABLE_CAPTURED_TERMS` in `weekly_recap.py`, and `realized_week.required_columns`
+# reads it to decide which lake columns the published artifact carries. A box on a stale image would
+# publish an artifact missing a column, silently — which `realized_week`'s own header records as
+# "how the split shipped as a no-op once".
+#
+# ⇒ SO THIS CLAUSE PINS THE CLOSURE RATHER THAN THE FILTER. Widening it fails here, loudly, and
+# forces the decision to be taken deliberately instead of discovered later. The filter change itself
+# is in `closeout.followUps` for the PM, because it means amending another story's ratified clause.
+
+_BOX_ENTRYPOINTS = (
+    "quant_sports_intel_models/football/nfl/fantasy/run_realized_week.py",
+    "quant_sports_intel_models/football/nfl/fantasy/realized_week.py",
+    "pipeline/jobs/sports_nfl_weekly_serving_job.py",
+)
+
+#: MEASURED 2026-09-16, not asserted from reading. Every `app/backend` module the box can reach from
+#: the entrypoints above.
+_BOX_REACHED_APP_BACKEND = {
+    "app/backend/models/nfl_recap.py",
+    "app/backend/models/nfl_weekly.py",
+    "app/backend/services/league_scoring.py",
+    "app/backend/services/projection_fields.py",
+    "app/backend/services/realized_stat_fields.py",
+    "app/backend/services/weekly_recap.py",
+}
+
+
+def _app_backend_closure(seeds) -> set[str]:
+    """Every `app/backend` module reachable from `seeds`, by transitive import (NF-K1's method)."""
+    import ast
+
+    seen: set[str] = set()
+    stack = list(seeds)
+    reached: set[str] = set()
+    while stack:
+        rel = stack.pop()
+        if rel in seen:
+            continue
+        seen.add(rel)
+        path = _REPO / rel
+        if not path.exists():
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            mods: list[str] = []
+            if isinstance(node, ast.ImportFrom) and node.module:
+                mods.append(node.module)
+                mods += [f"{node.module}.{a.name}" for a in node.names]
+            elif isinstance(node, ast.Import):
+                mods += [a.name for a in node.names]
+            for mod in mods:
+                cand = mod.replace(".", "/") + ".py"
+                if not (_REPO / cand).exists():
+                    continue
+                if mod.startswith("app.backend"):
+                    reached.add(cand)
+                    stack.append(cand)
+                elif mod.split(".")[0] in ("quant_sports_intel_models", "betting_ml"):
+                    stack.append(cand)
+    return reached
+
+
+def test_the_box_reached_app_backend_surface_has_not_widened():
+    """⛔ A NEW `app/backend` IMPORT ON A BOX PATH IS A DEPLOY DECISION, not a refactor."""
+    reached = _app_backend_closure(_BOX_ENTRYPOINTS)
+    assert reached, "the closure is empty — this clause would pass on nothing"
+    assert reached == _BOX_REACHED_APP_BACKEND, (
+        "the set of `app/backend` modules the BOX executes has changed:\n"
+        f"  newly reached: {sorted(reached - _BOX_REACHED_APP_BACKEND)}\n"
+        f"  no longer reached: {sorted(_BOX_REACHED_APP_BACKEND - reached)}\n"
+        "`orchestration_cd.yml` does NOT trigger a box rebuild on `app/backend/**` (deliberately — "
+        "the API ships via deploy.sh). So every module in this set can go STALE on the box while "
+        "CI is green. Widening it is a decision; take it deliberately and update the PM finding."
+    )
+
+
+def test_the_box_deploy_still_excludes_the_api_so_this_tripwire_is_not_moot():
+    """Two-sided: if the exclusion is ever lifted, this whole clause stops being a hazard and should
+    be retired rather than left as decoration (NF1.7(a) — a guard whose premise has gone away)."""
+    wf = (_REPO / ".github/workflows/orchestration_cd.yml").read_text()
+    triggers = [ln.strip().strip('- "') for ln in wf.splitlines() if ln.strip().startswith('- "')]
+    assert not any(t.startswith("app/backend") or t == "app/**" for t in triggers), (
+        "`app/backend` now triggers the box deploy, so the staleness hazard above is closed — "
+        "retire this section instead of leaving a guard whose premise no longer holds."
+    )
