@@ -157,27 +157,89 @@ class TestNcaabDoesNotForkTheSharedLakeLayer:
         assert not offenders, f"lake layer imported outside lake.py: {offenders}"
 
 
-# ── 6. freshness contracts are declared but NOT armed ───────────────────────────────────
-class TestFreshnessContractsAreDeclaredNotArmed:
-    def test_no_ncaab_contract_is_live_while_no_writer_exists(self):
-        # A contract for a table nothing writes is a permanent false page from the first
-        # deploy — the reason INC-41 rejected a table from its own registry.
+# ── 6. a contract is armed WITH its writer, and only with its writer ────────────────────
+class TestFreshnessContractsTrackTheirWriters:
+    """The rule is ARM WITH THE WRITER — never before (a contract for a table nothing writes is
+    a permanent false page, the reason INC-41 rejected a table from its own registry) and never
+    after (an unregistered contract is a silent freeze). So this class is TWO-SIDED by design:
+    the ingest pair is armed because its writer is confirmed running; the odds pair is NOT,
+    because enabling it is the operator's spend decision and it is still off."""
+
+    def test_the_ingest_contracts_are_armed_now_that_their_writer_runs(self):
+        # Proven by the schedule's first AUTONOMOUS fire (2026-09-15 14:00Z SUCCESS) — every
+        # earlier run was invoked by hand, which says nothing about whether the SCHEDULE ticks.
         live = {c.name for c in sdf.REGISTRY}
-        declared = set(nf.proposed_but_unenabled())
-        assert not (live & declared), (
-            f"NCAAB contracts {live & declared} are armed, but no NCAAB writer is scheduled. "
-            f"Register them in the SAME change that enables their schedule.")
+        assert set(nf.ARMED_IN_REGISTRY) <= live, (
+            f"{set(nf.ARMED_IN_REGISTRY) - live} claim to be armed but are not in REGISTRY")
 
-    def test_the_declared_contracts_are_not_empty(self):
-        # ⭐ Anti-vacuity. The clause above passes trivially if DECLARED is empty, which is
-        # exactly how this guard would rot into testing nothing.
-        assert len(nf.DECLARED) >= 4
+    def test_the_unarmed_contracts_are_NOT_live_while_their_writer_is_off(self):
+        # ⭐ The other half. sports_ncaab_odds_capture_schedule ships STOPPED, so arming its
+        # contracts would page CRITICAL every day on a table nobody writes.
+        live = {c.name for c in sdf.REGISTRY}
+        still_waiting = set(nf.proposed_but_unenabled())
+        assert not (live & still_waiting), (
+            f"NCAAB contracts {live & still_waiting} are armed, but their writer is not enabled. "
+            f"Register them in the SAME change that toggles the schedule ON.")
 
-    def test_every_declared_contract_carries_active_season_semantics(self):
+    def test_the_two_sets_are_disjoint_and_neither_is_empty(self):
+        # ⭐ Anti-vacuity, covering BOTH clauses above: each passes trivially over an empty set,
+        # which is exactly how this guard would rot into testing nothing.
+        armed, waiting = set(nf.ARMED_IN_REGISTRY), set(nf.proposed_but_unenabled())
+        assert armed and waiting, f"armed={armed} waiting={waiting}"
+        assert not (armed & waiting), "a contract cannot be both armed and awaiting its writer"
+        assert len(armed | waiting) >= 4, "the NCAAB contract set has shrunk unexpectedly"
+
+    def test_every_ncaab_contract_carries_active_season_semantics(self):
         # A wall-clock SLA on a seasonal writer pages all summer on a correctly-idle table.
-        for c in nf.DECLARED:
+        ncaab = list(nf.DECLARED) + [c for c in sdf.REGISTRY if c.sport == "ncaab"]
+        assert len(ncaab) >= 4
+        for c in ncaab:
             assert c.active_months, f"{c.name} has no active_months"
             assert c.sport == "ncaab"
+
+    def test_the_box_score_contract_cannot_page_before_the_season_tips(self):
+        """🔴 MEASURED BEFORE ARMING. `active_months` restarts the clock at 00:00 Nov 1, but the
+        season tips ~Nov 3 and hoopR publishes team_box_YYYY only once games are PLAYED — so a
+        bare 36h SLA breaches Nov 3 00:00Z, ~12h BEFORE the first tip, and pages CRITICAL through
+        opening week on a healthy pipeline."""
+        box = next(c for c in sdf.REGISTRY if c.name == "ncaab_team_box")
+        assert box.season_warmup_hours >= 96.0, (
+            "the warmup no longer covers window-open -> first tip -> first box file; arming this "
+            "contract will page every opening week")
+        last = datetime(2026, 9, 14, 18, tzinfo=timezone.utc)   # the pre-season backfill
+        reading = sdf.DeltaReading(name=box.name, last_commit=last, rows=100, version=1)
+        for day in (1, 3, 5):
+            v = sdf.classify(box, reading, now=datetime(2026, 11, day, tzinfo=timezone.utc))
+            assert v["severity"] is None, f"Nov {day} pages: {v}"
+
+    def test_BUT_a_feed_that_never_arrives_still_pages(self):
+        """⭐ The half that keeps the warmup a GRACE rather than an exemption. A blanket
+        in-season pass would silence this forever (the NF1.7(a) vacuous-anchor class)."""
+        box = next(c for c in sdf.REGISTRY if c.name == "ncaab_team_box")
+        last = datetime(2026, 9, 14, 18, tzinfo=timezone.utc)
+        reading = sdf.DeltaReading(name=box.name, last_commit=last, rows=100, version=1)
+        v = sdf.classify(box, reading, now=datetime(2026, 11, 20, tzinfo=timezone.utc))
+        assert v["verdict"] == "STALE" and v["severity"] == "CRITICAL", v
+
+    def test_the_armed_names_and_the_registry_cannot_drift(self):
+        """ARMED_IN_REGISTRY is plain strings (an object import would re-create the cycle), so
+        it needs a cross-check or the two modules can disagree silently."""
+        live = {c.name for c in sdf.REGISTRY if c.sport == "ncaab"}
+        assert live == set(nf.ARMED_IN_REGISTRY), f"registry={live} names={nf.ARMED_IN_REGISTRY}"
+
+    def test_the_freshness_modules_import_in_any_order(self):
+        """The armed contracts live in sports_delta_freshness because ncaab_freshness imports
+        SportsDeltaContract FROM it. The season window therefore has its own owner module; a
+        regression here is an ImportError at collection, so pin it explicitly."""
+        import importlib, subprocess, sys
+        for first in ("ncaab_freshness", "sports_delta_freshness", "ncaab_season"):
+            r = subprocess.run(
+                [sys.executable, "-c",
+                 f"import betting_ml.monitoring.{first}; "
+                 "import betting_ml.monitoring.sports_delta_freshness as s; "
+                 "assert any(c.sport=='ncaab' for c in s.REGISTRY)"],
+                capture_output=True, text=True, cwd=str(REPO))
+            assert r.returncode == 0, f"importing {first} first fails:\n{r.stderr[-600:]}"
 
     def test_the_season_window_contains_every_in_season_day(self):
         # CONTAINMENT, not equality: the month-granular monitor window must be WIDER than the
@@ -332,6 +394,72 @@ class TestTheCrosswalkAbsenceIsNotAnEscalation:
         assert "ncaab_team_crosswalk" not in {c.name for c in nf.DECLARED}
         src = (REPO / "betting_ml/monitoring/ncaab_freshness.py").read_text()
         assert "HAS NO CONTRACT HERE, AND THAT IS A DECISION" in src
+
+
+# ── 6c. both NCAAB jobs are BOUNDED and cannot stack ────────────────────────────────────
+class TestTheNcaabJobsAreBoundedAndSerialised:
+    """🔴 BOTH TIMEOUT CONSTANTS WERE DECLARED AND NEVER APPLIED. `NCAAB_INGEST_TIMEOUT_SECONDS`
+    and `NCAAB_ODDS_TIMEOUT_SECONDS` each appeared EXACTLY ONCE in the whole repo — at their own
+    definition — so both ops ran unbounded on a Dagster worker (the INC-32 class: an un-timed-out
+    wait wedges the worker, and the sensor daemon behind it). The capture job additionally had no
+    `concurrency_group`, and `services/dagster/dagster.yaml` caps concurrency per group value, so
+    a job without one opts out of the cap entirely — at 32 fires a day on a 2-vCPU box that is
+    the stacking shape E11.26 found in `intraday_schedule_job`.
+
+    ⚠️ ASSERTED VIA AST, NOT A TEXT SCAN, and that is load-bearing here: the explanatory comments
+    above each decorator NAME both tag keys, so a substring guard would pass with the tags
+    deleted (the INC-38 prose-cannot-satisfy rule).
+    """
+
+    JOBS = {
+        "pipeline/jobs/sports_ncaab_ingest_job.py": ("sports_ncaab_ingest_job",
+                                                     "NCAAB_INGEST_TIMEOUT_SECONDS"),
+        "pipeline/jobs/sports_ncaab_odds_capture_job.py": ("sports_ncaab_odds_capture_job",
+                                                           "NCAAB_ODDS_TIMEOUT_SECONDS"),
+    }
+
+    @staticmethod
+    def _job_tags(path: str, func_name: str) -> dict:
+        """The `tags=` mapping on the @job decorator of `func_name`, as {key: source-text}."""
+        tree = ast.parse((REPO / path).read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef) or node.name != func_name:
+                continue
+            for dec in node.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    continue
+                for kw in dec.keywords:
+                    if kw.arg == "tags" and isinstance(kw.value, ast.Dict):
+                        return {k.value: ast.unparse(v)
+                                for k, v in zip(kw.value.keys, kw.value.values)
+                                if isinstance(k, ast.Constant)}
+        return {}
+
+    @pytest.mark.parametrize("path", list(JOBS))
+    def test_the_job_applies_its_declared_timeout(self, path):
+        func, const = self.JOBS[path]
+        tags = self._job_tags(path, func)
+        assert tags, f"{func} has no tags= on its @job decorator"
+        assert "dagster/max_runtime" in tags, (
+            f"{func} runs UNBOUNDED on a Dagster worker. A run tag bounds every wait at once — "
+            f"subprocess, HTTP, retry backoff and in-process work — without enumerating them.")
+        assert const in tags["dagster/max_runtime"], (
+            f"{func}'s max_runtime does not use {const}; a second literal is a second owner of "
+            f"the budget, and the constant would go back to being declared-and-never-applied.")
+
+    @pytest.mark.parametrize("path", list(JOBS))
+    def test_the_job_declares_a_concurrency_group(self, path):
+        func, _ = self.JOBS[path]
+        tags = self._job_tags(path, func)
+        assert "concurrency_group" in tags, (
+            f"{func} has no concurrency_group, so dagster.yaml's per-group cap does not apply "
+            f"and its ticks can STACK on a 2-vCPU box (E11.26 / INC-32).")
+
+    def test_the_two_jobs_do_not_share_a_group(self):
+        """A shared value would make the daily ingest and the 30-minute capture queue behind
+        each other for no reason — and a stuck one would mute the other."""
+        groups = {self._job_tags(p, f)["concurrency_group"] for p, (f, _) in self.JOBS.items()}
+        assert len(groups) == len(self.JOBS), f"jobs share a concurrency_group: {groups}"
 
 
 # ── 7. the paid feeds cannot run by accident ────────────────────────────────────────────
