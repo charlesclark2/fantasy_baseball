@@ -10,7 +10,7 @@ metadata:
   name: nf-wk-td1
   vertical: nfl_fantasy
   card: https://trello.com/c/mYQoKNGx
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     MT1's live-league gate measured that the weekly payload's TD keys
