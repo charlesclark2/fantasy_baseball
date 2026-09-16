@@ -447,3 +447,24 @@ spec:
       the driver block is not the same vintage as the number it sits beside.
       For whoever owns NF1.5 to confirm or dismiss — not a WVR1 finding.
 
+
+      ⑩ A RIDER ON ⑧'s OPEN QUESTION ("who wires RC1's realized publisher?"), from
+      NF-INC-0917B's serving-writer census (2026-09-16) and INDEPENDENTLY SPOT-CHECKED
+      here rather than relayed on trust: of the writers that publish to the SERVING
+      api-cache, exactly ONE validates its published output against a declared
+      contract — `run_weekly_serving.py`, which runs `NflWeeklyManifest` /
+      `NflWeeklyPayload` / `NflWeeklyCurrent` `.model_validate(...)` over the very
+      blobs it writes. My check of six sibling writers (export_track_record_json,
+      export_draft_board_json, export_player_history_json, run_sleeper_player_ingest,
+      run_nf_serving_board_snapshot, run_nf_d21_publish) found none that does —
+      ⚠️ `run_nf_d21_publish`'s `GP.validate(...)` is a GATE check, not an
+      output-contract check on the published artifact, so it does not count and a
+      keyword grep alone would have miscounted it.
+      ⇒ WHEN RC1's `realized_week.publish` IS WIRED IT BECOMES THE 11TH SUCH WRITER,
+      and a contract is far cheaper to add BEFORE it has published history than after
+      (once weeks are on the wire, tightening a contract is retroactive over stored
+      artifacts — the E9.49 class). So ⑧'s question to the PM is really two: WHO wires
+      it, and DOES IT SHIP WITH A DECLARED CONTRACT. ⛔ Not a WVR1 scope request — WVR1
+      consumes that artifact and does not own it — and NF-INC-0917B carries the census
+      itself in its own followUps, so the PM will see it from both sides; recorded here
+      only because it rides on a question this story raised.
