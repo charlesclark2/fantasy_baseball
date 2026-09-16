@@ -156,3 +156,181 @@ already-exercised one rather than a novel output:
   and 0.03, so the single-week ratios are noisy and are not by themselves a bias
   measurement). This belongs to the head, not to this story's plumbing, and is
   carried to the closeout rather than corrected here.
+
+---
+
+## Node 3 — the coherence measurement
+
+### The artifact, captured before it could rotate
+
+The weekly publish runs daily and re-projects, so the before side is a **committed
+capture**, not a live read: `ablation_results/nf_wk_td1_before_week2_players.json`,
+season 2026 week 2, `generated_at 2026-09-15T15:32:59+00:00`, 500 players, sha256
+`6782c40f…`. A before/after measured across two publishes is not a controlled
+comparison — it is the NF-INJ2c market-vintage failure in a new costume.
+
+Method is NF-WK-MT1's, verbatim, and deviating from it would break comparability:
+component sum `= passYds*0.04 + rec*1.00 + recYds*0.10 + rushYds*0.10` (plus the four
+TD/INT terms once they exist), `None` counts as 0.0, `gap = head − components`, full-PPR
+weights because the head is full-PPR-native. Instrument:
+`run_nf_wk_td1_coherence.py`. It reproduces MT1's top-24 table to the digit.
+
+### BEFORE (measured)
+
+| POS | tier | n | mean head | mean gap | med \|gap\| | p95 \|gap\| | max \|gap\| |
+|---|---|---:|---:|---:|---:|---:|---:|
+| QB | top24 | 24 | 3.158 | **−0.576** | 0.884 | 2.201 | 2.430 |
+| QB | all | 88 | 1.345 | −0.343 | 0.285 | 1.663 | 2.430 |
+| RB | top24 | 24 | 6.894 | **+1.140** | 1.472 | 2.727 | 3.083 |
+| RB | all | 113 | 2.585 | +0.235 | 0.227 | 1.904 | 3.083 |
+| WR | top24 | 24 | 6.108 | **−0.359** | 0.727 | 2.291 | 4.136 |
+| WR | all | 179 | 2.057 | −0.177 | 0.277 | 1.210 | 4.136 |
+| TE | top24 | 24 | 4.359 | **+0.452** | 0.742 | 1.538 | 4.126 |
+| TE | all | 120 | 1.433 | +0.040 | 0.173 | 1.174 | 4.126 |
+| **ALL** | pooled | 500 | | **−0.061** | 0.233 | | 4.136 |
+
+⚠️ **The pooled figure is the single most misleading way to report this.** The
+per-position gaps carry opposite signs and cancel to −0.061, which reads as "nothing to
+see". Report the signed per-position table.
+
+⚠️ **The −0.77 in the spec's premise is a DIFFERENT artifact.** NF-C6-PH2's recorded
+`mean_signed_diff = −0.7709` (n=503) was measured on a locally-staged payload during
+that story, under the opposite sign convention (`components − head`). On the published
+artifact the same function returns `+0.0609`. Nothing is wrong with either number; they
+are different builds, and the story's before side is the published one.
+
+### The registered hypothesis is REFUTED — with the mechanism
+
+> HYPOTHESIS (registered forward): the missing TD expectation explains most of the
+> incoherence.
+
+It does not, and the reason is arithmetic rather than a matter of degree.
+
+**If both heads were coherent, the seven served terms should sit BELOW the head by
+exactly the TD share.** Touchdown terms are 22.1% of realized PPR (QB 33.3%, RB 22.8%,
+WR 17.2%, TE 18.8%; the eleven-term reconstruction matches realized total PPR with a
+mean residual of +0.0242, so the decomposition is essentially exact). What the payload
+actually does:
+
+| POS | tier | TD share | mean head | gap EXPECTED if coherent | gap MEASURED | **7-term excess** |
+|---|---|---:|---:|---:|---:|---:|
+| QB | top24 | 32.8% | 3.158 | +1.035 | −0.576 | **+1.611** |
+| QB | all | 32.8% | 1.345 | +0.441 | −0.343 | +0.784 |
+| RB | top24 | 22.6% | 6.894 | +1.559 | +1.140 | +0.419 |
+| RB | all | 22.6% | 2.585 | +0.585 | +0.235 | +0.350 |
+| WR | top24 | 17.2% | 6.108 | +1.052 | −0.359 | **+1.411** |
+| WR | all | 17.2% | 2.057 | +0.354 | −0.177 | +0.531 |
+| TE | top24 | 18.7% | 4.359 | +0.817 | +0.452 | +0.365 |
+| TE | all | 18.7% | 1.433 | +0.269 | +0.040 | +0.228 |
+
+⭐ **The excess is positive in all eight cells. The served component line is not SHORT of
+the points head by the touchdown value — it is running HOT by roughly that amount.** The
+payload's near-zero pooled coherence was a coincidence of two offsetting errors, not
+evidence of a healthy substrate. Emission removes one of them and leaves the other
+exposed, so the measured gap will get WORSE.
+
+⚠️ **Which head is wrong is NOT determined by this measurement.** A gap is symmetric: the
+component head may over-project its seven terms, or the points head may under-project
+the total. Attributing it needs realized outcomes for the week, which do not exist until
+it is played. Stated as a disagreement, not an indictment.
+
+### Forward, per position — sign first, then magnitude
+
+MT1's sign-certainty argument, carried and extended. `gap = head − components`, and the
+component head clips at 0, so every emitted TD term is ≥ 0:
+
+* **WR — sign-certain, no measurement needed.** Only `recTd` applies and it is
+  positive-weighted, so emission can only push components further above a head they
+  already exceed. WR coherence gets worse, at any magnitude.
+* **RB, TE — direction certain (down), magnitude decides.** Their gaps are positive, so
+  emission moves them toward zero; whether they land on it or overshoot is a magnitude
+  question.
+* **QB — genuinely ambiguous a priori**, because `passInt` is negative-weighted. MT1
+  explicitly declined to claim a sign here and asked for it to be measured separately.
+  **Measured: the interception penalty does NOT dominate.** Per passing yard the realized
+  net is `4×0.00622 − 2×0.00321 = +0.0185`, strongly positive. QB's gap gets worse, not
+  better, and the missing INT penalty does not explain it.
+
+**Magnitude — a labelled ESTIMATE, not the measurement.** Applying realized per-position
+TD-per-yard ratios to the payload's own projected yardage (a lower bound in |Δ|, because
+the head's clip-at-zero biases low-projected rows up):
+
+| POS | tier | gap now | est ΔTD PPR | est gap after | verdict |
+|---|---|---:|---:|---:|---|
+| QB | top24 | −0.576 | +1.913 | −2.489 | WORSENS |
+| QB | all | −0.343 | +0.861 | −1.203 | WORSENS |
+| RB | top24 | +1.140 | +1.914 | −0.773 | improves (overshoots past zero) |
+| RB | all | +0.235 | +0.754 | −0.519 | WORSENS |
+| WR | top24 | −0.359 | +1.338 | −1.697 | WORSENS |
+| WR | all | −0.177 | +0.480 | −0.656 | WORSENS |
+| TE | top24 | +0.452 | +0.919 | −0.467 | WORSENS (overshoots) |
+| TE | all | +0.040 | +0.330 | −0.290 | WORSENS |
+
+Seven of eight cells worsen; the one that improves overshoots past zero — exactly the
+shape MT1 predicted for the positive-gap positions.
+
+⛔ **NOTHING IS RESCALED, AND NOTHING SHOULD BE (MH2.2).** The residual stays material and
+changes sign by position. That is a finding about two independent heads, to be reported
+— not a defect in this story's plumbing to absorb. Forcing the component sum toward the
+head would fabricate agreement between two models that genuinely disagree.
+
+### The decisive measurement is an OPERATOR step
+
+The magnitudes above are an estimate. The controlled measurement needs one staging
+rebuild (~9 minutes, >2 min ⇒ operator). ⭐ **Both sides come from that ONE build**, which
+dissolves the vintage problem entirely: the after side is the payload with TD terms, and
+the controlled before side is the SAME payload with the TD terms dropped from the sum —
+valid because the ARM1/ARM2 smoke measured the seven served components **bit-identical**
+with and without the TD labels (max \|diff\| `0.000e+00`). The committed 2026-09-15
+capture then serves as an independent vintage-drift diagnostic rather than as the before
+side of the arithmetic. `run_nf_wk_td1_coherence.py --after …` computes all of it.
+
+---
+
+## ⚠️ A LARGER DEFECT FOUND WHILE MEASURING — reported, not fixed, and NOT this story's
+
+The coherence numbers above are measured on a payload whose **absolute level is wrong by
+a factor of roughly 3–6×**:
+
+| POS | realized top-24 weekly mean (2024) | served 2026 wk 2 projection | ratio |
+|---|---:|---:|---:|
+| QB | 18.99 | 3.16 | **0.17** |
+| RB | 18.45 | 6.89 | 0.37 |
+| WR | 21.09 | 6.11 | 0.29 |
+| TE | 11.91 | 4.36 | 0.37 |
+
+**The mechanism is provable from the manifest alone.** It records
+`stats_as_of: "2025-W18"` (the newest week in the stats feed) beside
+`train_through: 2026 wk 1` (the newest week in the training matrix). Both are computed
+correctly. Together they say: the 2026 week-1 training rows have **no stat rows**, so
+`weekly_frame.attach_labels` fills `fantasy_points = 0.0` for every one of them under the
+retained-zero convention. The model therefore trains on a whole week of fabricated zeros,
+and every player's `prior_week_box__ppr_l1` — last week's points — is 0.0 on the week-2
+slate.
+
+**Root cause, measured:**
+
+```
+ROLL_FORWARD_SOURCES = ['rosters', 'weekly_rosters', 'schedules', 'depth_charts',
+                        'injuries', 'nflverse_draft_picks', 'nflverse_combine']
+
+stats_player_week: in roll-forward = False   tier='nflverse' on_demand=False ⇒ ELIGIBLE
+snap_counts:       in roll-forward = False   tier='nflverse' on_demand=False ⇒ ELIGIBLE
+```
+
+Neither feed is referenced anywhere in `pipeline/`. **The two feeds the weekly model
+actually trains on have no scheduled ingest at all**, while the feeds it does roll
+forward (rosters, schedules) are current — which is exactly why `rosters_as_of` reads
+`2026-W2` and `stats_as_of` reads `2025-W18`. Both are free, non-`on_demand` nflverse
+sources, so they are eligible for the existing weekly roll-forward.
+
+This is the `stg_ref_players` "a table with NO SCHEDULED WRITER is a silent-staleness
+bomb" class, applied to the weekly model's training substrate, and it will hold for
+**every week of the 2026 season** until the sources are added.
+
+Consequences for reading this record: the SHAPE findings above (the sign of every Δ, the
+positive 7-term excess, the refuted hypothesis) are ratios and are robust to a roughly
+uniform level error. The ABSOLUTE magnitudes are not, and should be re-read after the
+level defect is fixed. ⛔ Not fixed here — it is a different story, and the same
+discipline that forbids rescaling the coherence residual forbids reaching outside this
+story's scope to fix a model-input defect.
