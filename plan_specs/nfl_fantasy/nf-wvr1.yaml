@@ -150,7 +150,15 @@ spec:
     #       `s3://credence-prod-s3-api-cache/fantasy/nfl/realized/` returns NOTHING while the
     #       control prefix `fantasy/nfl/2026/` returns the boards — so this is a genuine absence,
     #       not a permissions failure (NF1.7 (a): a check that cannot look must not read as empty).
-    #   ⇒ the blocker is now ONE OPERATOR COMMAND (RC1's publisher), not another story's merge.
+    #   ⚠️⚠️ AND THE PUBLISHER HAS NO RUNNER — corrected here rather than left as the overclaim it
+    #       was on first writing. `realized_week.publish` exists but is referenced ONLY by tests:
+    #       `grep -rn realized_week pipeline/ scripts/ services/` is EMPTY, so there is no Dagster
+    #       op, no schedule and no script that invokes it. That is RC1's own OverlapCheck item
+    #       (entrypoint sibling sweep GyD9hoeD: "if this story adds a publish/serving entrypoint,
+    #       it ships WITH an executing smoke from day one — never joins the zero-callers list").
+    #   ⇒ the blocker is NOT "one operator command": it is a WIRING task that belongs to RC1 (or a
+    #     successor of it), and WVR1 must not fork a second publisher for the same artifact — the
+    #     one-owner rule that governs the roster fetch governs this too.
     #   Until it runs, the pool ships as ruling 2's stated fallback — an EXPLICITLY NON-RANKED
     #   listing (`ordering: "unranked"`, with the reason on the payload). The follow-up is small and
     #   scoped: sum the published weeks per player, score through `league_scoring.score_row` under
