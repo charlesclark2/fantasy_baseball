@@ -96,6 +96,27 @@ print('interval_note=', (d.get('framing') or {}).get('interval_note','')[:60])"
 
 ⚠️ The CDN entry is `s-maxage=900`, so allow up to 15 minutes, or keep the cache-buster.
 
+✅ **This command is PROVEN TWO-SIDED, which is the NF-INC-0916 ⑪ lesson applied to my own
+handoff** — a check handed over without its failing path exercised is not a check, and a false RED
+mid-incident invites rolling back a correct deploy. Run against production as it stands right now
+(still defective) it prints the nine:
+
+```
+missing= ['season_type', 'scoring_system_id', 'interval_lo_level', 'interval_hi_level',
+          'ros_basis', 'ros_sigma_lo_level', 'ros_sigma_hi_level', 'positions', 'framing']
+interval_note=
+```
+
+and against a coerced payload (the post-fix state, generated locally from the same recorded blob):
+
+```
+missing= []
+interval_note= The 80% range is a measured COVERAGE FLOOR, not a promise: h
+```
+
+So a `missing= []` with a populated note is a real pass, and it is distinguishable from the current
+state rather than merely different-looking.
+
 ---
 
 ## STEP 3 — `deploy.sh` for the route half
