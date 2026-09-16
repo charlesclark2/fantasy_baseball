@@ -74,6 +74,46 @@ spec:
         caught) and SAY IN THE RECORD that this map has no external
         cross-check. If the team-level path turns out not to be
         cheap-ish, STOP AND REPORT rather than absorbing the growth.
+        # ⚠️⚠️ D2 DISPOSITION 2026-09-16 — THE STOP CONDITION FIRED AND THE PM RULED (C).
+        # An independently-computed figure DID exist (Sleeper scores every started defence under
+        # the league's own settings), and against it the construction reproduced only 35 of 48
+        # team-weeks across four weeks (disagreeing 1/3/6/3 of 12) — SYSTEMATIC, not a stat
+        # correction. One mechanism was found + fixed (nflverse keeps `fumble_recovery_tds`
+        # separate from `def_tds`) with marginal effect; at least one remains unidentified.
+        # ⇒ RULED (C), quoting the disposition: "the D/ST seat serves Sleeper's
+        # `starters_points`, PROVENANCE-LABELED ON THE SURFACE (the league's own figure, stated
+        # plainly — NOT a footnote), every other seat scored by our scorer, and the coverage
+        # report says honestly that D/ST terms are LEAGUE-PUBLISHED rather than covered. Team
+        # totals and PF/PA then agree exactly with the league's standings, which is the property
+        # the surface must have."
+        # ⛔ OPTION (A) — a stated D/ST absence — is REFUSED, and the ground matters: D/ST is one
+        # of nine seats, so an absence does not leave a hole, it makes every team total and the
+        # STANDINGS systematically disagree with the league's own page. That is D1's
+        # plausible-but-wrong shape one column over, and checking our numbers against their league
+        # page is a user's FIRST act on a recap.
+        # ⭐ THE ONE-SCORER RULE IS NOT BREACHED: it exists to prevent a FOURTH IMPLEMENTATION of
+        # our scoring policy; consuming the league's published figure is not an implementation, it
+        # is CITING THE AUTHORITY. On a factual surface the league's own number IS the fact, and
+        # our 27%-divergent construction would substitute an unvalidated estimate for a known one.
+        # 🔬 THE CONSTRUCTION STILL RUNS, AS A DIVERGENCE RECORDER, UNDER ONE HARD CONSTRAINT:
+        # ⛔ IT RECORDS DATA, NEVER A PAGE. "A comparison known to fail on ~27% of team-weeks that
+        # paged would be the muted-monitor pattern arriving on day one." Log the per-week
+        # divergence set (which teams, ours vs theirs, delta) to an artifact (B) consumes; NO
+        # alert threshold until (B) explains the known residual, because before then a NEW
+        # mechanism and a KNOWN one are indistinguishable in the stream.
+        # ⭐ THE PLAYER SEATS ARE THE MIRROR IMAGE and their expectation is DECLARED SEPARATELY:
+        # they reproduce Sleeper exactly today, so a player-seat divergence IS page-worthy signal
+        # and MAY alert; the D/ST seat EXPECTS divergence and only records.
+        # 📌 CARRIED TO CLOSEOUT: (a) the SEA wk1 case verbatim (ours 6.00 vs Sleeper 8.00, the
+        # realized line fully accounted, no term in the complete 56-key settings able to supply
+        # the 2) as (B)'s cleanest reproduction target, alongside the MH2.2 boundary already on
+        # the card — NO settings term may be invented to force agreement; if Sleeper's number
+        # cannot be derived from stats plus settings, THAT IS THE FINDING. (b) the proven-but-
+        # unwired corrections (points-allowed != opponent score, with the MIN 24->17 tier-crossing
+        # proof; negative `sack_yards_lost`; LA/LAR) stay committed as VALIDATED COMPONENTS
+        # AWAITING (B) — they do NOT wire into the served seat under (C), and ⛔ nothing may
+        # quietly wire them later without the harness passing.
+        # (B) is carded by the PM as fXIYuvMN.
     # ⚠️⚠️ AMENDED 2026-09-16 (PM ruling D1 = option A, ratified) — THE ORIGINAL PHASE A
     # DESCRIBED A CONTRACT THE STORED DATA CANNOT SATISFY. Node 1 verified the spec's premises
     # against the running system and found we hold NONE of the three inputs it assumed:

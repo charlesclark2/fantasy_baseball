@@ -1,5 +1,22 @@
 """NF-WK-RC1 (PM ruling D2) — the REALIZED team D/ST line, built from the lake.
 
+⛔⛔ NOT WIRED TO THE SERVED D/ST SEAT, AND THAT IS THE PM'S DISPOSITION (2026-09-16), NOT AN
+OVERSIGHT. Against Sleeper's own scoring of the same defences this construction reproduced only
+35 of 48 team-weeks (disagreeing 1/3/6/3 of 12 across four weeks) — systematic, not a stat
+correction. Option (C) was ruled: the SERVED D/ST seat carries the league's OWN published figure,
+because on a factual surface that number IS the fact and this construction would substitute an
+unvalidated estimate for a known one.
+
+What lives here is therefore a set of VALIDATED COMPONENTS AWAITING THE (B) STORY (PM card
+fXIYuvMN) — the points-allowed correction (proven decisively by MIN's 24 -> 17 tier crossing), the
+negative `sack_yards_lost` sign, the key-derived tier ranges, and the LA/LAR franchise
+normalisation. They are all correct and all worth keeping.
+
+⛔ NOTHING MAY QUIETLY WIRE THIS INTO THE SERVED SEAT LATER WITHOUT THE CROSS-CHECK HARNESS PASSING.
+Its remaining job under (C) is to run as a DIVERGENCE RECORDER: it records data, never a page —
+"a comparison known to fail on ~27% of team-weeks that paged would be the muted-monitor pattern
+arriving on day one."
+
 ═══════════════════════════════════════════════════════════════════════════════════════════════════
 WHY THIS EXISTS
 ═══════════════════════════════════════════════════════════════════════════════════════════════════
