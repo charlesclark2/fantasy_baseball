@@ -56,6 +56,42 @@ spec:
         coverage vs the FA pool (a deep-league FA pool reaches past
         the board's tail — a player with no projection renders a
         stated absence, never a zero or an omission).
+        ✅ NODE 1 COMPLETE 2026-09-15 — `docs/nf_wvr1_fa_pool_diagnosis.md`.
+        TWO BLOCKING findings; STOPPED before endpoint code per the
+        kickoff order. (F1) ⛔ THE SEASON BOARD CARRIES NO ROS
+        PROJECTION: `s3://$CACHE_BUCKET/fantasy/nfl/<season>/
+        projections.json` (via `_full_projections`) is a FULL-SEASON
+        projection — max `g` = 17.000, 53 rows > 16.0, measured
+        2026-09-15 with week 1 complete, so it cannot be a
+        rest-of-season figure; `base_season: 2025`; rebuilt DAILY on
+        live ADP/ECR/injury inputs but never decremented for played
+        weeks. The ONLY ROS artifact in the system is the WEEKLY
+        model's roll-up, which this spec forbids ⇒ the phrase "the
+        season product's ROS projections" names an artifact that does
+        not exist (plan_spec_process spec-premise class, PM ruling
+        2026-09-01). (F2) ⛔ NEITHER PUBLISHED VALUE COLUMN ORDERS AN
+        FA POOL: through the REAL `league_scoring.replacement_levels`
+        over the live board, 12-team full-PPR, the top-25 available
+        players are 6 QB / 3 TE / 16 K by points and 14 K / 8 DST /
+        2 TE / 1 QB by VOR — the FA pool is the below-replacement
+        population BY CONSTRUCTION, so draft-VOR is <=0 across it and
+        the lowest-dispersion positions float up (NF-C7/NF-C5, one
+        surface over). ✅ ANSWERED: coverage 97.8% of real week-1
+        skill performers (8 uncovered, all <4 PPR) — the tail is fine,
+        the ID JOIN is the risk (113 of 870 rows carry synthetic
+        non-gsis ids: 81 rookies + 32 D/ST), so the subtraction stays
+        on `league_scoring._join_key` (name+pos; 0 collisions measured
+        on 870 live rows). ✅ FRESHNESS DEPENDENCY: the substrate
+        already EXISTS and is already served (`League.league_rosters`
+        -> `/nfl/league-board::_joined_league_rosters`); only the
+        RE-FETCH is missing, and RC1's `sleeper_matchups.fetch_week`
+        does NOT supply it (STARTERS only, by design, and it wants
+        FROZEN point-in-time semantics where an FA pool wants
+        CURRENT). `/league/{id}/rosters` is already owned by
+        `platform_import/sleeper.py` ⇒ that is the one-owner seam, not
+        a new module and not a fork of RC1's. RC1 is UNMERGED
+        (no `origin/nf-wk-rc1`; 6 local commits, D2 "STOPPED, not
+        shipped"). ⚠️ #1139 CONFIRMED OPEN, 21 commits held.
     - description: >
         NODE 2 — THE RANKING, transparent arithmetic (the RC1
         power-rankings rule): available players scored by (a) the
@@ -164,3 +200,98 @@ spec:
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+
+      ── NODE 1, 2026-09-15 (evidence: docs/nf_wvr1_fa_pool_diagnosis.md) ──
+
+
+      ① 🚨 BLOCKING — PM RULING NEEDED ON THE SUBSTRATE. The season board
+      publishes a FULL-SEASON projection, not a rest-of-season one (max g =
+      17.000; 53 rows > 16.0; week 1 complete 2026-09-14), and nothing
+      decrements it as weeks are played. The spec's substrate ruling names a
+      quantity that does not exist. The only ROS artifact belongs to the weekly
+      model, which the same ruling forbids. Options as I read them, none taken
+      unilaterally: (a) ship value as an HONESTLY-LABELLED full-season figure
+      ("preseason full-season projection, refreshed daily for injury and market
+      news; it does not yet reflect in-season performance") and accept a gap
+      that grows ~1/17 per week; (b) ship the FA pool + need annotation with NO
+      value ranking until a ROS substrate exists; (c) fund a season-ROS
+      quantity (a successor — deriving remaining-games and remaining-points
+      from the board's own g/bye and the schedule is arithmetic on data we
+      already hold, and is NOT the weekly model); (d) wait for NF-INC-0916.
+      Recommendation: (c) is the only option that makes the product's own claim
+      true, and it is small; (a) is shippable sooner but the label has to carry
+      real weight. NOT a WVR1 decision.
+
+
+      ② 🚨 BLOCKING — PM RULING NEEDED ON THE RANKING. Measured through the real
+      scorer, an FA pool ordered by the board's raw points is 16/25 kickers, and
+      ordered by its VOR is 14/25 kickers plus 8 team defences. This is NF-C7's
+      recorded lesson ("best value on the board late in a draft is structurally
+      a backup TE/QB") and NF-C5's ("a starter-cutoff replacement carried into
+      an auction is the bug") on a third surface. The skew is entirely
+      CROSS-POSITION; within a position the board's ordering is legitimate. The
+      narrowing that needs no new arithmetic is RANK WITHIN POSITION, NEVER
+      ACROSS — which the need annotation already selects for, and which is
+      strictly more conservative than the spec's "any combined ordering states
+      its rule". Offered, not taken. If the PM instead wants a cross-position
+      number, that is a waiver-specific replacement level = new modelling, and
+      belongs in its own spec with the §0.5 posture, not smuggled into a
+      serving story.
+
+
+      ③ ⚠️ LIVE COPY DEFECT, independent of whether WVR1 ships. my-teams.tsx:80
+      tells paying users "Projections are the rest-of-season figure (pre-kickoff,
+      so this is effectively the full season)"; :26 and :368 repeat it. The
+      parenthetical was true when written and expired at kickoff. A shipped paid
+      surface now calls a full-season number rest-of-season. Suggest: checklist
+      item on the parent card, or fold into whichever NF-SEASON member touches
+      my-teams next. (This copy is also the likeliest ORIGIN of the spec's F1
+      premise — the spec-premise rule working exactly as the process doc
+      predicts.)
+
+
+      ④ THE ROSTER RE-FETCH SEAM — one owner, and it is NOT RC1's module.
+      RC1 owns the weekly MATCHUP fetch (starters, frozen per week). An FA pool
+      needs the CURRENT full rostered set (bench/IR/taxi included), which is
+      `/league/{id}/rosters` — already owned by `platform_import/sleeper.py`
+      (`_fetch_teams`) and also called by RC1's `_team_names` for labels. Two
+      different objects on one host, with OPPOSITE freshness semantics. Suggest
+      the PM confirm the seam before either session writes it, so it is written
+      once. Whoever writes it also owns re-stamping `league_rosters_synced_at`.
+
+
+      ⑤ A TRUNCATED LEAGUE MUST REFUSE, NOT RENDER. `bound_league_rosters`
+      drops WHOLE TEAMS at MAX_LEAGUE_ROSTER_PLAYERS = 500 and records it on
+      `league_rosters_truncated`. An FA pool computed from a truncated roster
+      set contains every dropped team's players — i.e. it recommends players who
+      are rostered, which is precisely the plausible-but-wrong class. The flag
+      is already on the record, so the refusal is available for free; it just
+      has to be taken. Binding on whatever WVR1 ships.
+
+
+      ⑥ THE FA-POOL SUBTRACTION MUST STAY ON THE NAME JOIN. 113 of 870 board
+      rows carry synthetic non-gsis ids (81 rookies + 32 D/ST); Sleeper rosters
+      carry a third id vocabulary. `league_scoring._join_key` (name+pos, D/ST by
+      franchise) is immune and measured clean (870 rows -> 870 distinct keys, 0
+      collisions). Anything that "improves" this to an id join silently drops the
+      rookie class — the NF-INFRA1/NF-C-LDA-0 crosswalk defect. Worth a guard
+      pinning zero key collisions on the published board, since that is a
+      property of today's data rather than a guarantee.
+
+
+      ⑦ A STATED-ABSENCE REASON IS OWED FOR THE BOARD'S TAIL. 2.2% of real
+      week-1 skill performers (8 of 357) are past the board entirely; all scored
+      under 4 PPR, so the stakes are low, but a deep-league FA pool will contain
+      them and they must render a stated absence, never a zero or an omission
+      (ABSENCE_REASONS, extended additively).
+
+
+      ⑧ UNMEASURED, offered as a successor question rather than a claim: how
+      responsive IS the daily board to a completed week? ECR/ADP are model
+      features and are refreshed, but the currently-served ECR vintage
+      (2026-09-10) sits INSIDE week 1 (09-09 -> 09-14), so the board's expert
+      channel does not yet reflect week-1 results; ADP's window partially does.
+      Whether that channel moves a player's projection enough to matter for a
+      waiver ranking is not measured here and should not be assumed in either
+      direction.
