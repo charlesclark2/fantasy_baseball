@@ -3619,6 +3619,21 @@ const CASES = [
     to: `<div className="min-w-0 overflow-x-auto rounded-lg border border-[#262626]">`,
     grep: "the weekly page never scrolls sideways",
   },
+  {
+    // ⭐⭐ A LIVE PRODUCTION OUTAGE, not a defect this story invented — `/fantasy/weekly` served
+    // React's white error page to every visitor from the first weekly publish until this fix.
+    // Restoring the unguarded dereference is EXACTLY the shipped code; the absent case in the spec
+    // must go red on it, and if it ever stops doing so the fixture has drifted back to a payload
+    // that always carries `framing` and the clause is decorative again.
+    id: "weekly-framing-unguarded",
+    shipped: "NF-INC-0917 — /fantasy/weekly hard-down: TypeError reading 'interval_note'",
+    detail:
+      "The served manifest carried no `framing` block (the route is a pass-through of the S3 blob and the builder validates a dict it then discards), so an unguarded `framing.interval_note` threw during the React commit and took the whole route down.",
+    file: "components/fantasy/weekly-page.tsx",
+    from: `  const interval = typeof framing?.interval_note === "string" ? framing.interval_note.trim() : ""`,
+    to: `  const interval = (framing as NflWeeklyFraming).interval_note`,
+    grep: "framing ABSENT",
+  },
 ]
 
 /**
@@ -3733,7 +3748,9 @@ const CASES = [
 // (`node e2e/red-proof.mjs weekly-`) rather than by a full board run, for the reason every entry
 // above records: 207 cases x a production build each does not belong in a session. So
 // 201/195/6 -> 207/201/6, and the next full run CONFIRMS it. ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 207, red: 201, notObservable: 6 }
+// NF-INC-0917 adds ONE case (`weekly-framing-unguarded`), RED-proven individually for the reason
+// every entry above records — a full board run is 208 production builds. So 207/201/6 -> 208/202/6.
+const RECORDED_BOARD = { total: 208, red: 202, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

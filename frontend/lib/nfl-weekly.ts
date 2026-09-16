@@ -169,7 +169,32 @@ export interface NflWeeklyManifest {
   pit_rows_dropped: number
   input_vintage: NflWeeklyInputVintage
   lineage: NflWeeklyLineage
-  framing: NflWeeklyFraming
+  /**
+   * ⚠️⚠️ OPTIONAL ON THE WIRE, AND NOT BECAUSE THE CONTRACT SAYS SO (NF-INC-0917).
+   *
+   * `nfl_weekly.NflWeeklyManifest` declares `framing` REQUIRED with a default — so the contract is
+   * emphatic that it exists. Production disagreed: on 2026-09-15 the served manifest carried no
+   * `framing` at all and this page died on `framing.interval_note` for every visitor.
+   *
+   * ⭐ THE MECHANISM IS WHY THIS FIELD (AND ONLY THIS CLASS OF FIELD) MUST BE READ DEFENSIVELY.
+   * `/nfl/weekly/manifest` returns the published S3 blob through `entitlement.open_manifest_payload`
+   * with NO `response_model`, so nothing between the builder and the browser coerces the payload to
+   * the declared shape. And the builder's own guard cannot catch the gap: it calls
+   * `NflWeeklyManifest.model_validate(manifest)` and DISCARDS the result, then writes the raw dict
+   * — and because `framing` carries a default, validating a dict that omits it PASSES. The default
+   * lands on an object that is thrown away; the field never reaches S3.
+   *
+   * ⇒ the declared type was a statement about what the server INTENDS to send, and this mirror has
+   * to say what it CAN send. Marking it optional makes the compiler demand the narrowing rather
+   * than letting a future reader dereference it the way this one did.
+   *
+   * ⛔ DO NOT "fix" this by widening more of the contract on spec. Every other field the page reads
+   * was verified PRESENT in the live payload on 2026-09-15; widening a field nobody has seen missing
+   * would be defending against fiction and would hide the next real gap in a sea of optionals. The
+   * builder fix is a BACKEND follow-up (see the spec's `closeout.followUps`), and when it lands this
+   * stays optional anyway — a pass-through route can always omit a key.
+   */
+  framing?: NflWeeklyFraming
 }
 
 // ══ the reads ════════════════════════════════════════════════════════════════════════════════
