@@ -216,12 +216,19 @@ spec:
       news; it does not yet reflect in-season performance") and accept a gap
       that grows ~1/17 per week; (b) ship the FA pool + need annotation with NO
       value ranking until a ROS substrate exists; (c) fund a season-ROS
-      quantity (a successor — deriving remaining-games and remaining-points
-      from the board's own g/bye and the schedule is arithmetic on data we
-      already hold, and is NOT the weekly model); (d) wait for NF-INC-0916.
-      Recommendation: (c) is the only option that makes the product's own claim
-      true, and it is small; (a) is shippable sooner but the label has to carry
-      real weight. NOT a WVR1 decision.
+      quantity as its OWN successor spec: the INPUTS are all held today (the
+      board's own `g`/`bye`, plus `schedules`, which is in ROLL_FORWARD_SOURCES
+      and carries 2026), and it would NOT touch the weekly model. ⚠️ But it is
+      NOT a one-line pro-rate, and I do not want to hand a successor that
+      premise: `g` already encodes a FULL-SEASON injury cap (NF-INJ3b, 44 rows
+      fitted), so scaling it by remaining-team-games would double-count games a
+      player has ALREADY missed — and games-played-to-date is exactly the
+      quantity we do not currently ingest (NF-INC-0916 owns
+      `stats_player_week`). Scoped honestly it is real work with a real
+      dependency; (d) wait for NF-INC-0916. Recommendation: (c) is the only
+      option that makes the product's own claim true, and it is the one I would
+      fund, but ⛔ NOT on a "it is small" premise — see the caveat above; (a) is
+      shippable sooner if the label carries real weight. NOT a WVR1 decision.
 
 
       ② 🚨 BLOCKING — PM RULING NEEDED ON THE RANKING. Measured through the real
