@@ -68,7 +68,9 @@ Every row carries `capture_timestamp` — **our** fetch time, never a file mtime
 **Marts** (`ncaab_marts`): `dim_ncaab_team` (SCD-2 over conference) · `dim_ncaab_conference` ·
 `fact_ncaab_team_game` (the P1 fitting surface).
 
-Verified build: **PASS=28, WARN=1, ERROR=0** over 6 ingested seasons. The one warning is a
+⚠️ **`dbt build --select ncaab` SEGFAULTS the fusion binary** — not our SQL and not the data (both verified independently). Build model-by-model; the recipe, the evidence and two non-fixes are in **`docs/ncaab_p0_dbt_build.md`**. There is also **no NCAAB Dagster dbt job**, so the marts do not rebuild on the box.
+
+Verified build: **PASS=28, WARN=1, ERROR=0** over 6 ingested seasons (reproduced end-to-end against real S3 on 2026-09-14). The one warning is a
 D-I-reclassifying school with no conference (West Florida) — a true state of the world, held at
 `warn` severity so a hard failure cannot train the operator to ignore staging tests.
 
@@ -139,9 +141,16 @@ that ignores them will mis-specify silently rather than fail:
   (hoopR's own repo records a model incident from one zero-possession row). The row is kept and
   flagged `possessions_unusable` rather than dropped, so the absence is countable.
 
-### ⏳ One caveat about the lake itself
+### ✅ The lake is live, with two operational caveats
 
-P1 can design against this surface **today** — the audit verdict and the schema are final. But the
-box runtime gate has not yet been verified (see `ncaab_guide.md` Status), so **do not assume a
-live, daily-advancing lake** until the first real `sports_ncaab_ingest_schedule` fire is confirmed
-from artifact content. The 6 ingested seasons were landed and verified locally; S3 is unproven.
+The runtime gate passed 2026-09-14 against real S3: `schedules` holds 2022–2027 (32,732 rows),
+`team_box` 2022–2026 (62,020), `team_crosswalk` 2026 (362), and the marts build over them. P1 can
+fit on this today.
+
+Two things P1 inherits rather than discovers:
+
+- ⚠️ **`dbt build --select ncaab` segfaults dbt-fusion** — not our SQL, not the data (both
+  verified independently). Build model-by-model: `docs/ncaab_p0_dbt_build.md`.
+- ⚠️ **There is no NCAAB Dagster dbt job.** The daily ingest advances the lake, but nothing
+  rebuilds the marts on the box — they sit at whatever was last built by hand. Wire that before
+  anything serves off them.

@@ -123,6 +123,7 @@ Compose `env_file:` can't carry real PEM newlines, so the key arrives as **`SNOW
 - **Run a one-off script on the box:** `docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc python scripts/X.py …` (add `-e AWS_DEFAULT_REGION=us-east-2` for DuckDB S3).
 - **Re-serve a specific date:** `… exec dagster-codeloc python scripts/write_serving_store.py --date YYYY-MM-DD --picks …`.
 - **Debug a downstream (feature/serving) change fast:** SKIP `run_w1_lakehouse`'s full W1 pitch rebuild (~10 min); run only the targeted chain (`--w8a-only` etc.) — safe per the INC-21 recovery.
+- **Build the NCAAB marts:** ⛔ NOT `dbt build --select ncaab` — it SEGFAULTS dbt-fusion 2.0.0-preview.218 nondeterministically (our SQL compiles 29/29 and the same SQL runs clean on python DuckDB 1.5.3, so it is the fusion binary). Build one model per invocation in dependency order — recipe + evidence + the two knobs that are NOT the fix (`--threads 1`, `memory_limit`) in `docs/ncaab_p0_dbt_build.md`. ⚠️ There is no NCAAB dbt job; the box never rebuilds these marts.
 - **Run/validate dbt:** `scripts/dbt_state.sh build --select state:modified+ --target dev` locally; on the box it goes through `dbt-runner`.
 - **Check the box / containers:** SSM in → `docker compose -f ~/app/services/dagster/aws/docker-compose.yml ps`; logs at `~/capture-cron.log`.
 - **Ship a code change to the box:** merge to main (CD) OR SSM in + `deploy.sh` — and remember it needs `--build`.
