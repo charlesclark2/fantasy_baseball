@@ -271,7 +271,7 @@ measured reproduction rate — which is why the residual below was found at all.
 
 1. ⭐⭐ **"Points allowed" is NOT the opponent's final score.** A D/ST is charged only with what the
    opposing OFFENSE scored; a pick-six against your quarterback is not your defence's fault.
-   Measured decisively: MIN 2025 wk1 — CLE... no, CHI scored 24, of which a **defensive touchdown**
+   Measured decisively: MIN 2025 wk1 — CHI scored 24, of which a **defensive touchdown**
    was 7, so MIN's defence allowed **17, not 24**, moving it from the 21-27 tier (worth 0) to the
    14-20 tier (worth 1). Naive = 5.0; corrected = **6.0 = Sleeper's figure exactly**. PHI in the
    same week reproduces at **4.0** either way, so the correction is what discriminates.
