@@ -41,6 +41,84 @@ def test_reject_unsigned_delta():
         s3io._reject_unsigned(tbl, "ctx")
 
 
+class TestAnAllNullColumnMustNotDonateAType:
+    """NCAAB-P0 runtime gate — `_stabilise_all_null_columns`, in the SHARED write path.
+
+    🔴 THE DEFECT. A Delta table's schema is set by whichever partition is written FIRST, and the
+    daily ingest always writes the CURRENT season — which, out of season, has no games played.
+    hoopR's pre-season 2027 schedule carried `game_json_url` as an all-null INT32 (it is VARCHAR
+    in every played season), so the first S3 write pinned the column to Int32 and every real
+    season then failed: `Cannot cast string 'https://...' to value of Int32 type`. An entire
+    backfill blocked by one degenerate column.
+
+    It hid because DEVELOPMENT wrote ascending (2022 → 2027) — a complete season donated the
+    schema and the pre-season file conformed. PRODUCTION WRITE ORDER IS THE REVERSE. CI mocks all
+    IO, so only a live run could find it.
+
+    ⚠️ Distinct from `_sanitize_null_columns` above, which handles a pyarrow `null`-TYPED column.
+    This one is CONCRETELY typed (int32) and merely happens to hold no values.
+    """
+
+    def test_an_all_null_column_adopts_the_existing_table_type(self):
+        """Table EXISTS → adopt its type. Turns a would-be conflict into a no-op."""
+        tbl = pa.table({
+            "season": pa.array([2027, 2027], pa.int64()),
+            "game_json_url": pa.array([None, None], pa.int32()),   # all-null, concretely typed
+        })
+        target = pa.schema([pa.field("season", pa.int64()), pa.field("game_json_url", pa.string())])
+        out = s3io._stabilise_all_null_columns(tbl, target)
+        assert pa.types.is_string(out.schema.field("game_json_url").type)
+        assert out.column("game_json_url").to_pylist() == [None, None]
+
+    def test_with_no_table_it_falls_back_to_string_rather_than_pinning_a_degenerate_type(self):
+        """Table ABSENT → string, so a degenerate partition cannot pin a type at all."""
+        tbl = pa.table({
+            "season": pa.array([2027], pa.int64()),
+            "game_json_url": pa.array([None], pa.int32()),
+        })
+        out = s3io._stabilise_all_null_columns(tbl, None)
+        assert pa.types.is_string(out.schema.field("game_json_url").type)
+        assert pa.types.is_int64(out.schema.field("season").type), "a populated column is untouched"
+
+    def test_a_column_with_any_value_is_never_retyped(self):
+        """The whole justification is that an all-null column carries no values. One value and
+        the column's type is real information — coercing it would be a silent data change."""
+        tbl = pa.table({"n": pa.array([None, 7], pa.int32())})
+        target = pa.schema([pa.field("n", pa.string())])
+        out = s3io._stabilise_all_null_columns(tbl, target)
+        assert pa.types.is_int32(out.schema.field("n").type)
+        assert out.column("n").to_pylist() == [None, 7]
+
+    def test_it_is_a_no_op_when_nothing_is_all_null(self):
+        tbl = pa.table({"season": pa.array([2024], pa.int64()), "x": pa.array(["a"], pa.string())})
+        assert s3io._stabilise_all_null_columns(tbl, None) is tbl
+
+    def test_the_production_write_ORDER_round_trips_on_a_real_delta_tree(self, tmp_path):
+        """The end-to-end proof, and the one that would have caught it: write the DEGENERATE
+        partition FIRST (as the daily job does), then a full one.
+
+        Offline — a local Delta tree; delta-rs writes local FS identically to S3."""
+        uri = str(tmp_path / "schedules")
+        pre_season = pa.table({
+            "season": pa.array([2027, 2027], pa.int64()),
+            "game_id": pa.array([1, 2], pa.int64()),
+            "game_json_url": pa.array([None, None], pa.int32()),   # the poison
+        })
+        played = pa.table({
+            "season": pa.array([2026], pa.int64()),
+            "game_id": pa.array([9], pa.int64()),
+            "game_json_url": pa.array(["https://example/9.json"], pa.string()),
+        })
+        s3io.write_season_partition(pre_season, uri, 2027)
+        s3io.write_season_partition(played, uri, 2026)   # pre-fix: DeltaError cast failure
+
+        import duckdb
+        con = duckdb.connect(); con.execute("INSTALL delta; LOAD delta")
+        rows = con.execute(
+            f"select season, game_json_url from delta_scan('{uri}') order by season").fetchall()
+        assert rows == [(2026, "https://example/9.json"), (2027, None), (2027, None)]
+
+
 def test_sanitize_null_columns_casts_void_to_string():
     # The wide-pbp landmine: an all-null column arrives as pyarrow `null` type → Delta `void`
     # (unreadable). _sanitize_null_columns recasts it to string (value-preserving, all null).

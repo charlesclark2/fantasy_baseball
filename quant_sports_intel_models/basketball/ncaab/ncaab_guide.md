@@ -1,11 +1,12 @@
 # NCAA Basketball (NCAAB) — Implementation Guide
 
-**Status:** v0.3 — Phase 0 (NCAAB-P0) BUILT AND MEASURED; the spec is held at `IN_PROGRESS`
-pending ONE thing: the box runtime gate. CI mocks all IO, so the first write to the `ncaab/`
-S3 prefix has never executed and may need a fresh IAM grant (the E8.5 class). **P1 is
-unblocked for DESIGN work today** — the audit verdict, the fitting surface and the
-registration constraints are all final — but P1 should not assume a live daily lake until
-that first fire is verified from artifact content.
+**Status:** v0.4 — Phase 0 (NCAAB-P0) **COMPLETE**. The box runtime gate PASSED 2026-09-14:
+the instance role wrote the `ncaab/` prefix on its first attempt (no IAM grant needed), the box
+reads hoopR over HTTPS, and the full mart chain builds — 28 passes + 1 warn. The lake holds
+2022–2027 and `fact_ncaab_team_game` is live at 69.1–69.6 possessions/team-game. **P1 is
+unblocked.** ⚠️ Two operational caveats it inherits: `dbt build --select ncaab` segfaults
+dbt-fusion (build model-by-model — `docs/ncaab_p0_dbt_build.md`), and there is **no NCAAB
+Dagster dbt job**, so the marts do not rebuild on the box.
 
 > 🚩 **STALENESS CORRECTIONS (NCAAB-P0, 2026-09-14) — READ BEFORE TRUSTING ANYTHING BELOW.**
 > The original stub predates the current architecture and FIVE of its claims are now WRONG:
@@ -56,7 +57,7 @@ that first fire is verified from artifact content.
 | E10 (parlay) | calculator first |
 
 ## Phased plan (kickoff ~early Nov — most runway of the three)
-- **Phase 0 — data:** 🟡 BUILT; awaiting the box runtime gate (NCAAB-P0, see Status above). The Odds API NCAAB (odds + ~~props~~ ⛔ not offered + scores) on the Railway-cron pattern; team/efficiency + pace data (compute adjusted efficiency from PBP, or ingest a Torvik/KenPom-style source); rosters + injuries; build `ncaab_data_inventory.md`.
+- **Phase 0 — data:** ✅ COMPLETE (NCAAB-P0; runtime gate passed 2026-09-14). The Odds API NCAAB (odds + ~~props~~ ⛔ not offered + scores) on the Railway-cron pattern; team/efficiency + pace data (compute adjusted efficiency from PBP, or ingest a Torvik/KenPom-style source); rosters + injuries; build `ncaab_data_inventory.md`.
 - **Phase 1 — honest surfaces by kickoff:** tempo×efficiency base totals/team-totals distribution, parlay calculator, per-book/CLV transparency (esp. mid-major sharp-vs-soft comparison).
 - **Phase 2 — gated edge (post-kickoff):** sharp-anchor (E4 — lead with mid-majors), ~~props (E5)~~ ⛔ **BLOCKED-AT-SOURCE, see the table above**, CLV (E3); each PBO<0.2 + DSR>0.
   ⚠️ **E3/E4 both consume market data and are therefore bounded by the archive floor:** any clause touching the market declares its window inside **2020-11-16** (6 seasons), and no story is scoped around a longer one. Game-only work has 24 seasons. See `ncaab_data_inventory.md` §8.

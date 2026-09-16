@@ -140,6 +140,28 @@ DECLARED: tuple[SportsDeltaContract, ...] = (
 )
 
 
+# ── a CONSIDERED ABSENCE, recorded so nobody "fixes" it ──────────────────────────────────
+#
+# ⛔ `ncaab_team_crosswalk` HAS NO CONTRACT HERE, AND THAT IS A DECISION, NOT AN OMISSION.
+#
+# The obvious reading of NCAAB-P0's runtime gate is: "the crosswalk no longer escalates on a
+# 404, so move the watching to a freshness SLA." That would be wrong, and INC-45 already paid
+# for the lesson — do NOT put an INC-41 freshness SLA on a DELIBERATELY-STATIC artifact,
+# because an SLA on something that should not advance pages daily on a healthy file, and a
+# monitor that pages on a healthy state is one that gets muted.
+#
+# MEASURED 2026-09-14: hoopR publishes the crosswalk for exactly ONE season at a time (only
+# `2026` existed; 2024, 2025 and 2027 were all 404). Between rolls NOTHING writes this table —
+# legitimately, for weeks or months, on hoopR's schedule and not ours. Any lag threshold wide
+# enough not to false-page across a roll is too wide to detect anything worth detecting.
+#
+# ⭐ WHAT WATCHES IT INSTEAD, and it is a better instrument for this failure: the question that
+# actually matters is not "was the file fetched recently" but "can we resolve conference names
+# for the season we are serving". `dim_ncaab_conference` answers that directly and per-row via
+# `name_unresolved`, and a defunct conference keeps its history rather than disappearing. That
+# is a CONTENT check at the point of use, which is strictly stronger than a fetch-time check —
+# the same shape as the 7-day Byparr outage, where every liveness probe was green and only a
+# staleness check on the LANDED DATA saw it.
 def registration_snippet() -> str:
     """Exactly what to paste into `sports_delta_freshness.REGISTRY` at enablement.
 

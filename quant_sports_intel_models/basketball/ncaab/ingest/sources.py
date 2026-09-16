@@ -118,6 +118,7 @@ class SourceSpec:
     on_demand: bool = False        # excluded from a default run (the paid /historical feeds)
     paid: bool = True              # ⚠️ DEFAULTS TO PAID — see below. Spends Odds-API credits.
     capture_owned: bool = False    # written by run_capture's read-merge-write, NOT by run_ingest
+    current_season_only: bool = False  # upstream publishes ONE season; a 404 is never a defect
     expect_rows: bool = True       # an empty landing in-season is an ESCALATION
     freshness_hours: int | None = None
     notes: str = ""
@@ -345,6 +346,7 @@ SOURCES: dict[str, SourceSpec] = {
     "team_crosswalk": SourceSpec(
         paid=False,  # hoopR, CC BY 4.0 — free
         name="team_crosswalk", fetch=hoopr_team_crosswalk, tier="hoopr", grain="team",
+        current_season_only=True,  # MEASURED: only ONE season's file exists upstream at a time
         typed=True, cadence="seasonal", freshness_hours=24 * 14, expect_rows=True,
         notes="hoopR mbb_team_crosswalk_<season>.parquet — 362 D-I teams with conference "
               "NAMES + KenPom/Torvik/Fox/Yahoo join keys. CURRENT SEASON ONLY."),
@@ -405,6 +407,28 @@ def classify_absence(spec: SourceSpec, season: int, *, when: date | None = None)
     same 404 means a feed we depend on has gone missing.
     """
     when = when or datetime.now(timezone.utc).date()
+    if spec.current_season_only:
+        # ⭐ NCAAB-P0 RUNTIME GATE — MEASURED, not assumed: hoopR publishes the team crosswalk
+        # for exactly ONE season at a time (on 2026-09-14 only `2026` existed; 2024, 2025 and
+        # 2027 were all 404). So for this source a 404 carries NO information about health —
+        # it means "the file you asked for is not the one season they currently publish", which
+        # is true of every season but one, and WHICH one drifts on hoopR's own schedule.
+        #
+        # Escalating on it would have been actively harmful in two ways, both measured:
+        #   • a historical backfill (`--seasons 2022-2026`) escalates on 4 of 5 seasons and
+        #     exits 1, for a completely healthy run;
+        #   • from the season's first tip (~2026-11-03) `in_season()` flips true and the DAILY
+        #     job would raise EVERY DAY until hoopR rolled the crosswalk forward — paging
+        #     CRITICAL through `run_failure_alert_sensor` on a benign upstream lag. A monitor
+        #     that cries wolf daily for weeks is a monitor that gets muted before the season it
+        #     exists to watch.
+        #
+        # ⚠️ THIS IS NOT "STOP WATCHING IT". Staleness moves to the instrument that can actually
+        # express it — a freshness SLA on the LANDED DATA (`ncaab_team_crosswalk` in
+        # betting_ml/monitoring/ncaab_freshness.py). That is the repo's own lesson from the
+        # 7-day Byparr outage: for a feed whose absence is routine, the durable detector is a
+        # staleness check on what landed, never a check that the fetch failed.
+        return None
     if season > season_for(when):
         return None                       # a future season — nothing is published yet
     if season == season_for(when) and not in_season(when):

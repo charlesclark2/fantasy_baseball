@@ -256,6 +256,66 @@ def _sanitize_null_columns(table: pa.Table) -> pa.Table:
     return pa.table(cols, schema=pa.schema(fields))
 
 
+def _all_null_column_names(table: pa.Table) -> list[str]:
+    """Columns with ZERO non-null values. PURE."""
+    return [f.name for i, f in enumerate(table.schema) if table.column(i).null_count == table.num_rows]
+
+
+def _stabilise_all_null_columns(table: pa.Table, target: pa.Schema | None) -> pa.Table:
+    """Stop an ALL-NULL column from donating (or conflicting with) a Delta column type.
+
+    🔴 NCAAB-P0 RUNTIME GATE — THE DEFECT THIS CLOSES, because it is invisible until a real
+    multi-season write and it BLOCKS AN ENTIRE BACKFILL. A Delta table's schema is set by
+    whichever partition is written FIRST, and the daily job always writes
+    `season_for()` — the CURRENT season, which out of season has no games played. That
+    pre-season file is the WORST possible schema donor: hoopR's 2027 schedule carried
+    `game_json_url` as an all-null INT32 (it is VARCHAR in every played season), so the first
+    S3 write pinned the Delta column to Int32 and every real season then failed with
+    `Cannot cast string 'https://...' to value of Int32 type`. Nothing caught it earlier
+    because DEVELOPMENT wrote ascending (2022 → 2027), so a complete season donated the schema
+    and the pre-season file conformed. **Production write order is the REVERSE of development
+    write order**, and CI mocks all IO, so only a live run could find it.
+
+    The rule: AN ALL-NULL COLUMN CARRIES NO VALUES, SO ITS DECLARED TYPE IS MEANINGLESS and it
+    must never decide anything.
+      • Table EXISTS  → adopt the table's type for that column. Strictly an improvement: it can
+        only turn a would-be type conflict into a no-op, which is why it is safe to apply to the
+        in-season NFL/NCAAF tables that already carry concrete types.
+      • Table ABSENT  → fall back to `string`, so a degenerate partition cannot pin a type at
+        all. This is the same trade `_sanitize_null_columns` already makes for `null`-typed
+        columns, and it is deliberately asymmetric: the cost is a column stored as string that
+        "should" have been numeric (arrow casts into it cleanly, downstream adds a `::int` at
+        the use-site — the INC-23 idiom), versus a HARD FAILURE that blocks every backfill.
+        A mild, visible type downgrade beats an unusable table.
+
+    PURE — the caller supplies `target`, so this is unit-tested offline with no IO.
+    """
+    null_cols = _all_null_column_names(table)
+    if not null_cols:
+        return table
+    want: dict[str, pa.DataType] = {}
+    for name in null_cols:
+        idx = table.schema.get_field_index(name)
+        current = table.schema.field(idx).type
+        if target is not None and name in target.names:
+            desired = target.field(target.get_field_index(name)).type
+        else:
+            desired = pa.string()
+        if desired != current:
+            want[name] = desired
+    if not want:
+        return table
+    cols, fields = [], []
+    for i, f in enumerate(table.schema):
+        if f.name in want:
+            cols.append(table.column(i).cast(want[f.name]))
+            fields.append(pa.field(f.name, want[f.name]))
+        else:
+            cols.append(table.column(i))
+            fields.append(f)
+    return pa.table(cols, schema=pa.schema(fields))
+
+
 # ── the Delta write path (delta-rs — DuckDB's delta extension is READ-only) ──────────────
 def write_season_partition(
     table: pa.Table,
@@ -282,10 +342,14 @@ def write_season_partition(
     opts = storage if storage is not None else (storage_options() if uri.startswith("s3://") else None)
 
     exists = True
+    target_schema: pa.Schema | None = None
     try:
-        DeltaTable(uri, storage_options=opts)
+        target_schema = DeltaTable(uri, storage_options=opts).schema().to_arrow()
     except TableNotFoundError:
         exists = False
+
+    # An all-null column must not donate a type on create, nor conflict with one on append.
+    table = _stabilise_all_null_columns(table, target_schema)
 
     if not exists:
         if not create_ok:
