@@ -227,16 +227,40 @@ spec:
           validate-and-discard suspects. They are not — they are something else, and
           the measurement is stark:
 
-          ⭐ OF THE 10 WRITERS THAT PUBLISH TO THE SERVING api-cache, EXACTLY ONE
+          ⭐ OF THE 12 WRITERS THAT REACH THE SERVING api-cache, EXACTLY ONE
           VALIDATES AGAINST A DECLARED CONTRACT — `run_weekly_serving.py`, and only
-          because NF-C6-PH2 built it that way. The other nine
+          because NF-C6-PH2 built it that way. The other eleven
           (`export_prospect_board_json`, `export_draft_board_json`,
           `export_player_history_json`, `export_track_record_json`,
-          `run_nf_serving_board_snapshot`, `run_sleeper_player_ingest`,
-          `write_api_cache`, `write_ncaaf_serving_store`, `write_serving_store`)
-          reference no pydantic model at all. Of 26 further S3 writers (lake, raw,
-          research artifacts), zero validate — but those have no typed consumer, so
-          they are a different question.
+          `run_nf_d21_publish`, `run_nf_serving_board_snapshot`, `run_realized_week`,
+          `run_sleeper_player_ingest`, `write_api_cache`, `write_ncaaf_serving_store`,
+          `write_serving_store`) reference no pydantic model at all. Of the further
+          S3 writers (lake, raw, research artifacts), zero validate — but those have
+          no typed consumer, so they are a different question.
+
+          ⚠️ THE DENOMINATOR WAS FIRST RECORDED AS 10 AND THAT WAS AN UNDERCOUNT —
+          corrected here rather than quietly, because the way it was wrong is the
+          reusable part. The first scan keyed on a file calling `put_object(` itself,
+          which MISSES A PUBLISHER THAT DELEGATES ITS UPLOAD TO A SHARED HELPER:
+          `run_nf_d21_publish` uploads through `GP.copy_tree_uploader` and
+          `run_realized_week` through `_maybe_publish`, so neither has an S3 call of
+          its own to find. A per-file scan for the WRITE is the wrong shape when the
+          write is factored out — same family as INC-27's "the dbt DAG is not the
+          full consumer list", facing the writer side. The headline survives (both
+          additions are `NO CONTRACT`), which is luck rather than method.
+
+          ⭐ AND A FALSE-POSITIVE SHAPE WORTH NAMING, caught by NF-WVR1 spot-checking
+          this census rather than relaying it: `run_nf_d21_publish` contains
+          `GP.validate(...)` — a GATE check, not an output-contract check — so a naive
+          `grep -E "model_validate|\.validate\(|pydantic|BaseModel"` reads it as a
+          second validating writer, and reads `write_serving_store` as one too. The
+          scan used here is `\.model_validate\w*\(`, which excludes both (verified
+          two-sided: the naive pattern HITs on d21 and `write_serving_store`, this one
+          does not). ⚠️ It has its own known weakness in the same direction — it asks
+          whether a file validates ANYTHING, not whether it validates THE BLOB IT
+          WRITES, so a file that validates an input while publishing an unchecked
+          output would read as VALIDATES. No such case occurred here (only one file
+          matched at all), but the number is a screen, not a proof.
 
           ⚠️ THE DISTINCTION MATTERS AND CUTS BOTH WAYS. "No contract" is NOT the
           defect this story fixed. The weekly manifest had a contract that DECLARED
