@@ -1381,3 +1381,105 @@ export const WEEKLY_STAT_LINE_LOCK_DETAIL =
  *  fabricating a line; rendering it as the lock would be lying about why it is not there. */
 export const WEEKLY_STAT_LINE_ABSENT =
   "No projected stat line was produced for this player this week. The points projection above is unaffected — the two come from separate models, and this one had nothing to say about him."
+
+// ── NF-INC-0916 — THE WITHHOLDING, while the weekly model's training feed is corrected ──────────
+//
+// ⭐ WHAT THIS COPY HAS TO DO, AND THE THING IT MUST NOT DO.
+//
+// The weekly model's two training feeds were never being ingested, so it fitted a week whose stat
+// lines had been filled with zeros no player actually produced. The served point runs at roughly a
+// third of what players scored, and at quarterback at roughly a fifth. `best_alpha = 0`, so
+// nothing was staked on it — which is exactly why it comes down rather than staying up behind a
+// hedge. A number we have measured at a fraction of reality is not made honest by a caveat.
+//
+// ⛔ NO EUPHEMISM. Not "temporarily unavailable", not "undergoing maintenance", not "we are making
+// improvements". Each of those describes a schedule rather than a fact, and each would leave a
+// reader believing the numbers were fine and merely absent. It says what broke and what it did.
+//
+// ⛔ NO DATE PROMISED. The fix waits on a feed landing, a retrain, and a measurement read by a
+// human — not on a calendar — and a page that named a day would be turning an inference about our
+// own queue into a delivery commitment. This is the same rule `WEEKLY_AWAITING_PUBLISH_DETAIL`
+// follows for the ordinary pre-publish state, applied to a worse cause.
+//
+// ⚠️ DATED, THOUGH. `WEEKLY_WITHHELD_SINCE` is rendered into the detail, because a notice with a
+// date on it is falsifiable — a reader can tell one that went up this morning from one that has
+// been sitting there a month — and an undated notice is the euphemism arriving by another route.
+// The date has ONE owner (`lib/weekly-suppression.ts`) and is passed in rather than retyped here.
+//
+// ⚠️ THE FIGURES ARE IN WORDS ("roughly a third", "roughly a fifth") RATHER THAN IN DECIMALS, and
+// that is this module's own rule rather than a stylistic choice: a measured figure typed into a
+// component cannot be reconciled against the measurement it came from and drifts silently on the
+// next re-score, so `test_the_canonical_copy_module_carries_no_measured_figure` refuses one
+// outright. The population-matched ratios live in `docs/nf_wk_td1_pm_decisions.md`.
+
+/** The title over the withheld-numbers notice. */
+export const WEEKLY_WITHHELD_TITLE = "We have taken this week's projected points down"
+
+/**
+ * The page's standfirst WHILE THE NUMBERS ARE WITHHELD.
+ *
+ * ⭐ IT HAS TO CHANGE, and the reason is the same one that makes the notice necessary.
+ * `WEEKLY_PAGE_STANDFIRST` promises "the 80% range around it and what is left of his season beside
+ * it" — a description of exactly what this page is currently declining to show, sitting two lines
+ * ABOVE the notice that says so. Leaving it would have the surface make and withdraw the same
+ * claim in the same screenful, which reads as carelessness rather than as candour.
+ *
+ * ⚠️ It describes what IS here rather than apologising, because what is left is genuinely useful:
+ * the week's rosters, opponents, byes and evidence base are all unaffected by the defect.
+ */
+export const WEEKLY_WITHHELD_STANDFIRST =
+  "Our projected points for the coming week are withheld while we correct a fault in the data the model learns from — the notice below says what happened. What is on this page does not come from that model: who is on a game-day roster this week, who they play, who is on a bye, and how much of each player's own form we hold."
+
+/**
+ * The notice, as sentences. Structured like `CSV_WITHHELD_NOTE` and for the same reason: every
+ * sentence stays a double-quoted literal, which is the form the claim screens actually read. A
+ * template literal would carry the same words past both of them.
+ */
+export const WEEKLY_WITHHELD_NOTE = {
+  lead:
+    "Our projected points for this week, the range around them, the rest-of-season figures and the projected stat line are all withheld, and the table below is not ordered by them either.",
+  since: "Withheld since",
+  mechanism:
+    "The model that produces them learns from a weekly feed of what players actually did, and we found that two parts of that feed were never being loaded. It therefore trained on a week in which every player's statistics were recorded as zeros — not because they sat out, but because nothing had been read in for them.",
+  effect:
+    "The effect is one-directional and large: it makes the model far too willing to project nothing at all, so the numbers it gives come out well below what players go on to score. Measured against the same players' real scoring in the same week, the projections were running at roughly a third of it, and at quarterback roughly a fifth. The shape of a big week was about right; the floor underneath it was not.",
+  ordering:
+    "We have taken the ordering down with the numbers. It probably survives the defect better than the numbers do, but a list ranked by a figure we are declining to show is still that figure's claim, and we would rather show you none of it than the half we are less sure about.",
+  kept:
+    "What is left on this page does not come from that model and is unaffected: who is on a game-day roster this week, who they play, who is on a bye, how many weeks of a player's own form we hold, how many weeks are left, and who we are not projecting at all and why. The line at the foot of the page gives the date of every input, including the one that went stale — it is what this was found in.",
+  restore:
+    "The numbers come back when the missing feeds are arriving each week, the model has been retrained on real weeks rather than fabricated ones, and we have measured the result against what players actually scored. We are not putting a date on that, because it depends on a run finishing and a person reading what it produced.",
+} as const
+
+/**
+ * The full notice, with its date.
+ *
+ * ⚠️ Built by joining screened literals rather than by interpolating a template, so the claim
+ * screens see every sentence. The only value that is not a literal here is the date itself.
+ */
+export function weeklyWithheldDetail(since: string): string {
+  return [
+    WEEKLY_WITHHELD_NOTE.lead,
+    WEEKLY_WITHHELD_NOTE.since + " " + since + ".",
+    WEEKLY_WITHHELD_NOTE.mechanism,
+    WEEKLY_WITHHELD_NOTE.effect,
+    WEEKLY_WITHHELD_NOTE.ordering,
+    WEEKLY_WITHHELD_NOTE.kept,
+    WEEKLY_WITHHELD_NOTE.restore,
+  ].join(" ")
+}
+
+/** The marker in a withheld number cell.
+ *
+ *  ⚠️ NOT AN EM-DASH, and that is the point. An em-dash on this page means "we do not know" (a
+ *  final week's rest-of-season figure genuinely is not a number). Here we DO know and are
+ *  declining to publish, which is a different fact and has to read as one — the merged empty state
+ *  is the specific error this surface is built to avoid. */
+export const WEEKLY_WITHHELD_CELL = "withheld"
+
+/** The paid panel, while the stat line is withheld. ⚠️ It must NOT reuse `WEEKLY_STAT_LINE_ABSENT`
+ *  ("no projected stat line was produced for this player"), which would be a FALSE claim about the
+ *  model — one was produced; we are not showing it. Nor the membership lock, which would tell an
+ *  entitled reader he had not paid for something he had. */
+export const WEEKLY_WITHHELD_STAT_LINE =
+  "The projected stat line is withheld along with the points. It comes from the same fit, so it carries the same defect — the stated statistics run low for the same reason, and showing them while the points are down would just move the problem to a different column."

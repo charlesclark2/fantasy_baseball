@@ -996,7 +996,17 @@ def test_the_freshness_op_actually_supplies_the_expected_kickoff():
     src = Path(__file__).resolve().parents[2] / "pipeline/jobs/sports_nfl_weekly_serving_job.py"
     tree = ast.parse(src.read_text())
 
-    calls = [n for n in ast.walk(tree)
+    # ⚠️ SCOPED TO `nfl_weekly_freshness_op`, NOT THE WHOLE MODULE (NF-INC-0916). A module-wide
+    # scan for `.classify(` was correct while this file held exactly one classifier call; node 1
+    # added a SECOND op with its own `SF.classify(...)` over a different classifier with a
+    # different signature, and the unscoped form then failed on code that has nothing to do with
+    # the property under test. Re-anchored onto the op it always meant — the argument is unchanged.
+    op = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == "nfl_weekly_freshness_op"), None)
+    assert op is not None, (
+        "`nfl_weekly_freshness_op` is gone from the job module — this guard would scan nothing")
+
+    calls = [n for n in ast.walk(op)
              if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
              and n.func.attr == "classify"]
     assert calls, "no WF.classify(...) call found in the freshness op — the guard would pass on nothing"
@@ -1012,7 +1022,7 @@ def test_the_freshness_op_actually_supplies_the_expected_kickoff():
             "expected_kickoff is hard-coded None — the escalation can never fire"
 
     # …and the value must come from the SCHEDULE's resolved target, never off the artifact.
-    assigned = [n for n in ast.walk(tree)
+    assigned = [n for n in ast.walk(op)
                 if isinstance(n, ast.Assign)
                 and any(isinstance(t, ast.Name) and t.id == "expected_kickoff" for t in n.targets)]
     assert any("first_kickoff" in ast.dump(n.value) for n in assigned), \

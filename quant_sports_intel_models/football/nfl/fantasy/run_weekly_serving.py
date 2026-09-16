@@ -174,6 +174,18 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
     if train.empty:
         raise WS.WeeklyServingError("no training rows strictly before the target week")
 
+    # ⛔ NF-INC-0916 — REFUSE TO TRAIN ON A WEEK WHOSE STAT LINE NEVER LANDED, and do it BEFORE the
+    # fit rather than after: the fit is the nine-minute step, and there is nothing to learn from a
+    # week of fabricated zeros except a wrong P(zero). The gate keys on COVERAGE ABSENCE, never on
+    # zeros — the retained-zero convention stands, because a player who played and scored nothing
+    # HAS a stat row and is a true zero.
+    vintage = _vintage(src, train, target)
+    stat_cov = WS.assert_training_stat_coverage(frame, target=target, vintage=vintage)
+    log.info("[METRIC] weekly_train_stat_coverage_min=%.4f", stat_cov["min_coverage"])
+    log.info("training stat coverage: %d week(s) checked, worst %s at %.4f (floor %.2f)",
+             stat_cov["n_weeks_checked"], stat_cov["min_week"], stat_cov["min_coverage"],
+             stat_cov["floor"])
+
     # The serving universe: everyone game-day rostered this week, byes included.
     fr = frame[(frame["season"] == target.season) & (frame["week"] == target.week)
                & frame["position"].isin(C.PROJECTED_POSITIONS)].copy()
@@ -233,7 +245,7 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
         "pit_weeks_checked": int(pit["weeks_checked"]),
         "pit_records_checked": int(pit["records_checked"]),
         "pit_rows_dropped": int(pit["rows_dropped"]),
-        "input_vintage": _vintage(src, train, target),
+        "input_vintage": vintage,
         "lineage": {
             "served_version": WS.SERVED_VERSION,
             "base_model_version": WS.BASE_MODEL_VERSION,
@@ -256,6 +268,11 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
             f"training reaches {tt_s} wk {tt_w}, which is NOT strictly before the projected week "
             f"{target.season} wk {target.week} — a current-week outcome would be in the model."
         )
+    # ⛔⛔ NF-INC-0916 — the manifest's own two-field proof. One owner, in `weekly_serving`, so the
+    # refusal can be driven with the exact historical pair rather than only through a full build.
+    sv = WS.assert_stat_vintage_reaches_training(vintage)
+    log.info("stat vintage vs training boundary: %s", sv)
+
     if not players:
         raise WS.WeeklyServingError("zero players — refusing to publish an empty week")
     empty_pos = [p for p, n in by_pos.items() if n == 0]

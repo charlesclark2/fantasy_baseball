@@ -41,6 +41,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       changelog: ${{ steps.filter.outputs.changelog }}
+      release_gate: ${{ steps.filter.outputs.release_gate }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -132,6 +133,33 @@ jobs:
               - '!docs/**'
             changelog:
               - 'frontend/data/changelog.json'
+            # 🚨 NF-INC-0916 (2026-09-16) — the RELEASE GATE, and it exists for one PR class.
+            #
+            # THE GAP IT CLOSES: the weekly page is withholding its projected points while the
+            # model that produces them is retrained, and a changelog entry announcing an
+            # improvement to those same projections is deferred in `changelog-held.json` until it
+            # is true. `test_nf_inc_0916_promotion_gate.py` enforces both halves — but the PR that
+            # LIFTS the withholding flips one `.ts` constant and touches nothing else, so it
+            # resolves `backend == false` and would run no Python job at all (the identical
+            # NCAAF-P3.9 finding one story over: the detection exists, it just stops being
+            # reached). The half that fires on exactly that PR — "you lifted the gate, now restore
+            # the announcement you deferred" — would therefore never execute.
+            #
+            # ⚠️ ONE PATTERN, NOT THREE, AND THAT IS FORCED BY `predicate-quantifier: every`: a
+            # file must match EVERY entry in its list, so a three-line list selects NOTHING. The
+            # brace form is the correct shape here and was MEASURED against picomatch with the
+            # action's own MatchOptions (`{dot: true}`), exactly as the two notes above did:
+            #
+            #     frontend/data/changelog.json          -> release_gate TRUE
+            #     frontend/data/changelog-held.json     -> release_gate TRUE
+            #     frontend/lib/weekly-suppression.ts    -> release_gate TRUE
+            #     frontend/components/nav.tsx           -> release_gate false
+            #     betting_ml/tests/test_x.py            -> release_gate false
+            #
+            # ⛔ AND NOT BY ADDING THESE PATHS TO `backend`, which is the disarming edit described
+            # at length above. Pinned by the guard itself, not left to this comment.
+            release_gate:
+              - 'frontend/{data/changelog.json,data/changelog-held.json,lib/weekly-suppression.ts}'
 
       # Say what was decided. A gate whose verdict appears nowhere in the log is one nobody can
       # sanity-check from a run page — which is a large part of why the `some`/`every` defect above
@@ -149,6 +177,12 @@ jobs:
             echo "→ changelog guard WILL run (frontend/data/changelog.json changed)"
           else
             echo "→ changelog guard will SKIP (the changelog is untouched)"
+          fi
+          echo "release_gate=${{ steps.filter.outputs.release_gate }}"
+          if [ "${{ steps.filter.outputs.release_gate }}" = "true" ]; then
+            echo "→ release gate WILL run (the changelog, the held registry or the withholding flag changed)"
+          else
+            echo "→ release gate will SKIP (none of those three files changed)"
           fi
 
   # E11.13 — fast gate: every test EXCEPT the `slow` Monte-Carlo calibration guards.
@@ -246,6 +280,42 @@ jobs:
 
       - name: Run the changelog guard
         run: uv run pytest betting_ml/tests/test_changelog_guard.py -v --tb=short
+
+  # NF-INC-0916 — the release gate: an announcement may not ship while its subject is withheld.
+  #
+  # ⚠️ GATED ON `release_gate` ALONE, never `backend || release_gate`. The PR this exists for is
+  # frontend-only (it flips one constant), and an `||` would make the job fire for the pre-existing
+  # reason on any mixed PR — which would make "the gate ran" true for the old reason and prove
+  # nothing about the new trigger. `changelog-guard` above is gated the same way, for the same
+  # reason, and the guard pins it.
+  #
+  # ADDITIVE, not a move: a backend PR still runs the same file inside the `core` fast-gate shard,
+  # so nothing left the merge bar.
+  release-gate:
+    name: Release gate (withheld numbers vs deferred announcements)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.release_gate == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --no-dev-packages || uv sync
+
+      - name: Run the release gate
+        run: uv run pytest betting_ml/tests/test_nf_inc_0916_promotion_gate.py -v --tb=short
 
   # Static checks that used to ride along in the single fast-gate job.
   static-checks:
