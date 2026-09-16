@@ -708,9 +708,12 @@ spec:
          a team-level source, which is a deliberate second read rather than a column on
          this row."
       ⇒ CONSEQUENCE FOR WVR1, which must be designed in and not discovered: the fact
-        columns can cover QB/RB/WR/TE/K but NOT DST — and the gate league rosters a DST
-        slot with 21 available defences in the pool. So the surface will have a genuine
-        per-position hole at exactly one of the six rostered positions.
+        columns can cover QB/RB/WR/TE/K but NOT DST. Stated precisely rather than roundly,
+        because the count differs by league: DST is one of the SIX positions a STANDARD
+        league rosters (QB/RB/WR/TE/K/DST), but one of the FIVE the runtime-gate league
+        rosters — that league declares QB/RB/WR/TE/FLEX×2/DST and NO kicker slot, which is
+        why its pool carried 0 K and 21 DST. Either way the uncovered position is DST, and
+        in a league with no kicker it is the only uncovered position of the five.
       ⛔ AND THE HOLE MUST NAME ITSELF. "No realized facts for this team defence" and
         "this defence did nothing" must NOT render identically — that is precisely the
         NF-C6b/NF-K1 class this repo has already paid for twice (the D/ST symptom that
