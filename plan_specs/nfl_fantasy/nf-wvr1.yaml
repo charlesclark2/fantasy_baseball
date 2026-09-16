@@ -468,3 +468,52 @@ spec:
       consumes that artifact and does not own it — and NF-INC-0917B carries the census
       itself in its own followUps, so the PM will see it from both sides; recorded here
       only because it rides on a question this story raised.
+
+
+      ⑪ ⛔⛔ CORRECTION TO ⑧ AND ⑩ — I WAS WRONG THAT RC1's REALIZED PUBLISHER HAS NO
+      CALLER (2026-09-16). It has a full CLI entrypoint,
+      `quant_sports_intel_models/football/nfl/fantasy/run_realized_week.py`
+      (`--season --week --publish --smoke`, bucket defaulting to CACHE_BUCKET), and RC1
+      built it deliberately so it "can never join the zero-callers list". My grep was
+      scoped to `pipeline/ scripts/ services/` and never looked in
+      `quant_sports_intel_models/…/fantasy/`, which is where the runner lives — the
+      INC-27 "grep the WHOLE repo, not just the DAG" lesson, landing on the session that
+      had just cited INC-27 at someone else. I asserted the absence in a commit message
+      and to the PM twice before checking the directory the module itself lives in.
+      ⇒ THE CORRECTED STATE, each half measured:
+        • an OPERATOR COMMAND EXISTS and is paste-ready:
+          `uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_realized_week
+           --season 2026 --week 1 --publish`  (reads the LAKE, so laptop per the
+          data-fix-defaults-to-the-laptop rule; `--smoke` dry-builds first; it REFUSES to
+          publish a `not_started` week rather than writing a zero-row artifact);
+        • what is genuinely MISSING is the RECURRING WIRING — nothing outside tests
+          references `run_realized_week`, so there is no op, schedule or cron; a week gets
+          published only when a human runs it;
+        • the ARTIFACT IS STILL UNPUBLISHED (S3 `fantasy/nfl/realized/` empty, verified
+          two-sided against a control prefix) — that half of ⑧ was measured directly and
+          STANDS.
+      ⇒ so the fact columns are unblocked by ONE OPERATOR RUN TODAY, not by a wiring
+      project; the wiring question survives for the RECURRING cadence (weeks 2..18).
+      The PM question is therefore: run it now for week 1, and separately decide who owns
+      the recurring cadence + whether it ships with a declared contract (⑩).
+
+      ⑩ᵃ AMENDMENT TO ⑩ — the census denominator is 12, NOT 10 (NF-INC-0917B, who found
+      their own defect while checking mine). A per-file scan keyed on a file calling
+      `put_object(` ITSELF misses a publisher that DELEGATES its upload to a shared
+      helper; two do — `run_nf_d21_publish` (via `GP.copy_tree_uploader`) and
+      `run_realized_week` (via `_maybe_publish`). Verified here: both carry
+      `put_object=0` and `model_validate=0`. Same INC-27 family as ⑪, facing the WRITER
+      side. The headline SURVIVES — still exactly ONE contracted writer
+      (`run_weekly_serving.py`) — but of 12, and by luck rather than method, so it is
+      recorded that way rather than quietly shown as a better number.
+      ⚠️ TWO SCOPE LIMITS, both theirs, both worth keeping attached to the number:
+      (a) my `\.validate\(` false-positive point applies to a NAIVE pattern, NOT to
+      their scan, which uses `\.model_validate\w*\(` and matches neither
+      `run_nf_d21_publish` nor `write_serving_store`; (b) the scan asks whether a file
+      validates ANYTHING, not whether it validates THE BLOB IT WRITES — no such case
+      arose (only one file matched at all), but it is a SCREEN, NOT A PROOF, and neither
+      story may quote it as one.
+      ⇒ and it lands on ⑪: `run_realized_week` is ALREADY the 12th uncontracted serving
+      writer, not a hypothetical one — the artifact has no declared contract today and no
+      published history yet, which is exactly the cheap window (E9.49 is the bill for the
+      other order).
