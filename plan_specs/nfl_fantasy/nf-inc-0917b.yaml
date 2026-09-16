@@ -327,25 +327,39 @@ spec:
           production afterwards and seeing a replay attach.
       - id: combined-page-copy-review
         summary: >
-          NOT DONE, AND HANDED BACK RATHER THAN GUESSED. The INC-0916 suppression is
-          live on `main`, so the weekly page now renders the withholding notice AND
-          — until the corrected manifest publishes — the INC-0917 framing-absence
-          panel. Nobody has seen them together; that was the point of the spec's
-          clause.
+          DONE — LOOKED AT, AND IT WAS WORSE THAN "TWO APOLOGIES". Driven with a real
+          browser against production 2026-09-16 (Playwright against the live page,
+          read-only; ⛔ never `curl | grep` — the weekly table is client-rendered and
+          React escapes apostrophes, which already produced one false RED during this
+          incident).
 
-          They are different facts and both are honest. The question is whether they
-          read as two apologies where one sentence would do.
+          ⭐ THE FINDING: the framing-absence panel ended "…and the projections above
+          are unaffected", and the projections above are WITHHELD. That is not a tone
+          problem, it is a FALSE STATEMENT, and it is false precisely when someone is
+          most likely to be reading it. Corrected to "…and nothing else on this page
+          depends on them", which is true in both states, and guarded as a CLASS
+          rather than as a sentence: a panel explaining ONE absence may not assert the
+          STATE of anything another mechanism can withhold
+          (`test_the_absence_copy_makes_no_claim_about_the_projections_status`, with a
+          paired clause so the guard cannot be satisfied by deleting the copy).
 
-          ⭐ WHY THIS SESSION DID NOT MERGE THE COPY: the two have different
-          lifetimes. The framing absence disappears the moment the corrected build
-          publishes (hours); the suppression lifts only on the operator's
-          verdict-table read (card VicWAoZl, NF-INC-0916 node 4). Copy merging them
-          into one sentence is wrong as soon as either half resolves, and which
-          resolves first is not a thing this session can know. So: the operator
-          looks (handoff §5b, in a real browser — ⛔ never `curl | grep`, the weekly
-          table is client-rendered and React escapes apostrophes, which already
-          produced one false RED during this incident), and if it reads badly the
-          fix is a lead-in/ordering change the PM owns.
+          ⚠️ AND ONE CLAUSE I EXPECTED TO BE FALSE IS TRUE, which is why this was
+          measured rather than reasoned: "it is on the '80% range' column heading
+          itself" still holds — under suppression the columns DO render, with their
+          cells withheld (`["PLAYER","TEAM","OPP","THIS WEEK","80% RANGE",…]`, read
+          off the live page). Had I gone by the argument rather than the browser I
+          would have rewritten a sentence that was correct.
+
+          ⏭️ THE REMAINING QUESTION IS A JUDGMENT AND IS THE PM's: should the
+          absence panel RENDER AT ALL while the numbers are withheld? It annotates a
+          range whose values are not displayed, so a reader meets two failure stories
+          where one applies. The page already gates several things on
+          `WEEKLY_NUMBERS_WITHHELD` (standfirst, ordering, row view, the bye note), so
+          the change is one condition. This session did not make it: it is a product
+          decision on INC-0916's live surface, the two notices have different
+          lifetimes (the framing absence ends at the next publish, hours; the
+          suppression ends on the operator's verdict read, card VicWAoZl), and gating
+          suppresses a statement that is TRUE. Handoff §5b carries the look.
       - id: main-is-ahead-of-dev
         summary: >
           PROCESS, worth a line because it nearly cost this session a wasted

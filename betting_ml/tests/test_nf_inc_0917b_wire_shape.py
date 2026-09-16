@@ -621,3 +621,63 @@ def test_the_envelope_and_the_response_model_agree_in_both_directions():
         f"`NflWeeklyManifestResponse` REQUIRES {sorted(required - set(enveloped))}, which "
         "`open_manifest_payload` no longer supplies — every response would fail to build"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 8. THE ABSENCE COPY MAY NOT ASSERT THE STATE OF CONTENT THAT CAN BE WITHHELD
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+_CLAIM_COPY = _REPO / "frontend/lib/fantasy-claim-copy.ts"
+
+
+def _framing_absent_copy() -> str:
+    """The `WEEKLY_FRAMING_ABSENT` string, read from the module that owns it."""
+    import re
+
+    m = re.search(r'export const WEEKLY_FRAMING_ABSENT\s*=\s*\n?\s*"((?:[^"\\]|\\.)*)"',
+                  _CLAIM_COPY.read_text())
+    assert m, "could not find WEEKLY_FRAMING_ABSENT — this guard would be vacuous"
+    return m.group(1)
+
+
+def test_the_absence_copy_parses():
+    """NF1.7(a) — a parser returning an empty string satisfies every substring clause below."""
+    assert len(_framing_absent_copy()) > 80
+
+
+def test_the_absence_copy_makes_no_claim_about_the_projections_status():
+    """⛔ MEASURED ON THE LIVE PAGE 2026-09-16, not reasoned about.
+
+    The two notices had never rendered together. With the INC-0916 suppression live, the weekly page
+    shows the withholding notice AND this absence panel, and this copy ended with "…and the
+    projections above are unaffected" — while the projections above were WITHHELD. A caveat panel
+    that reassures a reader about content the same page is declining to show is not a tone problem;
+    it is a false statement, and it is false precisely when someone is most likely to be reading it.
+
+    ⭐ THE CLASS, because the specific sentence will be reworded and this must outlive it: a panel
+    that explains ONE absence must not assert the STATE of anything another mechanism can withhold.
+    It can describe itself and it can point at something structural — the "80% range" column heading
+    is still rendered under suppression (checked on the live page; the columns render with their
+    cells withheld), so pointing at it stays true — but "the projections are fine" is a claim about
+    a neighbour, and neighbours change.
+    """
+    copy = _framing_absent_copy().lower()
+    forbidden = [
+        "projections above are unaffected",
+        "projections are unaffected",
+        "numbers above are unaffected",
+    ]
+    hit = [f for f in forbidden if f in copy]
+    assert hit == [], (
+        f"the framing-absence copy asserts the state of the projections ({hit}) — which is FALSE "
+        "whenever WEEKLY_NUMBERS_WITHHELD is on, i.e. exactly when a reader meets both notices"
+    )
+
+
+def test_the_absence_copy_still_says_what_it_is_for():
+    """The other side of the clause above: removing the false reassurance must not hollow the panel
+    out. It still has to say that the notes did not arrive and that we are not inventing them —
+    otherwise a future edit could satisfy the guard by deleting the copy (INC-38)."""
+    copy = _framing_absent_copy().lower()
+    for phrase in ("did not come through", "not showing them", "80% range"):
+        assert phrase in copy, f"the absence copy no longer says {phrase!r}"

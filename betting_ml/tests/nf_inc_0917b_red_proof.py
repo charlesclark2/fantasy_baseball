@@ -48,6 +48,7 @@ _RUNNER = _FAN / "run_weekly_serving.py"
 _CONTRACT = _REPO / "app/backend/models/nfl_weekly.py"
 _ROUTER = _REPO / "app/backend/routers/fantasy.py"
 _CONFIG = _REPO / "frontend/next.config.mjs"
+_COPY = _REPO / "frontend/lib/fantasy-claim-copy.ts"
 
 _GUARD = _TESTS / "test_nf_inc_0917b_wire_shape.py"
 _GUARD_FILES = (_GUARD,)
@@ -134,6 +135,18 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "    except _NeverRaised:",
      f"{_GUARD}::test_an_uncoercible_blob_degrades_rather_than_500ing"),
 
+    ("the absence copy goes back to claiming the withheld projections are unaffected",
+     _COPY,
+     "and nothing else on this page depends on them.",
+     "and the projections above are unaffected.",
+     f"{_GUARD}::test_the_absence_copy_makes_no_claim_about_the_projections_status"),
+
+    ("the absence copy is hollowed out instead of corrected",
+     _COPY,
+     "The measurement notes that belong with these numbers did not come through",
+     "The measurement notes are absent",
+     f"{_GUARD}::test_the_absence_copy_still_says_what_it_is_for"),
+
     # ── the CSP ─────────────────────────────────────────────────────────────────────────────────
     ("worker-src is gone, so session replay is silently off in production again",
      _CONFIG,
@@ -174,7 +187,7 @@ def _sweep_stale_backups() -> list[str]:
     for root in (_REPO / "app/backend", _TESTS, _FAN, _REPO / "frontend"):
         for bak in root.rglob(f"*{_BAK_SUFFIX}"):
             target = Path(str(bak)[: -len(_BAK_SUFFIX)])
-            assert target.suffix in (".py", ".mjs"), (
+            assert target.suffix in (".py", ".mjs", ".ts"), (
                 f"refusing to restore {bak} onto {target} — that is not a source file")
             target.write_text(bak.read_text())
             bak.unlink()

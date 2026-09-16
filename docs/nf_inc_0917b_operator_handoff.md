@@ -196,34 +196,47 @@ CSP line fixes) and then, **after the frontend deploys**, open `/fantasy/weekly`
 an error, and confirm a replay **does** attach. That is the only way to know the `worker-src` line
 worked; it has no server-side signal.
 
-### (b) The combined-page copy review — **now possible, and it needs your eye**
+### (b) The combined-page copy review — **looked at; one thing fixed, one thing is yours**
 
-This one has never been looked at, because the two pieces of copy have never rendered together.
-`WEEKLY_NUMBERS_WITHHELD = true` is live on `main`, so the page now shows **the INC-0916 suppression
-notice** (we have taken this week's numbers down) and, until the corrected manifest publishes, **the
-INC-0917 framing-absence panel** (the measurement notes are not in this payload).
+I drove the live page in a real browser (read-only) rather than reasoning about it, and it was worse
+than "two apologies":
 
-They are **different facts** and both are honest. The question is whether they read as *two
-apologies where one honest sentence would do* — a reader meeting both may conclude the product is
-broken in two ways rather than that one build is being withheld while one caveat block is missing.
+⭐ **The framing-absence panel ended "…and the projections above are unaffected", and the projections
+above are WITHHELD.** A caveat panel reassuring a reader about content the same page is declining to
+show is a false statement, and it is false exactly when someone is most likely to be reading it.
+**Fixed** — it now ends "…and nothing else on this page depends on them", which is true in both
+states — and guarded as a class, not as a sentence: a panel explaining one absence may not assert
+the state of anything another mechanism can withhold.
 
-⭐ **The reason this is a judgment call and not a fix:** the two have different lifetimes. The
-framing absence disappears the moment STEP 2's republish lands; the suppression lifts only on your
-verdict-table read (card `VicWAoZl`, NF-INC-0916 node 4). So merging them into one sentence would
-produce copy that is wrong as soon as either half resolves — which is why this session has **not**
-merged them and is handing you the look instead.
+⚠️ **And one clause I expected to be false is true**, which is why this needed a browser: "it is on
+the '80% range' column heading itself" still holds. Under suppression the columns DO render, with
+their cells withheld — read off the live page:
+`["PLAYER","TEAM","OPP","THIS WEEK","80% RANGE","REST OF SEASON",…]`. Going by the argument rather
+than the page would have rewritten a correct sentence.
+
+⏭️ **THE PART THAT IS YOURS: should the absence panel render at all while the numbers are withheld?**
+It annotates a range whose values are not displayed, so a reader still meets two failure stories
+where one applies. The page already gates several things on `WEEKLY_NUMBERS_WITHHELD` (standfirst,
+ordering, row view, the bye note), so it is one condition.
+
+I did not make that change, for three reasons worth weighing rather than just asserting: it is a
+product decision on **INC-0916's** live surface; the two notices have **different lifetimes** (the
+framing absence ends at the next publish — hours; the suppression ends on your verdict read, card
+`VicWAoZl`), so any copy that merges them is wrong as soon as either half resolves; and gating
+suppresses a statement that is **true**.
+
+⭐ **It may also resolve itself before you have to decide.** Run STEP 3 (`deploy.sh`) and the
+absence panel disappears entirely — the route completes the manifest from the blob already in S3, so
+the real notes render and there is only one notice on the page again.
 
 ```bash
-# LAPTOP. Open in a real browser, cache-busted. Read both panels together.
+# LAPTOP. Look at it yourself, cache-busted, in a real browser.
 open "https://www.credencesports.com/fantasy/weekly?cb=$(date +%s)"
 ```
 
 ⛔ Do **not** verify this with `curl | grep`: the weekly table is client-rendered and React escapes
 apostrophes, so a grep of the served HTML reports a healthy page as broken (the NF-INC-0916 node-0
 false-RED, already recorded).
-
-If it reads as two apologies, the cheapest honest fix is a single ordering/lead-in change on the
-page, carded rather than done here — this session has no basis for a copy decision the PM owns.
 
 ---
 
