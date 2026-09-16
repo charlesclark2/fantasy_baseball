@@ -278,11 +278,45 @@ spec:
           than "these surfaces are broken" — nobody has measured whether any of them
           is actually short of what its client reads.
 
+          ⭐⭐ AND THE PAIRED INSTANCE, WHICH IS THE PART WORTH CARRYING FORWARD.
+          Within the same hour, two sessions produced the SAME defect from opposite
+          ends of the same graph, each while citing INC-27 at the other:
+
+            · MINE, on the WRITE side — a per-file scan for `put_object(` cannot see
+              a publisher whose upload is factored into a shared helper.
+            · NF-WVR1's, on the CALLER side — a `grep` for callers scoped to
+              `pipeline/ scripts/ services/` missed `run_realized_week.py`, the CLI
+              sitting in the module's OWN directory, so "this publisher has no
+              caller" was asserted twice before the obvious directory was checked.
+              (Independently verified here before citing it: the CLI exists, with
+              `--season --week --publish --smoke --s3-bucket`; and nothing outside
+              its own directory references it, so the missing thing is the RECURRING
+              wiring, not the command.)
+
+          Two people, two directions, one shape: A SCOPED SCAN ANSWERS A QUESTION
+          ABOUT ITS SCOPE, NOT ABOUT THE REPO — and the scope is chosen before you
+          know where the answer lives, which is why the error is systematic rather
+          than careless. INC-27 is usually quoted as "grep the whole repo before
+          dropping a table"; the general form is that ANY completeness claim
+          ("N writers", "no callers", "nothing reads this") inherits the boundary of
+          the scan that produced it, and the claim should carry that boundary with it.
+
+          ⇒ CONSEQUENCE FOR THE PM, since it sharpens the cheap-window point above:
+          `run_realized_week` is ALREADY the 12th uncontracted serving writer, not a
+          hypothetical one — code-ready, CLI-complete, with the artifact still
+          unpublished. So it has no contract AND no published history right now, and
+          the first `--publish` closes that window permanently (E9.49 is the bill for
+          the other ordering). Not a WVR1 scope request from either side — they
+          consume that artifact and do not own it; both records carry it so the PM
+          sees it twice rather than as one story lobbying for another's work.
+
           Instrument, so this is re-runnable rather than a snapshot: AST scan for a
           bare `model_validate`/`model_validate_json`/`parse_obj` expression
-          statement, plus a scan for S3 writers keyed on `put_object(` / a
-          `--publish` + boto3 pair, split on whether the file references the
-          api-cache.
+          statement, plus a scan for S3 writers keyed on `put_object(` OR a known
+          upload helper (`_maybe_publish`/`copy_tree_uploader`/`upload_json`/
+          `publish_json`) OR a `--publish` + boto3 pair, split on whether the file
+          references the api-cache. ⚠️ That helper list is itself a scope — it is the
+          set measured today, not a closed one.
       - id: scoring-system-id-and-the-type-ranking
         summary: >
           A TENTH ABSENT FIELD, not in the spec's list: `scoring_system_id` was
