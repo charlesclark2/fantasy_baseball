@@ -136,6 +136,27 @@ spec:
     #   THE FEED — it reads the lake and renders a STATED ABSENCE when a week is missing, so a
     #   recurring-ingest failure degrades visibly rather than silently freezing the fact columns.
     #
+    # 📌 FACT COLUMNS — DEFERRED, and the blocker MOVED during this story (2026-09-16, stated
+    #   precisely because "as feasible" is the licence and feasibility changed twice in a day):
+    #     • AT PHASE A DESIGN TIME the blocker was CODE — league-scoring a realized line needs a
+    #       scorer-key -> nflverse-column map, that map is RC1's `realized_stat_fields.py`, and
+    #       writing a second one would be the no-fourth-scorer defect.
+    #     • NF-WK-RC1 MERGED (PR #1148) mid-story, so `realized_stat_fields.py` IS now on dev and
+    #       RC1 also publishes exactly the artifact needed:
+    #       `fantasy/nfl/realized/<season>/<week>/players.json` — one week's realized lines for ALL
+    #       players, read through the existing narrow `_load_json`, i.e. NO lake-read inside the
+    #       API Lambda (E9.26b: a wide `lakehouse_query` there fails SILENTLY and returns []).
+    #     • ⛔ BUT THE ARTIFACT IS NOT PUBLISHED. Measured two-sided 2026-09-16: listing
+    #       `s3://credence-prod-s3-api-cache/fantasy/nfl/realized/` returns NOTHING while the
+    #       control prefix `fantasy/nfl/2026/` returns the boards — so this is a genuine absence,
+    #       not a permissions failure (NF1.7 (a): a check that cannot look must not read as empty).
+    #   ⇒ the blocker is now ONE OPERATOR COMMAND (RC1's publisher), not another story's merge.
+    #   Until it runs, the pool ships as ruling 2's stated fallback — an EXPLICITLY NON-RANKED
+    #   listing (`ordering: "unranked"`, with the reason on the payload). The follow-up is small and
+    #   scoped: sum the published weeks per player, score through `league_scoring.score_row` under
+    #   `realized_stat_fields.REALIZED_STAT_FIELD` (the ONE scorer, RC1's map), attach to the pool
+    #   rows, and flip `ordering` to the realized facts. ⚠️ Bound the per-week fan-out when it is
+    #   built: one S3 GET per completed week is 1-2 today and ~17 by season's end.
     # 📌 DATED CORRECTION carried forward (WVR1's own follow-up ① was already stale within a day):
     #   ① recorded option (c) as blocked because "games-played-to-date is exactly the quantity we do
     #   not currently ingest". INC-0916's `in_season_stats.py` (daily in-season ingest of
