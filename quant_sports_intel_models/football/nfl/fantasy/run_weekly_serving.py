@@ -370,8 +370,20 @@ def assert_contract_shaped(built: dict) -> dict[str, int]:
     shipping writer would ever produce — which is the fixture the E2E suite could not construct and
     the reason the outage's guards were green throughout (NF-INC-0917's own finding).
 
-    Returns the field COUNT checked per blob, so a caller can log a number rather than a promise —
-    a gate that examined nothing has not passed (NF1.7(a)).
+    Returns, per blob, the number of declared fields verified present, for the `[METRIC]` line.
+
+    ⚠️ THAT NUMBER EQUALS THE CONTRACT'S OWN FIELD COUNT, AND IT IS WORTH SAYING WHY RATHER THAN
+    LEAVING IT TO LOOK LIKE A MISTAKE. This function only RETURNS when every declared field is
+    present — anything short raises — so on the success path the two are necessarily the same
+    number. An earlier revision made the count blob-derived to guard against "reports healthy for a
+    blob it never read", then could not write a NON-VACUOUS test for the difference, because there
+    is no reachable state in which the two disagree. The state that worried me is closed
+    structurally instead: an absent or non-dict blob is itself reported as a problem, so there is
+    no input on which this returns quietly without having looked.
+
+    ⛔ The lesson kept rather than the code churn: a distinction no test can observe is not a
+    safeguard, it is a comment. The dead "examined nothing" branch that sat on top of this — which
+    could never fire, since the count it read was a constant — is gone.
     """
     checked: dict[str, int] = {}
     problems: list[str] = []
@@ -387,10 +399,6 @@ def assert_contract_shaped(built: dict) -> dict[str, int]:
             shown = missing[:12]
             tail = f" (+{len(missing) - len(shown)} more)" if len(missing) > len(shown) else ""
             problems.append(f"{name}: {shown}{tail}")
-    if not any(checked.values()):
-        raise WS.WeeklyServingError(
-            "the contract-shape gate examined NO declared field — it cannot have passed"
-        )
     if problems:
         raise WS.WeeklyServingError(
             "REFUSING to write: a declared field is absent from the blob about to be published. "

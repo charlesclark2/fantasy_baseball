@@ -681,3 +681,34 @@ def test_the_absence_copy_still_says_what_it_is_for():
     copy = _framing_absent_copy().lower()
     for phrase in ("did not come through", "not showing them", "80% range"):
         assert phrase in copy, f"the absence copy no longer says {phrase!r}"
+
+
+def test_the_gate_only_returns_a_count_when_every_declared_field_is_present(runner):
+    """⭐ THE INVARIANT THAT MAKES THE `[METRIC]` NUMBER HONEST, asserted instead of assumed.
+
+    `assert_contract_shaped` returns the contract's own field count. That is only a true report of
+    what was verified because the function CANNOT return on a blob that is short — it raises. So the
+    claim to pin is not the arithmetic of the count (which no reachable state can falsify) but the
+    refusal that stands behind it.
+
+    ⚠️ Recorded because I got this wrong first: I made the count blob-derived to defend against
+    "reports healthy for a blob it never read", and then could not write a test that distinguished
+    the two implementations — there is no input on which they differ. A distinction no test can
+    observe is not a safeguard, it is a comment, and the honest guard is this one.
+    """
+    from quant_sports_intel_models.football.nfl.fantasy import weekly_serving as WS
+
+    full = _built(C.NflWeeklyManifest.model_validate(_HISTORICAL_MANIFEST).model_dump(),
+                  payload=C.NflWeeklyPayload.model_validate(_HISTORICAL_PLAYERS).model_dump())
+    counts = runner.assert_contract_shaped(full)
+    assert counts["manifest"] == len(C.declared_field_names(C.NflWeeklyManifest))
+
+    # Remove ONE declared field from each blob in turn: every one of them must refuse, which is what
+    # makes "returned a count" equivalent to "verified all of them".
+    for blob_name, model, field in (("manifest", C.NflWeeklyManifest, "framing"),
+                                    ("payload", C.NflWeeklyPayload, "scoring_system_id"),
+                                    ("current", C.NflWeeklyCurrent, "manifest_key")):
+        assert field in C.declared_field_names(model), f"{field} is no longer declared"
+        thin = dict(full, **{blob_name: _degenerate(full[blob_name], field)})
+        with pytest.raises(WS.WeeklyServingError, match=field):
+            runner.assert_contract_shaped(thin)

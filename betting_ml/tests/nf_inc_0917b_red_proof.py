@@ -105,6 +105,12 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "        item = None\n        if item is not None and isinstance(blob[name], list):",
      f"{_GUARD}::test_a_missing_field_on_one_player_row_is_caught_too"),
 
+    ("the gate reports its count WITHOUT refusing, so the number stops meaning anything",
+     _RUNNER,
+     "    if problems:\n        raise WS.WeeklyServingError(",
+     "    if False:\n        raise WS.WeeklyServingError(",
+     f"{_GUARD}::test_the_gate_only_returns_a_count_when_every_declared_field_is_present"),
+
     # ── the route: two halves, each deletable without the other noticing ─────────────────────────
     ("the route loses its response_model and is a pass-through of the S3 blob again",
      _ROUTER,
