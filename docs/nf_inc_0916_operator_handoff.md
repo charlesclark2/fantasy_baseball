@@ -29,11 +29,27 @@ So the announcement has been **deferred** into `frontend/data/changelog-held.jso
 
 **After the promotion, verify by content (cache-busted), not by a green deploy:**
 
+⚠️ **Two traps in this check, both of which return `0` on a perfectly healthy page.** (a) React escapes `'` to `&#x27;`, so a grep string containing an apostrophe never matches the rendered HTML; (b) the weekly **table is client-rendered**, so `curl` of the server HTML cannot see a single cell — a grep for the notice proves only that the banner shipped, never that the numbers are withheld. Use both commands below.
+
 ```bash
-# LAPTOP
-curl -s "https://www.credencesports.com/fantasy/weekly?cb=$(date +%s)" | grep -c "We have taken this week's projected points down"
-# expect: 1
+# LAPTOP. ~2 s. The notice shipped (apostrophe-free fragment, deliberately).
+curl -s "https://www.credencesports.com/fantasy/weekly?cb=$(date +%s)" \
+  | grep -c "projected points down"
+# expect: 1   (withheld)   /   0 after node 4 (un-suppressed)
 ```
+
+```bash
+# LAPTOP. ~15 s. The CELLS are withheld — reads the shipped client bundle,
+# which is the only place the row rendering is decided.
+cd "$(mktemp -d)" && curl -s "https://www.credencesports.com/fantasy/weekly?cb=$(date +%s)" -o p.html \
+  && grep -o 'src="/_next/static/chunks/[^"]*"' p.html | sed 's/src="//;s/"//' \
+     | while read -r c; do curl -s "https://www.credencesports.com${c}"; echo; done > b.js \
+  && grep -c 'point:g,p10:g,p90:g,ros:g,rosP10:g,rosP90:g,band:!1,statLine:!1' b.js
+# expect: 1   (every model cell folded to the withheld singleton, no conditional)
+# after node 4 this goes to 0 and the row view carries real values instead.
+```
+
+Verified live 2026-09-16 on `dpl_54WZndz76f3GBdEWBUrcUWzd5Db9`: both return as expected.
 
 ⚠️ And the repo's standing hazard applies: a long-open `dev → main` PR can merge an **earlier** `dev` snapshot with every signal green. Verify `main`'s actual file content afterwards, never the merge status:
 
@@ -72,6 +88,52 @@ AWS_DEFAULT_REGION=us-east-2 uv run python -m quant_sports_intel_models.football
 Success looks like: `weekly_train_stat_coverage_min` well above `0.30`, a `stat vintage vs training boundary` line whose `stats_as_of` is **not** behind `train_through`, and a published manifest for the target week.
 
 ⚠️ **The ingest may report "0 not-yet-published" and change nothing** — that is fine and expected. The lake already holds 2026 wk 1 for both feeds (1,118 / 1,492 rows), written **once** at 2026-09-16T02:43Z. The Delta history shows nothing else for these tables since the 2026-07-18 historical backfill, while `weekly_rosters` (a real roll-forward source) writes several times a day. **That contrast is the proof**: the rows were present and the *cadence* was absent — the `stg_ref_players` shape, invisible to a row count.
+
+---
+
+### ⭐ Did the retrain actually correct it? Read the PUBLISHED MANIFEST — one command, no box access
+
+This is the decisive check and it needs nothing but `curl`. The manifest carries the
+defect's own two-field proof, so it answers the question directly rather than by proxy.
+
+```bash
+# LAPTOP. ~2 s. Read-only. Exit 0 = corrected, exit 1 = still defective.
+curl -s "https://api.credencesports.com/fantasy/nfl/weekly/manifest?cb=$(date +%s)" | python3 -c '
+import json, sys
+d = json.load(sys.stdin); v = d.get("input_vintage", {})
+def wk(s):
+    try:
+        y, w = str(s).split("-W"); return (int(y), int(w))
+    except Exception: return (0, 0)
+st, sn = wk(v.get("stats_as_of")), wk(v.get("snaps_as_of"))
+tt = (v.get("train_through_season") or 0, v.get("train_through_week") or 0)
+print("generated_at :", d.get("generated_at"), " target:", d.get("season"), "wk", d.get("week"))
+print("stats_as_of  :", v.get("stats_as_of"), "  snaps_as_of:", v.get("snaps_as_of"))
+print("train_through:", tt[0], "wk", tt[1])
+ok = st >= tt and sn >= tt
+print("VERDICT      :", "OK - both feeds reach the training boundary" if ok
+      else "DEFECTIVE - a feed is BEHIND train_through")
+sys.exit(0 if ok else 1)
+'
+```
+
+**Proven two-sided.** Run against the live served manifest on 2026-09-16 (built by the
+**09-15** 08:30 PT fire, i.e. before the fix deployed) it returns:
+
+```
+generated_at : 2026-09-15T15:32:59+00:00  target: 2026 wk 2
+stats_as_of  : 2025-W18   snaps_as_of: 2025-W18
+train_through: 2026 wk 1
+VERDICT      : DEFECTIVE - a feed is BEHIND train_through      (exit 1)
+```
+
+That is the incident, still on the wire, dated. **Read the three outcomes correctly:**
+
+| after the next 08:30 PT fire | means |
+|---|---|
+| `generated_at` advances **and** VERDICT OK | **fixed** — go to the after-table below |
+| `generated_at` does **not** advance | node 2's publish guard **REFUSED** to publish a payload whose stats are behind its training boundary. The guard is working; the *ingest* is not landing. Check the run, not the guard. |
+| `generated_at` advances but VERDICT still DEFECTIVE | the publish guard failed to fire — that is a defect in node 2 and should be reported |
 
 ---
 

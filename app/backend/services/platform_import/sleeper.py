@@ -615,6 +615,101 @@ def import_league(league_id: str, *, include_draft: bool = True) -> C.ImportedLe
     )
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐ NF-WVR1 — THE ONE ROSTER-REFRESH OWNER (PM ruling 3, 2026-09-16)
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⛔ THIS IS THE SINGLE OWNER OF "RE-READ A SAVED LEAGUE'S CURRENT ROSTERS". Anything that needs to
+# know who is rostered RIGHT NOW calls this; nothing else re-fetches rosters. It lives here, beside
+# `_fetch_teams`, because `_fetch_teams` already owns the `/league/<id>/rosters` call and this is a
+# second QUESTION asked of the same endpoint — not a second fetcher (the repo's recurring
+# "one logical job, two execution owners" defect: INC-30's crontab, INC-36's deploy, INC-38's
+# month-boundary flag).
+#
+# ⚠️⚠️ DO NOT CONFUSE THIS WITH `sleeper_matchups.fetch_week` (NF-WK-RC1). They are DIFFERENT
+# OBJECTS WITH DELIBERATELY OPPOSITE FRESHNESS SEMANTICS, and collapsing them would break whichever
+# one lost:
+#
+#            RC1 `sleeper_matchups.fetch_week`      WVR1 `refresh_league_rosters` (here)
+#   asks     "what happened in week N"              "who is available NOW"
+#   wants    FROZEN — a recap must be stable        CURRENT — a stale pool is the whole defect
+#            after it renders
+#   reads    /matchups/{week} -> `starters`         /league/{id}/rosters -> `players`
+#   carries  the STARTED LINEUP only, on purpose    the WHOLE rostered set: bench, IR and taxi
+#            ("a recap lays out lineups, not       included, because an unavailable player is
+#             rosters")                             unavailable however he is slotted
+#
+# A free-agent pool is the COMPLEMENT of this set, so a roster this misses becomes a player we
+# recommend who is already owned — the worst output the waiver feature can produce.
+#
+# Analysis of record: `docs/nf_wvr1_fa_pool_diagnosis.md` §3.
+
+
+def refresh_league_rosters(league_id: str) -> dict:
+    """Re-read EVERY team's CURRENT roster for a saved Sleeper league.
+
+    Returns the stored-record shape directly — `{"rosters": [...], "synced_at": ..., "note": [...]}`
+    where each roster is `{"team_key", "team_name", "players": [{"name", "position", "team"}]}` —
+    so the caller can hand it to `LeagueSave` without a second mapping step that could drift from
+    `models.fantasy.LEAGUE_ROSTER_PLAYER_FIELDS`.
+
+    ⭐ DELEGATES TO `_fetch_teams` RATHER THAN RE-QUERYING. That keeps ONE code path talking to
+    `/league/<id>/rosters`, so name resolution, the `sleeper_players` artifact fallback and the
+    owner/team-name join can never differ between an IMPORT and a REFRESH — which is exactly the
+    class of drift that makes a refreshed roster subtly disagree with the one it replaced.
+
+    ⚠️ `player_key` IS DROPPED HERE, DELIBERATELY, and it is not an oversight to be "fixed" later.
+    `LEAGUE_ROSTER_PLAYER_FIELDS` is `("name", "position", "team")`, and the FA-pool subtraction
+    joins through `league_scoring._join_key` (name+position, D/ST by franchise) precisely BECAUSE
+    ids do not cross the three vocabularies in play: Sleeper's own ids, our board's ids — 113 of 870
+    published rows carry SYNTHETIC ids (81 rookies + 32 team defences) — and nflverse gsis ids. An
+    id join would silently drop the rookie class, which is the population a waiver surface exists to
+    surface. Measured: `docs/nf_wvr1_fa_pool_diagnosis.md` §4.
+
+    ⛔ RAISES rather than returning a partial set. A roster list short by one team produces an FA
+    pool containing that team's players — a confidently wrong recommendation that does not announce
+    itself — so a failed fetch must reach the caller as a failure (the `sleeper_matchups` refusal
+    posture, same reason).
+    """
+    if not _ID_RE.match(str(league_id or "")):
+        raise SleeperInputError("Invalid Sleeper league id.")
+
+    teams, note = _fetch_teams(str(league_id))
+    if not teams:
+        raise SleeperInputError(
+            f"Sleeper returned no rosters for league {league_id}. A league id from a different "
+            "season is the ordinary cause — Sleeper gives each season its own league id."
+        )
+
+    rosters = [
+        {
+            "team_key": t.team_key,
+            "team_name": t.name,
+            "players": [
+                {"name": p.name, "position": p.position, "team": p.team} for p in t.players
+            ],
+        }
+        for t in teams
+    ]
+    return {
+        "rosters": rosters,
+        # The caller re-stamps this onto `league_rosters_synced_at` (PM ruling 3: the writer owns
+        # the stamp). Generated HERE so the timestamp describes the FETCH, not whenever the caller
+        # got around to persisting it.
+        "synced_at": _utcnow_iso(),
+        # Carried through verbatim: `_fetch_teams` says how many rostered players it could NAME, and
+        # a pool computed over unnamed players is a pool that will not join to the board. The caller
+        # surfaces this rather than discarding it.
+        "note": list(note),
+    }
+
+
+def _utcnow_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 __all__ = [
     "BONUS_KEY_MAP",
     "PLATFORM",
@@ -624,6 +719,7 @@ __all__ = [
     "fetch_draft_state",
     "import_league",
     "list_leagues",
+    "refresh_league_rosters",
     "resolve_target",
     "resolve_user",
 ]

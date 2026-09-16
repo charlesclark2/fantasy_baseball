@@ -34,6 +34,7 @@ from app.backend.dependencies import (
 from app.backend.models.fantasy import (
     BigBoard,
     BigBoardSave,
+    bound_league_rosters,
     DraftAssistantRequest,
     FantasyPreferences,
     League,
@@ -52,9 +53,11 @@ from app.backend.services import (
 # Aliased because `depth_targets` is also the name of the FIELD this module reads off a league
 # record and off a request payload; an unaliased import would shadow-read as the value in every
 # local scope that touches one, which is exactly the kind of thing a reviewer skims past.
-from app.backend.models import nfl_weekly
+from app.backend.models import nfl_recap, nfl_weekly
 from app.backend.services import depth_targets as depth_targets_service
-from app.backend.services import weekly_league_board
+from app.backend.services import waiver_pool
+from app.backend.services import weekly_league_board, weekly_recap, weekly_recap_store
+from app.backend.services.platform_import import sleeper_matchups
 
 logger = logging.getLogger(__name__)
 
@@ -1435,3 +1438,373 @@ def nfl_draft_assistant(
         "my_team_known": bool(payload.my_team),
     }
     return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐ NF-WK-RC1 — THE WEEKLY LEAGUE RECAP + POWER RANKINGS (EPIC NF-SEASON's first member)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# What a league's week ACTUALLY did, per slot, in that league's own scoring — the factual surface
+# that realized data can carry and a projection cannot.
+#
+# 🔒 ON `router` (`require_fantasy_access`), FOR THE REASON `/nfl/weekly/league-board` GIVES. The
+# free tier's ONE personalized league reaches `personal_router`; this is `DECISION_SUPPORT`, the
+# capability the pricing page sells, and moving a route between router objects is a pricing change
+# wearing a refactor's clothes. The QUOTA is still enforced, and a league that is not the caller's
+# is 404 (never 403) so an id they do not own is indistinguishable from one that does not exist.
+#
+# 🗄️ THE CACHE SIDE, DECIDED BEFORE THE HANDLERS WERE WRITTEN (the G100 rule): PER-CALLER by
+# construction — one user's league, one user's scoring. ⛔ Never in the CDN allowlist
+# (`frontend/app/api/public/[...path]/route.ts`) or `cost_guardrails._PUBLIC_CACHE_RULES`; every
+# request carries `Authorization`, so `cache_control_for` answers `private, no-store`
+# unconditionally. ⚠️ AND THE PATHS ARE SIBLINGS OF `…/weekly/projections`, NEVER CHILDREN — both
+# allowlists match a prefix followed by "/", so `…/weekly/projections/recap` would have INHERITED
+# the free route's public cache rule. `recap` / `power-rankings` collide with nothing.
+#
+# ⭐⭐ THE STANDINGS FACT IS THE LEAGUE'S OWN TOTAL (PM ruling (i), 2026-09-16). We serve
+# `standingsTotal` (theirs) beside `itemisedTotal` (our sum of the seats we could itemise), under
+# deliberately different names, with the gap disclosed adjacent and naming the league's own captured
+# terms. The property, in the ruling's words: "our recap never contradicts the user's league page,
+# and everything we add beyond the league page is itemized and covered or stated as captured."
+
+#: Platforms whose played weeks we can re-fetch. ⛔ ESPN is STRUCTURAL, not a gap we are working
+#: through: the paste import flow never lets this server call ESPN, so nothing about that league is
+#: re-fetchable. Yahoo is the known app-side OAuth entitlement gap (NF-C0-Yahoo-SPIKE).
+_RECAP_FETCHABLE = ("sleeper",)
+
+_RECAP_UNAVAILABLE: dict[str, str] = {
+    "espn": (
+        "We cannot show standings or a weekly recap for an ESPN league. ESPN leagues are imported "
+        "by pasting their data in once, which means we hold a snapshot and have no way to go back "
+        "and ask ESPN what each team actually started in a given week."
+    ),
+    "yahoo": (
+        "We cannot show standings or a weekly recap for a Yahoo league yet. Reading a played week "
+        "needs a Fantasy permission our Yahoo app has not been granted."
+    ),
+}
+
+
+def _recap_league(request: Request, user_id: str, league_id: str) -> dict:
+    """The caller's saved league, or 404 — the ownership + quota gate `/nfl/league-board` documents."""
+    records = [
+        r for r in dynamo.list_fantasy_leagues(user_id) if str(r.get("sport") or "nfl") == "nfl"
+    ]
+    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
+    served = entitlement.leagues_within_quota(records, quota)
+    record = next((r for r in served if str(r.get("league_id") or "") == league_id), None)
+    if record is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    return record
+
+
+def _recap_platform(record: dict) -> str:
+    return str(record.get("source_platform") or "").strip().lower()
+
+
+def _recap_week(record: dict, season: int, week: int) -> dict:
+    """One league-week, scored — from the POINT-IN-TIME record, fetching it once if absent.
+
+    ⭐ THE STORE IS READ FIRST, ALWAYS. A recap must be stable after it renders (the D1 ruling), so
+    a week we have already captured is never re-derived from a later fetch; the store's own
+    divergence handling is what turns a platform restatement into a named event rather than a
+    number that moves under a reader.
+    """
+    platform = _recap_platform(record)
+    league_id = str(record.get("source_league_id") or "")
+    fetched = weekly_recap_store.load(season, week, platform, league_id)
+    if fetched is None:
+        if platform not in _RECAP_FETCHABLE or not league_id:
+            raise HTTPException(status_code=422, detail=_RECAP_UNAVAILABLE.get(
+                platform, "We cannot read played weeks for this league's platform."))
+        try:
+            fetched = sleeper_matchups.fetch_week(league_id, week)
+        except sleeper_matchups.SleeperMatchupError as e:
+            # 422, not 502: the platform answered and what it returned cannot carry a recap. That
+            # is a different fact from "the platform is unreachable" and points at a different fix.
+            raise HTTPException(status_code=422, detail=str(e)) from e
+        weekly_recap_store.store(fetched)
+
+    realized = _load_json(nfl_recap.realized_players_key(season, week))
+    manifest = _load_json(nfl_recap.realized_manifest_key(season, week))
+    if realized is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"We have not recorded week {week}'s player statistics yet.")
+
+    scored = weekly_recap.score_week(
+        fetched=fetched,
+        realized_rows=realized.get("players") or [],
+        cfg=record,
+    )
+    state = str((manifest or {}).get("completeness") or "final")
+    scored["completeness"] = state
+    scored["completenessNote"] = nfl_recap.COMPLETENESS_NOTE.get(
+        state, nfl_recap.COMPLETENESS_NOTE["partial"])
+    return scored
+
+
+@router.get("/nfl/weekly/recap")
+def nfl_weekly_recap(
+    request: Request,
+    league_id: str = Query(..., description="a saved league id belonging to the caller"),
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    week: int = Query(..., ge=1, le=22),
+    user_id: str = Depends(require_fantasy_access),
+):
+    """ONE league's completed week: every team's ACTUAL lineup, scored per slot in its own scoring.
+
+    ⛔ A HALF-PLAYED WEEK NEVER RENDERS AS FINAL. `completeness` is derived from a COUNT (the
+    realized line's distinct games against the schedule's), never a clock — a clock rule calls a
+    15/16 week final the moment a game is postponed, silently.
+    """
+    record = _recap_league(request, user_id, league_id)
+    scored = _recap_week(record, season, week)
+    return nfl_recap.WeeklyRecap(
+        season=season, week=week, leagueId=league_id, leagueName=record.get("name"),
+        platform=_recap_platform(record),
+        completeness=scored["completeness"], completenessNote=scored["completenessNote"],
+        capturedAt=scored.get("capturedAt"), startingSlots=scored.get("startingSlots") or [],
+        teams=scored.get("teams") or [], matchups=scored.get("matchups") or [],
+        coverage=scored.get("coverage") or {},
+        itemisationGapNote=scored.get("itemisationGapNote"),
+        standingsNote=scored["standingsNote"],
+    ).model_dump()
+
+
+@router.get("/nfl/weekly/power-rankings")
+def nfl_weekly_power_rankings(
+    request: Request,
+    league_id: str = Query(..., description="a saved league id belonging to the caller"),
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    through_week: int = Query(..., ge=1, le=22),
+    user_id: str = Depends(require_fantasy_access),
+):
+    """The league's standings through a week — record and points, all from the league's own totals.
+
+    ⚠️ A WEEK WE CANNOT READ IS SKIPPED, NOT ZEROED, and `weeksIncluded` says which were counted: a
+    zero is a loss a team did not necessarily suffer, and a silently-dropped week makes a record
+    wrong with no way for a reader to notice.
+    """
+    record = _recap_league(request, user_id, league_id)
+    weeks: list[dict] = []
+    for wk in range(1, int(through_week) + 1):
+        try:
+            weeks.append(_recap_week(record, season, wk))
+        except HTTPException as e:
+            if e.status_code in (404, 422):
+                continue  # not recorded / not readable — excluded, and `weeksIncluded` shows it
+            raise
+    ranked = weekly_recap.power_rankings(weeks)
+    return nfl_recap.PowerRankings(
+        season=season, leagueId=league_id, leagueName=record.get("name"),
+        platform=_recap_platform(record),
+        throughWeek=ranked["throughWeek"], weeksIncluded=ranked["weeksIncluded"],
+        rows=ranked["rows"], rankingBasis=ranked["rankingBasis"],
+        standingsNote=ranked["standingsNote"],
+    ).model_dump()
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐ NF-WVR1 — THE WAIVER SURFACE: who is AVAILABLE in your league, and where you are thin
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⛔ THERE IS NO VALUE COLUMN AND NOTHING IS RANKED ACROSS POSITIONS. Both are PM rulings
+# (2026-09-16), both measured, and `app/backend/services/waiver_pool.py` carries the evidence and
+# the quotes. The short form: the season board publishes a FULL-SEASON projection with NO in-season
+# production channel at all, so its top available player can be someone who has not taken a snap —
+# and an FA pool ordered by VOR is 14 kickers and 8 defences in its top 25, because the pool IS the
+# below-replacement population by construction. A rest-of-season value column arrives with NF-ROS1.
+
+#: The keys this route serves. Additive only (NF-C0/E8.6): a deployed client that knows none of
+#: these reads them with `?? default`, so a backend that ships ahead of the frontend degrades to the
+#: client's own empty state rather than to a blank screen.
+WAIVER_PAYLOAD_KEYS: tuple[str, ...] = (
+    "season", "league_id", "pool", "need", "rosters", "refusals", "caveats", "ordering",
+    "ordering_note",
+)
+
+#: ⚠️ A GENEROUS CEILING, NOT A SELECTION. The spec asks for a bounded fan-out with a loud refusal
+#: over the cap — but a cap that TRIMS would have to choose WHICH available players to keep, and
+#: this story has no number with which to choose (PM ruling 2). So the bound REFUSES instead of
+#: trimming: over the cap the pool is withheld with a named reason, never silently shortened into a
+#: list whose omissions look like unavailability. A 12-team league's pool measures ~690 rows against
+#: a published board of 870, so this never binds in practice — it exists so that a pathological
+#: league cannot put an unbounded body through Lambda's proxy-response cap.
+MAX_POOL_ROWS = 1200
+
+#: Platforms whose rosters we can re-read server-side. Verified against the adapters, not inherited:
+#: Sleeper is an unauthenticated public API; YAHOO holds an encrypted refresh token and is blocked
+#: only on the app-side entitlement grant (a PENDING absence); ESPN is a user PASTE flow that holds
+#: NO credential and whose adapter forbids ever acquiring one — a PERMANENT absence whose honest
+#: remedy is "re-import this league", an action the user can take, never "coming soon".
+REFRESHABLE_PLATFORMS: frozenset[str] = frozenset({"sleeper"})
+
+
+@router.get("/nfl/waiver-pool")
+def nfl_waiver_pool(
+    request: Request,
+    league_id: str = Query(..., description="a saved league id belonging to the caller"),
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    refresh: bool = Query(default=True, description="re-read the league's rosters before computing"),
+    user_id: str = Depends(require_fantasy_access),
+):
+    """ONE saved league's AVAILABLE players, by position, with where that roster is thin.
+
+    🔒 On `router`, so it inherits the blanket `require_fantasy_access` — the paid membership wall
+    (operator rulings 2026-09-14/16). Anonymous callers are refused at the gateway before Lambda.
+
+    ⭐ THE QUOTA IS ENFORCED HERE TOO, exactly as on `/nfl/league-board`: ownership alone is not
+    sufficient, or a lapsed subscriber could keep pulling personalized surfaces one league at a time
+    by id. 404 (not 403) for a league that is not the caller's, so an id they do not own is
+    indistinguishable from one that does not exist.
+
+    ⛔ A REFUSAL IS AN ANSWER, NOT AN ERROR. A league whose stored rosters are TRUNCATED, INCOMPLETE
+    or ABSENT still returns 200 — with `pool: null` and `refusals` naming every cause. That is the
+    load-bearing behaviour of the whole route: a pool computed over a truncated roster set contains
+    the dropped teams' players, i.e. it recommends players who are already owned, which the PM named
+    "the worst output this feature can produce". Rendering nothing and saying why is strictly better
+    than rendering something plausible and wrong.
+
+    ⚠️ FRESHNESS IS REPORTED, NEVER ASSUMED. `rosters.synced_at` is the age of the roster snapshot
+    the pool was computed from, and `rosters.refreshed` says whether THIS request re-read it. A
+    failed refresh does NOT fail the request — it degrades to the stored snapshot with its real age
+    and `refresh_error` set, because a stale pool that says it is stale is usable and a 502 is not.
+    """
+    records = [
+        r for r in dynamo.list_fantasy_leagues(user_id) if str(r.get("sport") or "nfl") == "nfl"
+    ]
+    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
+    served = entitlement.leagues_within_quota(records, quota)
+    record = next((r for r in served if str(r.get("league_id") or "") == league_id), None)
+    if record is None:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    platform = str(record.get("source_platform") or "").lower()
+    can_refresh = platform in REFRESHABLE_PLATFORMS
+
+    # ── 1. refresh the rosters, best-effort ──────────────────────────────────────────────────────
+    refreshed = False
+    refresh_error = None
+    if refresh and can_refresh and record.get("source_league_id"):
+        try:
+            from app.backend.services.platform_import import sleeper as sleeper_adapter
+
+            fresh = sleeper_adapter.refresh_league_rosters(str(record["source_league_id"]))
+            kept, truncated = bound_league_rosters(fresh["rosters"])
+            record = {
+                **record,
+                "league_rosters": kept,
+                "league_rosters_synced_at": fresh["synced_at"],
+                # ⭐⭐ THE REFRESH'S OWN VERDICT REPLACES THE STORED ONE — deliberately NOT the
+                # `or` that `LeagueSave._bound_league_rosters` applies, and the difference is worth
+                # stating because the `or` is the obvious thing to copy.
+                #
+                # On a SAVE the `or` is right: the importer slims before it sends, so a client that
+                # already truncated has told us something true about rosters we are only partly
+                # seeing, and our own `False` must not erase it.
+                #
+                # Here the rosters are REPLACED WHOLESALE by a fetch that read every team from
+                # `/league/{id}/rosters` and RAISES rather than returning a partial set. So
+                # `truncated` describes exactly the set now stored, while the old flag described a
+                # set that no longer exists. Carrying it forward would leave any league EVER
+                # truncated permanently refused — the feature silently dead for that user even
+                # after the league shrank or the cap was raised.
+                #
+                # ⚠️ Safe because completeness is ALSO checked independently and per-request:
+                # `pool_refusals` compares stored teams against the league's declared `n_teams` and
+                # refuses on `rosters_incomplete`. That check does not depend on this flag, so
+                # clearing a stale flag cannot let a short roster set through.
+                "league_rosters_truncated": bool(truncated),
+            }
+            # ⚠️ PERSISTED BEST-EFFORT, AND A FAILED WRITE DOES NOT FAIL THE READ. The pool is
+            # computed from `record` in memory either way, so a DynamoDB hiccup costs the freshness
+            # STAMP, never the answer. `put_fantasy_league`'s real signature is
+            # `(user_id, league_id, config, max_leagues)` — and the quota is passed because that
+            # writer enforces it, so omitting it would silently apply the storage ceiling instead
+            # of the caller's own.
+            try:
+                dynamo.put_fantasy_league(user_id, league_id, record, quota)
+            except Exception as write_err:  # noqa: BLE001
+                logger.warning(
+                    "waiver pool: refreshed rosters for %s but could not persist: %s",
+                    league_id, write_err,
+                )
+            refreshed = True
+        except Exception as e:  # noqa: BLE001 — see the docstring: stale-but-labelled beats a 502
+            logger.warning("waiver pool: roster refresh failed for league %s: %s", league_id, e)
+            refresh_error = str(e)[:200]
+
+    # ── 2. can we compute a pool at all? ─────────────────────────────────────────────────────────
+    # ⚠️ REFUSALS WITHHOLD THE POOL; CAVEATS RIDE ALONGSIDE IT. An un-refreshable platform is a
+    # CAVEAT, never a refusal — an ESPN league's stored rosters are a correct snapshot that is
+    # simply as old as the last import, and withholding on that basis would lock out every ESPN
+    # user permanently, including one who re-imported a minute ago. See `waiver_pool`'s own note.
+    refusals = waiver_pool.pool_refusals(record)
+    caveats = waiver_pool.pool_caveats(platform_can_refresh=can_refresh)
+
+    # ── 3. the board, and the caller's own roster for the need annotation ────────────────────────
+    projections = _full_projections(season)
+    if projections is None:
+        raise HTTPException(status_code=404, detail="Fantasy projections not found")
+    board = league_scoring.build_board(
+        projections.get("players") or [], record, projection_fields.STAT_FIELD
+    )
+    my_rows = league_scoring.match_roster_to_board(
+        record.get("imported_roster") or [], board["players"]
+    )
+    need = waiver_pool.positional_need(my_rows, record)
+
+    # ── 4. the pool — withheld entirely when any refusal applies ─────────────────────────────────
+    pool = None
+    if not refusals:
+        groups = waiver_pool.free_agent_pool(board["players"], record.get("league_rosters"))
+        total = sum(len(g["players"]) for g in groups)
+        if total > MAX_POOL_ROWS:
+            refusals = ["pool_over_cap"]
+        else:
+            pool = [
+                {
+                    "pos": g["pos"],
+                    "available": len(g["players"]),
+                    "players": [
+                        {
+                            "id": p.get("id"),
+                            "name": p.get("name"),
+                            "team": p.get("team"),
+                            "pos": p.get("pos"),
+                            "bye": p.get("bye"),
+                            "rookie": p.get("rookie"),
+                        }
+                        for p in g["players"]
+                    ],
+                }
+                for g in groups
+            ]
+
+    return {
+        "season": season,
+        "league_id": league_id,
+        "pool": pool,
+        "need": need,
+        "refusals": refusals,
+        "caveats": caveats,
+        "rosters": {
+            "synced_at": record.get("league_rosters_synced_at"),
+            "refreshed": refreshed,
+            "refresh_error": refresh_error,
+            "can_refresh": can_refresh,
+            "platform": platform,
+            "truncated": bool(record.get("league_rosters_truncated")),
+            "teams_held": len(record.get("league_rosters") or []),
+            "teams_declared": int(record.get("n_teams") or 0),
+        },
+        # ⚠️ STATED ON THE PAYLOAD, not left to the client to remember. The ordering rule is part of
+        # the claim this surface makes, and a client that forgets it renders a ranked-looking table.
+        "ordering": "unranked",
+        "ordering_note": (
+            "Available players are listed by position in the board's own order and are NOT ranked. "
+            "Our season projection is a preseason full-season figure that does not reflect 2026 "
+            "on-field production, so it cannot honestly order who to add."
+        ),
+    }
