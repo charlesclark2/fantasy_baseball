@@ -259,6 +259,23 @@ blocked *by* it, because the capability WVR1 needs is a different endpoint on th
 **the PM should confirm the seam** before either session writes the roster re-fetch, so it is written
 once.
 
+### The per-platform re-fetch capability — three DIFFERENT absences, not one
+
+Verified against the adapters, not inherited from prose. The distinction matters because the spec
+asks for "stated, distinguishable" absences and these three are not the same fact:
+
+| platform | server-side roster re-fetch? | why, and what the copy must say |
+|---|---|---|
+| **Sleeper** | ✅ **available today** | unauthenticated public API; `/league/{id}/rosters` is already called at import (`sleeper._fetch_teams`) |
+| **Yahoo** | ⚙️ **architecturally yes — blocked** | we hold an **encrypted refresh token** (`yahoo_oauth.refresh_access_token`, exercised by `fantasy_import._yahoo_access_token`) and `yahoo_oauth.is_enabled()` gates the flow. Blocked on the app-side Fantasy entitlement grant (card `ukQvjDPm`, NF-C0-Yahoo-SPIKE) — a **PENDING** absence |
+| **ESPN** | ⛔ **never — by design AND by policy** | the import is a **user paste flow**: we build a link, the user opens it and pastes the body, and we hold **no credential at all**. The adapter forbids ever acquiring one in as many words — *"⛔ NEVER add a 'paste your cookie instead' path … If the paste is too hard, fix the UX."* |
+
+⭐ **So ESPN's absence is PERMANENT, and its copy must not imply "coming soon."** The only refresh
+channel an ESPN league will ever have is the user re-importing, so the honest wording is *"re-import
+this league to refresh it"* — an action the user can take — rather than a wait. Yahoo's, by
+contrast, genuinely is a wait. Rendering both as one generic "not supported" would be the
+NF-C6b/NF-K1 defect: a single empty state standing in for causes that call for different actions.
+
 ### Two storage constraints that bite a naive FA pool
 
 1. **`LEAGUE_ROSTER_PLAYER_FIELDS = ("name","position","team")`** — `player_key` is deliberately
