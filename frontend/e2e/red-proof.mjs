@@ -29,6 +29,74 @@ import { fileURLToPath } from "node:url"
 const FRONTEND = join(dirname(fileURLToPath(import.meta.url)), "..")
 
 const CASES = [
+  // ══ NF-WK-RC1 Phase B — the weekly recap surface ═══════════════════════════════════════════
+  //
+  // ⭐ THE FIRST CASE IS THE ONE THIS SUITE EXISTS FOR. #1155 shipped a disclosure keyed on the
+  // league CAPTURING a term rather than on a MEASURED gap, so it printed "the slot points don't add
+  // up" beside two identical numbers. The PM has since made that distinction binding on every
+  // disclosure the program ships, and a suite that only asserts "the note renders" is satisfied by
+  // the defect itself.
+  {
+    id: "recap-disclosure-without-a-measured-gap",
+    shipped: "#1155 — the itemisation note contradicted two identical numbers printed beside it",
+    detail:
+      "keying the note on the league's captured TERMS rather than on a measured GAP: 'the league " +
+      "captures X' and 'X moved anything this week' are different facts.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: "      {recap.itemisationGapNote && (",
+    to: "      {true && (",
+    grep: "disclosure is ABSENT",
+  },
+  {
+    id: "recap-disclosure-becomes-a-footnote",
+    shipped: "the MT1 ruling-\u2462 adjacency rule — 'not a panel, not a footnote'",
+    detail:
+      "the gap disclosure drifts out of the card holding the total it is about, to the page edge.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: '        <p className="mt-2 border-l-2 border-amber-500/40 pl-2 text-xs text-amber-200/80">',
+    to: '        <p className="fixed bottom-0 left-0 text-xs text-amber-200/80">',
+    grep: "ADJACENT to the total",
+  },
+  {
+    id: "recap-two-totals-collapse-into-one",
+    shipped: "PM ruling (i) — the standings fact and our itemisation are DIFFERENT FACTS",
+    detail:
+      "serving our slot sum under the league-total label is exactly 'presented as two estimates " +
+      "of one number', and a reader cannot tell which they are looking at.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: "              {pts(team.standingsTotal)}\n            </div>",
+    to: "              {pts(team.itemisedTotal)}\n            </div>",
+    grep: "DIFFERENT FACTS",
+  },
+  {
+    id: "recap-dst-provenance-disappears",
+    shipped: "PM disposition D2 = (C) — the league's own figure, stated plainly, 'not a footnote'",
+    detail: "the per-seat provenance label is dropped, so whose number a seat carries is unanswerable.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: "            {RECAP_SOURCE_LABEL[seat.source] ?? seat.source}",
+    to: "            {null}",
+    grep: "states WHOSE number it is",
+  },
+  {
+    id: "recap-absence-becomes-a-dash",
+    shipped: "the absence-reason class (NF-C6b) — 'was not in the game' vs 'played and scored none'",
+    detail: "the stated reason collapses to a dash, which reads as a player who simply scored nothing.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: '          <span className="text-gray-500 italic">{seat.absence?.detail}</span>',
+    to: '          <span className="text-gray-500 italic">{"\u2014"}</span>',
+    grep: "renders a sentence, never a zero",
+  },
+  {
+    id: "recap-platform-absence-goes-generic",
+    shipped: "PM ruling (i) amendment 2 — a platform we cannot fetch has NO standings",
+    detail:
+      "discarding the server's own sentence loses the word STANDINGS, leaving a reader expecting " +
+      "standings to turn up somewhere else on the page.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: "          {(error as Error)?.message ||\n            (status === 404 ? RECAP_NOT_RECORDED_FALLBACK : RECAP_PLATFORM_UNAVAILABLE_FALLBACK)}",
+    to: '          {"We could not load this week."}',
+    grep: "STANDINGS specifically",
+  },
   {
     id: "blank-locked-board",
     shipped: "E9.56b — Rankings rendered BLANK for every logged-out visitor",

@@ -55,6 +55,7 @@ import {
 } from "@/lib/league-delta"
 import type { PlayerDelta } from "@/lib/league-delta"
 import { GenericDeltaCell } from "@/components/fantasy/league-delta-ui"
+import { WeeklyRecapPanel } from "@/components/fantasy/weekly-recap"
 import {
   EXPECTED_POINTS_LABEL,
   GENERIC_DELTA_LABEL,
@@ -548,6 +549,17 @@ export function MyLeague() {
               </p>
             </section>
           )}
+
+          {/* ── NF-WK-RC1 Phase B: WHAT ACTUALLY HAPPENED ─────────────────────────────────────
+              Placed directly under the activation delta and ABOVE the draft-time explanations,
+              because in season this is the reason a manager opens the page: the draft-shape
+              sections below answer a question they asked once, and this one answers the question
+              they have every Tuesday. It renders its own empty states (no completed week yet, a
+              platform whose weeks we cannot read, a week not yet recorded), so it is mounted
+              unconditionally on a selected league rather than hidden behind a guess here. */}
+          <div className="mb-6">
+            <WeeklyRecapPanel leagueId={league?.league_id ?? null} />
+          </div>
 
           {/* ── WHY: the replacement-level shift ──────────────────────────────────────────────── */}
           {shifts.length > 0 && (

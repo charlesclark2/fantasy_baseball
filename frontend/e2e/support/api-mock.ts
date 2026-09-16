@@ -246,6 +246,24 @@ export type MockOptions = {
    */
   weekly?: "published" | "awaiting" | "failed"
   /**
+   * ⭐ NF-WK-RC1 Phase B — which state the WEEKLY RECAP is in. Four DIFFERENT FACTS that the
+   * surface states differently, and the whole point of modelling them separately is that a page
+   * rendering all four identically is the defect (NF-C6b: the same symptom investigated twice).
+   *
+   *   "final"        — a completed week WITH a measured itemisation gap. THE DEFAULT.
+   *   "finalNoGap"   — a completed week whose itemisation MATCHES, so `itemisationGapNote` is
+   *                    NULL. ⛔ REQUIRED, and not a nicety: #1155 shipped a disclosure keyed on the
+   *                    league CAPTURING a term rather than on a measured gap, so it contradicted
+   *                    two identical numbers printed beside it. Without a null-note fixture the
+   *                    only assertion available is "the note renders", which that defect satisfies.
+   *   "partial"      — games still unfinished when the week was recorded.
+   *   "notRecorded"  — the week PLAYED but its statistics are not published yet: a 404, and an
+   *                    ordinary state between the slate ending and the artifact landing.
+   *   "platformUnavailable" — ESPN/Yahoo: a 422 whose detail says STANDINGS specifically, because
+   *                    a platform we cannot fetch has NO standings rather than approximate ones.
+   */
+  recap?: "final" | "finalNoGap" | "partial" | "notRecorded" | "platformUnavailable"
+  /**
    * ⭐ G100-C1 — how many personalized leagues this caller has SAVED.
    *
    *   "none"     — a fresh free account. THE DEFAULT, because it is the state every new user is in
@@ -620,12 +638,148 @@ function ncaafPayloadFor(
  * is what a spec asserting "a free account cannot obtain the stat line" needs. Serving it to
  * everyone would let that spec pass against a server no caller can reach.
  */
+/**
+ * NF-WK-RC1 Phase B — the recap payloads.
+ *
+ * ⚠️ EVERY FIELD NAME HERE IS READ OFF `app/backend/models/nfl_recap.py`, not invented to suit the
+ * component. A fixture derived from the renderer is a tautology: it proves the page can display
+ * what the page expects, which is exactly the assumption a wrong field name violates (NF-C0e).
+ *
+ * ⭐ THE TWO TOTALS DIFFER ON PURPOSE in `final`. `standingsTotal` is the league's own published
+ * figure and `itemisedTotal` is the sum of the seats we itemise, and they are DIFFERENT FACTS
+ * (PM ruling (i)). A fixture where they happened to be equal would let a surface that presents
+ * them as two estimates of one number pass every assertion.
+ */
+const RECAP_SEATS = (dstPts: number) => [
+  {
+    slot: "QB", seat: 0, name: "Recap Quarterback", position: "QB", team: "PHI",
+    points: 24.5, source: "our_scorer", sourceNote: null, pprPts: 24.5, absence: null,
+  },
+  {
+    slot: "RB", seat: 1, name: "Recap Runningback", position: "RB", team: "SF",
+    points: 11.2, source: "our_scorer", sourceNote: null, pprPts: 11.2, absence: null,
+  },
+  {
+    // ⭐ THE ABSENCE SEAT. `points` is NULL, never 0 — "was not in the game" and "played and scored
+    // nothing" are different facts, and a 0.00 in this cell states the wrong one.
+    slot: "WR", seat: 2, name: "Recap Receiver", position: "WR", team: "DAL",
+    points: null, source: null, sourceNote: null, pprPts: null,
+    absence: {
+      reason: "no_realized_line",
+      detail: "This player was started but no stat line was recorded for him this week — he did " +
+        "not appear in the game.",
+    },
+  },
+  {
+    // ⭐ THE D/ST SEAT — the league's OWN published figure (PM disposition D2 = (C)).
+    slot: "DEF", seat: 3, name: "Lions D/ST", position: "DST", team: "DET",
+    points: dstPts, source: "league_published",
+    sourceNote: "This score is your league's own published figure for the team defence, not ours. " +
+      "Every other slot is your league's scoring applied to the week's real stat line by us.",
+    pprPts: null, absence: null,
+  },
+]
+
+export const E2E_RECAP_GAP_NOTE =
+  "This league also scores fumbles and 40+ yard touchdown bonuses, which the breakdown below " +
+  "doesn't itemize yet — so the slot points don't add up to the total above."
+
+function recapPayload(mode: NonNullable<MockOptions["recap"]>, leagueId: string, week: number) {
+  const gap = mode !== "finalNoGap"
+  // ⛔ WHEN THERE IS NO GAP THE TWO TOTALS MATCH EXACTLY and the note is null — the #1155 state.
+  const aItemised = gap ? 43.7 : 45.7
+  const bItemised = gap ? 39.1 : 41.1
+  const teams = [
+    {
+      teamKey: "1", teamName: "The Dad Bods", matchupId: 1, seats: RECAP_SEATS(10.0),
+      standingsTotal: 45.7, standingsSource: "league_published",
+      itemisedTotal: aItemised, itemisationGap: gap ? -2.0 : 0.0,
+    },
+    {
+      teamKey: "2", teamName: "Kaep'n Crunch", matchupId: 1, seats: RECAP_SEATS(6.0),
+      standingsTotal: 41.1, standingsSource: "league_published",
+      itemisedTotal: bItemised, itemisationGap: gap ? -2.0 : 0.0,
+    },
+  ]
+  return {
+    season: 2026, week, leagueId, leagueName: "Dynasty A", platform: "sleeper",
+    completeness: mode === "partial" ? "partial" : "final",
+    completenessNote:
+      mode === "partial"
+        ? "Some of this week's games had not finished when these figures were recorded."
+        : "Every game in this week has finished.",
+    capturedAt: "2026-09-16T05:00:00Z",
+    startingSlots: ["QB", "RB", "WR", "DEF"],
+    teams,
+    matchups: [
+      {
+        matchupId: 1,
+        teams: [
+          { teamKey: "1", teamName: "The Dad Bods", total: 45.7 },
+          { teamKey: "2", teamName: "Kaep'n Crunch", total: 41.1 },
+        ],
+        winnerTeamKey: "1", tied: false, unpaired: null, resultUnavailable: null,
+      },
+    ],
+    coverage: { captured: gap ? ["fum", "pass_40p"] : [] },
+    itemisationGapNote: gap ? E2E_RECAP_GAP_NOTE : null,
+    standingsNote:
+      "Team totals and results are your league's own published figures. The slot breakdown is " +
+      "your league's scoring applied by us to the week's real stat line.",
+  }
+}
+
+export const E2E_RANKING_BASIS =
+  "Ranked by win-loss-tie record, then by total points for. Both are your league's own published " +
+  "figures, so this order is the one your league page shows."
+
+function powerRankingsPayload(leagueId: string, throughWeek: number) {
+  return {
+    season: 2026, leagueId, leagueName: "Dynasty A", platform: "sleeper",
+    throughWeek, weeksIncluded: [1],
+    rows: [
+      { rank: 1, teamKey: "1", teamName: "The Dad Bods", wins: 1, losses: 0, ties: 0,
+        pointsFor: 45.7, pointsAgainst: 41.1, weeksCounted: 1 },
+      { rank: 2, teamKey: "2", teamName: "Kaep'n Crunch", wins: 0, losses: 1, ties: 0,
+        pointsFor: 41.1, pointsAgainst: 45.7, weeksCounted: 1 },
+    ],
+    rankingBasis: E2E_RANKING_BASIS,
+    standingsNote:
+      "Records and points here are your league's own published totals for each completed week.",
+  }
+}
+
+/** ⛔ Verbatim from `routers/fantasy.py::_RECAP_UNAVAILABLE` — it says STANDINGS, and that word is
+ *  the ruling (a platform we cannot fetch has NO standings rather than approximate ones). */
+export const E2E_RECAP_ESPN_DETAIL =
+  "We cannot show standings or a weekly recap for an ESPN league. ESPN leagues are imported by " +
+  "pasting their data in once, which means we hold a snapshot and have no way to go back and ask " +
+  "ESPN what each team actually started in a given week."
+
 function weeklyPayloadFor(
   pathname: string,
   mode: NonNullable<MockOptions["weekly"]>,
   entitlement: Entitlement,
+  recap: NonNullable<MockOptions["recap"]> = "final",
 ): { body?: unknown; status?: number; detail?: string } | undefined {
   if (!pathname.startsWith("/fantasy/nfl/weekly/")) return undefined
+
+  // ⭐ THE RECAP ROUTES ARE RESOLVED FIRST, BEFORE the `weekly` mode branches above them. They are
+  // a DIFFERENT surface that happens to share a path prefix, and letting `weekly: "awaiting"` 404
+  // the recap would silently couple two unrelated states — a spec setting up "no projection built
+  // yet" would also be asserting against a recap that does not exist.
+  if (pathname === "/fantasy/nfl/weekly/recap") {
+    if (recap === "notRecorded") {
+      return { status: 404, detail: "We have not recorded week 1's player statistics yet." }
+    }
+    if (recap === "platformUnavailable") return { status: 422, detail: E2E_RECAP_ESPN_DETAIL }
+    return { body: recapPayload(recap, "e2e-league-1", 1) }
+  }
+  if (pathname === "/fantasy/nfl/weekly/power-rankings") {
+    if (recap === "platformUnavailable") return { status: 422, detail: E2E_RECAP_ESPN_DETAIL }
+    if (recap === "notRecorded") return { body: powerRankingsPayload("e2e-league-1", 1) }
+    return { body: powerRankingsPayload("e2e-league-1", 1) }
+  }
   if (mode === "failed") return { status: 500, detail: "e2e: weekly read failed" }
   // ⭐ THE REAL 404 AND ITS REAL DETAIL STRING, verbatim from `routers/fantasy.py` and confirmed
   // against the live API on 2026-09-13. The page branches on the STATUS; the string is carried so a
@@ -2087,7 +2241,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
     // ⭐ NF-WK-FE1 — resolved BEFORE the generic map for the same reason NCAAF is: it owns its own
     // status codes (a week with nothing published is a 404 and a failed read is a 500), and
     // `payloadFor`'s undefined-means-501 contract cannot express either.
-    const weekly = weeklyPayloadFor(apiPath, options.weekly ?? "published", entitlement)
+    const weekly = weeklyPayloadFor(apiPath, options.weekly ?? "published", entitlement, options.recap ?? "final")
     if (weekly) {
       if (weekly.status) {
         await route.fulfill({
