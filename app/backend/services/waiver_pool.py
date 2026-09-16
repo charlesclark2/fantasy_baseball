@@ -37,8 +37,16 @@ from __future__ import annotations
 
 from app.backend.services import league_scoring
 
-#: Why a league cannot have an FA pool computed for it at all. Distinct from a per-player absence:
-#: these describe the LEAGUE, and each one means the pool would be WRONG rather than thin.
+#: Why a league cannot have an FA pool computed for it AT ALL — each of these means the pool would
+#: be WRONG, not merely thin or stale, so the surface withholds it and says which applies.
+#:
+#: ⚠️⚠️ "CANNOT REFRESH" IS DELIBERATELY *NOT* IN THIS TUPLE — it is a CAVEAT (below), and the
+#: distinction is the difference between a feature ESPN users can use and one they cannot. An ESPN
+#: league's stored rosters are a real, correct snapshot; they are simply as old as the last import,
+#: and `league_rosters_synced_at` already says so. Withholding the pool for un-refreshability would
+#: lock out every ESPN user PERMANENTLY — including one who re-imported thirty seconds ago, whose
+#: rosters are as current as any Sleeper league's. Correctness and freshness are different claims
+#: and must not share a code path.
 POOL_REFUSAL_REASONS: tuple[str, ...] = (
     # ⭐ THE ONE THAT MATTERS. `bound_league_rosters` drops WHOLE TEAMS at
     # MAX_LEAGUE_ROSTER_PLAYERS = 500, recording it on `league_rosters_truncated`. A pool computed
@@ -52,9 +60,18 @@ POOL_REFUSAL_REASONS: tuple[str, ...] = (
     # Stored rosters exist but cover fewer teams than the league declares, so some team's roster is
     # missing and its players would read as available.
     "rosters_incomplete",
-    # The platform cannot re-fetch rosters, so any pool would be as old as the import. ESPN is
-    # PERMANENT (a paste flow; we hold no credential and the adapter forbids acquiring one);
-    # Yahoo is PENDING the app-side entitlement grant. The caller distinguishes them.
+)
+
+#: Reasons the pool is SERVED but comes with something the reader must be told. A caveat never
+#: withholds; it rides alongside the answer.
+POOL_CAVEAT_REASONS: tuple[str, ...] = (
+    # We cannot re-read this league's rosters server-side, so the pool is exactly as fresh as the
+    # last import. ⭐ TWO DIFFERENT FACTS WEAR THIS NAME and the surface must tell them apart:
+    # ESPN's is PERMANENT — the import is a user PASTE flow, we hold no credential, and the adapter
+    # forbids ever acquiring one, so the honest remedy is "re-import this league", an action the
+    # user can take and NOT a wait. Yahoo's is PENDING the app-side entitlement grant. Rendering
+    # both as one generic "not supported" is the NF-C6b defect: one empty state standing in for
+    # causes that call for different actions.
     "platform_cannot_refresh",
 )
 
@@ -97,15 +114,20 @@ def _rostered_keys(league_rosters: list[dict] | None) -> set[str]:
     return keys
 
 
-def pool_refusals(record: dict, *, platform_can_refresh: bool = True) -> list[str]:
+def pool_refusals(record: dict) -> list[str]:
     """Every reason this league's FA pool would be WRONG, in `POOL_REFUSAL_REASONS` terms.
 
-    Returns a LIST, not a first-match: a league can be both truncated and un-refreshable, and a
+    Returns a LIST, not a first-match: a league can be both truncated and short of teams, and a
     surface that reports only the first cause sends the reader to fix the wrong thing (the NF-C6b
     "an empty state that renders identically for three causes" lesson).
 
     ⚠️ A refusal is not an error. The caller still renders the league — it renders it WITHOUT a
     pool, saying which of these is true. Silence would be the defect.
+
+    ⛔ FRESHNESS IS NOT A REFUSAL. Nothing here asks whether the rosters are recent or whether the
+    platform can be re-read; those are caveats (`pool_caveats`). A pool computed from a month-old
+    but COMPLETE roster set is correct-and-stale, which is usable and says so. A pool computed from
+    an INCOMPLETE one is wrong, and wrong is what this function is for.
     """
     reasons: list[str] = []
     rosters = record.get("league_rosters")
@@ -118,9 +140,12 @@ def pool_refusals(record: dict, *, platform_can_refresh: bool = True) -> list[st
         held = sum(1 for e in rosters if isinstance(e, dict))
         if declared and held < declared:
             reasons.append("rosters_incomplete")
-    if not platform_can_refresh:
-        reasons.append("platform_cannot_refresh")
     return reasons
+
+
+def pool_caveats(*, platform_can_refresh: bool) -> list[str]:
+    """What the reader must be told about a pool we ARE serving (`POOL_CAVEAT_REASONS`)."""
+    return [] if platform_can_refresh else ["platform_cannot_refresh"]
 
 
 def free_agent_pool(board_players: list[dict], league_rosters: list[dict] | None) -> list[dict]:
