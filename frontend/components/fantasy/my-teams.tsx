@@ -23,11 +23,22 @@
 // past Lambda's proxy-response cap) — not the roster's scores. `useMyTeams` sets `board: null` for
 // that reason alone; a page needing one league's whole board calls `useLeagueBoard`.
 //
-// ROS = the season projection (pre-kickoff, so "rest of season" is effectively the full season) —
-// labelled honestly, never faked into a per-game number (a per-game figure divided out of a season
-// total is false precision). Per-game splits, weekly rest-of-season updates and waiver-wire
-// suggestions are PHASE 2, gated on the NF-W1 weekly model — stubbed below as "coming in-season,"
-// not built or faked here.
+// ⚠️ THESE ARE PRESEASON FULL-SEASON PROJECTIONS, AND THE COPY MUST SAY SO (NF-WVR1, 2026-09-16).
+// This block used to read: "ROS = the season projection (pre-kickoff, so 'rest of season' is
+// effectively the full season)". That equivalence was TRUE WHEN WRITTEN and EXPIRED AT KICKOFF —
+// week 1 completed 2026-09-14 — so the surface was calling a full-season number "rest-of-season"
+// and justifying it with a condition that no longer held.
+//
+// ⛔ AND THE BOARD HAS NO IN-SEASON PRODUCTION CHANNEL AT ALL, which is the part that makes the
+// old wording actively misleading rather than merely imprecise: `run_nf1.assemble_features` is
+// "every column is a base-season realized quantity or a leakage-safe forward designation"
+// (base_season 2025), and the daily publish refreshes only depth_charts/rosters/weekly_rosters —
+// no results feed. The number moves with ROLE, HEALTH and MARKET; it does NOT move with what a
+// player has actually done in 2026. Measured: `docs/nf_wvr1_fa_pool_diagnosis.md`.
+//
+// A rest-of-season figure arrives with NF-ROS1, not here. Until then the honest label is
+// "preseason full-season", never faked into a per-game number (a per-game figure divided out of a
+// season total is false precision).
 
 import Link from "next/link"
 import { useMyTeams } from "@/lib/fantasy-queries"
@@ -77,7 +88,7 @@ export function MyTeams() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <SurfaceHeader
         title="My Teams"
-        blurb="Every league you've imported, in one place — each roster scored under that league's own format, and every team totalled and ranked. Projections are the rest-of-season figure (pre-kickoff, so this is effectively the full season)."
+        blurb="Every league you've imported, in one place — each roster scored under that league's own format, and every team totalled and ranked. Projections are the preseason full-season figures and do not yet reflect 2026 on-field production."
       />
 
       {isError && (
@@ -365,8 +376,9 @@ function LeagueCard({
             </p>
           )}
           <p className="mt-3 text-[11px] text-gray-600">
-            Per-game splits, weekly rest-of-season updates and waiver-wire suggestions are coming
-            in-season, once the weekly model ships — this page shows the season/ROS projection only.
+            This page shows the preseason full-season projection, which does not yet reflect 2026
+            on-field production. Per-game splits, rest-of-season updates and waiver-wire
+            suggestions are coming in-season.
           </p>
         </>
       )}
