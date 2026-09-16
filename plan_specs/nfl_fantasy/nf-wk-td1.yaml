@@ -1,0 +1,151 @@
+# Plan spec — NF-WK-TD1 (FULL tier: touchdown components in the weekly payload — the
+# substrate repair that gates the ENTIRE my-teams weekly lens)
+# Authored by PM 2026-09-16 from NF-WK-MT1's Phase-A runtime-gate finding and the operator's
+# ruling ① = (b): the whole lens is HELD until the weekly payload can carry a league's
+# touchdown scoring. This story is that gate's key.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-wk-td1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/mYQoKNGx
+  status: ACCEPTED
+spec:
+  description: >
+    MT1's live-league gate measured that the weekly payload's TD keys
+    (passTd, passInt, rushTd, recTd) are present and NULL for all 500
+    players — only yardage and volume are projected. Consequence: a
+    league-scored weekly point misses ~all touchdown scoring (an
+    ordinary half-PPR league resolves 4 of 42 terms), with per-player
+    error ±4 pts on 11-pt projections in both directions (McBride
+    +4.13, Gibbs +3.08, JSN −1.79; QB mean −25.5% of the model's
+    figure) — squarely at the start/sit decision margin. The operator
+    has held the entire my-teams weekly lens on this. This story makes
+    the weekly component line able to CARRY touchdowns. ⚠️ FORK,
+    decided by evidence in node 1 before anything else: (A) the model
+    already carries TD expectations internally (the points head must
+    price TDs somehow — find where) and this is an EMISSION/export
+    story — proceed; (B) TD expectations do not exist as extractable
+    quantities and would require NEW modeling — ⛔ STOP, report to the
+    PM with what exists and what a modeling story would need; a new
+    model head requires its own §0.5 pre-registered spec and will not
+    be smuggled in as plumbing. best_alpha=0 throughout; no scoring
+    implementation touched (the one-scorer rule stands; the scorer was
+    proven correct — the substrate is what changes).
+  acceptanceCriteria:
+    - description: >
+        NODE 1 — THE DIAGNOSIS, before any emission code: establish
+        from the weekly model's actual code and artifacts (not
+        assumption) where touchdown value lives. Does the points head
+        consume TD-bearing features? Are per-stat TD expectations
+        computed anywhere (in training, in an intermediate frame, in
+        the season model's machinery) and simply not exported? Name
+        the quantity, its units (expected TDs per week), and its
+        provenance. Also verify the payload contract's intent: the
+        null keys were DECLARED — find the commit/comment that added
+        them and record what they were reserved for. VERDICT: fork
+        (A) or (B), with evidence. If (B), stop and report — the
+        remaining criteria apply only under (A).
+    - description: >
+        NODE 2 — EMISSION under fork (A): populate passTd, passInt,
+        rushTd, recTd in the weekly payload from the named internal
+        quantities, per-player, for every projected player (a player
+        whose position genuinely has no TD expectation renders an
+        explicit zero or a stated absence per ABSENCE_REASONS — never
+        silently null-as-before, so a consumer can distinguish
+        "projected at zero" from "not emitted"). Contract change is
+        additive in the declared sense (null→populated on existing
+        keys); Pydantic contract updated; consumers verified tolerant
+        both ways (the FE1 page and the MT1 endpoint read the same
+        artifact — neither may break on the pre-TD artifact that is
+        already published; the coverage classifier flips these terms
+        captured→applied automatically, verify it does).
+    - description: >
+        NODE 3 — THE COHERENCE MEASUREMENT, the honest heart of the
+        story: re-measure points-head-vs-component-line coherence on
+        the same real payload before and after emission (per-row fold
+        series per the standing convention, renderers exercised on
+        real producer output). HYPOTHESIS (registered here, forward):
+        the missing TD expectation explains most of the C6-PH2
+        incoherence (mean signed −0.77 components-below-point; MT1's
+        per-player ±4). Report the residual honestly whatever it is —
+        ⛔ NO rescaling, calibration, or fudge applied to force the
+        component sum toward the points head (MH2.2); if the residual
+        stays material, that is a finding about the model to report,
+        not to fix here. The MT1 gate measurement is the template:
+        re-run the BLA-league reading (coverage terms applied,
+        per-player gaps) and record the before/after table — that
+        table is what the PM takes to the operator to lift or keep
+        the lens hold.
+    - description: >
+        VERIFICATION + BOUNDARIES: the publish entrypoint smoke
+        (test_nf_inc_0914_publish_entrypoint.py) still passes — if
+        emission touches run_weekly_serving.py, note the sibling-sweep
+        exposure (card GyD9hoeD: that main() has zero executing
+        callers; extending its smoke coverage in-story is in scope,
+        forking a new pattern is not). Guards RED-proven (unique
+        anchors + baseline-pass + NOT-SELECTED + resolve-every-node);
+        a payload emitting a TD figure for a player the model did not
+        project must refuse. No scorer file touched; no model
+        training/fitting; no serving-page code (the lens stays held —
+        lifting the hold is the operator's call on node 3's table).
+        Standing: worktree; PR -> dev -> main; deploys per owner
+        (box publish path vs deploy.sh); >2-min operator paste-ready;
+        no Trello; roadmap frozen; findings to closeout.followUps.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-wk-td1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "TD" / "touchdown" / "weekly component" (board Credence Sports, 2026-09-16)'
+    duplicates: []
+    adjacent:
+      - "NF-WK-MT1 (Phase A done; Phase B HELD by operator ruling 09-16) — this story is the gate's key; MT1's live BLA measurement is the before-side of node 3."
+      - "NF-C6-PH2 (Done) — the weekly serving contract + the component-coherence caveat (mean signed −0.77, components below the point) this story's hypothesis addresses."
+      - "NF-WK-FE1 (Done) — the public weekly page reads the same artifact; must stay tolerant of both pre- and post-TD payloads."
+      - "Entrypoint sibling sweep (GyD9hoeD, To Do) — run_weekly_serving.py's zero-executing-callers exposure; extend its smoke if touched here."
+      - "Gate 3 proper / NF-OPT1 (deferred) — downstream consumers of a TD-bearing component line; the ROS league-scoring option (ruling ① 09-14) also reopens once TDs exist."
+      - "NCAAF-INC-0914 / NCAAB-P0 (IN FLIGHT) — disjoint verticals/files."
+  triedLedger:
+    files:
+      - "NF-WK-MT1 closeout.followUps (the live-league figures: 4/42 terms, ±4 per-player, the null-TD census across 500 players)"
+      - "The weekly model's producer + points head (where TD value must implicitly live — node 1's read)"
+      - "app/backend/models/nfl_weekly.py (the declared-null TD keys + ABSENCE_REASONS)"
+      - "plan_specs/plan_spec_process.md (per-row fold series + renderer-rehearsal convention; spec-premise verification)"
+    recordedNulls:
+      - "Forcing component-sum == points head by rescaling — ruled out ex ante (MH2.2); the residual is reported, never absorbed."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "Operator decision to lift the my-teams weekly lens hold (on node 3's before/after table); MT1 Phase B; league-scored ROS; gate 3 proper / NF-OPT1"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-wk-td1-plan
+spec:
+  goalRef: { name: nf-wk-td1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-diagnosis
+        desc: "Where does TD value live? Fork verdict (A) emit / (B) STOP-and-report-to-PM."
+      - id: 2-emission
+        desc: "(A only) Populate the TD keys; additive contract; consumers tolerant both ways."
+      - id: 3-coherence
+        desc: "Before/after coherence table on real payload (BLA-league template); residual reported, never absorbed."
+      - id: 4-verify
+        desc: "Entrypoint smoke green; guards RED-proven; refuse-on-unprojected; no scorer/model/page code touched."
+      - id: 5-closeout
+        desc: "The before/after table + fork verdict + residual statement into closeout.followUps — the PM takes it to the operator for the lens-hold decision."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

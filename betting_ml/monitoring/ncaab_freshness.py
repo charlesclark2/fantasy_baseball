@@ -33,82 +33,33 @@ from dataclasses import replace
 
 from betting_ml.monitoring.sports_delta_freshness import SportsDeltaContract
 
-#: The D-I season window, MONTH-granular. November through April; April is in because the title
-#: game falls in its first week.
+#: Re-exported from the module that OWNS it (`ncaab_season`), which imports nothing from
+#: `sports_delta_freshness` and so cannot participate in the cycle described below. Existing
+#: callers keep importing `SEASON_MONTHS` / `season_month_containment_holds` from here.
+from betting_ml.monitoring.ncaab_season import (  # noqa: E402
+    SEASON_MONTHS,
+    season_month_containment_holds,
+)
+
+#: ⭐ ARMED 2026-09-15 AND THEREFORE NO LONGER HERE: `ncaab_schedules` and `ncaab_team_box`
+#: now live in `sports_delta_freshness.REGISTRY`, because their writer is confirmed running —
+#: the schedule's first AUTONOMOUS fire succeeded at 2026-09-15 14:00Z (every earlier run was
+#: invoked by hand, which proves the JOB works and says nothing about the SCHEDULE).
 #:
-#: ⚠️ THE RELATIONSHIP WITH `sources.in_season()` IS CONTAINMENT, NOT EQUALITY, and writing it
-#: down is the point. The ingest layer's `in_season()` is DAY-granular (April 1-10, because the
-#: season really does end mid-month); `active_months` cannot express a mid-month boundary at
-#: all. That is the same shape as INC-41's hour-granularity windows being unable to express a
-#: 30-minute grace — the coarser instrument must be the WIDER one, or it suppresses a check on
-#: a day the finer one considers live.
+#: They are DEFINED there rather than imported from here, and that is forced rather than
+#: stylistic: this module imports `SportsDeltaContract` FROM `sports_delta_freshness`, so a
+#: module-level import back is a cycle — measured, it raises
+#: `cannot import name ... from partially initialized module` whenever THIS module is imported
+#: first, which is exactly what a fast-gate test does. `ARMED_IN_REGISTRY` below is names only
+#: (plain strings, no import), so the two modules can still be cross-checked by a guard.
 #:
-#: So the invariant is: every month in which `in_season()` is EVER true must appear here. The
-#: converse is deliberately false — this window stays open for the back half of April, when
-#: `in_season()` has already closed, which costs at most a few days of a contract ageing
-#: against a season that has just ended. That direction is safe; the other direction would
-#: silently blind the monitor during live play. `season_month_containment_holds()` asserts it,
-#: and a guard test drives it, because two owners of one boundary is this repo's documented
-#: seasonal-hole class (E9.48(c) / INC-37 / NCAAF-RF1).
-SEASON_MONTHS: tuple[int, ...] = (11, 12, 1, 2, 3, 4)
-
-
-def season_month_containment_holds() -> tuple[bool, tuple[int, ...]]:
-    """Does `SEASON_MONTHS` cover every month the ingest layer ever calls in-season?
-
-    Returns (ok, months_missing_from_SEASON_MONTHS). Imported lazily so this module stays
-    import-cheap and free of a cycle.
-    """
-    from datetime import date
-
-    from quant_sports_intel_models.basketball.ncaab.ingest.sources import in_season
-
-    # 2027 is a non-leap year; every month is probed on days 1, 15 and 28 so a mid-month
-    # boundary (April 10) cannot hide between probes.
-    live = {m for m in range(1, 13)
-            for d in (1, 15, 28) if in_season(date(2027, m, d))}
-    missing = tuple(sorted(live - set(SEASON_MONTHS)))
-    return (not missing), missing
-
-
+#: What remains below is what is still UNARMED: the two paid odds tables, whose writer is the
+#: operator's spend decision.
+#:
 #: Sized against the PROPOSED cadence in docs/ncaab_p0_credit_arithmetic.md §3. Each SLA is one
 #: cadence plus a grace window that tolerates a late run and one deploy, but NOT a skipped cycle
 #: — the distinction `classify` then splits into WARN (a missed cycle) and CRITICAL (dead feed).
 DECLARED: tuple[SportsDeltaContract, ...] = (
-    SportsDeltaContract(
-        name="ncaab_schedules",
-        sport="ncaab",
-        source="schedules",
-        tier="raw",
-        # Daily writer. 36h tolerates a late run and one deploy window, not a skipped day.
-        max_lag_hours=36.0,
-        cadence="daily (proposed: sports_ncaab_ingest_schedule)",
-        active_months=SEASON_MONTHS,
-        why=("the game spine every NCAAB surface and model reads. Frozen, the slate silently "
-             "stops advancing while every job still reports success — hoopR overwrites the "
-             "current season's file in place, so a frozen mirror is indistinguishable from a "
-             "quiet day in every signal except this one"),
-        remediate=("run the ingest for the current season and READ THE RECEIPT: "
-                   "`uv run python -m quant_sports_intel_models.basketball.ncaab.ingest.handler "
-                   "--sources schedules`. It exits non-zero on an escalation rather than "
-                   "swallowing, and refuses to overwrite a good partition with an empty one"),
-    ),
-    SportsDeltaContract(
-        name="ncaab_team_box",
-        sport="ncaab",
-        source="team_box",
-        tier="raw",
-        max_lag_hours=36.0,
-        cadence="daily (proposed: sports_ncaab_ingest_schedule)",
-        active_months=SEASON_MONTHS,
-        why=("the box lines the possession estimate — and therefore every tempo and efficiency "
-             "figure — is computed from. Frozen, ratings keep serving off last week's games "
-             "with no error anywhere"),
-        remediate=("as ncaab_schedules, with `--sources team_box`. ⚠️ Before the season's first "
-                   "tip the upstream file legitimately 404s and the ingest reports "
-                   "`not published yet` — that is the expected pre-season state, which is why "
-                   "this contract is active_months-gated and not wall-clock"),
-    ),
     SportsDeltaContract(
         name="ncaab_odds_game_lines",
         sport="ncaab",
@@ -162,6 +113,12 @@ DECLARED: tuple[SportsDeltaContract, ...] = (
 # is a CONTENT check at the point of use, which is strictly stronger than a fetch-time check —
 # the same shape as the 7-day Byparr outage, where every liveness probe was green and only a
 # staleness check on the LANDED DATA saw it.
+#: The NCAAB contracts that ARE live, by name. Strings, deliberately — importing the objects
+#: from `sports_delta_freshness` would re-create the cycle described above. A guard cross-checks
+#: these against the real REGISTRY, so the two cannot drift apart silently.
+ARMED_IN_REGISTRY: tuple[str, ...] = ("ncaab_schedules", "ncaab_team_box")
+
+
 def registration_snippet() -> str:
     """Exactly what to paste into `sports_delta_freshness.REGISTRY` at enablement.
 

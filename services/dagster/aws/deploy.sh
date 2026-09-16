@@ -164,12 +164,43 @@ log "draining in-flight Dagster runs (timeout ${DRAIN_TIMEOUT}s)"
 # exited IMMEDIATELY, deploying straight into a live run. Same swallowed-error class as the
 # INC-32 landmines. It now returns the sentinel `unknown`, which the loop treats as "cannot
 # verify" (ALERT-loud, bounded) rather than as "drained".
+# NCAAF-INC-0914 (2026-09-14) — TWO holes survived the INC-36 hardening, and the first one
+# cost five runs in a single deploy:
+#
+#  (a) ⭐ THE FILTER LISTED `STARTED` ONLY, AND A RUN IS NOT `STARTED` FOR ITS FIRST ~47s.
+#      The instance runs QueuedRunCoordinator, so EVERY scheduled run passes
+#      QUEUED -> STARTING -> STARTED. Measured on 2026-09-14: run 06d7352c
+#      (sports_ncaaf_dbt_build_job) was ENQUEUED 18:00:00.77, went STARTING 18:00:09.44 and did
+#      not reach STARTED until 18:00:47.67. This probe ran at 18:00:23 — squarely inside that
+#      window — reported 0, and the recreate was authorised. dagster-codeloc (the run worker)
+#      was torn down ~1s after the run logged its first dbt command, and FIVE runs died:
+#      sports_ncaaf_dbt_build_job (orphaned in STARTED, invisible for 4h — see below),
+#      sports_nfl_dbt_build_job + artifact_freshness_job + intraday_public_betting_job (killed
+#      in STARTING, failed at the 180s start-timeout), and intraday_schedule_job.
+#      ⇒ the drain must wait for every NON-TERMINAL run, not just the ones already executing.
+#
+#  (b) a GRAPHQL-LEVEL error still degraded to 0. INC-36 fixed the TRANSPORT failure (a failed
+#      curl / unparseable body returns `unknown`), but `runsOrError` resolving to `PythonError`
+#      returns HTTP 200 with a body that has no `results` key — and `.get('results',[])` read
+#      that as "drained". The query already asked for `__typename`; now the answer is REQUIRED
+#      to be `Runs`, so a server-side error is `unknown` like any other unverifiable probe.
+#      Same swallowed-error class INC-36 was written to remove, one layer deeper.
+#
+# ⚠️ Every in-flight run is a SUBPROCESS OF dagster-codeloc (DefaultRunLauncher), so a recreate
+# kills all of them by construction — there is no "it was nearly done" safe case to optimise for.
 in_flight() {
   local raw n
   raw="$(curl -fsS "$LOCAL_GQL" -H 'Content-Type: application/json' \
-    --data '{"query":"{ runsOrError(filter:{statuses:[STARTED]}, limit:1){ __typename ... on Runs { results { runId } } } }"}' 2>/dev/null)" \
+    --data '{"query":"{ runsOrError(filter:{statuses:[QUEUED,NOT_STARTED,STARTING,STARTED,CANCELING]}, limit:20){ __typename ... on Runs { results { runId status } } } }"}' 2>/dev/null)" \
     || { echo unknown; return 0; }
-  n="$(printf '%s' "$raw" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len((d.get('data',{}).get('runsOrError',{}) or {}).get('results',[])))" 2>/dev/null)" \
+  n="$(printf '%s' "$raw" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+r = (d.get('data') or {}).get('runsOrError') or {}
+if r.get('__typename') != 'Runs':
+    raise SystemExit(1)
+print(len(r.get('results', [])))
+" 2>/dev/null)" \
     || { echo unknown; return 0; }
   case "$n" in ''|*[!0-9]*) echo unknown ;; *) echo "$n" ;; esac
 }
