@@ -366,6 +366,31 @@ spec:
       produced nothing for that player, which is not what happened. Three
       states, three sentences — the rule this surface was already built on.
 
+      ── ⑧ THE ZERO-CLIP RE-MEASUREMENT IS CALENDAR-BOUND, and saying so
+      keeps it from reading as an omission. TD1's component-head zero-clip
+      figures (QB passing_tds 1.40x, TE receiving_tds 3.41x, n=78/113)
+      compare the HEAD'S MEAN against REALIZED per-component outcomes,
+      which do not exist for a week until it has been played. The target
+      week (2026 wk 2) runs 09-17 → 09-21, so the cleaner read the spec
+      asks for cannot be taken before 09-22 — and `run_nf_wk_td1_coherence`
+      does not compute it (it computes coherence + TD coverage). ⇒ node 3's
+      level and zero-atom reads are available the moment a corrected
+      payload publishes; the zero-clip re-read is a SECOND, later pass. It
+      is not blocked on anything but the calendar.
+
+      ── ⑨ A CLAUSE THIS SESSION WROTE WAS VACUOUS FOR A REASON WORTH
+      RECORDING: writing a file through a shell heredoc collapsed the `\b`
+      in a regex into a literal BACKSPACE (0x08), so the "the notice
+      promises no delivery date" assertion matched a control character
+      followed by a month name — i.e. it passed on nothing. Invisible in
+      the diff, in `tsc` and in a green run; found by reading the RENDERED
+      page and then scanning the file's bytes. A scan of every file this
+      branch touched found exactly those two occurrences and no others.
+      Both repaired clauses are now RED-proven. The class: an escape that
+      is BOTH a regex escape and a Python escape (\b \n \t \r \f \v \a)
+      is silently rewritten by that write path, and the result is a guard
+      that cannot fail.
+
       ── ⑥ NF-WK-RC1 IS A CONSUMER OF THESE TABLES, NOT AN INGEST OWNER — checked,
       because the kickoff flagged a possible collision. Its node 1 is a DIAGNOSIS
       ("name the realized weekly stat-line source in the lake … find its cadence"),

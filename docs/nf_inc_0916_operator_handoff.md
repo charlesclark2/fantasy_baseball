@@ -114,6 +114,10 @@ uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_nf_wk_td1_co
 
 ⚠️ **Registered expectation for the coherence read, so it is not misread as a regression:** TD1's node-3 hypothesis was **refuted** — emission is expected to make coherence **worse**, in 7 of 8 cells. The served component line was running *hot* by roughly the value of the four terms it omitted, so the near-zero pooled coherence was two offsetting errors. **A widening gap is the predicted result.**
 
+### ⏳ The zero-clip re-read is a SECOND, LATER pass — it is calendar-bound, not missing
+
+TD1's component-head zero-clip figures (QB `passing_tds` 1.40×, TE `receiving_tds` 3.41×, n=78/113) compare the head's MEAN against REALIZED per-component outcomes, which do not exist for a week until it has been **played**. 2026 week 2 runs 09-17 → 09-21, so that read cannot be taken before 09-22, and `run_nf_wk_td1_coherence` does not compute it. The level and zero-atom reads above are available the moment a corrected payload publishes; this one follows a week later.
+
 ---
 
 ## STEP 4 — the held chain, in order
