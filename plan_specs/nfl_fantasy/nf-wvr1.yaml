@@ -92,6 +92,75 @@ spec:
         a new module and not a fork of RC1's. RC1 is UNMERGED
         (no `origin/nf-wk-rc1`; 6 local commits, D2 "STOPPED, not
         shipped"). ⚠️ #1139 CONFIRMED OPEN, 21 commits held.
+    # ⚠️⚠️ AMENDED 2026-09-16 (PM RULING 1, ratified) — THE SUBSTRATE IS REPLACED.
+    # Node 1 measured that the spec's ROS quantity DOES NOT EXIST: the season board publishes a
+    # FULL-SEASON projection (max `g` = 17.000, 53 rows > 16.0, week 1 complete) that never
+    # decrements, and — the sharper half — it has NO IN-SEASON PRODUCTION CHANNEL AT ALL
+    # (`assemble_features`: "every column is a base-season realized quantity or a leakage-safe
+    # forward designation", base_season 2025; BOARD_INPUT_SOURCES = depth_charts/rosters/
+    # weekly_rosters, no results feed). Its 2026 channels are ROLE, HEALTH and MARKET, never
+    # PRODUCTION.
+    #
+    # PM RULING: (b) NOW, (c) FUNDED AS A SUCCESSOR; (a) and (d) REFUSED.
+    #   ⛔ (a) an honestly-labelled full-season value column is REFUSED OUTRIGHT, quoted: "a value
+    #      ranking whose top entry hasn't taken a snap is plausible-but-wrong at the feature's core
+    #      question — a waiver decision IS 'what changed since the draft' — and no label rescues a
+    #      ranking built to ignore the answer." (The row that carried the argument: Fernando
+    #      Mendoza, 268.3 projected, top of the available pool, zero snaps in week 1.)
+    #   ⛔ (d) waiting for NF-INC-0916 is REFUSED for a DIFFERENT reason: INC-0916 corrects the
+    #      weekly model's LEVELS; the weekly ROS would still be that model's OUTPUT and its
+    #      certification is a separate question — do not couple this story to it.
+    #   ⇒ THIS STORY SHIPS THE FA POOL + POSITIONAL-NEED ANNOTATION NOW, WITH NO VALUE COLUMN.
+    #      The value column arrives with NF-ROS1 (carded PMVQXY99) — an in-season rest-of-season
+    #      quantity blending the preseason prior with 2026 realized production, games-remaining
+    #      aware. That is new modelling and gets its own §0.5 spec.
+    #
+    # ⭐ THE SUB-QUESTION, SETTLED EXPLICITLY (PM): reading `stats_player_week` — the REALIZED LAKE
+    # TABLE — is OUTSIDE the weekly-model ban. The ban covers model OUTPUTS; realized stat lines are
+    # FACTS ABOUT WHAT HAPPENED, RC1 already scores them, and "no honesty argument distinguishes a
+    # fact by which story reads it."
+    # ⇒ SANCTIONED CONSEQUENCE: alongside the pool and the need annotation, this story MAY ship
+    #   REALIZED 2026 PRODUCTION-TO-DATE as FACT COLUMNS — league-scored through the existing
+    #   scorer path, labelled as WHAT PLAYERS HAVE DONE, ⛔ never forecast language — as the honest
+    #   interim ordering for a waiver surface.
+    #
+    # ✅ FEED SERVING-STATE VERIFIED 2026-09-16 (the PM asked which source serves it; stating which):
+    #   the lake NOW CARRIES 2026 week 1 — `stats_player_week` 1,118 REG rows, 32 teams, 0 null
+    #   `fantasy_points_ppr` (it held ZERO 2026 rows when RC1 measured on 09-15). The writer was the
+    #   OPERATOR'S BACKFILL, **not** the recurring ingest: the Delta log carries exactly ONE new
+    #   commit per table (stats_player_week 27→28, snap_counts 13→14) at 2026-09-16T02:43:29Z, with
+    #   commitInfo `operation: WRITE, mode: Overwrite, predicate: season = 2026, num_added_rows:
+    #   1118` — and #1139 merged at 05:32Z, ~3h LATER, so INC-0916's recurring ingest code was not
+    #   on the box when this landed. ⇒ week 1 is serveable TODAY; the recurring path is UNPROVEN
+    #   until its first natural fire (week 2 completes Mon 09-21). ⛔ THIS SURFACE MUST NOT ASSUME
+    #   THE FEED — it reads the lake and renders a STATED ABSENCE when a week is missing, so a
+    #   recurring-ingest failure degrades visibly rather than silently freezing the fact columns.
+    #
+    # 📌 DATED CORRECTION carried forward (WVR1's own follow-up ① was already stale within a day):
+    #   ① recorded option (c) as blocked because "games-played-to-date is exactly the quantity we do
+    #   not currently ingest". INC-0916's `in_season_stats.py` (daily in-season ingest of
+    #   stats_player_week + snap_counts, owned by `nfl_weekly_stats_ingest_op`) merged to dev and
+    #   reached main at 05:32Z 09-16. That dependency has LANDED, so (c) is materially cheaper than
+    #   WVR1's own record says. The correction is on NF-ROS1's card.
+    # ⚠️ AMENDED 2026-09-16 (PM RULING 2, ratified) — WITHIN-POSITION ONLY.
+    # Measured through the REAL `league_scoring.replacement_levels` over the live 870-row board,
+    # 12-team full-PPR, FA pool proxied by "no ADP" (676 rows): the top 25 AVAILABLE players are
+    # 6 QB / 3 TE / 16 K by RAW POINTS and 14 K / 8 DST / 2 TE / 1 QB by VOR. The FA pool IS the
+    # below-replacement population BY CONSTRUCTION, so draft-VOR is <=0 across it and the
+    # LOWEST-DISPERSION positions float up (every kicker projects 125-138, ~3 pts from its own
+    # replacement level). This is NF-C7's lesson ("best value on the board late in a draft is
+    # structurally a backup TE/QB") and NF-C5's ("a starter-cutoff replacement carried into an
+    # auction is the bug") measured on a THIRD surface; it is quoted on NF-ROS1's card, where the
+    # waiver-specific replacement level now lives.
+    # ⛔ THIS STORY NEVER RANKS ACROSS POSITIONS. The NEED ANNOTATION is the cross-position
+    #   instrument, and it SELECTS POSITIONS, NOT PLAYERS.
+    # ⇒ WITHIN a position, until NF-ROS1 exists, ordering is by the REALIZED FACT COLUMNS (Ruling 1)
+    #   — or, absent those, an EXPLICITLY NON-RANKED LISTING. ⛔ NEVER by the preseason projection,
+    #   which fails within-position for the same Mendoza reason.
+    # 📌 Caveat recorded as-is per the PM: the position-mix measurement used `fpPpr` as the
+    #   full-PPR point total (the paid stat line is not fetchable without auth) — faithful for
+    #   full-PPR and the mechanism is structural, but the exact mix under a CUSTOM scoring config
+    #   is unverified.
     - description: >
         NODE 2 — THE RANKING, transparent arithmetic (the RC1
         power-rankings rule): available players scored by (a) the
@@ -108,6 +177,27 @@ spec:
         product's existing intervals, carried not invented. Drop
         candidates are OUT of scope (recommending who to cut is a
         harder claim — record as a successor option).
+    # ⚠️ AMENDED 2026-09-16 (PM RULING 3, ratified) — THE ROSTER RE-FETCH SEAM: WVR1 WRITES IT.
+    # The FA-pool substrate already EXISTS and is already served (`League.league_rosters` ->
+    # `/nfl/league-board::_joined_league_rosters`); only the RE-FETCH was missing.
+    # ⇒ OWNER: a REFRESH METHOD ON THE PLATFORM-IMPORT ADAPTER — `platform_import/sleeper.py`,
+    #   BESIDE `_fetch_teams`, hitting `/league/{id}/rosters`. It is THE ONE roster-refresh owner
+    #   and must be DOCUMENTED AS SUCH AT THE DEFINITION.
+    # ⭐ WVR1 writes it because WVR1 is the story that needs CURRENT-roster semantics. RC1's
+    #   `sleeper_matchups.fetch_week` STAYS SEPARATE BY DESIGN — starters-only, FROZEN
+    #   point-in-time; a different object with correctly different semantics (node 1's analysis is
+    #   the record). A one-line note naming the split goes in RC1's spec record so neither session
+    #   duplicates it.
+    # ⇒ THE WRITER OWNS RE-STAMPING `league_rosters_synced_at`.
+    # ⛔ TWO BINDING CONSTRAINTS, ratified verbatim:
+    #   (1) A TRUNCATED LEAGUE REFUSES RATHER THAN RENDERS. `bound_league_rosters` drops WHOLE
+    #       TEAMS at MAX_LEAGUE_ROSTER_PLAYERS = 500 and records it on `league_rosters_truncated`,
+    #       which is the tripwire — "an FA pool containing rostered players is the worst output
+    #       this feature can produce".
+    #   (2) THE SUBTRACTION JOINS ON `league_scoring._join_key` (name+position, D/ST by franchise),
+    #       ⛔ NEVER ON AN ID: 113 of 870 board rows carry synthetic non-gsis ids (81 rookies + 32
+    #       D/ST), so an id join would silently drop the rookie class — "the population waivers
+    #       exist to surface". Measured clean today: 870 rows -> 870 distinct keys, 0 collisions.
     - description: >
         PHASE A — SERVING before page code: a paid authed endpoint
         (my-teams pattern; 401-anon; contract Pydantic-declared,
