@@ -172,6 +172,16 @@ def component_coherence(payload: dict | None) -> dict:
     from the served component line versus the served point. They are not expected to agree exactly —
     they are different models — so this is a DIAGNOSTIC that is reported, never a gate. A large
     divergence would be a finding worth a story; a modest one is what two heads look like.
+
+    ⚠️⚠️ SIGN CONVENTION, AND THE PROGRAM CARRIES TWO OF THEM FOR THIS ONE QUANTITY.
+    `mean_signed_diff` here is **components − head** (the scored line minus the served point).
+    NF-WK-MT1's gate and NF-WK-TD1's coherence runner compute the OPPOSITE, **head − components**.
+    Both are defensible and neither is being changed — but a figure quoted from one artifact under
+    the other's reading has its sign inverted, which has already happened once: C6-PH2's locally
+    staged −0.77 (n=503, THIS convention) and the published blob's +0.0609 (n=500) read as a
+    contradiction until the convention is named. ⇒ any citation of a coherence figure must name
+    BOTH the artifact it came from and the convention it was computed under (PM ruling, NF-WK-TD1
+    D5 item 5).
     """
     if not payload:
         return {"evaluable": False, "reason": "nothing staged"}
@@ -196,8 +206,13 @@ def component_coherence(payload: dict | None) -> dict:
         "median_abs_diff": round(a[len(a) // 2], 4),
         "p95_abs_diff": round(a[int(0.95 * (len(a) - 1))], 4),
         "max_abs_diff": round(a[-1], 4),
+        # ⭐ THE CONVENTION TRAVELS WITH THE NUMBER. The docstring binds whoever reads this module;
+        # this string binds whoever reads the ARTIFACT, which is where a figure gets quoted from.
+        "sign_convention": "components_minus_head",
         "interpretation": ("the points distribution and the component head are INDEPENDENT models; "
-                           "this is a coherence diagnostic, never a parity gate"),
+                           "this is a coherence diagnostic, never a parity gate. `mean_signed_diff` "
+                           "is components MINUS head — NF-WK-MT1 and NF-WK-TD1 use the opposite "
+                           "sign, so cite the artifact AND the convention together"),
     }
 
 
