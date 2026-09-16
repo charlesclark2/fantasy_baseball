@@ -278,6 +278,29 @@ spec:
       now scoped to `nfl_weekly_freshness_op`, the op it always meant;
       the assertion itself is unchanged, and a red-proof case shows the
       defect it exists to catch still turns it RED.
+    node3: >
+      MEASUREMENT TOOLING DONE; THE RETRAIN ITSELF IS AN OPERATOR RUN
+      (~9 min, in the handoff). `run_nf_inc_0916_level` is now the ONE
+      method for the population-matched level read, and it REPRODUCES
+      TD1's before-table rather than approximating it: QB 0.205 / RB
+      0.466 / WR 0.358 / TE 0.402 / ALL 0.355 against TD1's recorded
+      0.205 / 0.465 / 0.358 / 0.402 / 0.355.
+      ⭐ TD1 recorded the figures without stating the realized
+      population's bounds, so it was RECOVERED BY REPRODUCTION — four
+      candidates scored against the record; 2016-2025 REG-only
+      reproduces WR exactly (5.743) and the rest within 0.008. Both
+      exclusions on the realized side are stated because they point in
+      OPPOSITE directions: a bye is not a player-week anyone could score
+      in (including it would FLATTER the projection), and the postseason
+      is a different population.
+      The zero-atom read is the discriminating half — a uniform scale
+      error and an inflated atom both depress the mean and have
+      different fixes — and it is two-sided, so it can come back clean.
+      ⛔ NO ACCEPTANCE THRESHOLD is asserted in the runner or its test.
+      The operator reads the table and rules on un-suppression.
+      ⚠️ The before-table artifact is COMMITTED
+      (`ablation_results/nf_inc_0916_level_before.{json,md}`) so the
+      after-run has a fixed comparator that cannot drift.
     node0_scope_note: >
       ⚠️ RENDERING ONLY, per the spec — the free API and CDN routes still SERVE
       the defective numbers, so a reader who fetches
