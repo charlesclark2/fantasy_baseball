@@ -1416,6 +1416,21 @@ export const WEEKLY_STAT_LINE_ABSENT =
 export const WEEKLY_WITHHELD_TITLE = "We have taken this week's projected points down"
 
 /**
+ * The page's standfirst WHILE THE NUMBERS ARE WITHHELD.
+ *
+ * ⭐ IT HAS TO CHANGE, and the reason is the same one that makes the notice necessary.
+ * `WEEKLY_PAGE_STANDFIRST` promises "the 80% range around it and what is left of his season beside
+ * it" — a description of exactly what this page is currently declining to show, sitting two lines
+ * ABOVE the notice that says so. Leaving it would have the surface make and withdraw the same
+ * claim in the same screenful, which reads as carelessness rather than as candour.
+ *
+ * ⚠️ It describes what IS here rather than apologising, because what is left is genuinely useful:
+ * the week's rosters, opponents, byes and evidence base are all unaffected by the defect.
+ */
+export const WEEKLY_WITHHELD_STANDFIRST =
+  "Our projected points for the coming week are withheld while we correct a fault in the data the model learns from — the notice below says what happened. What is on this page does not come from that model: who is on a game-day roster this week, who they play, who is on a bye, and how much of each player's own form we hold."
+
+/**
  * The notice, as sentences. Structured like `CSV_WITHHELD_NOTE` and for the same reason: every
  * sentence stays a double-quoted literal, which is the form the claim screens actually read. A
  * template literal would carry the same words past both of them.

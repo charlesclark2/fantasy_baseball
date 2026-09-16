@@ -11,7 +11,7 @@ import {
   weeklyRowOrder,
   weeklyRowView,
 } from "@/lib/weekly-suppression"
-import { WEEKLY_WITHHELD_NOTE } from "@/lib/fantasy-claim-copy"
+import { WEEKLY_PAGE_STANDFIRST, WEEKLY_WITHHELD_NOTE } from "@/lib/fantasy-claim-copy"
 
 /**
  * NF-WK-FE1 — THE WEEKLY PROJECTIONS SURFACE, AT THE RENDER LEVEL.
@@ -254,8 +254,16 @@ test("the notice says what broke, carries its date, and promises no delivery dat
   }
   // A month name or a weekday would be a delivery commitment made out of an inference.
   expect(lowered).not.toMatch(
-    /(january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/,
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/,
   )
+
+  // ⭐⭐ AND THE PAGE MUST NOT MAKE THE CLAIM IT IS WITHDRAWING, TWO LINES ABOVE THE WITHDRAWAL.
+  // The ordinary standfirst promises "the 80% range around it and what is left of his season
+  // beside it" — precisely what is withheld — and it renders directly under the title. A surface
+  // that advertises and retracts the same thing in one screenful reads as carelessness rather than
+  // as candour; this is what keeps the two in step through a reversal.
+  const body = await page.evaluate(() => document.body.innerText)
+  expect(body).not.toContain(WEEKLY_PAGE_STANDFIRST)
 })
 
 // ══ 1 — the band renders with the point, EVERYWHERE the point renders ═══════════════════════════

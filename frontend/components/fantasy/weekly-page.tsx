@@ -80,6 +80,7 @@ import {
   WEEKLY_STAT_LINE_LOCK_TITLE,
   WEEKLY_STAT_LINE_NOTE,
   WEEKLY_WITHHELD_CELL,
+  WEEKLY_WITHHELD_STANDFIRST,
   WEEKLY_WITHHELD_STAT_LINE,
   WEEKLY_WITHHELD_TITLE,
   weeklyWithheldDetail,
@@ -462,7 +463,14 @@ export function WeeklyProjectionsPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <SurfaceHeader title={WEEKLY_PAGE_TITLE} blurb={WEEKLY_PAGE_STANDFIRST}>
+      {/* ⚠️ THE STANDFIRST IS FLAG-DRIVEN TOO (NF-INC-0916). The ordinary one promises "the 80%
+          range around it and what is left of his season beside it" — precisely what this page is
+          currently withholding — and it renders two lines above the notice that says so. A surface
+          that makes and withdraws the same claim in one screenful reads as carelessness. */}
+      <SurfaceHeader
+        title={WEEKLY_PAGE_TITLE}
+        blurb={WEEKLY_NUMBERS_WITHHELD ? WEEKLY_WITHHELD_STANDFIRST : WEEKLY_PAGE_STANDFIRST}
+      >
         {manifest.data && (
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <WeekHeading manifest={manifest.data} />
