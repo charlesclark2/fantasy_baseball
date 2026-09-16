@@ -225,7 +225,10 @@ def score_week(
             "itemisedTotal": total,
             "standingsTotal": standings,
             "standingsSource": SOURCE_LEAGUE_PUBLISHED if standings is not None else None,
-            "itemisationGap": (None if standings is None else total - float(standings)),
+            # Snapped: a 1.4e-14 residue is not a gap, and serving one invites a surface to
+            # render "-0.00" beside two numbers that match.
+            "itemisationGap": (None if standings is None
+                               else _snap(total - float(standings))),
         })
 
     return {
@@ -241,12 +244,27 @@ def score_week(
         # ⛔ RENDERED ADJACENT TO THE TOTAL, never as a panel or a footnote (MT1 ruling ③). None
         # when the league captures nothing, so a surface shows no disclosure rather than an empty
         # one — a caveat that fires on nothing is one readers learn to skip.
-        "itemisationGapNote": itemisation_gap_note(coverage),
+        "itemisationGapNote": itemisation_gap_note(coverage, max_gap=_max_gap(teams)),
         "standingsNote": (
             "Team totals and results are your league's own published figures. The slot breakdown "
             "is your league's scoring applied by us to the week's real stat line."
         ),
     }
+
+
+def _snap(value: float) -> float:
+    """Float noise -> exactly 0.0. See `GAP_EPSILON`."""
+    return 0.0 if abs(value) <= GAP_EPSILON else value
+
+
+def _max_gap(teams: list[dict]) -> float:
+    """The largest |itemisation gap| over the week's teams — the input to the disclosure decision.
+
+    Zero when no team has a standings total to compare against: without the league's own number
+    there is no gap to claim, which is the same honest answer as a gap of zero.
+    """
+    gaps = [abs(t["itemisationGap"]) for t in teams if t.get("itemisationGap") is not None]
+    return max(gaps) if gaps else 0.0
 
 
 def matchups(teams: list[dict]) -> list[dict]:
@@ -317,19 +335,47 @@ EXPLAINABLE_CAPTURED_TERMS: dict[str, str] = {
 EXPLANATION_COLUMNS: tuple[str, ...] = tuple(sorted(set(EXPLAINABLE_CAPTURED_TERMS.values())))
 
 
-def itemisation_gap_note(coverage: dict) -> str | None:
+#: Below this, an itemisation gap is FLOAT NOISE, not a gap. A real one is at least a scoring
+#: increment (the smallest weight in the catalog is 0.01/yard territory, i.e. ~1e-2); IEEE-754 error
+#: accumulated over ~9 seats is ~1e-13. 1e-6 sits far below any real difference and far above the
+#: noise, so the classification can never be close.
+GAP_EPSILON = 1e-6
+
+
+def itemisation_gap_note(coverage: dict, *, max_gap: float | None = None) -> str | None:
     """The sentence rendered ADJACENT to the total, naming the terms that explain the gap.
 
     ⛔ SPECIFIC, NEVER GENERIC (the ruling): "the coverage report already names which terms explain
     the gap, so the copy says so, never a vague 'totals may differ'." Built from the RESOLVED
     coverage rather than a constant, so a league that captures nothing gets no sentence at all and
     a league that captures something gets its OWN terms named.
+
+    ⚠️⚠️ AND IT REQUIRES A MEASURED GAP, WHICH THE RUNTIME GATE IS WHAT TAUGHT US. The first cut
+    keyed the note on the league CAPTURING a term, which is a statement about its SCORING and is
+    always true once any term is captured. On the operator's real 2026 league the captured terms
+    (fumble-recovery touchdowns, missed extra points, return touchdowns) simply DID NOT OCCUR in
+    week 1, so the itemisation was exact — `138.36` against `138.35999999999999` — and the note
+    still asserted "the slot points don't add up to the total above" directly beside two numbers a
+    reader can see are the same.
+
+    A caveat that contradicts the figures printed next to it is worse than no caveat: it spends the
+    trust the disclosure exists to protect. The terms are still in `coverage` for anyone who wants
+    them; what is withheld is the false CONSEQUENCE clause.
+
+    `max_gap` is the largest |itemisedTotal − standingsTotal| over the week's teams. Passing None
+    keeps the old unconditional behaviour for a caller that genuinely cannot measure it — but
+    `score_week` always can, and does.
     """
     captured = sorted(
         t["key"] for t in (coverage.get("terms") or [])
         if t.get("verdict") == "captured" and abs(float(t.get("weight") or 0.0)) > 0
     )
     if not captured:
+        return None
+    # ⭐ NO MEASURED GAP ⇒ NO CLAIM OF ONE. See the docstring: the captured terms are real, but
+    # whether they MOVED anything this week is a different fact, and only the second licenses the
+    # "doesn't add up" sentence.
+    if max_gap is not None and abs(max_gap) <= GAP_EPSILON:
         return None
     labels = {
         "fum": "fumbles", "pass_td_40p": "40+ yard passing TD bonuses",
