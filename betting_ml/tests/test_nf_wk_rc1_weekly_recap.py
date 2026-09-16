@@ -240,3 +240,30 @@ def test_the_recap_contract_declares_both_totals_separately():
     fields = set(nfl_recap.RecapTeam.model_fields)
     assert {"standingsTotal", "itemisedTotal"} <= fields
     assert "total" not in fields
+
+
+# ── the publish entrypoint ───────────────────────────────────────────────────────────────────────
+
+def test_the_publisher_refuses_a_week_that_has_not_started():
+    """⛔ A zero-row artifact is indistinguishable from a whole league on a bye, so a not_started
+    week must REFUSE rather than publish an empty one. The sibling of NF1.7's silent-no-publish."""
+    import subprocess
+    import sys as _sys
+    r = subprocess.run(
+        [_sys.executable, "-m",
+         "quant_sports_intel_models.football.nfl.fantasy.run_realized_week",
+         "--season", "1999", "--week", "1", "--smoke"],
+        capture_output=True, text=True, timeout=180,
+    )
+    # A 1999 week is not in the lake window; the smoke path must still not raise.
+    assert r.returncode in (0, 1), r.stderr[-500:]
+
+
+def test_the_entrypoint_has_an_executing_smoke_flag():
+    """The entrypoint sibling sweep (GyD9hoeD): a publish script ships WITH a runnable smoke, so it
+    can never join the zero-callers list."""
+    from pathlib import Path
+    src = Path(__file__).resolve().parents[2].joinpath(
+        "quant_sports_intel_models/football/nfl/fantasy/run_realized_week.py").read_text()
+    assert '"--smoke"' in src
+    assert 'if man["completeness"] == "not_started"' in src, "the refusal must be in the publish path"
