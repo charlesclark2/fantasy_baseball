@@ -14,9 +14,12 @@ that gates the merge.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import ModuleType
 
 from app.backend.services import realized_dst, weekly_recap
 from betting_ml.monitoring import nfl_realized_freshness as RF
@@ -28,12 +31,93 @@ _INJURIES_PATH = _REPO / "pipeline/jobs/sports_nfl_sleeper_injuries_job.py"
 _RUNNER_PATH = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_realized_week.py"
 
 
-def _by_path(path: Path, name: str):
+_MISSING = object()
+
+#: The `pipeline.*` names the injuries job imports AT TOP LEVEL. Pre-seeding these is what lets it
+#: be loaded without executing `pipeline/__init__.py` — see `_pipeline_stubbed`.
+_PIPELINE_NAMES = (
+    "pipeline",
+    "pipeline.jobs",
+    "pipeline.jobs.sports_dbt_job",
+    "pipeline.jobs.sports_nfl_weekly_serving_job",
+)
+
+
+@contextlib.contextmanager
+def _pipeline_stubbed():
+    """Make `pipeline.*` importable WITHOUT running `pipeline/__init__.py`, then restore exactly.
+
+    ⛔⛔ E11.23, AND THIS FILE WALKED INTO IT ON CI AFTER PASSING LOCALLY — which is the whole
+    lesson. `pipeline/__init__.py` reads the GITIGNORED `dbt/target/manifest.json` at import, and
+    this worktree carries a SYMLINK to the main checkout's copy, so the two clauses that load the
+    injuries job (which imports `pipeline.jobs.*` at top level, unlike the weekly job module) passed
+    here and died at COLLECTION on a CI runner. A developer machine cannot see this rule.
+
+    ⭐ THE CURE IS NOT A SKIP. A skipped clause is a vacuous anchor in the one environment that
+    gates the merge — CI would never run the "a monitor is not hosted inside its own subject"
+    property these tests exist for. Instead the package NAMES are pre-seeded in `sys.modules` and
+    the two submodules actually needed are loaded BY PATH under their real names, so Python's
+    import machinery finds everything already present and executes no package `__init__`.
+
+    ⚠️ RESTORED EXACTLY on exit, including keys that were ABSENT before (the `_MISSING` sentinel).
+    pytest imports every test module during collection and xdist shares a worker across files, so a
+    leaked `sys.modules` entry is the "passes in isolation, fails in the full run" flake this repo
+    already paid for once (`_serving_store_loader`).
+    """
+    saved = {name: sys.modules.get(name, _MISSING) for name in _PIPELINE_NAMES}
+    try:
+        for pkg in ("pipeline", "pipeline.jobs"):
+            mod = ModuleType(pkg)
+            mod.__path__ = [str(_REPO / pkg.replace(".", "/"))]
+            sys.modules[pkg] = mod
+        for mod_name, rel in (
+            ("pipeline.jobs.sports_dbt_job", "pipeline/jobs/sports_dbt_job.py"),
+            ("pipeline.jobs.sports_nfl_weekly_serving_job",
+             "pipeline/jobs/sports_nfl_weekly_serving_job.py"),
+        ):
+            sys.modules[mod_name] = _load(_REPO / rel, mod_name)
+        yield
+    finally:
+        for name, prior in saved.items():
+            if prior is _MISSING:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = prior
+
+
+def _load(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader, f"could not load {path}"
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _by_path(path: Path, name: str):
+    """Load a job module by path. The injuries job additionally needs `pipeline.*` pre-seeded."""
+    if path == _INJURIES_PATH:
+        with _pipeline_stubbed():
+            return _load(path, name)
+    return _load(path, name)
+
+
+def test_the_weekly_job_module_still_needs_no_pipeline_package_at_import():
+    """⭐ THE PRECONDITION THAT MAKES THE LOADER ABOVE SOUND, asserted rather than assumed.
+
+    Loading the weekly job by path is only safe while that module imports nothing from `pipeline` at
+    top level. If it ever does, this clause fails HERE with a readable reason instead of the whole
+    file dying at collection on CI with a FileNotFoundError about a dbt manifest.
+    """
+    src = _JOB_PATH.read_text()
+    offenders = [
+        ln.strip() for ln in src.splitlines()
+        if ln.startswith(("from pipeline", "import pipeline"))
+    ]
+    assert not offenders, (
+        f"{_JOB_PATH.name} now imports the pipeline package at top level: {offenders}. That "
+        "executes `pipeline/__init__.py`, which reads the gitignored dbt manifest — see "
+        "`_pipeline_stubbed`."
+    )
 
 
 def _edges(job):
