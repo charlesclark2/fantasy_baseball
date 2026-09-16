@@ -267,3 +267,48 @@ def test_the_entrypoint_has_an_executing_smoke_flag():
         "quant_sports_intel_models/football/nfl/fantasy/run_realized_week.py").read_text()
     assert '"--smoke"' in src
     assert 'if man["completeness"] == "not_started"' in src, "the refusal must be in the publish path"
+
+
+# ── the disclosure requires a MEASURED gap (found by the runtime gate, 2026-09-16) ──────────────
+
+_CAPTURED_ONLY = {"terms": [{"key": "fumble_rec_td", "verdict": "captured", "weight": 6.0}]}
+
+
+def test_no_disclosure_when_the_itemisation_actually_matches():
+    """⭐ THE LIVE CASE. On the operator's real 2026 league the captured terms did not OCCUR in
+    week 1, so the totals agreed to float precision (138.36 vs 138.35999999999999) — and the first
+    cut still said "the slot points don't add up to the total above" beside two numbers a reader
+    can see are the same. A caveat that contradicts the figures printed next to it spends the trust
+    the disclosure exists to protect."""
+    assert weekly_recap.itemisation_gap_note(
+        _CAPTURED_ONLY, max_gap=-1.4210854715202004e-14) is None
+
+
+def test_the_disclosure_still_fires_on_a_real_gap():
+    """The two-sided half: suppressing a REAL gap would be the worse error."""
+    note = weekly_recap.itemisation_gap_note(_CAPTURED_ONLY, max_gap=2.0)
+    assert note and "fumble-recovery touchdowns" in note
+
+
+def test_float_noise_is_snapped_out_of_the_served_gap():
+    """A -1.4e-14 residue must not reach a surface that would render it as '-0.00'."""
+    assert weekly_recap._snap(-1.4210854715202004e-14) == 0.0
+    assert weekly_recap._snap(-2.0) == -2.0
+
+
+def test_the_gap_measured_over_a_week_drives_the_note(monkeypatch):
+    """End-to-end: an exactly-itemised week carries NO note even though the league captures a term."""
+    monkeypatch.setattr(league_scoring, "score_row", lambda *a, **k: {"pts": 10.0})
+    fetched = {
+        "season": 2025, "week": 1, "platform": "sleeper", "leagueId": "L",
+        "startingSlots": ["RB"],
+        "teams": [{"teamKey": "1", "teamName": "A", "matchupId": 1, "platformTotal": 10.0,
+                   "lineup": [{"slot": "RB", "seat": 0, "playerKey": "1", "empty": False,
+                               "name": "P", "position": "RB", "team": "ATL", "platformPts": 10.0}]}],
+    }
+    out = weekly_recap.score_week(
+        fetched=fetched,
+        realized_rows=[{"player_display_name": "P", "position": "RB", "team": "ATL"}],
+        cfg={"scoring": {"per_stat": {"fumble_rec_td": 6.0}}})
+    assert out["teams"][0]["itemisationGap"] == 0.0
+    assert out["itemisationGapNote"] is None

@@ -80,6 +80,20 @@ BREAKS = [
      '''    return max(0.0, float(opponent_score))''',
      "test_points_allowed_excludes_the_opponents_non_offensive_touchdowns"),
 
+    ("the disclosure stops requiring a MEASURED gap (the live-gate defect)",
+     "app/backend/services/weekly_recap.py",
+     '''    if max_gap is not None and abs(max_gap) <= GAP_EPSILON:
+        return None''',
+     '''    if False:
+        return None''',
+     "test_no_disclosure_when_the_itemisation_actually_matches"),
+
+    ("float noise is no longer snapped out of the served gap",
+     "app/backend/services/weekly_recap.py",
+     '''    return 0.0 if abs(value) <= GAP_EPSILON else value''',
+     '''    return value''',
+     "test_float_noise_is_snapped_out_of_the_served_gap"),
+
     ("the artifact stops carrying the explanation columns",
      "quant_sports_intel_models/football/nfl/fantasy/realized_week.py",
      '''        | set(W.EXPLANATION_COLUMNS)''',
