@@ -266,6 +266,25 @@ def test_the_contract_accepts_the_pre_TD_and_post_TD_artifacts_alike(td_value):
     C.NflWeeklyPlayer.model_validate(_row(**{f: td_value for f in _TD_FIELDS}))
 
 
+def test_the_ALREADY_PUBLISHED_artifact_still_validates_and_still_reduces():
+    """⭐ THE STRONGEST FORM OF THE NF-C0 CLAUSE: the real published blob, not a hand-made row.
+
+    A fixture I wrote can only confirm the shape I assumed. This drives the 500-row artifact that
+    is on the wire right now — the one the deployed client reads — through the payload contract,
+    the per-row contract, the FREE reducer and the entitled open path. If a later change tightened
+    any of them to require the TD fields, this is what would catch it, and the consequence would be
+    a 500 on a payload users are being served."""
+    payload = json.loads((_AR / "nf_wk_td1_before_week2_players.json").read_text())
+    manifest = json.loads((_AR / "nf_wk_td1_before_week2_manifest.json").read_text())
+    assert all(r[f] is None for r in payload["players"] for f in _TD_FIELDS), (
+        "the committed capture is no longer the pre-TD artifact — this clause needs the OLD shape")
+    C.NflWeeklyPayload.model_validate(payload)
+    C.NflWeeklyManifest.model_validate(manifest)
+    for r in payload["players"]:
+        C.NflWeeklyPlayer.model_validate(r)
+    assert len(C.public_weekly_payload(payload)["players"]) == len(payload["players"])
+
+
 @pytest.mark.parametrize("td_value", [None, 1.25])
 def test_the_league_board_scores_both_artifacts_without_raising(td_value):
     rows = [_row(id=f"P{i}", **{f: td_value for f in _TD_FIELDS}) for i in range(3)]
