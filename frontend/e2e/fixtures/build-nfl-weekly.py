@@ -217,8 +217,15 @@ def build() -> tuple[dict, dict, dict]:
     payload = {"season": SEASON, "week": WEEK, "generated_at": GENERATED_AT, "players": players}
 
     # ── the contract, as the box enforces it ──────────────────────────────────────────────────
+    # ⚠️ BOTH BLOBS ARE THE VALIDATED DUMP (NF-INC-0917B). This block said "the contract, as the box
+    # enforces it" and mirrored the box on the manifest while DISCARDING the payload's validation —
+    # so these fixtures carried `scoring_system_id` on the manifest and not on the players blob,
+    # which is the split production is in today. A fixture generator is the closest thing this repo
+    # has to a second implementation of the writer, and the two had drifted in exactly the place
+    # that mattered: the E2E suite could not reproduce the served shape because it was a third
+    # shape, neither the contract nor the wire.
     manifest = C.NflWeeklyManifest.model_validate(manifest).model_dump()
-    C.NflWeeklyPayload.model_validate(payload)
+    payload = C.NflWeeklyPayload.model_validate(payload).model_dump()
     C.assert_best_alpha_is_zero(manifest)
 
     # ── the FREE blob, produced by the SHIPPING reducer ────────────────────────────────────────

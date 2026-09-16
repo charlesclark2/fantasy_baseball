@@ -334,7 +334,8 @@ def nfl_board(
 # outside this repo's IaC. That flip is also what makes `services/jwt_verify.py`
 # load-bearing here; neither free route reads a token at all, which is the strongest
 # available statement that one cannot help.
-@board_router.get("/nfl/weekly/manifest")
+@board_router.get("/nfl/weekly/manifest",
+                  response_model=nfl_weekly.NflWeeklyManifestResponse)
 def nfl_weekly_manifest(
     season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
     week: int | None = Query(default=None, ge=1, le=22),
@@ -357,7 +358,26 @@ def nfl_weekly_manifest(
     data = _load_json(nfl_weekly.weekly_manifest_key(season, week))
     if data is None:
         raise HTTPException(status_code=404, detail="Weekly projection not found")
-    return entitlement.open_manifest_payload(data)
+    # ⛔⛔ NF-INC-0917B — THE SECOND LINE, AND THE ONE THAT DOES NOT NEED A BOX DEPLOY.
+    #
+    # This used to `return entitlement.open_manifest_payload(data)` — the published blob, verbatim,
+    # with no coercion between the builder and the browser. The builder's own guard could not close
+    # the gap either (it validated a dict and discarded the result), so a field declared REQUIRED
+    # WITH A DEFAULT reached nobody: `/fantasy/weekly` died on `framing.interval_note` for 758
+    # minutes while `framing` had never once been on the wire.
+    #
+    # The builder fix makes the BLOB complete. This makes the RESPONSE complete — which is a
+    # different guarantee and the one worth having, because a pass-through route can always omit a
+    # key and these two halves ship down different pipes (box CD on merge to `main`; this one only
+    # when the operator runs `deploy.sh`). Either half alone leaves a window; the coercion is what
+    # holds while the other is in flight, and what holds for every blob already sitting in S3.
+    #
+    # ⭐ COERCE FIRST, THEN ENVELOPE. `NflWeeklyManifestResponse` declares the envelope keys, so
+    # neither ordering could strip them — but doing it in this order keeps the model the sole author
+    # of the contract half and `entitlement` the sole author of the tier half.
+    return nfl_weekly.NflWeeklyManifestResponse.model_validate(
+        entitlement.open_manifest_payload(nfl_weekly.NflWeeklyManifest.model_validate(data).model_dump())
+    )
 
 
 @board_router.get("/nfl/weekly/projections")
