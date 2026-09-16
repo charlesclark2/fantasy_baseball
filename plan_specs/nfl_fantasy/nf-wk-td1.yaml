@@ -10,7 +10,7 @@ metadata:
   name: nf-wk-td1
   vertical: nfl_fantasy
   card: https://trello.com/c/mYQoKNGx
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     MT1's live-league gate measured that the weekly payload's TD keys
@@ -144,8 +144,137 @@ spec:
       - id: 5-closeout
         desc: "The before/after table + fork verdict + residual statement into closeout.followUps — the PM takes it to the operator for the lens-hold decision."
   closeout:
-    verdict: null
+    verdict: >
+      FORK (A) — EMISSION. SHIPPED, code-complete and CI-green; the decisive
+      before/after measurement is an OPERATOR step (~9 min) and the lens-hold
+      decision is the operator's on it. ⛔ NOTHING PUBLISHED from this branch.
+
+      NODE 1 — the four null TD keys are a LABEL-SELECTION gap, not a modeling
+      gap. `build_players` writes all eleven component keys; four take the `else`
+      branch because `fit_component_head` skipped them at
+      `if comp not in train.columns: continue`; they are not on the matrix
+      because `attach_labels` keeps four volume columns and `engineer_features`
+      merges three yardage columns. 4 + 3 = the seven populated fields exactly,
+      confirmed against the cached matrices. ⭐ The labels were never missing
+      from the FEED — `load_sources_w1` selects all four by name, so they are
+      read from the lake on every serving build and dropped two functions later.
+      Proven by a two-sided smoke calling `fit_component_head` UNCHANGED: labels
+      stripped ⇒ exactly today's seven; labels present ⇒ all eleven; and max
+      |arm1 − arm2| over the seven already-served components = 0.000e+00.
+      No new learner, feature set, hyperparameter or form — `WP.COMPONENTS` has
+      named all eleven since NF-W1, and `EM.fit_head_mean` (documented
+      byte-identical to `fit_component_head`) is what NF-W6 already fitted per TD
+      stat to get the incumbent its ceiling gate measured against.
+
+      NODE 2 — `attach_component_labels` puts every DECLARED component label on
+      the serving matrix, from the REAL stats feed (never `feat_stats`: a stub
+      zero reaching a label is a fabricated outcome). The missing set is DERIVED,
+      not listed — a hand list would re-arm the exact defect it fixes, and
+      deriving it makes a double merge structurally impossible. ⛔ In the SERVING
+      path and NOT `engineer_features`, for a measured reason:
+      `build_matrix_w6` calls `build_matrix` and THEN `EM.attach_td_labels`,
+      which RAISES if the column is already present — changing the shared matrix
+      would break the whole NF-W6/W6b/W6b-C/W6c/W6d line. Every research harness
+      is byte-identical. `assert_component_line_complete` refuses both directions
+      and COUNTS NON-NULL VALUES, NEVER KEYS; it lives in the BUILDER rather than
+      on the Pydantic contract, because a required field would break the
+      already-published pre-TD artifact on read (NF-C0).
+
+      NODE 3 — THE HYPOTHESIS IS REFUTED, with a mechanism. If both heads were
+      coherent the seven served terms would sit BELOW the head by the TD share
+      (22.1% of realized PPR). They do not: the "7-term excess" is POSITIVE in
+      all eight cells, i.e. the served component line is running HOT by roughly
+      the value of the four terms it omits. The payload's near-zero pooled
+      coherence was two offsetting errors, not a healthy substrate — emission
+      removes one and exposes the other, so the gap gets WORSE. WR worsens
+      sign-certainly; RB/TE overshoot past zero; and QB — which MT1 declined to
+      claim — is MEASURED to worsen too (net +0.0185 PPR per passing yard, so the
+      interception penalty does not dominate). Seven of eight cells worsen.
+      ⛔ Nothing rescaled (MH2.2); the residual is material and changes sign by
+      position, reported per-position and SIGNED because pooled it cancels to
+      −0.061 and reads as "nothing to see".
+
+      NODE 4 — 25 guards, 12/12 RED-proven attributably with baseline-pass,
+      NOT-SELECTED, unique-anchor, mutation-landed, token-gone and
+      resolve-every-node legs. Owning shard `core`: 6,725 passed / 0 failed.
+      The NF-INC-0914 static scope check is extended to both edited modules.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) ⭐⭐ P0-CLASS, NOT THIS STORY, AND LARGER THAN IT — THE WEEKLY MODEL'S
+      TWO TRAINING FEEDS HAVE NO SCHEDULED INGEST. `stats_player_week` and
+      `snap_counts` are both ABSENT from `ROLL_FORWARD_SOURCES` and referenced
+      NOWHERE in `pipeline/`, though both are free, non-`on_demand` nflverse
+      sources and therefore eligible for the existing weekly NFL roll-forward.
+      Consequence, provable from the published manifest alone: it records
+      `stats_as_of: "2025-W18"` beside `train_through: 2026 wk 1`, so every 2026
+      week-1 training row has NO stat row and `attach_labels` fills
+      `fantasy_points = 0.0` under the retained-zero convention. The model trains
+      on a whole week of fabricated zeros and every player's
+      `prior_week_box__ppr_l1` is 0.0 on the week-2 slate. MEASURED EFFECT: the
+      served projection's absolute level is wrong by ~3-6x — top-24 QB projected
+      3.16 against a realized 18.99 (ratio 0.17), RB 0.37, WR 0.29, TE 0.37. This
+      is the `stg_ref_players` "a table with NO SCHEDULED WRITER is a
+      silent-staleness bomb" class applied to a MODEL's training substrate, and
+      it holds for EVERY week of 2026 until the sources are added. ⚠️ It also
+      bounds how this story's own numbers should be read: the SHAPE findings
+      (every sign, the 7-term excess) are ratios and survive a uniform level
+      error; the ABSOLUTE magnitudes should be re-read after it is fixed.
+      ⇒ a spec of its own. The fix looks like two entries in one list, but the
+      repo's own rule applies: verify the source actually advances and check what
+      a season-scoped partition overwrite does to in-season weekly data before
+      treating it as a one-line change.
+
+      (2) THE CARD'S ENTRYPOINT PREMISE IS WRONG IN A WAY THAT MATTERS TO ITS
+      SUCCESSOR. GyD9hoeD says `run_weekly_serving.main()` has "zero executing
+      callers". Measured: it has TWO (`test_nf_c6_ph2_weekly_serving.py:805,810`)
+      and BOTH stop at the `--publish` bucket refusal, which raises before
+      `build()` runs — the caller patches `build` to explode and asserts it does
+      not. So the exposure is real but NARROWER: main()'s SUCCESS PATH is what CI
+      has never executed. This story extended the NF-INC-0914 static scope check
+      to both modules (it catches that incident's exact break with no
+      fixture-coverage blind spot) and pinned the measurement, but a true
+      executing smoke of the success path needs a synthetic lake — that is the
+      successor's scope, and it should be written against the corrected premise.
+
+      (3) THE COMPONENT HEAD CLIPS AT ZERO, which is a structural upward bias on
+      a zero-heavy target (`E[clip(pred)] ≥ E[pred]`). On one test week the head
+      over-projected QB `passing_tds` 1.40x and TE `receiving_tds` 3.41x against
+      realized (n=78 and n=113 against realized means of 0.44 and 0.03, so the
+      single-week ratios are noisy and are NOT by themselves a bias measurement).
+      It belongs to the head — which stays `advisory_ungated` for all eleven
+      components, unchanged by this story — and interacts with finding (1),
+      because a depressed feature level changes what the clip does. Worth a
+      measurement over a full season before anything is concluded.
+
+      (4) THE FIXTURE RE-CAPTURE IS BLOCKED ON THE REBUILD, and the trap is
+      pinned in advance. `build-nfl-weekly.py`'s own docstring says "RETIRE THESE
+      ON THE FIRST PUBLISH and re-capture raw from the live API" — the first
+      publish happened 2026-09-15, so it is now due. ⚠️ But the published week
+      carries `n_bye: 0`, and the builder deliberately constructs FOUR rows a raw
+      capture cannot reproduce: a BYE, a FINAL-WEEK player (`ros*` null), a
+      WEEK-1 ROOKIE (`histWeeks` 0) and a COMPONENT-LESS row. Swapping wholesale
+      would trade a real defect for four vacuous guards. A guard now fails if the
+      synthetic bye row leaves the fixture; the same reasoning applies to the
+      other three. Re-arm on `manifest.n_bye > 0`, never a guessed week number.
+      ⭐ NOTE the component-less row specifically: after this story a projected
+      row with a null component line is REFUSED at build, so that fixture case
+      can no longer arise from production — it is retained to keep the page's
+      absent-state render non-vacuous, and that is now a deliberate synthetic
+      case rather than a capturable one.
+
+      (5) NF-C6-PH2's RECORDED COHERENCE FIGURE IS NOT THE PUBLISHED ARTIFACT'S.
+      Its `mean_signed_diff = −0.7709` (n=503) was measured on a locally-staged
+      payload during that story, under the opposite sign convention
+      (`components − head`). The same function on the published 2026 wk 2 blob
+      returns `+0.0609` (n=500). Neither is wrong; they are different builds. Any
+      future reader comparing against "the −0.77" should know which artifact it
+      describes — and the spec for this story inherited it as though it described
+      the published one.
+
+      (6) A ONE-LINE DOC CORRECTION, low priority: `run_nf_c6_ph2_promotion_review
+      .component_coherence` computes `components − head` while MT1's gate and this
+      story compute `head − components`. Both are defensible; carrying both
+      conventions in one program invites a sign error in a number people quote.
