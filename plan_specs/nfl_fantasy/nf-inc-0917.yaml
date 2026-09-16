@@ -1,0 +1,146 @@
+# Plan spec — NF-INC-0917 (MINI, incident: /fantasy/weekly is HARD-DOWN in production —
+# TypeError reading 'interval_note' — the page died on a framing block the served payload
+# never carried). Opened by the session that fixed it, 2026-09-16.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inc-0917
+  vertical: nfl_fantasy
+  card: https://trello.com/c/PENDING
+  status: DONE  # Fix shipped in PR #1143 (frontend-only, onto `main` directly). Verified live by CONTENT, cache-busted.
+spec:
+  description: >
+    `/fantasy/weekly` answered EVERY visitor with React's client-side error page:
+    `TypeError: Cannot read properties of undefined (reading 'interval_note')`.
+    The page read `manifest.data.framing.interval_note` unguarded and the served
+    manifest carried no `framing` block at all, so the read threw during the React
+    commit phase and took the whole route down.
+
+    ⭐ THE HTTP STATUS WAS 200 THROUGHOUT. The crash is client-side, so the document
+    shell served normally — an uptime check reads this outage as perfectly healthy.
+    That is the E11.30 "detected but nobody notified" class landing on the FRONTEND,
+    where the repo has no equivalent of `send_alert` at all.
+
+    best_alpha=0; no model, number or value changed. The projections themselves were
+    complete and correct for the entire outage.
+  closeout:
+    verdict: >
+      FIXED AND VERIFIED LIVE. The page renders, states the absence of the framing
+      notes in its own screened copy, and throws nothing. The underlying payload
+      defect is UNFIXED and is a BACKEND follow-up — the frontend is now merely
+      immune to it, which is the correct division: a pass-through route can always
+      omit a key, so this guard stays even after the builder is repaired.
+    followUps:
+      - id: introducing-deploy
+        summary: >
+          WHICH DEPLOY INTRODUCED IT — and the distinction that matters is between the
+          deploy that shipped the LATENT dereference and the event that TRIGGERED it.
+
+          LATENT DEFECT SHIPPED: Vercel production deployment `6431417948` for sha
+          `63494ae3` (PR #1110 → `main`), created 2026-09-14T06:05:09Z. That is the
+          first production build carrying NF-WK-FE1's weekly page and its unguarded
+          `framing.interval_note` read.
+
+          WENT DOWN: 2026-09-15T15:32:59Z — the `generated_at` of the FIRST weekly
+          manifest ever published. Before it both free weekly routes 404'd and the page
+          rendered its honest awaiting-publish state, so the defect sat latent ~33h.
+          Only week 2 has ever published (`?week=1` → 404) and that one blob has NEVER
+          carried `framing`, so the page has been down for the entire life of the data.
+
+          THE DEPLOYMENT IN THE REPORT (`dpl_8Cme8NUPwaTFWwpQtd4GJamKzRWz`) is the
+          build that was SERVING when the crash was observed — the last frontend
+          production deploy, sha `5f597e7e`, 2026-09-14T17:54:18Z. It INHERITED the
+          defect; it did not introduce it. ⚠️ `main` had advanced well past it (to
+          `afe81d23`) with NO production deploy since, because `vercel.json`'s
+          `ignoreCommand` path-filters on `frontend/` — so "the latest deploy" and
+          "the latest commit on main" are routinely different builds here.
+
+          ⛔ NOT THE SUPPRESSION HOTFIX. NF-INC-0916 node 0 (`37f3a1c7`, `eb91b6e1`)
+          lives only on `nf-inc-0916` / PR #1139 and is on NEITHER `main` NOR `dev`.
+          It never deployed, so it cannot be the cause — checked FIRST, before any fix.
+      - id: page-down-duration
+        summary: >
+          MINUTES OF PAGE-DOWN: 753 minutes (12.6 hours) from the first weekly publish
+          at 2026-09-15T15:32:59Z to the fix being cut at 2026-09-16T04:06Z, plus the
+          deploy tail. Every visitor to `/fantasy/weekly`, signed in or not, for that
+          whole window — the two free weekly reads are byte-identical for every caller,
+          so there was no cohort that escaped it.
+
+          ⚠️ THE DURATION IS A LOWER BOUND ON THE DETECTION GAP, NOT ON THE HARM: the
+          route returned HTTP 200 the entire time, so nothing we run would ever have
+          reported it. It was found by a human opening the page.
+      - id: guard-added
+        summary: >
+          GUARD ADDED — a BOTH-WAYS rendering pair on the live page path, in
+          `e2e/specs/weekly-projections.spec.ts`, RED-proven by the new red-proof case
+          `weekly-framing-unguarded` (board 207/201/6 → 208/202/6):
+            1. non-vacuity — FAILS if the fixture ever stops carrying `framing`, so the
+               two clauses below cannot both pass for the same wrong reason (NF1.7 (a));
+            2. PRESENT — both served notes render AND nothing claims they are missing
+               (so a page printing the absence copy unconditionally cannot satisfy both);
+            3. ABSENT — the page renders, STATES the absence, the notes are genuinely
+               gone, the copy clears the claim denylist, and NO page error is raised.
+          The absent case is built by DELETING THE KEY FROM THE REAL PAYLOAD, never by
+          hand-writing a second fixture that would drift from the shipping writer
+          (NF-C0e). Additionally verified by rendering the CAPTURED PRODUCTION payload —
+          the actual broken blob — which is what proves no sibling dereference fails on
+          the next line.
+
+          ⭐⭐ THE FINDING, because the suite was green through the whole outage and that
+          is the part worth keeping: THE ASSERTIONS ALREADY EXISTED. Test 8 already read
+          both notes and `openWeekly` already collected page errors. What did not exist
+          was a PAYLOAD THAT OMITS THE BLOCK — every weekly spec runs against a fixture
+          generated by the SHIPPING writer, which always carries `framing`, so the suite
+          could only ever exercise the branch that worked. A guard is only as good as
+          the states its fixtures can reach: this is the vacuous-guard class landing on
+          the FIXTURE rather than on the assertion, and it is not visible by reading the
+          test — only by asking which payloads the harness can produce.
+      - id: backend-builder-writes-an-unvalidated-dict
+        summary: >
+          ⛔ THE REAL DEFECT IS STILL OPEN AND IS A BACKEND STORY (not in PR #1143).
+          `/nfl/weekly/manifest` returns the published S3 blob through
+          `entitlement.open_manifest_payload` with NO `response_model`, so nothing
+          between the builder and the browser coerces the payload to the declared shape.
+          And the builder's own guard structurally CANNOT catch the gap:
+          `run_weekly_serving.py` calls `NflWeeklyManifest.model_validate(manifest)` and
+          DISCARDS the result, then writes the raw dict — and because `framing` carries
+          a DEFAULT, validating a dict that omits it PASSES. The default lands on an
+          object that is thrown away; the field never reaches S3.
+
+          ⇒ a declared field, a passing validation, and nothing on the wire. FIX:
+          serialize the VALIDATED MODEL rather than the input dict (`model_dump()` of
+          the object validation already builds), and put a `response_model` on the
+          route. ⚠️ A DEFAULTED FIELD IS THE DANGEROUS SHAPE — validation can never
+          fail on its absence, so every other defaulted field on this contract has the
+          same latent hole. Live payload is ALSO missing `positions`, `season_type`,
+          `scoring_system_id`, `interval_lo_level`, `interval_hi_level`, `ros_basis`,
+          `ros_sigma_lo_level`, `ros_sigma_hi_level` — none of which the page happens to
+          dereference today, which is the only reason the symptom was one crash and not
+          a cascade.
+      - id: no-frontend-alerting
+        summary: >
+          A CLIENT-SIDE CRASH IS INVISIBLE TO EVERYTHING WE RUN. HTTP 200, no server
+          error, no `send_alert` path — the backend has a documented ALERT tier and the
+          frontend has no equivalent.
+
+          ⭐ AND THE GAP IS ALERTING, NOT CAPTURE — which narrows the fix considerably.
+          `instrumentation-client.ts` carries a live Sentry DSN and
+          `replaysOnErrorSampleRate: 1.0`, and the CSP's `connect-src` DOES allow
+          `https://*.sentry.io` — so the exception itself had a clear path off the page
+          and was almost certainly RECORDED for all 12.6 hours while nobody was told.
+          ⇒ do NOT spend the follow-up building capture we already have; spend it on the
+          NOTIFICATION rule (an alert on a spike in unhandled client exceptions, or on
+          any error on a serving route). Confirm by looking for the TypeError in Sentry
+          for 2026-09-15T15:33Z onward — if it is there, that is the whole finding.
+          It is the difference between a 12.6-hour outage and a 10-minute one.
+      - id: sentry-replay-csp-worker-src
+        summary: >
+          COSMETIC, NOT THE CAUSE, and confirmed so before being set aside: the
+          `worker-src` CSP warning in the console is Sentry session-replay being blocked
+          by our own policy (`next.config.mjs` `securityHeaders` declares no `worker-src`,
+          so it falls back to `default-src 'self'` and the replay worker's blob: URL is
+          refused). It did not cause the crash — the TypeError is a plain unguarded
+          property read reproduced offline with no CSP involved. ⚠️ BUT it is not
+          nothing: it means session replay, the one tool that would have SHOWN this
+          outage, is disabled in production. Relevant to `no-frontend-alerting` above.
