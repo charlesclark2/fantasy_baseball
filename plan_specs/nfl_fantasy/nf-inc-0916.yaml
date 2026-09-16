@@ -436,3 +436,23 @@ spec:
       key. Neither computation was flipped (PM ruling, TD1 D5 item 5). The
       artifact-side half is the load-bearing one: a figure gets quoted from the
       artifact, not from the module.
+
+      ── ⑪ THE NODE-0 VERIFICATION COMMAND I HANDED THE OPERATOR WAS VACUOUS IN
+      TWO INDEPENDENT WAYS, AND IT REPORTED A HEALTHY PRODUCTION PAGE AS BROKEN.
+      It was `curl … | grep -c "We have taken this week's projected points down"`,
+      which returned 0 against a page where the suppression was fully live.
+      (a) React escapes `'` to `&#x27;` in server-rendered HTML, so a grep string
+      containing an apostrophe cannot match; (b) more seriously, the weekly TABLE
+      is client-rendered — the served HTML carries no row, no cell and no
+      `data-withheld` marker — so a curl of the page structurally CANNOT observe
+      the thing node 0 is about. Even spelled correctly it would only ever have
+      proven the banner shipped. A check whose failing and passing states are
+      indistinguishable is not a check (NF1.7 (a)); here it was worse than
+      absent, because a false RED on a live incident invites re-promoting or
+      rolling back a correct deploy. The durable read for a client-rendered
+      surface is the SHIPPED BUNDLE: the row view constant-folds to
+      `point:g,p10:g,p90:g,ros:g,rosP10:g,rosP90:g,band:!1,statLine:!1` with
+      `g={kind:"withheld"}` and no conditional, which is only reachable when the
+      flag compiled to true. Both corrected commands are in the handoff and were
+      proven live 2026-09-16 on `dpl_54WZndz76f3GBdEWBUrcUWzd5Db9`. The same pair
+      is what node 4 should run in reverse to confirm un-suppression.
