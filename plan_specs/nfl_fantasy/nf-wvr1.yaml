@@ -563,3 +563,39 @@ spec:
       that helper list is ITSELF a scope — the set measured today, not a closed one. The
       same failure is one unusual helper away. A completeness claim is a claim about a
       boundary; state the boundary.
+
+
+      ⑫ ✅ RUNTIME GATE PASSED ON THE DEPLOYED LAMBDA, 2026-09-16 — against a REAL
+      10-team Sleeper league ("BLA"), ~30 minutes after that league's waivers processed,
+      which is what makes it a FRESHNESS test rather than only a correctness one.
+      SERVED PAYLOAD: `ordering: unranked` · `refusals: []` · `caveats: []` ·
+      `rosters.refreshed: true` with `synced_at` stamped at request time ·
+      `teams_held 10 == teams_declared 10` · `truncated: false` · pool grouped by
+      position (QB 93 · RB 147 · WR 263 · TE 157 · DST 21 = 681) · anon `401` at the
+      GATEWAY (refused before Lambda, the G100-D1 discriminator).
+      ⭐ K IS CORRECTLY ABSENT, verified not assumed: this league's roster declares
+      QB/RB/WR/TE/FLEX×2/DST with NO kicker slot, so `build_board`'s rosterable filter
+      excludes K entirely. The NF-K1 shape (a projectable position vanishing) was checked
+      against the league config rather than shrugged at.
+      ⭐⭐ THE DECISIVE TEST, and it proves MORE than it looks: a SECOND, INDEPENDENT live
+      read of `/league/{id}/rosters` (not the one the endpoint made) gave 147 rostered
+      players across 10 teams, and `rostered ∩ served_pool` = **0**. But the load-bearing
+      half is the COUNT RECONCILIATION, which is exact:
+        league board 828 (870 − 42 K) − pool 681 = 147 implied rostered = 147 live
+        per position: QB 13 · RB 50 · WR 58 · TE 15 · DST 11 = 147
+      ⇒ ⚠️ THE ZERO ALONE WOULD NOT HAVE PROVEN THE NAME JOIN. `rostered ∩ pool` compares
+      NAME SETS, so a rostered player whose name NORMALISES DIFFERENTLY on the two sides
+      would fail to subtract, remain in the pool, and STILL NOT INTERSECT — invisible in
+      the zero. The exact count match is what closes it: had any of the 147 failed to
+      join, implied rostered would have been < 147. So the gate establishes three things
+      at once — no rostered player offered as available, a complete 10/10 live fetch, and
+      a 100% name-join rate on a real league.
+      ⛔ AND THE TWO FALSE PASSES ON THE WAY THERE ARE RECORDED, because the first form of
+      this check was vacuous: (1) the check was first run with the literal PLACEHOLDER
+      `<player claimed off waivers…>`, which is not on the board, so "absent (correct)"
+      was trivially true and would have passed for ANY typo; (2) a single-name test cannot
+      distinguish ROSTERED from PAST-THE-BOARD'S-TAIL (2.2% of real week-1 skill
+      performers) — `Kaelon Black` only became evidence once his board membership was
+      confirmed separately. A positive control (`pool` must be able to answer IN POOL) and
+      an explicit board-membership precondition were added before the result was believed.
+      The NF1.7 (a) class, in the runtime gate itself.
