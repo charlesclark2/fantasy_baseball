@@ -10,7 +10,14 @@ metadata:
   name: mlb-lake2
   vertical: mlb
   card: https://trello.com/c/K2zbMQuo
-  status: IN_PROGRESS
+  status: DONE  # PM flip 2026-09-16 on the three gate reads (operator, box+laptop):
+  # A) daily build 09-15: stg_derivative_odds 134.2s @ raw_files=113 (was 299s @ 2,063 files
+  #    pre-compaction) — tier 309.4s, fraction 0.172, verdict OK on the FULL tier.
+  # B) intraday tick 624d5f1b (2026-09-16 01:30Z, serving-only): tier 20.2s,
+  #    budget_fraction 0.042, w3pre_tier_verdict=OK — the DONE gate, read after two days of
+  #    settled ticks (6 consecutive SUCCESS), not a single first-tick draw.
+  # C) check_artifact_freshness --strict 02:01Z: 9/9 OK incl. the two new SLAs
+  #    (stg_oddsapi_odds 30h, stg_derivative_odds 40h), advanced by the daily build.
 spec:
   description: >
     Restore real headroom to the W3pre intraday tick. The 09-04
