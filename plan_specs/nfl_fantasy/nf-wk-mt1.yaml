@@ -9,7 +9,7 @@ metadata:
   name: nf-wk-mt1
   vertical: nfl_fantasy
   card: https://trello.com/c/HvVAWD9f   # consumer-chain thread; MT1 card linked at kickoff
-  status: IN_PROGRESS
+  status: CLOSED(PHASE_A_DONE, PHASE_B_HELD)  # Operator ruling 2026-09-16, quoted: "the WHOLE lens is held. Not (c). No Phase B page code of any kind." A weekly roster surface without league scoring under-delivers the paid pitch, and a league-scored number carrying a known +/-4-pt per-player error at an 11-pt margin cannot ship, so the lens waits for the substrate (NF-WK-TD1). Phase A stays live, correct, paid and authed with NO CONSUMER YET: an explicitly ACCEPTABLE state, and the contract the successor builds on.
 spec:
   description: >
     The paid question the weekly stack exists to answer: "who do I
@@ -189,8 +189,8 @@ spec:
         desc: "Verdict + findings into closeout.followUps; the contract statement for gate 3 proper / NF-OPT1."
   closeout:
     verdict: >
-      PHASE A COMPLETE AND GREEN; THE RUNTIME GATE IS OPEN AND CALENDAR-BOUND; PHASE B
-      DELIBERATELY NOT STARTED. The paid endpoint
+      PHASE A COMPLETE, SERVED, AND GATE-PASSED ON LIVE DATA; PHASE B HELD BY OPERATOR
+      RULING 2026-09-16 PENDING NF-WK-TD1. The paid endpoint
       `GET /fantasy/nfl/weekly/league-board` scores a saved league's roster for one week
       through `services/league_scoring` — the ONE scorer, reused rather than ported,
       because `WEEKLY_COMPONENT_FIELD` is derived from `STAT_FIELD` and the champion's
@@ -203,6 +203,8 @@ spec:
       `max_abs_diff = 0.0` over the fixture. The oracle is USED rather than copied, so
       the clause cannot be a restatement of the code it checks. The PM recorded this on
       2026-09-14 as "exactly the proof the spec wanted", carried here verbatim.
+      🗓️ AS OF 2026-09-14 — SUPERSEDED 2026-09-16 BY THE GATE RESULT BELOW, retained
+      verbatim as the dated record of why Phase B was not started that session:
       ⛔ THE RUNTIME GATE CANNOT BE RUN THIS SESSION and no page code was written.
       Measured 2026-09-14, cache-busted: `/fantasy/nfl/weekly/manifest` and
       `/…/projections` both answer 404 `{"detail":"Weekly projection not found"}` from
@@ -210,6 +212,29 @@ spec:
       weekly publish (card iMHg7nm6) has not happened, so there is no real payload to
       curl against. Node 2 gates node 3 ("no page code before this"), so Phase B is a
       follow-on once the curls come back, NOT an omission.
+
+      ✅ THE RUNTIME GATE RAN 2026-09-16 AND PASSED, ON A REAL LEAGUE AND A REAL WEEK.
+      The first weekly publish landed 2026-09-15 15:32:59Z (season 2026, week 2, 500 players,
+      QB/RB/WR/TE). `infrastructure/lambda/deploy.sh` was run by the operator and the route was
+      CONFIRMED IN THE DEPLOYED BUNDLE by an authenticated bogus-league-id discriminator on the
+      DETAIL STRING (`League not found` = the handler ran; `Not Found` = the route never
+      landed) — necessary because a nonexistent path ALSO 401s at the gateway, so the deploy
+      CANNOT be confirmed anonymously (the G100-D1 rule: a failure indistinguishable from the
+      healthy state has not been verified). All three legs are in: (a) SCORED ROSTER — league
+      BLA (Sleeper, half-PPR, 10 teams), 15 rows, the hand-computed half-PPR total agreeing
+      with the served `leaguePts` to 1e-9, and `rec` resolving at 0.5 from the league's OWN
+      settings rather than the served full-PPR 1.0 — i.e. league settings demonstrably applied
+      SERVER-SIDE, which is the story's mission sentence; (b) 401-ANON at the gateway, before
+      the Lambda; (c) TWO DISTINCT ABSENCE CAUSES on one roster — `position_not_projected`
+      (Pittsburgh D/ST) and `not_in_weekly_payload` (Jordyn Tyson) — so `ABSENCE_REASONS` is
+      proven discriminating on LIVE data, not merely on a fixture. Boundaries (a) and (b) held:
+      one scorer, and the band served as the carried PPR quantile band beside its `pprPts`
+      anchor, never re-scaled.
+      ⛔ AND THE GATE CAUGHT WHAT CI STRUCTURALLY CANNOT — finding (10): the weekly payload
+      carries NO touchdowns, so every league's TD scoring resolves CAPTURED and the
+      league-scored point is yardage-and-volume only. The scorer is correct; the substrate
+      cannot express a touchdown. THAT finding, not any defect in this story, is what holds
+      Phase B.
       NF-WK-FE1 #1103 was VERIFIED merged into `dev` (commit e1de338c) rather than
       assumed, so the one-frontend-story-at-a-time constraint is already satisfied for
       whoever picks Phase B up.
@@ -295,6 +320,15 @@ spec:
       as the league point's band), and one line states the two are independent outputs of
       one model differing ~0.75 pts on average, neither correcting the other. ⛔ No copy
       may imply a rank-ordering or a correction between them.
+      ⚠️ CONDITIONED 2026-09-16 — NO LONGER STANDING, DO NOT CARRY FORWARD. The PM ruled
+      this disposition CONDITIONAL, not standing, because its PREMISE CHANGED: it was
+      ratified before finding (10) established that the component line omits touchdowns
+      entirely, so the "~0.75 pts on average" framing understates what a reader will
+      actually see (per-player gaps to +4.13 on an 11.16-pt projection, both signs). ⇒ when
+      a league-scored number ships again, THE SHOW-BOTH-NUMBERS PAIRING MUST BE RE-RATIFIED
+      AGAINST THE MEASURED COVERAGE AT THAT TIME — it may not be carried forward on the old
+      premise. Recorded as a CHANGED-PREMISE re-read, not a re-litigation: the 2026-09-14
+      text is retained verbatim above and nothing about it is withdrawn.
 
       (3) ⭐ A PPR BAND BESIDE A LEAGUE-SCORED POINT IS A FALSE CLAIM UNLESS THE PPR POINT
       IS RENDERED WITH IT. The band brackets `pprPts`, not `leaguePts`; a reader shown
@@ -339,6 +373,11 @@ spec:
       Phase B starts only after those curls come back. MERGED NEVER MEANS SERVED: this
       endpoint reaches production ONLY via `infrastructure/lambda/deploy.sh`, which no CI
       runs.
+      ✅ CLOSED 2026-09-16 — THE GATE RAN AND PASSED; the record is in the verdict above and
+      its consequential finding in (10). The calendar dependency resolved 2026-09-15 when the
+      first weekly publish landed. The sequencing held exactly as written: no page code was
+      begun before the curls came back, and when they came back they MOVED THE STORY — which
+      is the entire argument for the rule.
 
       (6) 🧪 THE RED PROOF EARNED ITS KEEP THREE TIMES, AND ALL THREE ARE CARRYABLE
       PATTERNS — every one was invisible to a green suite and to review.
@@ -376,6 +415,26 @@ spec:
       payload would change, and the one count that IS pinned
       (`test_the_parity_clause_is_not_vacuous`) is pinned as a FLOOR, so more real rows
       strengthen it rather than breaking it.
+      🗓️ STATE AS OF 2026-09-16, AND WHY IT IS NOT DISCHARGED HERE. The first publish HAS
+      landed, so raw capture is now possible and all three live payloads were pulled (the
+      manifest and the free board are anonymous; the entitled board needs a token). Two things
+      stop this being a swap, and both must be carried: ⭐ (a) WEEK 2 HAS `n_bye: 0`. NFL byes
+      do not begin until later in the season, so a raw week-2 capture STRUCTURALLY CANNOT carry
+      a bye row, and the bye clause's own non-vacuity assertion (`assert byes, "the fixture
+      carries no bye row; this clause would pass on nothing"`) would refuse it — correctly.
+      Swapping anyway would trade a real defect (fixtures that only confirm the assumed shape)
+      for a VACUOUS GUARD, which is the worse of the two and the trade this repo keeps losing
+      (NF1.7 (a)). ⇒ re-arm the tripwire on the MEASURED CONDITION `manifest.n_bye > 0`, never
+      on a guessed week number, and keep ONE deliberately-synthetic bye fixture until then,
+      labelled as such. (b) The three fixtures are read by FOUR consumers, one of them a MERGED
+      story: this suite, `test_nf_wk_fe1_weekly_page.py`, `nf_wk_fe1_red_proof.py`, and three
+      Playwright specs via `frontend/e2e/support/api-mock.ts`. A capture is therefore a
+      CROSS-STORY change requiring the test-merge discipline, not a closeout chore — and under
+      the operator's close-clean ruling it was deliberately NOT begun in this session.
+      ⇒ CARRIED TO NF-WK-TD1, which touches the same payload and should own the capture: after
+      TD emission the entitled fixture must be re-captured ANYWAY, so doing it now would book
+      the cross-story cost twice. Note also the capture is a ROW SUBSET of raw rows, never a
+      reshaping — a fixture derived from our own transform cannot test that transform (E9.64b).
 
       (8) 📐 THE CONTRACT STATEMENT GATE 3 PROPER AND NF-OPT1 EXTEND. This endpoint is the
       seam both successors were promised, and what each needs is now a specific,
@@ -439,3 +498,136 @@ spec:
       before the break had ALREADY extracted the body into a testable function, which
       shrank the blind spot to the argument-binding line and did not close it — EXTRACTION
       IS NOT A SUBSTITUTE FOR EXECUTION.
+
+      (10) ⭐⭐ THE WEEKLY PAYLOAD CARRIES NO TOUCHDOWNS, SO NO LEAGUE'S TD SCORING CAN BE
+      APPLIED — MEASURED 2026-09-16 ON THE FIRST LIVE PUBLISH, AND THE WHOLE REASON PHASE B
+      IS HELD. This is the finding the runtime gate exists to produce, and NOTHING IN CI
+      COULD HAVE PRODUCED IT: every fixture was well-formed, every clause green, the scorer
+      exact. Only a real payload could say what the model does not project.
+
+      THE NULL-TD CENSUS (season 2026, week 2, published 2026-09-15 15:32:59Z, n = 500
+      players, read from `/fantasy/nfl/weekly/projections-full`). FOUR component fields are
+      present as KEYS and NULL in every row: `passTd` 0 non-null of 500; `passInt` 0 of 500;
+      `rushTd` 0 of 500; `recTd` 0 of 500. The other seven are fully populated: `passYds`,
+      `passAtt`, `rushYds`, `rushAtt`, `rec`, `tgt`, `recYds` all 500 of 500. ⇒ the weekly
+      component line projects YARDAGE AND VOLUME ONLY; it contains no scoring play of any
+      kind. ⚠️ KEYS-PRESENT-BUT-NULL IS THE TRAP: a check that asks which FIELDS the payload
+      carries (as the session's own first precondition check did) reports full coverage of
+      all ELEVEN declared `WEEKLY_COMPONENT_FIELD` entries and passes. Only a check on
+      VALUES sees it. A successor's substrate check must count NON-NULL values, never keys
+      (the NF-K1 "count the rows that carry the value" rule, one level in).
+
+      THE COVERAGE READING, on an entirely ordinary league (BLA, Sleeper, half-PPR, 10
+      teams): 42 scoring terms, 4 APPLIED, 38 CAPTURED. Applied: `pass_yds` 0.04, `rec` 0.5,
+      `rec_yds` 0.1, `rush_yds` 0.1. Captured includes `pass_td` 4.0, `rush_td` 6.0,
+      `rec_td` 6.0 and `pass_int` -1.0 — each with the note "no projection backs this
+      scoring term", which is `resolve_scoring` behaving EXACTLY right: a weight cannot be
+      applied to a stat the model does not emit, and saying so is the honest verdict.
+      ⇒ finding (2) anticipated this shape and UNDERSTATED it by a wide margin: it measured
+      8 applied / 20 captured on the fixture under `full_ppr`. The live reading is 4 of 42,
+      and the missing terms are the touchdowns.
+
+      THE PER-PLAYER ERROR — THE "BEFORE" SIDE OF NF-WK-TD1'S COHERENCE MEASUREMENT, recorded
+      to the digit. Method, so it reproduces exactly: component sum := passYds*0.04 +
+      rec*1.00 + recYds*0.10 + rushYds*0.10 with None treated as 0.0 (FULL-PPR weights, so
+      the comparison isolates the substrate rather than the league); head := the served
+      `fpPpr`. Gap := head - component sum. Top-projected players, week 2:
+      Trey McBride TE head 11.16 / components 7.04 / gap +4.13;
+      Christian McCaffrey RB 10.45 / 10.60 / -0.15;
+      Bijan Robinson RB 10.12 / 9.18 / +0.94;
+      Jahmyr Gibbs RB 9.34 / 6.26 / +3.08;
+      Jaxon Smith-Njigba WR 8.77 / 10.55 / -1.79;
+      Zay Flowers WR 8.38 / 8.36 / +0.03;
+      De'Von Achane RB 7.96 / 5.18 / +2.77;
+      Derrick Henry RB 7.93 / 6.40 / +1.54.
+      By position (n, mean head, mean components, mean gap, gap as % of head):
+      QB 88, 1.345, 1.688, -0.343, -25.5%;
+      RB 113, 2.585, 2.350, +0.235, +9.1%;
+      TE 120, 1.433, 1.393, +0.040, +2.8%;
+      WR 179, 2.057, 2.233, -0.177, -8.6%.
+      Whole field: mean signed gap -0.0609, median -0.0904.
+
+      ⚠️⚠️ READ THE AGGREGATE AND THE PER-PLAYER FIGURES TOGETHER OR THE FINDING INVERTS.
+      The whole-field mean gap is -0.06 points, which reads as "negligible" and is the
+      number a careless summary would quote. It is an ARTIFACT of a heavily zero-weighted
+      weekly projection whose mean is only 1.3-2.6 points (the field includes inactive and
+      barely-used players), AND of two effects that cancel in the mean: touchdowns push the
+      gap POSITIVE where the model expects them, while the head-vs-components incoherence
+      pushes it NEGATIVE at QB (-25.5%, where components gain pass yardage but cannot lose
+      the interceptions the head prices). The decision-relevant quantity is the PER-PLAYER
+      error at the TOP of the board, where it reaches +4.13 on an 11.16-point projection —
+      37% of the number, and far wider than the margin a start/sit read turns on. This is
+      the NF1.8 "state the margin in the unit that grows" discipline: quote the per-player
+      figure, never the field mean.
+
+      ⭐ THE SCORER IS CORRECT, AND THAT IS A MEASUREMENT NOT A CLAIM. Jayden Reed, week 2,
+      under BLA's own settings: hand-computed half-PPR = passYds 0.0077*0.04 + rec
+      0.9414*0.5 + recYds 13.7938*0.1 + rushYds 1.0815*0.1 = 1.9585380, and the served
+      `leaguePts` is 1.9585380 — agreement to 1e-9, independently of the suite. The same
+      row's FULL-PPR component sum is 2.4292380 against a served `pprPts` of 2.0361, a
+      head-minus-components offset of -0.3931 on one player. ⇒ TWO SEPARATE DEFECTS COMPOSE
+      HERE and a successor must not conflate them: (i) the component line omits touchdowns
+      entirely, and (ii) the component line and the points head are INDEPENDENT MODEL HEADS
+      that disagree even on the stats both do carry (the documented coherence offset, mean
+      signed -0.7709 / median |d| 0.6016 / p95 3.7101 / max 7.9200, n=503, 2026-09-05).
+      Emitting touchdowns fixes (i) and does NOT fix (ii). This is precisely why the spec's
+      parity clause was written to compare the scorer to ITSELF on one line and was FORBIDDEN
+      from comparing the component sum to the points head — that instruction was right, and
+      the live data is what shows how right.
+
+      ⇒ RUNTIME-GATE DOCTRINE, RECORDED AT THE PM'S INSTRUCTION AND GENERAL BEYOND THIS
+      STORY: nothing this story built was wrong, and no test could have caught this; only
+      live data could. CI mocks all IO, so the suite can prove the scorer exact and the
+      guards attributable while remaining structurally blind to what the model declines to
+      project. This is the SECOND time in one week the live gate caught what CI cannot —
+      NF-WK-FE1's week-1 gap being the first — which is the argument for the sequencing rule
+      in its strongest available form: MERGED NEVER MEANS SERVED, and now also PUBLISHED
+      NEVER MEANS SCORABLE. A green suite is evidence about the code; only a curl is
+      evidence about the substrate.
+
+      ═══ ✅ PM + OPERATOR RULINGS, 2026-09-16 — THE FIVE DECISIONS THAT CLOSE THIS STORY ═══
+
+      ① PHASE B IS HELD IN FULL — OPTION (b), NOT (c). OPERATOR RULING, QUOTED: "the WHOLE
+      lens is held. Not (c). No Phase B page code of any kind." The reasoning, recorded
+      because it is the precedent: a weekly roster surface WITHOUT league scoring
+      under-delivers the paid pitch, and a league-scored number carrying a known +/-4-pt
+      per-player error at an 11-pt margin cannot ship — so the lens waits for the SUBSTRATE
+      rather than shipping either half. ⇒ my recommendation of the (c) split-ship was NOT
+      taken, and the record says so plainly rather than quietly adopting the ruling as
+      though it had been the proposal. PHASE A STAYS EXACTLY AS IT IS: live, correct, paid,
+      authed, and WITH NO CONSUMER YET — the operator ruled that an explicitly ACCEPTABLE
+      state, because it is the contract the successor builds on and its coverage reporting
+      is already doing its job (it is what made finding (10) legible rather than silent).
+      ⛔ A future reader must not treat "a deployed endpoint nothing calls" as an oversight
+      to tidy up; it is a ruled, dated, deliberate state.
+
+      ② THE SHOW-BOTH-NUMBERS PAIRING IS CONDITIONAL, NOT STANDING. Moot under (b), and
+      pre-answered for the successor: when a league-scored number ships again the pairing
+      must be RE-RATIFIED against the coverage measured AT THAT TIME, never carried forward
+      on this story's premise. Annotated in place on the 2026-09-14 disposition above so it
+      cannot be read as still-binding.
+
+      ③ THE COVERAGE DISCLOSURE SITS ADJACENT TO THE NUMBER ITSELF, NOT IN A PANEL ALONE.
+      RULED NOW AND BINDING ON WHOEVER SHIPS THE NUMBER LATER, including NF-WK-TD1's
+      consumer. The 4-of-42 reading is what proved a panel cannot carry that weight. ⭐ AND
+      THE RULE DOES NOT RELAX AS COVERAGE IMPROVES: even at near-complete coverage the
+      ADJACENCY requirement stays. ⇒ this SUPERSEDES the shape suggested in the 2026-09-14
+      disposition on finding (2) ("a plain per-team statement") only as to PLACEMENT — the
+      wording conventions (`fantasy-claim-copy.ts`), the "not in this number" vs "contributed
+      nothing" distinction, and the ⛔ never-a-blanket-direction-claim rule all stand.
+
+      ④ THE WALL STAYS PAID. Operator ruling; the 2026-09-14 disposition ④ (KEEP PAID,
+      honest wall) survives finding (10) unchanged. Recorded; no action.
+
+      ⑤ NF-WK-TD1 IS FUNDED AND IS THE VERY NEXT STORY — spec at
+      `plan_specs/nfl_fantasy/nf-wk-td1.yaml`, carded by the PM. THIS STORY'S GATE RECORD IS
+      ITS INPUT: finding (10)'s null-TD census, the 4-of-42 coverage reading, the per-player
+      table and the Jayden Reed 1e-9 parity are the "BEFORE" side of its coherence
+      measurement, which is why they are recorded to the digit with their method rather than
+      summarised. ⛔ NOT STARTED IN THIS SESSION, by explicit instruction — this story closes
+      clean first. ⚠️ Two things TD1 should read before it begins: finding (7)'s fixture
+      state (it touches the same payload, so it should OWN the raw capture, and the bye
+      clause re-arms on `manifest.n_bye > 0`), and finding (10)'s TWO-DEFECTS-COMPOSE
+      warning (emitting touchdowns fixes the missing-stat half and does NOT fix the
+      independent-heads incoherence; a successor that measures only the first will report a
+      false all-clear).
