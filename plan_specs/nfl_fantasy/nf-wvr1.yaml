@@ -517,3 +517,31 @@ spec:
       writer, not a hypothetical one — the artifact has no declared contract today and no
       published history yet, which is exactly the cheap window (E9.49 is the bill for the
       other order).
+
+
+      ⑩ᵇ PROVENANCE ON ⑩ᵃ, so a later reader is not misled by where to look: the census
+      correction (12 not 10) lives on NF-INC-0917B's OPEN PR #1152 (commit 325d366b) and
+      is NOT on `dev`. Verified 2026-09-16 — `origin/dev`'s copy of
+      `plan_specs/nfl_fantasy/nf-inc-0917b.yaml` carries none of the correction's markers
+      (`copy_tree_uploader`, `_maybe_publish`, `run_realized_week` all absent). So a
+      reader checking `dev` today finds the UNCORRECTED census and would conclude 10.
+      ⇒ cite ⑩ᵃ's number as pending-on-#1152, not as the record's current state. (And ⑪'s
+      "unblocked by one operator run" is true of `run_realized_week` INDEPENDENTLY of that
+      PR — the two must not be read as one landing.)
+
+      ⭐ THE GENERAL FORM, which is the part worth keeping once both anecdotes fade
+      (NF-INC-0917B's articulation, adopted here because it is better than mine):
+      A SCOPED SCAN ANSWERS A QUESTION ABOUT ITS SCOPE, NOT ABOUT THE REPO — and the scope
+      is chosen BEFORE you know where the answer lives, which is what makes this
+      SYSTEMATIC rather than careless. INC-27 is usually quoted as "grep the whole repo
+      before dropping a table"; the wider shape is that ANY COMPLETENESS CLAIM — "N
+      writers", "no callers", "nothing reads this", "zero rows therefore not running" —
+      INHERITS THE BOUNDARY OF THE SCAN THAT PRODUCED IT, AND MUST CARRY THAT BOUNDARY
+      WITH IT. Two instances inside one hour, from opposite sides: their per-file
+      `put_object(` scan could not see a DELEGATING writer (undercount, 10 vs 12); my
+      `pipeline/ scripts/ services/` grep could not see a caller living beside its own
+      module (a false ABSENCE asserted to the PM twice). ⚠️ And the honest tail, theirs:
+      the corrected instrument keys on `put_object(` OR A KNOWN UPLOAD-HELPER LIST, and
+      that helper list is ITSELF a scope — the set measured today, not a closed one. The
+      same failure is one unusual helper away. A completeness claim is a claim about a
+      boundary; state the boundary.
