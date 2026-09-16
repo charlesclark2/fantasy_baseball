@@ -1,0 +1,166 @@
+# Plan spec — NF-WVR1 (FULL tier: waiver-wire suggestions — EPIC NF-SEASON member 3,
+# built on the TRUSTED season substrate, not the incident-held weekly model)
+# Authored by PM 2026-09-16 per operator prioritization (fantasy vertical first; waiver recs
+# named a biggest-win). Substrate ruling is the spine of this spec: the weekly model is
+# under NF-INC-0916 (level 0.355 of realized) and its outputs are OFF-LIMITS here.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-wvr1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/3D2HnxXv   # EPIC NF-SEASON; WVR1 card linked at kickoff by PM
+  status: ACCEPTED
+spec:
+  description: >
+    For each imported league (Sleeper first), rank the league's
+    AVAILABLE players — the FA pool — by projected rest-of-season
+    value for THIS user's roster: the season product's ROS
+    projections (the draft board's live, trusted machinery) combined
+    with positional need derived from the user's current roster, with
+    intervals shown. ⛔ SUBSTRATE RULING, binding: the WEEKLY model's
+    outputs (weekly points, weekly ROS, bands, components) are under
+    NF-INC-0916 and may not feed any number this story ships — the
+    season board's full-season projections are the substrate, full
+    stop; when INC-0916 lifts and the weekly substrate is certified,
+    a successor may add weekly-informed ranking, not this story.
+    ⛔ CLAIMS DISCIPLINE: these are ranked availability suggestions
+    with uncertainty shown — "highest projected remaining-season
+    value among available players at positions your roster is thin" —
+    never pickup guarantees, never matchup language, never "will win
+    you the week"; through fantasy-claim-copy.ts. League-scored
+    display values go through the ONE scorer server-side (the season
+    my-teams pattern) — no fourth implementation. Paid feature behind
+    the membership wall (operator rulings 09-14/16). best_alpha=0.
+  acceptanceCriteria:
+    - description: >
+        NODE 1 — THE FA-POOL DIAGNOSIS, against the running system
+        (the RC1 lesson: verify stored premises before designing on
+        them): establish what current league-wide rosters the system
+        can actually know. Import-time snapshots go stale (waivers
+        move players weekly — an FA pool from a stale import
+        recommends already-rostered players, the plausible-but-wrong
+        class this program refuses). NF-WK-RC1 (IN FLIGHT) is
+        building the Sleeper weekly roster/matchup re-fetch — that
+        capability is the freshness source: COORDINATE through the
+        spec records, one fetch owner, WVR1 consumes. State the
+        dependency honestly: if RC1's fetch has not merged when this
+        story reaches the FA-pool step, build behind its interface
+        (or its branch), never fork a second Sleeper fetcher. ESPN/
+        Yahoo leagues render the stated platform absence (the RC1
+        copy pattern); Yahoo joins when the access grant lands
+        (card ukQvjDPm — do not chase it here). Also diagnose the
+        season-ROS source precisely: which artifact carries the
+        rest-of-season projection + interval per player (the season
+        board's machinery), its refresh cadence in-season, and its
+        coverage vs the FA pool (a deep-league FA pool reaches past
+        the board's tail — a player with no projection renders a
+        stated absence, never a zero or an omission).
+    - description: >
+        NODE 2 — THE RANKING, transparent arithmetic (the RC1
+        power-rankings rule): available players scored by (a) the
+        season product's ROS value, league-scored server-side through
+        league_scoring where league settings apply to season stat
+        rates (reuse the season my-teams path — verify what it
+        already does before building anything); (b) positional need
+        from the user's current roster composition vs their league's
+        lineup slots — a stated, inspectable adjustment (e.g. "your
+        only TE is on bye weeks 8/12"), never an opaque composite
+        score. The two factors render SEPARATELY (value column + need
+        annotation), and any combined ordering states its rule in
+        plain words on the surface. Intervals from the season
+        product's existing intervals, carried not invented. Drop
+        candidates are OUT of scope (recommending who to cut is a
+        harder claim — record as a successor option).
+    - description: >
+        PHASE A — SERVING before page code: a paid authed endpoint
+        (my-teams pattern; 401-anon; contract Pydantic-declared,
+        additive; absences per ABSENCE_REASONS extended additively —
+        no-projection-coverage and platform-cannot-refresh both
+        distinguishable). Fan-out over a league's FA pool bounded
+        with a loud refusal over the cap. Runtime gate: operator
+        curls on the deployed Lambda against a real league (a real FA
+        pool with a known recent waiver move to prove freshness);
+        authed deploy discriminator (G100-D1); probe field names read
+        from the actual payload first (uniform absence ⇒ suspect the
+        probe). deploy.sh only; merged never means served. ⚠️ The
+        #1139 dev→main promotion hold (NF-INC-0916 node 4) is active:
+        if this story's serving change needs a main promote before
+        the hold lifts, STOP and surface to the PM — do not ride the
+        held promote and do not work around it.
+    - description: >
+        PHASE B — THE SURFACE, queued behind NF-WK-RC1's Phase B
+        (one frontend story at a time — verify RC1's frontend is
+        merged before starting; if this story is ready first, Phase A
+        ships and Phase B waits): a waiver view in my-teams per
+        imported team — ranked available players, value + interval,
+        need annotations, stated absences, the ordering rule visible.
+        Copy per the claims discipline above; renderers gated per
+        G100. Changelog entry only when the surface renders a real
+        league's live FA pool. Guards: E2E both ways per surface;
+        rendered-output assertions; the freshness property RED-proven
+        (a stale-roster fixture must change the FA pool when the
+        fetched week updates); no scorer file outside
+        app/backend/services touched; RED-proofs with unique anchors
+        + baseline-pass + NOT-SELECTED + resolve-every-node; owning
+        CI shard. Standing: worktree; PR -> dev; >2-min operator
+        paste-ready; no Trello; roadmap frozen; findings to
+        closeout.followUps.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-wvr1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "waiver" / "FA pool" / "NF-SEASON" (board Credence Sports, 2026-09-16)'
+    duplicates: []
+    adjacent:
+      - "EPIC NF-SEASON (3D2HnxXv) — member 3; operator-prioritized 09-16 ahead of NCAAB-P1."
+      - "NF-WK-RC1 (IN FLIGHT) — owns the Sleeper weekly re-fetch this story's FA-pool freshness consumes; one fetch owner; Phase B queues behind RC1's."
+      - "NF-INC-0916 (IN FLIGHT) — the weekly model is OFF-substrate here by ruling; the #1139 promotion hold may gate this story's serving deploys — surface, don't work around."
+      - "Season board / draft optimizer / my-teams season lens (LIVE) — the trusted ROS substrate + the league-scoring path to REUSE; the draft optimizer's value machinery is the ancestor of this ranking."
+      - "NF-YAH1 (ukQvjDPm, blocked on Yahoo grant) — Yahoo leagues join this surface when granted; absence copy meanwhile."
+      - "Gate 3 / NF-OPT1 (deferred) — the win-prob optimizer is NOT this story; no simulation claims."
+  triedLedger:
+    files:
+      - "The season board's ROS artifact + intervals (node 1 names it precisely; the substrate ruling's object)"
+      - "app/backend/services/league_scoring.py + the season my-teams league-scored path (reuse target)"
+      - "models/fantasy.py LEAGUE_ROSTER_PLAYER_FIELDS + the RC1 fetch design (the freshness dependency)"
+      - "docs/nf_wk_rc1_realized_source_diagnosis.md (the platform re-fetch capability map: Sleeper open, Yahoo OAuth-blocked, ESPN structural)"
+    recordedNulls:
+      - "Weekly-model-informed ranking — ruled out for THIS story ex ante (NF-INC-0916); a successor adds it only after the corrected substrate is live and measured."
+      - "Drop/cut recommendations — out of scope; recorded as a successor option, not silently included."
+  supersedes: []
+  dependsOn:
+    - "RC1's Sleeper re-fetch for FA-pool freshness (coordinate, consume, never fork); the #1139 promotion hold may gate serving deploys (surface to PM)"
+  feedsInto:
+    - "The in-season retention loop's highest-intent feature; the trade engine (member 4) reuses the value+need framework; Yahoo fast-follow when granted"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-wvr1-plan
+spec:
+  goalRef: { name: nf-wvr1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-diagnosis
+        desc: "FA-pool freshness (RC1 dependency stated) + the season-ROS source named precisely + coverage vs deep pools."
+      - id: 2-ranking
+        desc: "Transparent value + need arithmetic; one scorer; intervals carried."
+      - id: 3-phase-a
+        desc: "Paid endpoint; bounded fan-out; runtime gate on a real league with a known waiver move. ⚠️ #1139 hold — surface if a main promote is needed."
+      - id: 4-phase-b
+        desc: "Waiver view (queued behind RC1 Phase B); claims-disciplined copy; changelog on live render only."
+      - id: 5-closeout
+        desc: "Verdict + the value+need framework statement for the trade engine into closeout.followUps."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
