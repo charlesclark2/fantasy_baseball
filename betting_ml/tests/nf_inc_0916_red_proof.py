@@ -262,6 +262,12 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      '    sv = {"evaluable": False}',
      f"{_REFUSE}::test_the_build_invokes_both_refusals"),
 
+    ("a top-level `pipeline` import returns to the job module, killing the fast gate at collection",
+     _JOB,
+     "import json\nimport os",
+     "import json\nimport os\nfrom pipeline.utils.alerting import send_alert  # noqa: F401",
+     f"{_FEED}::test_the_job_module_can_be_read_without_importing_the_pipeline_package"),
+
     # ⚠️ RE-ANCHORING AN EXISTING GUARD CAN WEAKEN IT. Node 1's second op gave this module a second
     # `.classify(` call, so NF-C6-PH2's module-wide scan failed on code unrelated to its property
     # and had to be scoped to the op it always meant. This case proves the scoping did not cost it

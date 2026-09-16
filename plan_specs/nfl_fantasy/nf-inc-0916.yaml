@@ -366,6 +366,28 @@ spec:
       produced nothing for that player, which is not what happened. Three
       states, three sentences — the rule this surface was already built on.
 
+      ── ⑩ CI CAUGHT A DEFECT THIS SESSION SHIPPED, AND THE MECHANISM IS
+      WORTH RECORDING BECAUSE IT IS STRUCTURALLY INVISIBLE LOCALLY.
+      Node 1's ordering clauses imported `pipeline.jobs....`, and
+      `pipeline/__init__.py` READS `dbt/target/manifest.json` at import —
+      a gitignored file — so the fast gate died at COLLECTION on the CI
+      runner (the E11.23 rule, verbatim). It passed on the laptop because
+      this worktree carries a SYMLINK to the main checkout's manifest,
+      which is exactly what hides the rule from a developer machine.
+      ⭐ THE CURE IS NOT THE SANCTIONED SKIP. "Skip when the manifest is
+      absent" would make the INC-25/INC-40 ordering clause vacuous in the
+      one environment that gates the merge. The job module imports
+      NOTHING from `pipeline` at top level, so it is loaded BY FILE PATH
+      — `pipeline/__init__.py` never executes and the COMPILED graph stays
+      available in the fast gate, which is the property worth having
+      (source order is meaningless under a topological executor). A new
+      clause asserts that precondition, so a future top-level `pipeline`
+      import fails with a message naming the cause rather than as a
+      FileNotFoundError about a dbt manifest.
+      VERIFIED THE CI WAY: the manifest symlink was moved aside and the
+      whole `core` shard re-run — 6,744 passed, 41 skipped. Red proof
+      29/29.
+
       ── ⑧ THE ZERO-CLIP RE-MEASUREMENT IS CALENDAR-BOUND, and saying so
       keeps it from reading as an omission. TD1's component-head zero-clip
       figures (QB passing_tds 1.40x, TE receiving_tds 3.41x, n=78/113)

@@ -15,6 +15,7 @@ INC-38), and the classifier clauses drive the real function on the five shapes i
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -22,6 +23,7 @@ from betting_ml.monitoring import nfl_weekly_stats_freshness as SF
 from quant_sports_intel_models.football.nfl.ingest.in_season_stats import WEEKLY_STAT_SOURCES
 from quant_sports_intel_models.football.nfl.ingest.sources import ROLL_FORWARD_SOURCES, SOURCES
 
+_REPO = Path(__file__).resolve().parents[2]
 _NOW = datetime(2026, 9, 16, 3, 0, tzinfo=timezone.utc)
 _WK1_ENDED = datetime(2026, 9, 15, 6, 30, tzinfo=timezone.utc)   # measured: wk1's MNF close
 
@@ -64,6 +66,63 @@ def test_the_training_feeds_have_exactly_one_ingest_owner():
 # 2 — THE ORDER, ON THE COMPILED GRAPH (INC-25 / INC-40)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
+_JOB_PATH = _REPO / "pipeline/jobs/sports_nfl_weekly_serving_job.py"
+
+
+def _job_module():
+    """The job module, loaded BY FILE PATH rather than imported as `pipeline.jobs....`.
+
+    ⛔⛔ E11.23, AND THIS FILE WALKED INTO IT. `pipeline/__init__.py` reads `dbt/target/manifest.json`
+    AT IMPORT, and that file is gitignored — so any fast-gate test that imports the `pipeline`
+    PACKAGE dies at COLLECTION on a CI runner. It passed locally only because this worktree carries
+    a SYMLINK to the main checkout's manifest, which is exactly what makes the rule invisible from a
+    developer machine.
+
+    ⭐ THE CURE IS NOT A SKIP. The sanctioned fallback is "skip when the manifest is absent", but a
+    skipped ordering clause is a vacuous anchor in the one environment that gates the merge — CI
+    would never run the INC-25/INC-40 property these tests exist for. Loading the module from its
+    PATH never executes `pipeline/__init__.py`, so the COMPILED graph stays available in the fast
+    gate, which is the property worth having: source order is meaningless under a topological
+    executor.
+
+    This is only sound while the job module imports nothing from `pipeline` at top level, so the
+    clause below asserts exactly that rather than leaving it as an assumption.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_nf_inc_0916_job_under_test", _JOB_PATH)
+    assert spec and spec.loader, f"could not load {_JOB_PATH}"
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_job_module_can_be_read_without_importing_the_pipeline_package():
+    """⛔ THE PRECONDITION FOR EVERY GRAPH CLAUSE BELOW, asserted rather than assumed.
+
+    If someone adds a top-level `from pipeline...` import to the job module, the path-load above
+    starts pulling `pipeline/__init__.py` and the fast gate dies at collection again — the failure
+    this session actually shipped. Asserting it here means that change fails with a message naming
+    the cause, instead of as a FileNotFoundError about a dbt manifest.
+    """
+    import ast
+
+    tree = ast.parse(_JOB_PATH.read_text())
+    offenders = []
+    for node in tree.body:   # TOP LEVEL only — a function-level import is lazy and harmless
+        if isinstance(node, ast.Import):
+            offenders += [a.name for a in node.names if a.name.split(".")[0] == "pipeline"]
+        elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "pipeline":
+            offenders.append(node.module)
+    assert not offenders, (
+        f"{_JOB_PATH.name} now imports {offenders} at TOP LEVEL. That makes every fast-gate clause "
+        "in this file import `pipeline/__init__.py`, which reads the gitignored "
+        "`dbt/target/manifest.json` and dies at COLLECTION on a CI runner (E11.23). Move the import "
+        "inside the function that needs it."
+    )
+    assert _job_module() is not None
+
+
 def _edges():
     """(downstream, upstream) pairs from the COMPILED job graph.
 
@@ -71,7 +130,7 @@ def _edges():
     op is DEFINED in the file says nothing about when it runs; a guard reading source lines would
     be satisfied by a job whose ops execute in the wrong order (INC-38/INC-40).
     """
-    from pipeline.jobs.sports_nfl_weekly_serving_job import sports_nfl_weekly_serving_job as job
+    job = _job_module().sports_nfl_weekly_serving_job
 
     out = []
     for node, deps in job.graph.dependencies.items():
@@ -126,15 +185,11 @@ def test_the_freshness_leg_is_downstream_of_the_ingest_it_judges():
 def test_the_ingest_subprocess_carries_a_finite_timeout():
     """INC-32 — every subprocess on a Dagster path is bounded, and `run_bounded` kills the whole
     process group rather than orphaning a grandchild."""
-    import importlib
-    from pathlib import Path
-
-    # ⚠️ `importlib`, NOT `from pipeline.jobs import sports_nfl_weekly_serving_job`. The package
-    # re-exports the JOB under the module's own name, so the plain form binds a `JobDefinition`
-    # and every attribute read below fails for a reason that has nothing to do with the property
-    # under test.
-    J = importlib.import_module("pipeline.jobs.sports_nfl_weekly_serving_job")
-    module_src = Path(J.__file__).read_text()
+    # ⚠️ Loaded BY PATH, never `from pipeline.jobs import …` — see `_job_module`. The plain form
+    # both binds a `JobDefinition` (the package re-exports the job under the module's own name) AND
+    # drags in `pipeline/__init__.py`'s manifest read, which kills the fast gate on CI.
+    J = _job_module()
+    module_src = _JOB_PATH.read_text()
     start = module_src.index("def nfl_weekly_stats_ingest_op(")
     end = module_src.index("def _slate_end_utc(")
     assert start < end, "the ingest op no longer precedes the slate helper — re-anchor this slice"
