@@ -10,7 +10,7 @@ metadata:
   name: nf-wk-rc1
   vertical: nfl_fantasy
   card: https://trello.com/c/3D2HnxXv   # EPIC NF-SEASON; RC1 card linked at kickoff by PM
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     After each NFL week completes, every imported league gets (a) a
