@@ -294,11 +294,37 @@ spec:
       (ABSENCE_REASONS, extended additively).
 
 
-      ⑧ UNMEASURED, offered as a successor question rather than a claim: how
-      responsive IS the daily board to a completed week? ECR/ADP are model
-      features and are refreshed, but the currently-served ECR vintage
-      (2026-09-10) sits INSIDE week 1 (09-09 -> 09-14), so the board's expert
-      channel does not yet reflect week-1 results; ADP's window partially does.
-      Whether that channel moves a player's projection enough to matter for a
-      waiver ranking is not measured here and should not be assumed in either
-      direction.
+      ⑧ ANSWERED (was "unmeasured" in the first pass; the structural answer is
+      decisive and it CHANGES THE WEIGHT OF OPTION (a) in ①). The board has NO
+      in-season PRODUCTION channel, BY DESIGN. `run_nf1.assemble_features`
+      states its own contract — "every column is a BASE-SEASON realized quantity
+      or a leakage-safe forward designation" — with `base_season: 2025`; and the
+      daily publish refreshes exactly `BOARD_INPUT_SOURCES = ["depth_charts",
+      "rosters", "weekly_rosters"]` (sports_nfl_board_publish_job.py:82), i.e. no
+      results feed at all, consistent with RC1's independent finding that
+      `stats_player_week` holds zero 2026 rows. So every performance feature
+      (pergame_fp, snap_share, target_share, carry_share, base_games) is a 2025
+      quantity. The board's 2026-responsive channels in full are: depth chart,
+      roster status, injury/designation status, Vegas win totals, and ADP/ECR —
+      ROLE, HEALTH and MARKET, never PRODUCTION. That is the CORRECT design for
+      a leakage-safe preseason draft board and the wrong substrate for a waiver
+      ranking, which is precisely a question about what has changed since the
+      draft. ⇒ an honest label under option (a) cannot stop at "refreshed daily
+      for injury and market news" — that leaves the impression the number tracks
+      performance. It has to say the projection DOES NOT REFLECT 2026 ON-FIELD
+      PRODUCTION AT ALL. (Fernando Mendoza tops the available pool at 268.3
+      projected points and did not take a snap in week 1.)
+
+
+      ⑨ OBSERVED, NOT ADJUDICATED — the `contrib` driver block's vintage. On the
+      live payload: 702 of 870 rows carry `contrib`;
+      `featureContributionsMeta.generated_at` is 2026-08-02 (~6 weeks old) and
+      its `model_version` is `nfl_fantasy_nf1_v1` while the payload's own is
+      `nfl_fantasy_nf1_5_v1`. ⚠️ I have NOT established this is a defect: the
+      metadata stamps its own vintage and version honestly, and NF1.5 is a
+      market-aware refinement layered on NF1, so NF1 attributions may
+      legitimately explain the NF1 component. Recorded because a waiver surface
+      might want to show "why", and because a reader of the board should know
+      the driver block is not the same vintage as the number it sits beside.
+      For whoever owns NF1.5 to confirm or dismiss — not a WVR1 finding.
+
