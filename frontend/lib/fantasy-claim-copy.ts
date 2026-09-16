@@ -1006,14 +1006,20 @@ export const REPORT_FIRST_WEEK_NOTE =
 
 export const PORTFOLIO_HEADING = "Your teams"
 
-/** The label for the numbers themselves. ⚠️ "Full-season" and "pre-kickoff" are both load-bearing:
- *  the weekly model is not published, so there is no per-game or week-1 figure to show, and a season
- *  total divided into a per-game rate would be false precision rather than a weekly projection. */
-export const PORTFOLIO_TOTAL_LABEL = "Full-season projected points (pre-kickoff)"
+/** The label for the numbers themselves. ⚠️ "Preseason" and "full-season" are both load-bearing,
+ *  and "(pre-kickoff)" was RETIRED on 2026-09-16 (NF-WVR1) because it EXPIRED AT KICKOFF — week 1
+ *  completed 2026-09-14, so a parenthetical asserting we are before the season was simply false on
+ *  a paid surface. "Preseason" says the same true thing about the NUMBER'S VINTAGE without making
+ *  a claim about today's date, so it cannot expire the same way.
+ *  The rest still holds: there is no per-game or week-1 figure to show here, and a season total
+ *  divided into a per-game rate would be false precision rather than a weekly projection. */
+export const PORTFOLIO_TOTAL_LABEL = "Preseason full-season projected points"
 
 /** ⭐ THE TWO READINGS, and the labels are the boundary between them. As-set is what the reader's
  *  platform says they are starting; best-possible is what the roster is worth with the lineup right.
- *  Neither is "your score" — both are full-season projections before a snap has been played. */
+ *  Neither is "your score" — both are PRESEASON full-season projections, and neither reflects what
+ *  has actually happened in 2026. (The old wording, "before a snap has been played", expired at
+ *  kickoff — NF-WVR1, 2026-09-16.) */
 export const PORTFOLIO_AS_SET_LABEL = "Your current starters (projected)"
 export const PORTFOLIO_BEST_LABEL = "Your best possible lineup (projected)"
 export const PORTFOLIO_GAP_LABEL = "Points on your bench"
