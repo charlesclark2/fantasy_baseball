@@ -23,6 +23,7 @@ import subprocess
 import sys
 
 from dagster import In, Nothing, Out, in_process_executor, job, op
+from dagster._core.storage.tags import MAX_RUNTIME_SECONDS_TAG
 
 from betting_ml.utils.sports_duckdb import sports_duckdb_env
 
@@ -32,6 +33,41 @@ SPORTS_DBT_DIR = os.environ.get(
 )
 # 40 min ceiling — the full NFL build is ~1–2 min over the lake; this is a generous wedge-guard.
 DBT_TIMEOUT_SECONDS = int(os.environ.get("SPORTS_DBT_TIMEOUT_SECONDS", "2400"))
+
+# ── NCAAF-INC-0914 (2026-09-14) — the two run tags this job family never had ───────────────
+# Both jobs build FOUR dbt legs: run(staging) → run(marts) → leakage gates → tests.
+_DBT_LEGS_PER_JOB = 4
+
+#: E11.26 — the job's own wall-clock ceiling, SIZED FROM THE LEGS rather than guessed, so
+#: `leg_cap < job_ceiling < cadence` holds by construction (2400 < 10800 << 86400, one day) and
+#: cannot drift if the leg cap moves. Without it these jobs inherited the instance-wide
+#: `max_runtime_seconds: 14400`, which is sized for the Sunday MLB full refresh.
+#:
+#: ⚠️ THIS IS A DETECTION-LATENCY BOUND, NOT THE CURE. On 2026-09-14 a CD deploy recreated
+#: dagster-codeloc 1s into run 06d7352c's first dbt command; the run had reached STARTED, and
+#: `DefaultRunLauncher` does not implement `supports_check_run_worker_health`, so run-monitoring
+#: never checks whether a started worker is alive — the 4h cap was the ONLY backstop and the
+#: alert, 4h later, named no cause. The SAME event caught three runs still in STARTING at
+#: Dagster's 180s start-timeout, and `intraday_schedule_job` at its own 1500s ceiling in 26 min.
+#: Three latencies, one event: the difference was whether the job carried a ceiling of its own.
+#: The CAUSE is fixed in services/dagster/aws/deploy.sh (the drain could not see a STARTING run).
+JOB_MAX_RUNTIME_SECONDS = int(
+    os.environ.get("SPORTS_DBT_MAX_RUNTIME_S", str(_DBT_LEGS_PER_JOB * DBT_TIMEOUT_SECONDS + 1200))
+)
+
+#: ⭐ ONE group SHARED by the NCAAF and NFL builds — they are not independent tenants.
+#: `sports_ncaaf_dbt_schedule` and `sports_nfl_dbt_schedule` carry the IDENTICAL cron
+#: (`0 11` America/Los_Angeles = 18:00 UTC) and, per profiles.yml, materialize into ONE DuckDB
+#: FILE (`SPORTS_DUCKDB_PATH`, separate schemas). DuckDB's write lock is exclusive, so on any day
+#: both game-day gates open, whichever opens second dies on the lock. Both schedules were verified
+#: RUNNING on the box 2026-09-15. `tag_concurrency_limits` in services/dagster/dagster.yaml already
+#: caps `concurrency_group` at 1 per unique value, so one build simply queues behind the other.
+SPORTS_DBT_CONCURRENCY_GROUP = "sports_dbt_build"
+
+_SPORTS_DBT_JOB_TAGS = {
+    "concurrency_group": SPORTS_DBT_CONCURRENCY_GROUP,
+    MAX_RUNTIME_SECONDS_TAG: str(JOB_MAX_RUNTIME_SECONDS),
+}
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════
@@ -104,7 +140,7 @@ def sports_nfl_dbt_test_op(context):
         context.log.info("sports_dbt NFL tests PASSED (warnings may still be present — see log).")
 
 
-@job(executor_def=in_process_executor)
+@job(executor_def=in_process_executor, tags=_SPORTS_DBT_JOB_TAGS)
 def sports_nfl_dbt_build_job():
     # run (HALT) → leakage gates (HALT) → the rest of the tests (WARN-continue).
     built = sports_nfl_dbt_run_op()
@@ -271,7 +307,7 @@ def sports_ncaaf_dbt_test_op(context):
         context.log.info("sports_dbt NCAAF tests PASSED (warnings may still be present — see log).")
 
 
-@job(executor_def=in_process_executor)
+@job(executor_def=in_process_executor, tags=_SPORTS_DBT_JOB_TAGS)
 def sports_ncaaf_dbt_build_job():
     # run (HALT) → leakage gates (HALT) → the rest of the tests (WARN-continue).
     # The gates run BEFORE the broad suite so a leak surfaces even if a later peripheral test

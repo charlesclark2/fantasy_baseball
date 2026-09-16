@@ -99,6 +99,46 @@ class TestTheDrainDoesNotFailOpen:
             "distinguish 'cannot verify' from 'nothing running'"
         )
 
+    def test_the_drain_waits_for_runs_that_have_not_reached_started_yet(self, deploy_src: str) -> None:
+        """NCAAF-INC-0914 — the hole that survived INC-36 and cost five runs in one deploy.
+
+        The instance runs `QueuedRunCoordinator`, so every scheduled run passes
+        QUEUED -> STARTING -> STARTED. A filter of `[STARTED]` alone is blind for the whole
+        launch window. MEASURED 2026-09-14: run 06d7352c was ENQUEUED 18:00:00.77, went STARTING
+        18:00:09.44 and did not reach STARTED until 18:00:47.67; the probe ran at 18:00:23,
+        reported 0, and the recreate tore down the run worker 1s after it logged its first dbt
+        command. Every in-flight run is a subprocess of dagster-codeloc, so a recreate kills all
+        of them by construction — the drain must wait for every NON-TERMINAL run.
+        """
+        fn = _in_flight_block(deploy_src)
+        statuses = re.search(r"statuses:\[([A-Z_,\s]+)\]", fn)
+        assert statuses, "in_flight() must filter runs by status"
+        listed = {s.strip() for s in statuses.group(1).split(",") if s.strip()}
+        for required in ("QUEUED", "STARTING", "STARTED"):
+            assert required in listed, (
+                f"in_flight() must count runs in {required}. A run is not STARTED for its first "
+                f"~47s under QueuedRunCoordinator, and a deploy authorised during that window "
+                f"kills it (NCAAF-INC-0914). Listed: {sorted(listed)}"
+            )
+
+    def test_a_graphql_level_error_is_unknown_rather_than_drained(self, deploy_src: str) -> None:
+        """NCAAF-INC-0914 — the same swallowed-error class INC-36 removed, one layer deeper.
+
+        INC-36 hardened the TRANSPORT failure. But `runsOrError` resolving to `PythonError`
+        returns HTTP 200 with a body carrying no `results` key, so `.get('results', [])` read a
+        server-side error as "drained". The query already asks for `__typename`; the answer must
+        be REQUIRED to be `Runs` or a failed probe is indistinguishable from an idle box.
+        """
+        fn = _in_flight_block(deploy_src)
+        assert "__typename" in fn and "Runs" in fn, (
+            "in_flight() must ask for __typename and require it to be `Runs` — otherwise a "
+            "GraphQL-level error (PythonError) is read as zero in-flight runs"
+        )
+        assert re.search(r"__typename.{0,40}!=.{0,20}Runs|__typename.{0,20}==.{0,20}Runs", fn, re.S), (
+            "asking for __typename is not enough — in_flight() must BRANCH on it. Without the "
+            "check the field is decoration and a PythonError still reads as 'drained'."
+        )
+
     def test_an_unverifiable_drain_is_loud_and_bounded(self, deploy_src: str) -> None:
         assert "DRAIN_UNKNOWN_MAX" in deploy_src, (
             "repeated probe failures must be bounded — blocking forever is as bad as failing open"

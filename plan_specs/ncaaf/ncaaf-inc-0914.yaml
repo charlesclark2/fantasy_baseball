@@ -9,7 +9,12 @@ metadata:
   name: ncaaf-inc-0914
   vertical: ncaaf
   card: https://trello.com/c/l8Rjkh8j
-  status: ACCEPTED
+  status: SHIPPED_PENDING_VERIFICATION  # cause MEASURED, fix code-complete + guards RED-proven 7/7.
+  # The outstanding half is a RUNTIME GATE, not scope: CI mocks all IO and cannot see a shell probe
+  # running against a live Dagit, so 7a is proven only when the NEXT CD deploy's own log shows the
+  # drain WAITING on an in-flight run (five deploys on 09-14 logged 'no in-flight runs' while runs
+  # were live — that is the before-state). No data restore is owed: the marts were rebuilt twice on
+  # 09-14 after the game day and the 09-15 tick correctly skipped on the game-day gate.
 spec:
   description: >
     sports_ncaaf_dbt_build_job run 06d7352c-5744-4902-b42d-a0c8aa4a43ba
@@ -113,8 +118,96 @@ spec:
   graph:
     nodes: []   # MINI incident — evidence reads (operator) -> named cause -> minimal matched fix -> restore + freshness verify -> class/census feed -> closeout
   closeout:
-    verdict: null
-    followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+    verdict: SHIPPED
+    followUps: |
+      PM triages into: checklist item on the parent card | merge into an existing
+      card (name it) | a new spec. Worker sessions never create Trello cards.
+
+      ══ VERDICT ══════════════════════════════════════════════════════════════
+      CAUSE MEASURED. The 2026-09-14 18:00:15Z Orchestration-CD deploy (PR #1121,
+      merged 18:00:11Z) recreated `dagster-codeloc` — code server AND run worker —
+      while run 06d7352c's subprocess (pid 693) was 1 s into its first dbt command.
+      The drain that authorised the recreate probed at 18:00:23 while the run was in
+      STARTING; its GraphQL filter lists STARTED only. Run created 18:00:00.70,
+      STARTING 18:00:09.44, STARTED 18:00:47.67, last log 18:00:48.12, then silence
+      until the 4 h cap fired at 22:01:20 (wall 14432.8 s = 14400 + one monitor tick).
+      ⛔ NOT OOM: dmesg + journal empty across 17:30-22:30, OOMKilled=false, 3.1/15.7 GB
+      used — and mechanically ruled out anyway (the code server's own
+      `_check_for_orphaned_runs` fails a dead-subprocess run within one cleanup tick,
+      with an exit code; 4 h of silence is not that shape).
+      SERVING IMPACT: none measurable. `sports_ncaaf_roll_forward_job` (13:00:45) and
+      `sports_ncaaf_strength_refit_job` (14:30:27) both ran the IDENTICAL
+      `ncaaf.staging` + `ncaaf.marts` selectors, both SUCCESS, both after the 09-13
+      game day; `dim_ncaaf_game` holds completed games through 2026-09-13 (the most
+      recent CFB game day). ⚠️ both are MONDAY-ONLY jobs — on any other gate-open day
+      the 18:00 build is the only NCAAF rebuild. Self-heal confirmed: the 09-15 tick
+      fired and the game-day gate correctly skipped. No restore run needed.
+      FIX: (a) the drain now counts every NON-TERMINAL run and branches on
+      `__typename` (a GraphQL-level PythonError had still degraded to a silent 0 —
+      the INC-36 class one layer deeper); (b) both sports dbt builds gained
+      `dagster/max_runtime` (10800 s, DERIVED from the legs) + a SHARED
+      `concurrency_group`. Guards RED-proven 7/7. Docs:
+      docs/ncaaf_inc_0914_evidence_reads.md (§0 verdict, §7 fix, §8 verify).
+
+      ══ FOLLOW-UPS ═══════════════════════════════════════════════════════════
+      F1. ⭐⭐ THE HEADLINE INSTRUMENT GAP, UNFIXED AND NOT FIXABLE BY A TIMEOUT.
+          `DefaultRunLauncher` does not implement `supports_check_run_worker_health`
+          and the base `RunLauncher` returns False, so once a run reaches STARTED this
+          instance NEVER checks whether its worker is alive. MEASURED CONSEQUENCE: one
+          event, five dead runs, THREE detection latencies — ~3 min for the three runs
+          still in STARTING (Dagster's 180 s start-timeout), 26 min for
+          `intraday_schedule_job` (its own E11.26 1500 s ceiling; failed at 1581.9 s),
+          and 4 HOURS for the NCAAF build, which had crossed into STARTED ~1 s before
+          the teardown. The alert that results names no cause BY CONSTRUCTION — it will
+          read identically for OOM, crash and hang. §7b's ceiling bounds this at 3 h and
+          no timeout can do better. A real fix is a launcher that supports a liveness
+          check, or a deploy that explicitly FAILS the runs it kills (see F2).
+          PM DECISION WARRANTED.
+      F2. ⭐ THE DEPLOY SHOULD FAIL WHAT IT KILLS. Every in-flight run is a subprocess
+          of `dagster-codeloc`, so a recreate kills all of them BY CONSTRUCTION — after
+          the recreate, any non-finished run that started before it is dead and could be
+          marked failed immediately with a message naming the deploy. That converts a
+          4-hour cause-free mystery into an instant, correctly-attributed failure. Not
+          done here (minimality — §7a prevents the kill; this would attribute one that
+          happens anyway, e.g. when the drain times out after DRAIN_TIMEOUT and proceeds).
+          ~15 lines in deploy.sh. Pairs with F1.
+      F3. THE DRAIN STILL PROCEEDS AFTER DRAIN_TIMEOUT (600 s) WITH A WARN — unchanged
+          by this fix and correct by INC-36's design, but note `daily_ingestion_job` runs
+          ~86 min (5178 s on 09-14, 5302 s on 09-15), so a deploy landing inside it waits
+          600 s and then recreates into a live run anyway. §7a narrows the window; it does
+          not close it. F2 is what makes that case diagnosable.
+      F4. ELEVEN CD DEPLOYS ON 2026-09-14 (six between 16:56 and 22:46), each recreating
+          the run worker, each logging "no in-flight runs". That cadence is a PM/process
+          question, not a code defect: with §7a in place each of those deploys now waits
+          for the box to be idle, so a busy merge day trades deploy latency for run
+          safety. Worth a line in whatever owns the box's operating picture — the census
+          thread (leaf-run detector ZPmBj8PF) or BOX_OPERATIONS. EXTEND, do not fork.
+      F5. `sports_nfl_board_publish_job` FAILED 2026-09-14 14:15:15 (392.2 s), outside
+          every deploy window and unrelated to this incident; it succeeded at 17:39 and
+          22:35 the same day. Different job, different class — flagged for whoever owns
+          NF-INC-0914, not chased here.
+      F6. `Dockerfile:43` installs `dagster>=1.11.5` UNPINNED. The box measured
+          **1.13.22** (R0) while the source reading was done against 1.13.5 — the
+          `_force_mark_as_failed` / `check_run_timeout` / `CancelExecution` paths are
+          identical in both, so nothing turned on it, but a run-monitoring semantics
+          change could arrive on any `--build`. Same unpinned-dependency class CLAUDE.md
+          already records for the ML libs.
+      F7. R6 (does the drain probe return a well-formed `Runs` body today?) was not run.
+          NOT load-bearing — requiring `__typename == "Runs"` is the correct reading of
+          the response whether or not the probe is currently degraded — but it would say
+          whether the PythonError hole was ever live or purely latent.
+      F9. ⚠️ THE DEPLOY THAT SHIPS A `deploy.sh` CHANGE RUNS THE **OLD** `deploy.sh` —
+          MEASURED, not assumed. `deploy.sh` does `git pull --ff-only` and keeps
+          executing; git's fast-forward UNLINKS and RECREATES the file, so the running
+          bash keeps its fd on the old inode and reads the old script to the end
+          (verified with a mid-file edit that shifts every later byte offset — no
+          misalignment, old lines executed). ⇒ the new drain takes effect from the
+          SECOND post-merge deploy, and the FIRST one must not be read as evidence
+          either way. Merge against an idle box. Worth knowing for every future
+          `deploy.sh` change, not just this one.
+
+      F8. `_run_sports_dbt` still uses raw `subprocess.run` where its sibling refit job
+          uses `bounded_subprocess.run_bounded`. On POSIX the CALLER is genuinely bounded
+          (kill+wait, not the Windows communicate() path — verified), so this was NOT a
+          contributing cause here; but a surviving GRANDCHILD is not killed, which on a
+          2-vCPU box is the E11.26 hazard. One logical discipline, two owners.
