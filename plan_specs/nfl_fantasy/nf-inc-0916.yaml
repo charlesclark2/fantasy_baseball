@@ -11,7 +11,7 @@ metadata:
   name: nf-inc-0916
   vertical: nfl_fantasy
   card: https://trello.com/c/ISopvUYR
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     stats_player_week and snap_counts are absent from
