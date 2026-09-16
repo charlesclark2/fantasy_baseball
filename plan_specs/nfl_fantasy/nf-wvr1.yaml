@@ -519,15 +519,33 @@ spec:
       other order).
 
 
-      ⑩ᵇ PROVENANCE ON ⑩ᵃ, so a later reader is not misled by where to look: the census
-      correction (12 not 10) lives on NF-INC-0917B's OPEN PR #1152 (commit 325d366b) and
-      is NOT on `dev`. Verified 2026-09-16 — `origin/dev`'s copy of
-      `plan_specs/nfl_fantasy/nf-inc-0917b.yaml` carries none of the correction's markers
-      (`copy_tree_uploader`, `_maybe_publish`, `run_realized_week` all absent). So a
-      reader checking `dev` today finds the UNCORRECTED census and would conclude 10.
-      ⇒ cite ⑩ᵃ's number as pending-on-#1152, not as the record's current state. (And ⑪'s
-      "unblocked by one operator run" is true of `run_realized_week` INDEPENDENTLY of that
-      PR — the two must not be read as one landing.)
+      ⑩ᵇ PROVENANCE ON ⑩ᵃ — ⚠️ THIS ENTRY WAS ITSELF WRONG ON FIRST WRITING AND IS
+      CORRECTED IN PLACE (2026-09-16). What it said: "a reader checking `dev` today finds
+      the UNCORRECTED census and would conclude 10." MEASURED, and false — on
+      `origin/dev`'s copy of `plan_specs/nfl_fantasy/nf-inc-0917b.yaml`:
+        `10 WRITERS` 0 · `12 WRITERS` 0 · `EXACTLY ONE` 0 · `1 of 10` 0 · `1 of 12` 0
+        `status: ACCEPTED` · `verdict: null` · closeout still the PM's placeholder
+        ("Findings land HERE. PM triages into…")
+        every "census" hit is PM ACCEPTANCE-CRITERIA PROSE — the instruction to PERFORM
+        one ("a census of other publish paths that validate-and-discard…") plus an
+        OverlapCheck line. Not a result.
+      ⇒ THE ACCURATE FORM: the census does not exist on `dev` IN ANY FORM. The figure 10
+      never existed in any record anywhere — only in an intermediate commit on
+      NF-INC-0917B's branch and in inter-session messages. When #1152 lands it arrives
+      ALREADY CORRECTED at 12. My original wording would have sent a reader hunting a
+      wrong number that is not there — worse than the ambiguity it was trying to close.
+      ⇒ ⑩ᵃ's number is PENDING ON #1152 (still open); ⑪'s "unblocked by one operator run"
+      is true of `run_realized_week` INDEPENDENTLY of that PR — the two are not one
+      landing.
+      ⭐ THE MECHANISM, because it is the rule below for the THIRD time and this one is
+      mine: NF-INC-0917B's warning was about STATUS ("don't let it read as landed") and I
+      converted it into a claim about CONTENT ("a reader would find 10") WITHOUT READING
+      THE FILE. Worse, I had run a grep — `grep -cE "12|denominator|copy_tree_uploader|
+      _maybe_publish"` returned **2** — and read a COUNT as evidence that a census result
+      existed, when the two hits were incidental and the three SPECIFIC markers all
+      returned 0. ⇒ SUB-RULE, cheap and general: A GREP COUNT IS NOT EVIDENCE OF WHAT
+      MATCHED. Print the matching LINES before drawing a conclusion from a non-zero count;
+      `-c` answers "how many lines contain something", never "is the thing there".
 
       ⭐ THE GENERAL FORM, which is the part worth keeping once both anecdotes fade
       (NF-INC-0917B's articulation, adopted here because it is better than mine):
