@@ -148,6 +148,120 @@ class TestTheDrainDoesNotFailOpen:
         )
 
 
+class TestADeployAttributesTheRunsItKills:
+    """NCAAF-INC-0914 Decision 1 (PM, 2026-09-15) — fail-and-attribute.
+
+    The drain does not wait forever: past `DRAIN_TIMEOUT` it proceeds with a WARN, and
+    `daily_ingestion_job` alone runs ~86 min. When that happens the runs die anyway. Before this,
+    they died SILENTLY and surfaced hours later carrying Dagster's cause-free "This job is being
+    forcibly marked as failed" — measured at 4h02m for run 06d7352c on 2026-09-14.
+
+    Safe to automate ONLY because it is true by construction rather than by heuristic: a run with
+    a live worker is a subprocess of `dagster-codeloc`, so recreating that container kills it.
+    """
+
+    def test_the_snapshot_is_taken_before_the_recreate(self, deploy_src: str) -> None:
+        """The victim set must be fixed while the OLD worker still owns it.
+
+        Deriving it AFTER the recreate would sweep in runs the NEW worker has since started —
+        marking a live, working run as failed. Ordering is the whole guarantee.
+        """
+        snap_at = deploy_src.index('DOOMED_RUNS="$(doomed_runs)"')
+        recreate_at = deploy_src.index("compose_up_core || rollback")
+        assert snap_at < recreate_at, (
+            "the doomed-run snapshot must be taken BEFORE `compose_up_core` recreates the "
+            "containers — a set derived afterwards can contain runs the NEW worker started, and "
+            "failing one of those is a worse defect than the silence this block removes"
+        )
+
+    def test_the_doomed_set_excludes_queued_runs(self, deploy_src: str) -> None:
+        """⚠️ THE TRAP: the doomed set is NARROWER than the drain set, and reusing one for the
+        other is a false attribution against a run that is alive.
+
+        "Every in-flight run is a subprocess of dagster-codeloc" holds for STARTING/STARTED. A
+        QUEUED run is a ROW IN POSTGRES awaiting dequeue: it survives the recreate untouched and
+        the new daemon launches it moments later.
+        """
+        fn = _function_block(deploy_src, "doomed_runs")
+        statuses = re.search(r"statuses:\[([A-Z_,\s]+)\]", fn)
+        assert statuses, "doomed_runs() must filter runs by status"
+        listed = {s.strip() for s in statuses.group(1).split(",") if s.strip()}
+        assert listed == {"STARTING", "STARTED"}, (
+            f"the doomed set must be exactly STARTING+STARTED — the states in which a worker "
+            f"PROCESS exists. QUEUED/NOT_STARTED runs survive a recreate and marking them failed "
+            f"is a false attribution; CANCELING is already being terminated deliberately. "
+            f"Got: {sorted(listed)}"
+        )
+
+    def test_the_drain_waits_on_strictly_more_than_the_doomed_set(self, deploy_src: str) -> None:
+        """The two lists are deliberately different and must not be 'unified' by a later tidy-up:
+        we WAIT for queued work (it is about to launch), but we never ATTRIBUTE its death."""
+        drain = _in_flight_block(deploy_src)
+        doomed = _function_block(deploy_src, "doomed_runs")
+        drain_set = set(re.search(r"statuses:\[([A-Z_,\s]+)\]", drain).group(1).replace(" ", "").split(","))
+        doomed_set = set(re.search(r"statuses:\[([A-Z_,\s]+)\]", doomed).group(1).replace(" ", "").split(","))
+        assert doomed_set < drain_set, (
+            f"the doomed set must be a STRICT subset of the drain set — the drain waits for "
+            f"queued work, the attribution never claims it. drain={sorted(drain_set)} "
+            f"doomed={sorted(doomed_set)}"
+        )
+        assert "QUEUED" in drain_set - doomed_set, (
+            "QUEUED must be waited for but never attributed"
+        )
+
+    def test_the_attribution_iterates_only_the_snapshot(self, deploy_src: str) -> None:
+        """A fresh query inside the attribution block would re-derive the victim set after the
+        recreate — the exact defect `test_the_snapshot_is_taken_before_the_recreate` forbids,
+        reintroduced one layer down."""
+        block = _attribution_block(deploy_src)
+        assert "DOOMED_RUNS" in block, "the attribution must read the pre-teardown snapshot"
+        assert "runsOrError" not in block, (
+            "the attribution block must NOT re-query Dagster for in-flight runs — it must iterate "
+            "ONLY the ids snapshotted before the recreate, or a run the new worker started can be "
+            "marked failed"
+        )
+
+    def test_the_failure_message_names_the_deploy_and_the_commit(self, deploy_src: str) -> None:
+        """PM constraint: a bare FAILED reproduces the cause-free alert one layer down. The
+        attribution IS the point."""
+        block = _attribution_block(deploy_src)
+        assert "DEPLOY_SHA" in block and "NEW_HEAD" in block, (
+            "the deploy's commit SHA must be passed into the attribution so the run's failure "
+            "event names WHICH deploy killed it"
+        )
+        assert "deploy" in block.lower(), "the failure message must name the deploy as the cause"
+
+    def test_a_run_that_finished_on_its_own_is_skipped(self, deploy_src: str) -> None:
+        """Between the snapshot and the marking, a run may have completed — or Dagster's own 180 s
+        start-timeout may have failed it. Overwriting a terminal status would destroy the real
+        outcome."""
+        block = _attribution_block(deploy_src)
+        assert "is_finished" in block, (
+            "the attribution must skip a run that already reached a terminal status"
+        )
+
+    def test_an_unverifiable_snapshot_attributes_nothing_and_says_so(self, deploy_src: str) -> None:
+        """NF1.7(a): a probe that could not be evaluated is never scored as 'nothing to do'."""
+        assert 'if [ "$DOOMED_RUNS" = "UNKNOWN" ]' in deploy_src, (
+            "an unverifiable snapshot must be handled explicitly, not treated as an empty set"
+        )
+        unknown_branch = deploy_src[deploy_src.index('if [ "$DOOMED_RUNS" = "UNKNOWN" ]'):]
+        unknown_branch = unknown_branch[: unknown_branch.index("# --- 5.")]
+        assert "ALERT" in unknown_branch, (
+            "an unverifiable snapshot must be LOUD — its consequence is a run that dies "
+            "unattributed, i.e. exactly the pre-fix behaviour"
+        )
+
+    def test_a_failed_attribution_never_rolls_back_a_healthy_deploy(self, deploy_src: str) -> None:
+        """The runs are already dead either way; losing a good deploy over the bookkeeping would
+        be a strictly worse outcome (INC-36's rollback left the daemon down)."""
+        block = _attribution_block(deploy_src)
+        assert "rollback" not in block, (
+            "the attribution step is best-effort — it must never roll back a deploy that is "
+            "otherwise healthy"
+        )
+
+
 class TestATransientRemovalRaceDoesNotCostARollback:
     def test_the_core_up_is_retried(self, deploy_src: str) -> None:
         assert "compose_up_core" in deploy_src, "the core `up -d --build` must go through a retry wrapper"
@@ -233,6 +347,19 @@ class TestTheCdPollBudgetOutlastsTheBoxCommand:
 def _lock_block(src: str) -> str:
     start = src.index('if [ -f "$DEPLOY_LOCK" ]')
     return src[start : src.index('trap \'rm -f "$DEPLOY_LOCK"\' EXIT')]
+
+
+def _attribution_block(src: str) -> str:
+    """The NCAAF-INC-0914 fail-and-attribute section (7b), **comment-stripped**.
+
+    ⚠️ The stripping is load-bearing, and the RED proof is what proved it: the section carries a
+    comment explaining that `is_finished` skips an already-terminal run, so a raw substring scan
+    for `is_finished` stayed GREEN with the actual check deleted. That is the INC-38
+    prose-satisfies-the-guard class, inside a guard written for this incident.
+    """
+    start = src.index("# --- 7b.")
+    block = src[start : src.index("# --- success", start)]
+    return "\n".join(ln for ln in block.splitlines() if not ln.lstrip().startswith("#"))
 
 
 def _in_flight_block(src: str) -> str:

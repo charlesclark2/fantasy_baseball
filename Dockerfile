@@ -39,8 +39,24 @@ COPY pyproject.toml uv.lock* ./
 # 1.8.0 → sklearn._loss moved → "No module named '_loss'" broke strikeout_glm_v1
 # on the box). Bump a version here only alongside a re-fit + re-promote of every
 # affected artifact AND the matching pyproject/uv.lock bump, in the same PR.
+#
+# 🔒 DAGSTER IS PINNED EXACT TOO, for a different reason than the ML libs above, and the reason is
+# an INCIDENT COST. NCAAF-INC-0914 (2026-09-14) was diagnosed by reading Dagster's run-monitoring
+# source — `_force_mark_as_failed`, `check_run_timeout`, `CancelExecution` — because the alert it
+# produced named no cause. `dagster>=1.11.5` meant the box was running whatever was latest at the
+# last `--build` (measured: **1.13.22**, against source read at 1.13.5), so the diagnosis could
+# not be trusted until those three paths had been verified identical across the two. That
+# verification is the tax an unpinned ORCHESTRATOR charges on every future incident, and unlike a
+# library it decides WHEN and HOW a run is killed.
+# 🚨 BUMP DISCIPLINE: bump this deliberately, never incidentally — and when you do, RE-CHECK the
+# run-monitoring paths named above (`python_modules/dagster/dagster/_daemon/monitoring/`), since a
+# change there silently rewrites what every failure alert on this box means. The sibling
+# `dagster-*` libs pin `dagster` exactly, so this ONE pin locks the whole family in step (verified
+# by resolution: dagster/-cloud/-webserver/-pipes/-graphql/-shared 1.13.22, -dbt/-postgres/
+# -snowflake 0.29.22). A future resolver conflict here is the pin WORKING — bump the family
+# together rather than loosening it.
 RUN pip install --no-cache-dir \
-    "dagster>=1.11.5" \
+    "dagster==1.13.22" \
     dagster-cloud \
     dagster-webserver \
     dagster-pipes \
