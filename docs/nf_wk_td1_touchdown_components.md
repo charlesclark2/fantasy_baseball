@@ -334,3 +334,71 @@ uniform level error. The ABSOLUTE magnitudes are not, and should be re-read afte
 level defect is fixed. ⛔ Not fixed here — it is a different story, and the same
 discipline that forbids rescaling the coherence residual forbids reaching outside this
 story's scope to fix a model-input defect.
+
+---
+
+## ⏭️ Operator handoff
+
+⛔ **Nothing in this story publishes.** No `--publish`, no `deploy.sh`. The weekly artifact
+is written by the box job, and the API Lambda is untouched (`app/backend` changes are
+none — the contract already declared the keys).
+
+### Step 1 — merge PR #1137 (branch `nf-wk-td1` → `dev`), CI green.
+
+### Step 2 — the node-3 measurement. **LAPTOP**, ~9 minutes, stages locally, publishes nothing.
+
+⭐ `--season 2026 --week 2` is load-bearing: it pins the same target week as the committed
+capture. Both sides of the controlled comparison come from THIS one build.
+
+```bash
+cd /Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy
+git checkout dev && git pull
+uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_weekly_serving \
+  --season 2026 --week 2 \
+  --out quant_sports_intel_models/football/nfl/fantasy/artifacts/weekly_serving
+```
+
+**Success looks like:** it exits 0 and logs
+`component line: 11 field(s) non-null on all N projected rows` plus
+`[METRIC] weekly_component_fields_complete=11`. It writes
+`artifacts/weekly_serving/weekly/2026/2/players.json`. ⛔ If it raises
+`… component value(s) are NULL on projected players`, the emission did not take —
+that refusal is the point and should stop the run.
+
+### Step 3 — the before/after table. **LAPTOP**, seconds.
+
+```bash
+cd /Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy
+uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_nf_wk_td1_coherence \
+  --before quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_wk_td1_before_week2_players.json \
+  --after  quant_sports_intel_models/football/nfl/fantasy/artifacts/weekly_serving/weekly/2026/2/players.json \
+  --out    quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_wk_td1_coherence.json
+```
+
+**Success looks like:** `AFTER TD non-null counts` shows all four fields at the full row
+count (the before side reads 0/0/0/0), and it prints the controlled pair
+(`after_without_td` vs `after`) plus a per-position Δ table. **That Δ table is what the PM
+takes to the operator for the lens-hold decision.** Expect most cells to move the gap
+further negative — the refutation in node 3 predicts it, and it is a finding rather than
+a failure.
+
+### Step 4 — publish, only if the PM wants the TD line live.
+
+```bash
+docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc \
+  python -m quant_sports_intel_models.football.nfl.fantasy.run_weekly_serving \
+  --s3-bucket credence-prod-s3-api-cache --publish
+```
+
+⚠️ This is the **BOX**, it reaches the LIVE prod api-cache, and it re-resolves the target
+week (it will build whatever week is current, not week 2). The scheduled
+`sports_nfl_weekly_serving_job` runs exactly this daily, so **merging alone will put the
+TD line on the wire at the next scheduled fire** — that is the decision to make
+deliberately, not the command.
+
+### Not in this story, and worth its own spec
+
+Follow-up (1) in the spec closeout: `stats_player_week` and `snap_counts` have no
+scheduled ingest, which is holding every served weekly projection ~3–6× low. That is a
+larger defect than the one this story fixes, and it bounds how this story's absolute
+magnitudes should be read.
