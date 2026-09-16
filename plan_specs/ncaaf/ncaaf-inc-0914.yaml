@@ -9,12 +9,17 @@ metadata:
   name: ncaaf-inc-0914
   vertical: ncaaf
   card: https://trello.com/c/l8Rjkh8j
-  status: SHIPPED_PENDING_VERIFICATION  # cause MEASURED, fix code-complete + guards RED-proven 7/7.
-  # The outstanding half is a RUNTIME GATE, not scope: CI mocks all IO and cannot see a shell probe
-  # running against a live Dagit, so 7a is proven only when the NEXT CD deploy's own log shows the
-  # drain WAITING on an in-flight run (five deploys on 09-14 logged 'no in-flight runs' while runs
-  # were live — that is the before-state). No data restore is owed: the marts were rebuilt twice on
-  # 09-14 after the game day and the 09-15 tick correctly skipped on the game-day gate.
+  status: DONE  # cause MEASURED; fix shipped to main (afe81d23); guards RED-proven 14/14;
+  # RUNTIME GATE RUN AND PASSED on the box 2026-09-16 02:31-02:33 UTC, 4/4 criteria — see
+  # docs/ncaaf_inc_0914_evidence_reads.md §10f. Victim run 46931bf0 failed at wall 89.9 s (the
+  # incident produced 14432.8 s on the identical event shape, ~160x) carrying a PIPELINE_FAILURE
+  # event that names deploy afe81d23 and 'THIS RUN DID NOT FAIL ON ITS OWN INPUTS - re-run it
+  # (NCAAF-INC-0914)'; tags max_runtime=10800 + concurrency_group=sports_dbt_build confirmed on a
+  # run launched from the new image; the deploy still ended OK, so the attribution never rolled
+  # back a healthy deploy. The drain logged '2 in-flight run(s) active - waiting...' at the exact
+  # point five deploys on 09-14 logged 'no in-flight runs' while runs were live. No data restore
+  # was owed: the marts were rebuilt twice on 09-14 after the game day and the 09-15 tick correctly
+  # skipped on the game-day gate.
 spec:
   description: >
     sports_ncaaf_dbt_build_job run 06d7352c-5744-4902-b42d-a0c8aa4a43ba
@@ -317,3 +322,32 @@ spec:
           (kill+wait, not the Windows communicate() path — verified), so this was NOT a
           contributing cause here; but a surviving GRANDCHILD is not killed, which on a
           2-vCPU box is the E11.26 hazard. One logical discipline, two owners.
+
+      F10. ⭐ A VERIFICATION PROBE THAT READS `EventLogEntry.user_message` CANNOT SEE A
+          REPORTED DAGSTER EVENT — I shipped one in §10b and it returned a false negative
+          on a PASSING criterion. `instance.report_run_failed` routes through
+          `report_dagster_event`, which constructs the entry with `user_message=""` and
+          puts the text on `entry.dagster_event.message`. So the probe filtered on a field
+          that is STRUCTURALLY EMPTY for exactly the event class it was hunting: zero hits
+          on a perfectly healthy attribution, with "the message is absent" indistinguishable
+          from "I looked in the wrong place" (NF1.7 (a), inside the check written to close
+          the PM's own D1 constraint). The same defect was latent in R1's event dump, which
+          blanked the message on every dagster event — including the forcible-failure text
+          that is this incident's signature; it changed no conclusion only because the
+          timeline was read off event TYPES and TIMESTAMPS. BOTH are fixed, and the §10b
+          replacement reports a hit COUNT and dumps the terminal events verbatim so the two
+          outcomes are distinguishable. Generalises: any probe that filters a log/event
+          stream on one field must prove that field is populated for the class it targets,
+          and must render the not-found case as EVIDENCE rather than silence.
+
+      F11. THE `is_finished` GUARD IN §7b NOW HAS A PRODUCTION WITNESS, and it is the
+          clause the RED proof caught as vacuous (§7b's explanatory comment contains the
+          token, so a raw substring scan stayed GREEN with the real check deleted; fixed by
+          stripping comments in `_attribution_block()`). In the 2026-09-16 gate run
+          `intraday_schedule_job` COMPLETED SUCCESSFULLY in the ~46 s between the snapshot
+          and the attribution, and the guard declined to overwrite a terminal SUCCESS
+          (`skip 3c55016e … already SUCCESS`). Without it the deploy would have stamped a
+          FAILED-by-deploy message onto a run that succeeded — a FABRICATED failure,
+          strictly worse than the silence this story set out to fix. Worth carrying: an
+          attribution mechanism needs a terminal-state guard, and the guard is load-bearing
+          on the ordinary case, not the rare one.
