@@ -4,7 +4,25 @@ Written for the PM. Source of truth for the work itself: `plan_specs/nfl_fantasy
 (closeout + six follow-ups) and `docs/nf_wk_td1_touchdown_components.md` (the measurements).
 PR **#1137** → `dev`.
 
-**Status: `IN_PROGRESS`, PM flip pending.** Code complete and CI-green. Node 3's acceptance
+> ## ✅ RULED BY THE PM, 2026-09-16 — this document is now the RECORD of a settled decision,
+> ## not an open question. The rulings live in the spec's `closeout.followUps`.
+>
+> **D1** lens hold does NOT lift; criterion restated — the substrate-carries-TDs criterion is MET,
+> and the lens lifts when NF-INC-0916's corrected republish measures OK. **D2** gates the lens: yes;
+> now an incident, `NF-INC-0916` (card ISopvUYR). **D3** operator: HOLD the merge — #1137 lands at
+> INC-0916 node 4(ii). **D4** ungated posture accepted; the zero-clip re-measurement folds into
+> INC-0916 node 3. **D5** triaged. **D6** spec stays `IN_PROGRESS`, held for INC-0916.
+>
+> ⚠️⚠️ **STATE CORRECTION on D3, measured after the ruling landed:** #1137 was **already merged to
+> `dev`** (`7e0f1080`, 02:44:40Z). The intent is intact for a mechanical reason — the box image
+> ships from `main` (`orchestration_cd.yml` fires on `push: branches: [main]`), Vercel production is
+> `main`, the emission code is on `origin/dev` and **not** on `origin/main`, and no `dev→main` PR is
+> open. **But the control has moved:** the hold is no longer "do not merge #1137", it is
+> **"do not promote `dev`→`main` until NF-INC-0916 node 4"** — a routine promotion would ship the
+> emission *and* a changelog entry that is not yet true, and the next scheduled weekly-serving fire
+> would publish TD columns at uncorrected levels.
+
+**Status: `IN_PROGRESS`, held for NF-INC-0916.** Code complete and CI-green. Node 3's acceptance
 criterion — "record the before/after table" — is **not yet met**: the AFTER side needs one
 ~9-minute operator staging build. Nothing in this story publishes.
 
