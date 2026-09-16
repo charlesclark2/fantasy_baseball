@@ -11,6 +11,32 @@ metadata:
   vertical: nfl_fantasy
   card: https://trello.com/c/3D2HnxXv   # EPIC NF-SEASON; WVR1 card linked at kickoff by PM
   status: IN_PROGRESS
+  # ✅ PHASE A COMPLETE AND ACCEPTED (PM, 2026-09-16). Shipped + deployed + runtime-gated:
+  #   GET /fantasy/nfl/waiver-pool, `sleeper.refresh_league_rosters` (the one roster-refresh
+  #   owner), `waiver_pool.py`, 18 guards RED-proven over 7 breaks, and the my-teams copy hotfix.
+  #   PRs #1147 / #1151 / #1153, all on main. Spec stays IN_PROGRESS for Phase B + fact columns.
+  # ⚖️ PM DISPOSITIONS ON WVR1's FOUR OPEN QUESTIONS (2026-09-16):
+  #   Q1 PHASE B WAITS FOR RC1's FRONTEND. One frontend story at a time and RC1 holds the slot
+  #      (green-lit first; the recap surface is the retention product's debut). Phase A serving a
+  #      real payload does not change the queue — it makes Phase B fast when the slot opens.
+  #      ✅ PERMITTED NOW: prepare fixtures from the live payload. ⛔ NO page code.
+  #   Q2 RC1 OWNS WEEKS 2-18. RC1 wires `run_realized_week` into a scheduled job — sequenced
+  #      behind INC-0916's stats ingest, gated on RC1's own FINAL count-rule so a pre-MNF fire
+  #      publishes nothing partial, with a freshness contract and heartbeat — landing before
+  #      RC1's Phase B ships. ⛔ WVR1 CONSUMES; WVR1 NEVER WRITES IT.
+  #   Q3 RC1 OWNS THE CONTRACT. The contract-before-publish directive is issued and
+  #      `run_realized_week` is its named first target (the NF-INC-0917B pattern: validated dump
+  #      + write-gate + measured-first, never blanket). ⚠️ The week-1 publish discrepancy WVR1
+  #      raised is RESOLVED HERE — see followUp ⑬ — and the E9.49 window IS partially closed:
+  #      the contract is validated AGAINST THE STORED ARTIFACT, not written fresh. WVR1's own
+  #      "12th uncontracted writer" framing was substantively wrong; corrected at ⑭.
+  #   Q4 THE FACT COLUMNS ARE WVR1's, gated on Q2 (cadence) and Q3 (contract) existing first.
+  #      Scope as stated: sum published weeks per player, score through `league_scoring.score_row`
+  #      under RC1's `REALIZED_STAT_FIELD`, attach to pool rows, flip `ordering`. The per-week
+  #      fan-out bound is a REQUIREMENT, not a note (⑯). Labelled as what players HAVE DONE; no
+  #      forecast language; `ordering` states its basis. ⛔ The VALUE column still waits for
+  #      NF-ROS1 — realized facts and projected value stay different columns with different
+  #      provenance when both exist.
 spec:
   description: >
     For each imported league (Sleeper first), rank the league's
@@ -150,7 +176,16 @@ spec:
     #       `s3://credence-prod-s3-api-cache/fantasy/nfl/realized/` returns NOTHING while the
     #       control prefix `fantasy/nfl/2026/` returns the boards — so this is a genuine absence,
     #       not a permissions failure (NF1.7 (a): a check that cannot look must not read as empty).
-    #   ⚠️⚠️ AND THE PUBLISHER HAS NO RUNNER — corrected here rather than left as the overclaim it
+    #       ⛔⛔ SUPERSEDED — see followUp ⑬. The bullet above is left verbatim because it was TRUE
+    #       WHEN MEASURED (05:57:03Z) and FALSE WHEN RESTATED (~07:49Z): the artifact landed at
+    #       2026-09-16T06:43:50Z, BETWEEN those two instants. Week 1 IS published (1,118 rows,
+    #       32 teams, `completeness: final`, 16/16 games). A measured ABSENCE is the one class of
+    #       fact a later event can silently overturn; carrying one forward unrefreshed is the
+    #       defect, not the measurement.
+    #   ⚠️⚠️ AND THE PUBLISHER HAS NO RUNNER — ⛔⛔ THIS CLAIM IS ITSELF WRONG; see followUp ⑪.
+    #       It has a full CLI (`run_realized_week.py --season --week --publish --smoke`), and that
+    #       CLI is what published week 1. The grep below was scoped to three directories and never
+    #       looked in the one the module lives in. Left verbatim as the record of the error.
     #       was on first writing. `realized_week.publish` exists but is referenced ONLY by tests:
     #       `grep -rn realized_week pipeline/ scripts/ services/` is EMPTY, so there is no Dagster
     #       op, no schedule and no script that invokes it. That is RC1's own OverlapCheck item
@@ -599,3 +634,103 @@ spec:
       confirmed separately. A positive control (`pool` must be able to answer IN POOL) and
       an explicit board-membership precondition were added before the result was believed.
       The NF1.7 (a) class, in the runtime gate itself.
+
+
+      ⑬ ✅ THE WEEK-1 PUBLISH DISCREPANCY THE PM FLAGGED — RESOLVED, AND THE ERROR WAS
+      MINE (2026-09-16). RC1's recap said week 1 was published by an operator CLI run; my
+      recap said the artifact was unpublished. RC1 is right. The artifact exists:
+      `fantasy/nfl/realized/2026/1/players.json` (1,104,121 B) + `manifest.json`, 1,118
+      rows, 32 teams, `completeness: "final"`, 16/16 realized games.
+      ⭐ BUT IT IS NEITHER OF THE TWO OPTIONS THE PM FRAMED ("one of those is wrong"):
+      BOTH RECORDS WERE ACCURATE ABOUT DIFFERENT INSTANTS. Dated from the transcript and
+      from S3's true UTC `LastModified` (read via boto3 — ⛔ never `aws s3 ls`, which
+      prints SHELL-LOCAL time and would have shown 01:43:50 for a 06:43:50Z object):
+        • 05:57:03Z — I list the prefix two-sided against a control. It is genuinely EMPTY.
+        • 06:43:50Z — the artifact is published (`generated_at` 06:43:49Z).
+        • 06:45:12Z — I commit ⑪, correcting the "publisher has no caller" claim. I am
+          writing ABOUT the publisher 82 seconds after it published, and never re-read.
+        • ~07:49Z — I state "still unpublished (S3 prefix empty, verified two-sided)" to
+          the PM as present-tense fact. It has been false for 65 minutes.
+      ⭐⭐ THE DURABLE RULE, and it is the TEMPORAL form of the scan-boundary rule this
+      session already adopted: A MEASURED ABSENCE HAS A TIMESTAMP, AND ABSENCE IS THE ONE
+      CLASS OF FACT A LATER EVENT CAN SILENTLY OVERTURN. A measured PRESENCE stays true
+      (the file WAS there at T); a measured ABSENCE expires the moment anything lands.
+      Carrying one forward unrefreshed into a present-tense claim asserts something
+      unmeasured. Operationally: RE-READ AN ABSENCE IMMEDIATELY BEFORE ASSERTING IT, and
+      state absences with their measurement time ("empty as of 05:57Z"), never bare.
+      ⚠️ NOTE THE COMPOUNDING: I corrected the CAPABILITY claim (⑪, the CLI exists) and
+      left the STATE claim standing beside it — when the correction is that a mechanism
+      exists, re-check whether that mechanism has since RUN. The two are one question.
+      ⇒ the spec-premise rule applies to session recaps, as the PM said; this is the
+      sharper version — a recap must re-verify its perishable claims, not just quote them.
+
+      ⑭ ⛔ CORRECTION TO MY OWN Q3 FRAMING — `run_realized_week` IS NOT "the 12th
+      UNCONTRACTED WRITER". That was wrong in SUBSTANCE, not merely stale, and it would
+      have sent the contract work at a target that mostly already exists. Measured
+      against the source and the published artifact (2026-09-16):
+        WHAT IT ALREADY HAS
+        • A DERIVED column contract: `realized_week.required_columns()` is built from the
+          scorer's own maps (`REALIZED_STAT_COLUMNS | REALIZED_KEY_COLUMNS |
+          {REALIZED_PPR_COLUMN} | EXPLANATION_COLUMNS`) — adding a scorer term widens the
+          read automatically. This is the NF-C0e cure, not the defect (a hand list is what
+          leaks the next field silently).
+        • Those columns are named explicitly in the SELECT, so a column that VANISHED from
+          the lake fails loudly rather than arriving as a silent null.
+        • The contract is SERVED: `manifest["columns"]`, so a consumer can check the
+          artifact carries what its scorer needs before scoring.
+        • `publish()` RAISES on a failed write (the NF-FRESH1 lesson, already paid for).
+        • `completeness` is a computed count rule with a HARD refusal on `not_started`.
+        THE HONEST RESIDUAL, and it is narrow
+        • The contract is DECLARED AND SERVED BUT NOT ASSERTED AGAINST THE OUTPUT.
+          `manifest["columns"] = list(required_columns())` restates the REQUEST; nothing
+          checks the emitted rows actually carry those columns with usable values. A lake
+          column that exists but is unpopulated would be advertised and then scored as
+          silent zeros — the NF-C0e "reads the value back under the key the code wrote"
+          shape, one level out.
+        • MEASURED ON THE PUBLISHED WEEK 1, the gap is currently BENIGN: 47/47 declared
+          columns present, 0 all-NULL. Five are all-ZERO (`def_safeties`, `fg_made_0_19`,
+          `fg_made_60_`, `rushing_2pt_conversions`, `special_teams_tds`) — legitimately
+          rare events across 16 games, NOT a defect, and stated so the next reader does
+          not "fix" them.
+      ⇒ THE ASK FOR RC1 IS CORRESPONDINGLY SMALL and matches the PM's measured-first
+        directive: a publish-time assertion that each declared STAT column is non-null on
+        at least some rows (the NF-K1 shape — count rows CARRYING the value, never rows),
+        plus a floor on `n_players`/`n_teams`. ⛔ NOT a blanket schema validator.
+
+      ⑮ ⚠️ A STRUCTURAL LIMIT ON THE Q4 FACT COLUMNS, MEASURED — THE REALIZED ARTIFACT
+      CARRIES NO TEAM-DEFENCE ROWS. Position census of the published week 1 (1,118 rows):
+      LB 180 · WR 151 · CB 119 · DT 104 · SAF 90 · RB 89 · TE 80 · DE 78 · QB 37 · OT 37 ·
+      K 32 · P 31 · … — individual defenders, but ZERO DST/DEF rows, and no
+      points-allowed column of any kind. This is not a bug; RC1 documents it at source,
+      quoted verbatim rather than paraphrased (`realized_stat_fields.py`):
+        "The `dst_*` family is TEAM-grained (points and yards allowed). `stats_player_week`
+         is player-grained and carries neither. They are absent here; supplying them needs
+         a team-level source, which is a deliberate second read rather than a column on
+         this row."
+      ⇒ CONSEQUENCE FOR WVR1, which must be designed in and not discovered: the fact
+        columns can cover QB/RB/WR/TE/K but NOT DST — and the gate league rosters a DST
+        slot with 21 available defences in the pool. So the surface will have a genuine
+        per-position hole at exactly one of the six rostered positions.
+      ⛔ AND THE HOLE MUST NAME ITSELF. "No realized facts for this team defence" and
+        "this defence did nothing" must NOT render identically — that is precisely the
+        NF-C6b/NF-K1 class this repo has already paid for twice (the D/ST symptom that
+        cost two investigations because three distinct causes rendered the same). The
+        pool's existing refusal/caveat vocabulary is the right home: a stated reason,
+        not a blank. K is unaffected (32 K rows present).
+
+      ⑯ 📌 THE Q4 FAN-OUT BOUND IS A REQUIREMENT, AND THERE IS A CHEAPER SHAPE TO RAISE
+      WITH RC1. Per the PM: the per-week read grows to ~17 GETs by season's end, so the
+      fact columns ship with EITHER (a) a bounded batched read with a LOUD REFUSAL over
+      the cap — never a silent truncation, which would compute a season-to-date total
+      from a subset of weeks and present it as complete (the most dangerous shape here,
+      because a short total looks exactly like a quiet player) — OR (b), preferable and
+      to be raised with RC1: a CUMULATIVE SEASON-TO-DATE artifact published beside the
+      weekly one, which turns WVR1's read into ONE GET forever regardless of week.
+      ⭐ (b) also removes the fan-out's failure mode entirely rather than bounding it, and
+        it is cheapest for RC1 to add NOW, while it is wiring the recurring cadence (Q2) —
+        the same write already has every week in hand. Raising it after the cadence ships
+        means a second pass over the same job. A one-line note naming this ask is dropped
+        in RC1's spec record (`nf-wk-rc1.yaml`), the same mechanism ruling 3 used for the
+        seam split, so neither session duplicates the work.
+      ⚠️ WVR1 does not decide this — RC1 owns the artifact. If (b) is declined, (a) is the
+        requirement and the cap refusal is a first-class payload state, not a log line.
