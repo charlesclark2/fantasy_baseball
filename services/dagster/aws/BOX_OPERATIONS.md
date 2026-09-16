@@ -98,12 +98,27 @@ CD = GitHub Actions OIDC → SSM RunCommand → `deploy.sh` on the box (auto on 
 1. `git pull origin main` (FIRST — so env-parity validates the new env)
 2. env-parity check vs `env.required` (every key present + non-empty)
 3. snapshot images → `:rollback`
-4. graceful drain (≤600s for in-flight runs)
+4. graceful drain (≤600s for in-flight runs) — **waits on every NON-TERMINAL run** (QUEUED/NOT_STARTED/STARTING/STARTED/CANCELING), then **snapshots the runs that have a live worker** (STARTING/STARTED only) so step 7b can attribute them
 5. **`docker compose up -d --build` + `--profile capture build`**
 6. reconcile host crontab (capture.crontab)
 7. verify (daemon up / defs import / dbt-runner health / PEM materialized / IMDS hop-2) → **rollback on any failure**
+7b. **fail-and-attribute** — any run from step 4's snapshot that is still non-terminal is marked FAILED naming this deploy + commit SHA (best-effort; never rolls back)
 
 🚨 **BAKED-IMAGE DRIFT (the recurring gotcha):** a `git pull` updates the working tree but the running containers keep the OLD image — code is COPY'd in at build. **Only `up -d --build` ships new code.** A "successful" deploy without `--build` silently runs stale code.
+
+⚠️ **EVERY DEPLOY RECREATES THE RUN WORKER, AND THE BOX DEPLOYS OFTEN — this is the box's single
+biggest source of unexplained run failures (NCAAF-INC-0914, 2026-09-14).** `dagster-codeloc` is
+both the code server and the run worker (`DefaultRunLauncher` executes runs as subprocesses inside
+it), so `up -d --build` kills every run that has a live worker, **by construction**. Measured on
+2026-09-14: **11 deploys in one day**, six of them between 16:56 and 22:46, and one of them killed
+**five runs** — which surfaced at three different latencies (~3 min / 26 min / **4 h**) depending
+only on what ceiling each job happened to carry. ⇒ **the accepted trade (PM ruling 2026-09-15) is
+deploy latency for run safety:** the drain now waits for the box to be idle, bounded at ≤600 s and
+predictably worst around **12:00–13:28 UTC** (`daily_ingestion_job`, ~86 min) and at the top of each
+hour. ⛔ **If deploy latency ever becomes a complaint, the lever is BATCHING MERGES to `main` — never
+shortening the drain** (that is INC-36's own root cause, and the E2.1-r "don't raise a bound to make
+a symptom vanish" rule). The leaf-run census card (`ZPmBj8PF`) reads the box's operating picture
+from this section — extend it here rather than forking a second schedule ledger.
 
 🟥 **The merge bar for box code is NOT CI-green** (CI mocks all IO). For pipeline / serving / writers / sensors / date-tz / boto3 / DuckDB-on-box changes: **CI green AND the relevant op actually RAN once on the box** (a scoped run is fine — skip the stable W1 pitch rebuild, run the targeted chain). See CLAUDE.md "RUNTIME GATE".
 

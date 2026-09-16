@@ -231,6 +231,52 @@ while :; do
   sleep 20; waited=$((waited+20))
 done
 
+# --- 4b. snapshot what this recreate is about to kill (NCAAF-INC-0914) ------
+# The drain above waits, but it does NOT wait forever: past DRAIN_TIMEOUT it proceeds with a
+# WARN, and `daily_ingestion_job` alone runs ~86 min. When that happens the runs die anyway —
+# and before this block they died SILENTLY, surfacing hours later with Dagster's cause-free
+# "This job is being forcibly marked as failed" (measured 2026-09-14: 4h02m for run 06d7352c).
+# This snapshot is what lets §7b attribute them instead.
+#
+# ⭐ TAKEN **BEFORE** THE RECREATE, DELIBERATELY, AND NEVER RE-DERIVED AFTERWARDS. A run the NEW
+# worker starts must be untouchable, and the only way to guarantee that is to fix the victim set
+# while the OLD worker still owns it.
+#
+# ⚠️⚠️ THE DOOMED SET IS **NARROWER THAN THE DRAIN SET**, and conflating the two is the trap.
+# "Every in-flight run is a subprocess of dagster-codeloc" is true of STARTING/STARTED — those
+# have a worker process, and a recreate kills it by construction. It is NOT true of QUEUED /
+# NOT_STARTED: a queued run is a ROW IN POSTGRES awaiting dequeue, it survives the recreate
+# untouched, and the new daemon launches it normally moments later. Marking those failed would
+# be a FALSE attribution against a run that is alive and working — the mirror image of the
+# defect this block exists to fix. CANCELING is excluded too: it is already being terminated
+# deliberately, so crediting its death to the deploy would be wrong.
+# ⇒ the drain WAITS on QUEUED+NOT_STARTED+STARTING+STARTED+CANCELING; only STARTING+STARTED are DOOMED.
+doomed_runs() {
+  local raw
+  raw="$(curl -fsS "$LOCAL_GQL" -H 'Content-Type: application/json' \
+    --data '{"query":"{ runsOrError(filter:{statuses:[STARTING,STARTED]}, limit:50){ __typename ... on Runs { results { runId } } } }"}' 2>/dev/null)" \
+    || { echo UNKNOWN; return 0; }
+  printf '%s' "$raw" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+r = (d.get('data') or {}).get('runsOrError') or {}
+if r.get('__typename') != 'Runs':
+    raise SystemExit(1)
+print(' '.join(x['runId'] for x in r.get('results', [])))
+" 2>/dev/null || { echo UNKNOWN; return 0; }
+}
+DOOMED_RUNS="$(doomed_runs)"
+if [ "$DOOMED_RUNS" = "UNKNOWN" ]; then
+  # NF1.7(a): an unevaluable probe is never scored as "nothing to do". Say so loudly — the
+  # consequence is a run that dies unattributed, i.e. exactly the pre-fix behaviour.
+  log "  ALERT: could not snapshot in-flight runs before the recreate — anything this deploy kills will NOT be attributed and will surface later on the run-monitor's cap with no cause"
+  DOOMED_RUNS=""
+elif [ -n "$DOOMED_RUNS" ]; then
+  log "  snapshot: $(printf '%s' "$DOOMED_RUNS" | wc -w | tr -d ' ') run(s) with a live worker will be killed by the recreate — ${DOOMED_RUNS}"
+else
+  log "  snapshot: no run has a live worker — the recreate kills nothing"
+fi
+
 # --- 5. rebuild + redeploy (core + capture profile) -------------------------
 log "rebuild + redeploy core services"
 # INC-36 (2026-07-29): a SINGLE transient container-removal race used to cost a full
@@ -374,6 +420,46 @@ $COMPOSE exec -T dagster-codeloc head -1 /tmp/snowflake_rsa_key.pem | grep -q 'B
 # instance role reachable from inside a container ⇒ IMDSv2 hop-limit>=2 + region ok
 $COMPOSE exec -T dagster-codeloc python -c "import boto3; boto3.client('sts').get_caller_identity()" \
   || rollback "container cannot reach instance role (IMDS hop-limit / region?)"
+
+# --- 7b. fail-and-attribute the runs this deploy killed (NCAAF-INC-0914) ----
+# Runs ONLY over the pre-teardown snapshot from §4b — never a fresh query, so a run the new
+# worker has since started cannot be touched. `is_finished` skips anything that completed (or
+# that Dagster's own 180s start-timeout already failed) between the snapshot and now.
+# Placed here because the verify above has already proven codeloc is up and `import pipeline`
+# works; `DagsterInstance.get()` itself only needs DAGSTER_HOME + Postgres.
+# Best-effort by design: a failure here must never roll back a HEALTHY deploy — the runs are
+# already dead either way, and without this they simply surface later with no cause.
+if [ -n "${DOOMED_RUNS}" ]; then
+  log "attributing the run(s) this deploy killed"
+  $COMPOSE exec -T -e DEPLOY_SHA="${NEW_HEAD}" -e DOOMED_RUNS="${DOOMED_RUNS}" \
+    dagster-codeloc python - <<'PY' 2>&1 | sed 's/^/    /' \
+    || log "  WARN: attribution step failed — the killed run(s) will still surface on the run-monitor's cap, just without a cause"
+import os
+from dagster import DagsterInstance
+
+sha = os.environ["DEPLOY_SHA"][:8]
+ids = os.environ["DOOMED_RUNS"].split()
+MESSAGE = (
+    f"Killed by the box deploy of {sha}. `docker compose up -d --build` recreated the "
+    "dagster-codeloc container, and every run with a live worker is a SUBPROCESS of that "
+    "container, so this run's worker died with it. The drain did not clear within "
+    "DRAIN_TIMEOUT, so the deploy proceeded (see the deploy log). "
+    "\u26a0\ufe0f THIS RUN DID NOT FAIL ON ITS OWN INPUTS \u2014 re-run it. (NCAAF-INC-0914)"
+)
+with DagsterInstance.get() as inst:
+    for rid in ids:
+        rec = inst.get_run_record_by_id(rid)
+        if rec is None:
+            print(f"skip   {rid[:8]} \u2014 no run record")
+            continue
+        run = rec.dagster_run
+        if run.is_finished:
+            print(f"skip   {rid[:8]} {run.job_name} \u2014 already {run.status.value}")
+            continue
+        inst.report_run_failed(run, message=MESSAGE)
+        print(f"FAILED {rid[:8]} {run.job_name} \u2014 attributed to deploy {sha}")
+PY
+fi
 
 # --- success ----------------------------------------------------------------
 for img in "${ROLLBACK_IMAGES[@]}"; do docker image inspect "${img}:rollback" >/dev/null 2>&1 && docker rmi "${img}:rollback" >/dev/null 2>&1 || true; done

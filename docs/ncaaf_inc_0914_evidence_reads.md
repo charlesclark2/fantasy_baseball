@@ -704,3 +704,94 @@ the top of each hour, which is the busiest minute on this box.
 - **No `.env` change, no schedule toggle, no crontab edit.** Nothing in this fix needs one.
 - **No re-run of the four other runs killed on 09-14.** All four are hourly/daily jobs that have
   since run green many times (`sports_nfl_dbt_build_job` 09-15 18:00:44, 192.6 s).
+
+---
+
+## 10. RUNTIME GATE — proving fail-and-attribute on the box (PM Decision 1, open until run)
+
+CI mocks all IO and cannot exercise a shell probe against a live Dagit, so **this criterion is not
+met until the procedure below has run on the box.** It must run **after** the merge deploy, so the
+new `deploy.sh` is the one on disk.
+
+### 10a. Why a deliberately forced case is the *honest* equivalent
+
+With §7a in place the drain now **waits**, so in normal operation the attribution never fires —
+which is the point, and also why it cannot be observed passively. The attribution's real job is the
+case the drain cannot prevent: **the drain giving up at `DRAIN_TIMEOUT`.** Reproducing that honestly
+needs a run longer than the timeout — so rather than park a deploy for 10 minutes, shorten the
+timeout for one manual run. `DRAIN_TIMEOUT` is already env-overridable
+(`DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-600}"`), so this exercises the **real code path with a real run**;
+nothing is stubbed and no source is edited.
+
+`sports_nfl_dbt_build_job` is the victim of choice: ~193 s (measured 2026-09-15), **idempotent**
+(it rebuilds marts from the lake, so being killed costs nothing and the next run redoes it), and it
+is one of the two jobs this PR tagged — so the same test also confirms §7b's tags landed.
+
+### 10b. Procedure
+
+**Step 1 — launch the victim** (Dagit → `sports_nfl_dbt_build_job` → Launch Run), or from the box:
+
+```bash
+docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml \
+  exec -T dagster-codeloc dagster job launch -j sports_nfl_dbt_build_job -w /app/services/dagster/aws/workspace.yaml
+```
+
+**Step 2 — within ~60 s, while it is still running, force a deploy past the drain:**
+
+```bash
+sudo -u ec2-user -H DRAIN_TIMEOUT=20 bash /home/ec2-user/app/services/dagster/aws/deploy.sh 2>&1 \
+  | tee /tmp/ncaaf-inc-0914-runtime-gate.log
+```
+
+### 10c. Expected output — all five lines, in this order
+
+```
+[deploy HH:MM:SS]   1 in-flight run(s) active — waiting…                 ← §7a: the OLD code said "no in-flight runs"
+[deploy HH:MM:SS]   WARN: drain timed out after 20s — proceeding …
+[deploy HH:MM:SS]   snapshot: 1 run(s) with a live worker will be killed by the recreate — <runid>
+[deploy HH:MM:SS] attributing the run(s) this deploy killed
+    FAILED <runid8> sports_nfl_dbt_build_job — attributed to deploy <sha8>
+```
+
+**Then confirm the run itself carries the cause** (substitute the run id):
+
+```bash
+docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml \
+  exec -T -e RID=<runid> dagster-codeloc python - <<'PY'
+import os, datetime as dt
+from dagster import DagsterInstance
+RID = os.environ["RID"]
+with DagsterInstance.get() as inst:
+    rec = inst.get_run_record_by_id(RID)
+    r = rec.dagster_run
+    wall = round(rec.end_time - rec.start_time, 1) if (rec.start_time and rec.end_time) else None
+    print("status    :", r.status.value, "| wall_secs:", wall)
+    print("max_runtime tag:", r.tags.get("dagster/max_runtime"),
+          "| concurrency_group:", r.tags.get("concurrency_group"))
+    for e in inst.all_logs(RID):
+        if e.user_message and "NCAAF-INC-0914" in e.user_message:
+            print("ATTRIBUTION EVENT:", e.user_message)
+PY
+```
+
+### 10d. Pass criteria — all four
+
+| # | Criterion | Why it is the criterion |
+|---|---|---|
+| 1 | `status = FAILURE` and `wall_secs` is **~the run's real age (seconds/minutes)**, not ~10800 | proves the attribution beat the run-monitor's cap. Before this change the same event produced **14432.8 s**. |
+| 2 | An event contains `NCAAF-INC-0914` **and the deploy's 8-char SHA** | the PM's constraint: a bare FAILED reproduces the cause-free alert one layer down |
+| 3 | `max_runtime tag = 10800`, `concurrency_group = sports_dbt_build` | §7b's tags are on the image and reached the box |
+| 4 | The deploy still ends `✅ deploy OK` | the attribution is best-effort and must never roll back a healthy deploy |
+
+### 10e. Two things that are **not** failures
+
+- **A second run appears and succeeds.** The `sports_nfl_dbt_schedule` tick or a queued run may
+  launch after the recreate — that run is **not** in the snapshot and must be left alone. Seeing it
+  finish green is the ordering guarantee working, not a miss.
+- **`skip <runid8> … — already FAILURE`** in the attribution output. If Dagster's own 180 s
+  start-timeout got there first, the `is_finished` check correctly declines to overwrite a terminal
+  status.
+
+⚠️ **This deploy rebuilds and recreates the containers for real** — it is a normal deploy with a
+shortened drain, not a simulation. Run it outside **12:00–13:30 UTC** and away from the top of the
+hour, and expect ~60–90 s of orchestrator downtime exactly as any deploy causes.
