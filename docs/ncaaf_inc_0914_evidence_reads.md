@@ -290,7 +290,11 @@ with DagsterInstance.get() as inst:
     for e in inst.all_logs(RID):
         n += 1
         et = e.dagster_event.event_type_value if e.dagster_event else "LOG"
-        raw = (e.user_message or "").replace("\n", " \\n ")
+        # NOTE: a REPORTED dagster event carries user_message="" and puts its text on
+        # dagster_event.message. Reading user_message alone blanks every such event —
+        # including the forcible-failure text that is this incident's own signature.
+        de = e.dagster_event
+        raw = ((de.message if de is not None else None) or e.user_message or "").replace("\n", " \\n ")
         msg = raw[:400] + (f"   [...{len(raw)} chars total]" if len(raw) > 400 else "")
         print(u(e.timestamp), "|", et, "|", e.step_key or "-", "|", msg)
     print("-" * 78)
@@ -755,10 +759,21 @@ sudo -u ec2-user -H DRAIN_TIMEOUT=20 bash /home/ec2-user/app/services/dagster/aw
 
 **Then confirm the run itself carries the cause** (substitute the run id):
 
+⚠️ **`RID=<runid>` is a placeholder — substitute the real id.** Left literal, bash reads `<` as an
+input redirect and the whole heredoc dies with `-bash: runid: No such file or directory`.
+
+⚠️ **Read `dagster_event.message`, NOT `user_message`.** `instance.report_run_failed` routes through
+`report_dagster_event`, which builds the `EventLogEntry` with **`user_message=""`** and puts the text
+on `entry.dagster_event.message`. A probe filtering on `user_message` therefore searches a field that
+is *structurally empty for exactly the event class it is hunting* — it returns zero hits on a
+perfectly healthy attribution, and "absent" is indistinguishable from "looked in the wrong place"
+(NF1.7 (a)). The read below reports a hit COUNT and dumps the terminal events verbatim, so both
+outcomes are legible.
+
 ```bash
 docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml \
-  exec -T -e RID=<runid> dagster-codeloc python - <<'PY'
-import os, datetime as dt
+  exec -T -e RID=46931bf0-f2f7-481f-b3c8-9f8003fc1c9e dagster-codeloc python - <<'PY'
+import os
 from dagster import DagsterInstance
 RID = os.environ["RID"]
 with DagsterInstance.get() as inst:
@@ -768,11 +783,28 @@ with DagsterInstance.get() as inst:
     print("status    :", r.status.value, "| wall_secs:", wall)
     print("max_runtime tag:", r.tags.get("dagster/max_runtime"),
           "| concurrency_group:", r.tags.get("concurrency_group"))
-    for e in inst.all_logs(RID):
-        if e.user_message and "NCAAF-INC-0914" in e.user_message:
-            print("ATTRIBUTION EVENT:", e.user_message)
+    logs = list(inst.all_logs(RID))
+    hits = 0
+    for e in logs:
+        de = e.dagster_event
+        msg = (de.message if de is not None else None) or e.user_message or ""
+        et = de.event_type_value if de is not None else "(user log)"
+        if "NCAAF-INC-0914" in msg:
+            hits += 1
+            print(f"ATTRIBUTION EVENT [{et}]:", msg)
+    print("--- entries scanned:", len(logs), "| NCAAF-INC-0914 hits:", hits)
+    print("--- terminal events verbatim ---")
+    for e in logs:
+        de = e.dagster_event
+        if de is not None and de.event_type_value in ("RUN_FAILURE", "RUN_CANCELING", "ENGINE_EVENT"):
+            print(" ", de.event_type_value, "|", (de.message or "").replace("\n", " ")[:400])
 PY
 ```
+
+`hits: 0` **with** a RUN_FAILURE/PIPELINE_FAILURE event carrying some *other* message is the real
+failure — the deploy log would then be printing an attribution line from the shell while the run
+itself carries no cause. `hits: 0` with the terminal dump empty means the probe, not the fix, is
+broken.
 
 ### 10d. Pass criteria — all four
 
@@ -795,3 +827,66 @@ PY
 ⚠️ **This deploy rebuilds and recreates the containers for real** — it is a normal deploy with a
 shortened drain, not a simulation. Run it outside **12:00–13:30 UTC** and away from the top of the
 hour, and expect ~60–90 s of orchestrator downtime exactly as any deploy causes.
+
+---
+
+## 10f. RUNTIME GATE — RUN AND PASSED, 2026-09-16 02:31–02:33 UTC
+
+Run on the box by the operator, deploy `afe81d23` (the `dev`→`main` merge of PR #1136). The victim
+was `sports_nfl_dbt_build_job` run `46931bf0-f2f7-481f-b3c8-9f8003fc1c9e`.
+
+**The gate ran under the right preconditions**, which is itself measured rather than assumed: the
+deploy's own first line read `git pull origin main (from afe81d23) … Already up to date`, so the
+merge's CD deploy had already installed the new `deploy.sh` and **this was the second deploy** —
+the one §9a says is the first to run the new drain. The new log lines firing at all is the
+confirmation.
+
+### Deploy log, verbatim (all five §10c lines, in order)
+
+```
+[deploy 02:31:37] draining in-flight Dagster runs (timeout 20s)
+[deploy 02:31:37]   2 in-flight run(s) active — waiting…
+[deploy 02:31:57]   2 in-flight run(s) active — waiting…
+[deploy 02:31:57]   WARN: drain timed out after 20s — proceeding (runs may retry). …
+[deploy 02:31:57]   snapshot: 2 run(s) with a live worker will be killed by the recreate — 46931bf0… 3c55016e…
+[deploy 02:32:43] attributing the run(s) this deploy killed
+    FAILED 46931bf0 sports_nfl_dbt_build_job — attributed to deploy afe81d23
+    skip   3c55016e intraday_schedule_job — already SUCCESS
+[deploy 02:32:45] ✅ deploy OK — main (afe81d23) live on the box; all checks passed
+```
+
+The first line is §7a. **Five deploys on 09-14 logged `no in-flight runs` at that exact point while
+runs were live** — that is the before-state, and it is the whole incident.
+
+### Pass criteria — 4/4
+
+| # | Criterion | Measured |
+|---|---|---|
+| 1 | `FAILURE`, wall ≈ the run's real age | **`FAILURE`, wall_secs 89.9** — the incident produced **14432.8 s** on the identical event shape (**~160× faster**) |
+| 2 | An event names `NCAAF-INC-0914` **and** the deploy SHA | ✅ `PIPELINE_FAILURE`, 1 hit in 12 entries, naming `afe81d23` and `⚠️ THIS RUN DID NOT FAIL ON ITS OWN INPUTS — re-run it. (NCAAF-INC-0914)` |
+| 3 | `max_runtime 10800`, `group sports_dbt_build` | ✅ both, on a run launched from the new image |
+| 4 | Deploy still ends `✅ deploy OK` | ✅ — the attribution never rolled back a healthy deploy |
+
+### ⭐ The `skip … already SUCCESS` line is the strongest evidence in the run
+
+§10e anticipated `skip … already FAILURE` (Dagster's 180 s start-timeout winning the race). What
+actually happened is better: `intraday_schedule_job` **completed successfully** in the ~46 s between
+the snapshot (02:31:57) and the attribution (02:32:43), and the `run.is_finished` guard declined to
+overwrite a terminal SUCCESS.
+
+That clause is the one the RED proof caught as **vacuous** mid-build — §7b's explanatory comment
+contains the token `is_finished`, so a raw substring scan stayed GREEN with the real check deleted
+(fixed by making `_attribution_block()` strip comment lines). It now has a production witness
+proving it does real work: **the attribution does not blindly fail everything it snapshotted.**
+Without it this deploy would have stamped a FAILED-by-deploy message onto a run that succeeded —
+a fabricated failure, strictly worse than the silence the story set out to fix.
+
+### The page carries the cause too, not just the run record
+
+`pipeline/sensors/run_failure_alert_sensor.py` builds its email body from
+`context.failure_event.message` — the exact `PIPELINE_FAILURE` event above — and the run's log
+carries `Sensor "run_failure_alert_sensor" acted on run status FAILURE of run 46931bf0…`, so it
+fired on this run. ⇒ the PM's Decision-1 constraint ("a bare FAILED reproduces the cause-free alert
+one layer down") is satisfied **end to end**: the operator's email for `46931bf0` named the deploy
+SHA and said re-run it, where the 09-14 email carried only *"forcibly marked as failed… resources
+may not have been fully cleaned up."*
