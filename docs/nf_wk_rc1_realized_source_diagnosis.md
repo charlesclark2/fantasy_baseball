@@ -249,3 +249,88 @@ un-ingested tier). That is a scoping decision for Phase A, not a defect.
    consequence — a deliberate decision, not a tidy-up.
 5. **Team D/ST realized scoring needs a team-level read** (`schedules` for points allowed,
    `stats_team_week` for yards allowed). 21 of 25 captured terms.
+
+---
+
+# D2 — the team D/ST construction: STOPPED AND REPORTED, not shipped
+
+**Status: the PM's stop condition fired.** The ruling said *"If the team-level path turns out not to
+be cheap-ish after all, stop and report rather than absorbing the growth silently."* It did, and this
+is the report. The module (`app/backend/services/realized_dst.py`) is committed because its proven
+parts are load-bearing for whatever comes next, but **it is not wired into a served surface.**
+
+## What the cross-check turned out to be
+
+Better than the ruling assumed. The ruling anticipated *"where none [an independently-computed
+figure] exists, prove the construction two-sided."* One DOES exist: **Sleeper scores every started
+defence under that league's own settings**, so `starters_points` for the DEF seat is an external
+authority computed by someone else. That converts D2 from a two-sided sanity argument into a
+measured reproduction rate — which is why the residual below was found at all.
+
+## What is PROVEN, and worth keeping regardless
+
+1. ⭐⭐ **"Points allowed" is NOT the opponent's final score.** A D/ST is charged only with what the
+   opposing OFFENSE scored; a pick-six against your quarterback is not your defence's fault.
+   Measured decisively: MIN 2025 wk1 — CLE... no, CHI scored 24, of which a **defensive touchdown**
+   was 7, so MIN's defence allowed **17, not 24**, moving it from the 21-27 tier (worth 0) to the
+   14-20 tier (worth 1). Naive = 5.0; corrected = **6.0 = Sleeper's figure exactly**. PHI in the
+   same week reproduces at **4.0** either way, so the correction is what discriminates.
+   ⚠️ The 7 is an ASSUMPTION (6 plus an assumed made extra point) and is carried on the wire as
+   `pointsAllowedAssumption`, never hidden; exact derivation needs `pbp`, which is not ingested.
+2. **`sack_yards_lost` is stored NEGATIVE** (CHI wk1: −12), so net yards = `passing + rushing +
+   sack_yards_lost`. The natural-looking subtraction moves the total the WRONG WAY (it inflated
+   CHI's 317 to 341). The first cut of the probe did exactly that.
+3. **The bucket ranges parse from the scorer's own key names** (`dst_pa_g_14_17` → 14..17,
+   `dst_pa_g_46p` → 46..∞), per the ruling's "derived from the scorer's key set, never hand-typed",
+   and an unparseable tier RAISES rather than scoring nothing silently.
+4. **The lake says `LA` for the Rams; Sleeper says `LAR`** — the NF-W3 franchise-code family.
+   Un-normalised, LAR was dropped entirely (0.00 vs 11.00). Normalised through the scorer's own
+   team vocabulary it reproduces exactly.
+5. **A scorer-key vs field-name wrong-key bug, caught by the cross-check.** `dst_row` first keyed
+   team counters by SCORER key (`def_fumble_rec`) while `score_row` reads them by the map's FIELD
+   name (`fumble_recovery_opp`), so every team defensive counter silently scored ZERO — **9 of 12
+   defences low**. Fixed by translating inside the module and giving the merged map ONE owner
+   (`dst_stat_field`), because the bug entered at a call site assembling two dicts by hand.
+
+## What is NOT resolved — the reason this stops
+
+Against Sleeper's own figure, over the probed league's four weeks (12 started defences each):
+
+| week | disagreeing / 12 |
+|---|---|
+| 1 | 1 |
+| 2 | 3 |
+| 3 | 6 |
+| 4 | 3 |
+
+**13 of 48 team-weeks (~27%) do not reproduce.** That is systematic, not a stat-correction artifact
+— which is what the four-week run was for; a one-off would have been consistent with the platform
+restating a played week, and this is not.
+
+One further mechanism was identified and fixed, with only marginal effect: **nflverse keeps
+`fumble_recovery_tds` SEPARATE from `def_tds`** (BAL wk2 carries a 63-yard opponent fumble-recovery
+touchdown with `def_tds = 0`), so a fumble-return touchdown was missed entirely. Folding it in moved
+week 3 from 7 to 6 and changed nothing else. ⚠️ And it introduces its own ambiguity that is itself a
+finding: `fumble_recovery_tds` does **not** split own-fumble from opponent-fumble recoveries, and
+only the opponent kind is a D/ST score.
+
+At least one mechanism remains unidentified. The cleanest instance is **SEA 2025 wk1: ours 6.00,
+Sleeper 8.00**, where the realized line is fully accounted for (PA 17 → 14-20 tier = 1; 1 sack = 1;
+2 interceptions = 4; 384 net yards → the 350-399 tier, which is absent from the league's settings
+and therefore 0) and the league's **complete, unfiltered 56-key** scoring settings contain no term
+that could supply the missing 2 points.
+
+## What this means for RC1
+
+The player side is unaffected and solid (3.55e-15 against nflverse's own PPR). The honest options
+for D/ST are a PM call, not a worker call:
+
+- **render D/ST as a stated absence** for now (the MT1 discipline) and card the construction, or
+- **fund the residual** as its own scoped piece of work — the cross-check harness now exists, so the
+  question is a bounded "explain 13 team-weeks", not an open-ended one, but it is plainly not the
+  "cheap-ish" the ruling scoped.
+
+⛔ What must NOT happen is shipping it at ~73% agreement. A D/ST number that is right three times in
+four is exactly the plausible-but-wrong failure the D1 ruling refused on the recap side, and a
+starting-slot score that quietly disagrees with the league's own is the same defect wearing a
+different hat.
