@@ -11,7 +11,7 @@ metadata:
   name: nf-inc-0917b
   vertical: nfl_fantasy
   card: https://trello.com/c/iG6gCYw5
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The root defect measured by NF-INC-0917: the weekly manifest
