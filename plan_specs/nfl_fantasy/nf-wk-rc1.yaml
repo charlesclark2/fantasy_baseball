@@ -300,6 +300,31 @@ spec:
         entitlement gates untouched; renderers gated per G100. This
         story carries the NF-SEASON suite's first changelog entry —
         written only when the surface renders a real completed week.
+    # ✅ PHASE B DELIVERED 2026-09-16 (PM green-lit; one-frontend-story occupant confirmed by the
+    # PM — WVR1's Phase B queues behind this). `components/fantasy/weekly-recap.tsx`, mounted on the
+    # league view directly under the activation delta and ABOVE the draft-shape sections: in season
+    # this is the question a manager has every Tuesday, and those answer one they asked once.
+    #   • THE TWO TOTALS carry different labels, different visual weight, and their own definitions.
+    #     There is no merged figure on the page and no `total` on the wire.
+    #   • THE DISCLOSURE renders ONLY when the server returns `itemisationGapNote`, adjacent to the
+    #     total inside the same team card, in the SERVER'S words. ⛔ The page never synthesises a
+    #     replacement from the coverage report — that is how #1155 happened, and the adjacency is
+    #     asserted by MEASURING BOUNDING BOXES rather than by grepping a className.
+    #   • EVERY EMPTY STATE IS A DIFFERENT FACT and says which (no week finished / played but not
+    #     recorded / platform unreadable / no opponent), and for the two the server answers, ITS
+    #     sentence is preferred because it knows which platform and which week.
+    #   • PER-SEAT PROVENANCE is visible beside the seat, not behind a tooltip; an absent player
+    #     renders his reason, never a zero.
+    #   • THE COMPLETED WEEK is derived from the projection's own target week, never a clock — the
+    #     same reason the artifact's completeness gate is a COUNT.
+    # VERIFICATION: 10 E2E clauses on RENDERED OUTPUT and COMPUTED LAYOUT (NF-C4: a source-grep
+    # frontend guard tests that someone typed a string), 6 new red-proof cases, and 74 pre-existing
+    # E2E specs that render this page still pass — the panel adds two calls to it, so the harness
+    # models both rather than letting them 501.
+    # ⚠️ THE `finalNoGap` HARNESS MODE IS LOAD-BEARING, not a nicety: without a null-note fixture
+    # the only available assertion is "the note renders", which the #1155 defect satisfies exactly.
+    # 📌 CHANGELOG: written, because a real completed week renders. It ships only with this PR,
+    # whose merge is gated on the operator confirming the live render AND on ①'s cadence.
     - description: >
         TIMING + GUARDS: the first fully-scoreable week is week 2
         (completes Tue 09-16 night; realized lines land per node 1's
