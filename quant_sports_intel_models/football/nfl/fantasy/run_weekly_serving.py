@@ -289,10 +289,33 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
     log.info("[METRIC] weekly_component_fields_complete=%d", comp_line["n_component_fields"])
     log.info("component line: %d field(s) non-null on all %d projected rows",
              comp_line["n_component_fields"], comp_line["n_projected"])
-    C.NflWeeklyManifest.model_validate(manifest)
-    C.NflWeeklyPayload.model_validate(payload)
-    C.NflWeeklyCurrent.model_validate(current)
-    C.assert_best_alpha_is_zero(C.NflWeeklyManifest.model_validate(manifest).model_dump())
+    # ⛔⛔ NF-INC-0917B — WHAT IS WRITTEN IS THE VALIDATED OBJECT, NEVER THE INPUT DICT.
+    #
+    # These three lines used to be `model_validate(x)` with the result DISCARDED, and that is the
+    # whole of what took `/fantasy/weekly` down for 758 minutes on 2026-09-15. `framing` is
+    # declared REQUIRED WITH A DEFAULT, so validating a dict that omits it PASSES — the default
+    # lands on an object nobody keeps, and the raw dict goes to S3 without it. A declared field, a
+    # passing validation, and nothing on the wire: validation that does not gate what ships is
+    # decoration.
+    #
+    # ⭐ THE DEFAULTED FIELD IS THE DANGEROUS SHAPE, because validation can NEVER fail on its
+    # absence. The published week-2 manifest was missing NINE of them — `season_type`,
+    # `scoring_system_id`, the two interval levels, `ros_basis`, the two ros-sigma levels,
+    # `positions` and `framing` — plus four inside `lineage`, and `players.json` was missing
+    # `scoring_system_id`. Only ONE of those was ever dereferenced, and the reason the other nine
+    # were survivable is a property of their TYPE rather than of anyone's care: an absent OBJECT
+    # throws on its first property read, an absent SCALAR renders `undefined`. `framing` is the
+    # only object-valued defaulted field on this contract.
+    #
+    # ⭐ REBINDING (rather than validating into a new name) is what makes this total: `stage()` and
+    # `publish()` both write `built[...]`, so there is no path from here to S3 that does not pass
+    # through these three assignments. Measured on the real published artifacts: 9 + 4 + 1 keys
+    # ADDED, zero removed, zero values changed on any of 500 rows — the completeness moves, the
+    # payload does not.
+    manifest = C.NflWeeklyManifest.model_validate(manifest).model_dump()
+    payload = C.NflWeeklyPayload.model_validate(payload).model_dump()
+    current = C.NflWeeklyCurrent.model_validate(current).model_dump()
+    C.assert_best_alpha_is_zero(manifest)
 
     cov = WS.train_serve_coverage(target_rows, train, target=target)
     for c, v in sorted(cov["serve"].items()):
@@ -325,7 +348,69 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
                             "build_seconds": round(time.time() - t0, 1)}}
 
 
+def assert_contract_shaped(built: dict) -> dict[str, int]:
+    """REFUSE to write a blob that does not carry every field its contract declares.
+
+    ⛔⛔ THE GATE IS ON THE WRITE, NOT ON THE BUILD, AND THAT IS THE WHOLE POINT (NF-INC-0917B).
+
+    `build()` already serialises the validated model, so in the ordinary path this can never fire.
+    It is here because the thing that has to be true is a property of what SHIPS, and a check that
+    lives one function upstream of the write is a check a future caller can route around — which is
+    precisely what happened: `NflWeeklyManifest.model_validate(manifest)` ran on every build for
+    the whole life of this surface, passed every time, and `framing` still reached nobody, because
+    validating and writing were two different objects. A guard that does not stand between the data
+    and the wire is decoration.
+
+    ⭐ IT ASKS A DIFFERENT QUESTION FROM `model_validate`. Validation asks "could this become a
+    valid object" and a DEFAULTED field can never fail it by being absent. This asks "is every
+    declared field actually here", which is the only question a published artifact has to answer.
+
+    ⭐ AND IT IS WHY THE BUILDER HALF IS TESTABLE AT ALL. Reaching the real rebind otherwise costs
+    a ~9-minute fit; this refusal can be driven in milliseconds with a degenerate `built` that no
+    shipping writer would ever produce — which is the fixture the E2E suite could not construct and
+    the reason the outage's guards were green throughout (NF-INC-0917's own finding).
+
+    Returns, per blob, the number of declared fields verified present, for the `[METRIC]` line.
+
+    ⚠️ THAT NUMBER EQUALS THE CONTRACT'S OWN FIELD COUNT, AND IT IS WORTH SAYING WHY RATHER THAN
+    LEAVING IT TO LOOK LIKE A MISTAKE. This function only RETURNS when every declared field is
+    present — anything short raises — so on the success path the two are necessarily the same
+    number. An earlier revision made the count blob-derived to guard against "reports healthy for a
+    blob it never read", then could not write a NON-VACUOUS test for the difference, because there
+    is no reachable state in which the two disagree. The state that worried me is closed
+    structurally instead: an absent or non-dict blob is itself reported as a problem, so there is
+    no input on which this returns quietly without having looked.
+
+    ⛔ The lesson kept rather than the code churn: a distinction no test can observe is not a
+    safeguard, it is a comment. The dead "examined nothing" branch that sat on top of this — which
+    could never fire, since the count it read was a constant — is gone.
+    """
+    checked: dict[str, int] = {}
+    problems: list[str] = []
+    for name, model in (("manifest", C.NflWeeklyManifest),
+                        ("payload", C.NflWeeklyPayload),
+                        ("current", C.NflWeeklyCurrent)):
+        blob = built.get(name)
+        missing = C.missing_declared_fields(blob, model, where=name)
+        checked[name] = len(C.declared_field_names(model))
+        if missing:
+            # Cap the report: a payload defect repeats on all ~500 rows and an unreadable refusal
+            # is one nobody acts on.
+            shown = missing[:12]
+            tail = f" (+{len(missing) - len(shown)} more)" if len(missing) > len(shown) else ""
+            problems.append(f"{name}: {shown}{tail}")
+    if problems:
+        raise WS.WeeklyServingError(
+            "REFUSING to write: a declared field is absent from the blob about to be published. "
+            "This is the NF-INC-0917 shape — validation that does not gate what ships is "
+            f"decoration. {'; '.join(problems)}"
+        )
+    return checked
+
+
 def stage(built: dict, out_dir: Path) -> list[Path]:
+    shape = assert_contract_shaped(built)
+    log.info("[METRIC] weekly_contract_fields_checked=%d", sum(shape.values()))
     t = built["target"]
     week_dir = out_dir / str(t.season) / str(t.week)
     week_dir.mkdir(parents=True, exist_ok=True)
@@ -346,6 +431,10 @@ def stage(built: dict, out_dir: Path) -> list[Path]:
 def publish(built: dict, bucket: str, *, do_publish: bool) -> None:
     """Upload the three SERVED blobs. `diagnostics.json` is staged locally and never published —
     it is the build's own record, not part of the contract."""
+    # ⚠️ BEFORE the dry-run early return (the NF-INJ3B reading): a `--dry-run` that skips the
+    # refusal is a rehearsal of a different program, and the one run an operator uses to convince
+    # themselves the publish is safe is exactly the one that must exercise the gate.
+    assert_contract_shaped(built)
     t = built["target"]
     keys = {
         C.weekly_manifest_key(t.season, t.week): built["manifest"],

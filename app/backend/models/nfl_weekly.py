@@ -127,7 +127,7 @@ postseason, so NCAAF-P3.1 had to key on a kickoff DATE; the NFL feed continues t
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, get_args, get_origin
 
 from pydantic import BaseModel, Field
 
@@ -427,6 +427,53 @@ class NflWeeklyManifest(BaseModel):
     framing: NflWeeklyHonestFraming = NflWeeklyHonestFraming()
 
 
+class NflWeeklyManifestResponse(NflWeeklyManifest):
+    """What `/nfl/weekly/manifest` actually puts on the wire: the manifest PLUS the entitlement
+    envelope `entitlement.open_manifest_payload` adds.
+
+    ⛔⛔ WHY THIS EXISTS INSTEAD OF `response_model=NflWeeklyManifest` (NF-INC-0917B).
+
+    The obvious fix for a pass-through route is to hang the contract model on it. On THIS route
+    that would have been a REGRESSION, and the measurement is one line: validating the LIVE
+    response against a bare `NflWeeklyManifest` drops
+
+        ['entitled', 'freeBoard', 'locked', 'lockedSeason']
+
+    because `open_manifest_payload` adds four keys the contract does not declare and pydantic
+    silently discards what it has no field for. That is E9.41 exactly — `FeaturedYesterday` never
+    declared `status`, the serializer stripped it, and Won/Lost colouring was broken for every
+    settled pick with the store correct the whole time. Fixing a missing-field defect by
+    introducing a dropped-field defect is not a fix; it is the same bug facing the other way.
+
+    ⭐ SO THE ENVELOPE IS DECLARED RATHER THAN TOLERATED. The response is then additive in both
+    directions — the nine defaulted contract fields arrive, the four envelope keys survive — and
+    the shape is enforced at serving regardless of what a future builder writes, which is the half
+    of this fix the box deploy cannot provide.
+
+    ⚠️ THE RESIDUAL, NAMED: a key `entitlement_envelope` gains LATER would be dropped here, since
+    this model declares the four it emits today. That is not left to memory —
+    `test_the_manifest_response_declares_every_key_the_envelope_actually_adds` DERIVES the key set
+    by calling `open_manifest_payload` on a real manifest and comparing, so growing the envelope
+    without growing this model is a red build rather than a silent strip.
+
+    ⛔ NOT a second contract. Everything a projection means is inherited from `NflWeeklyManifest`;
+    what is added here is transport metadata about the CALLER's tier, which is why it lives on a
+    response wrapper and not on the artifact the builder writes.
+    """
+
+    #: `False` unconditionally on this route — both free weekly handlers take no `Request` and read
+    #: no entitlement, which is what makes the bytes identical for every caller (and the CDN entry
+    #: legal). Served explicitly rather than implied by absence, for the E9.41 reason
+    #: `entitlement_envelope` states: a client must never infer entitlement from a missing key.
+    locked: bool = False
+    entitled: bool = True
+    lockedSeason: int
+    #: Which season-board preset is free. Weekly has no presets, so this is the SEASON board's
+    #: boundary travelling on a shared envelope — meaningless here, already deployed, and therefore
+    #: preserved rather than tidied away (NF-C0: never remove a key a deployed client may read).
+    freeBoard: dict[str, object]
+
+
 class NflWeeklyPayload(BaseModel):
     """`players.json` — the stored superset. The free route serves `public_weekly_payload` of it."""
 
@@ -639,7 +686,8 @@ class NflWeeklyLeagueBoard(BaseModel):
 #: this tuple would escape every guard, which is the vacuity this list exists to prevent).
 CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     NflWeeklyPlayer, NflWeeklyAbsence, NflWeeklyInputVintage, NflWeeklyLineage,
-    NflWeeklyHonestFraming, NflWeeklyManifest, NflWeeklyPayload, NflWeeklyCurrent,
+    NflWeeklyHonestFraming, NflWeeklyManifest, NflWeeklyManifestResponse, NflWeeklyPayload,
+    NflWeeklyCurrent,
     # NF-WK-MT1 — the league-scored weekly lens. In the registry so the import-time claim guards
     # walk these too: a surface that renders a roster is exactly where a start/sit imperative or an
     # opponent claim would first appear.
@@ -688,6 +736,73 @@ def paid_weekly_fields_present(data: dict) -> set[str]:
 def declared_field_names(model: type[BaseModel]) -> tuple[str, ...]:
     """The field names `model` declares, in declaration order."""
     return tuple(model.model_fields.keys())
+
+
+def _nested_model(annotation) -> type[BaseModel] | None:
+    """`X` if `annotation` is `X` or `X | None` and `X` is one of our models, else None.
+
+    ⚠️ A `list[X]` IS NOT A NESTED OBJECT, and skipping it here is load-bearing rather than tidy:
+    `get_args(list[NflWeeklyAbsence])` is `(NflWeeklyAbsence,)`, identical to what a union yields,
+    so without the guard `absences` recursed as though the LIST were one absence — reported as
+    "absences is list, not an object" on a perfectly valid manifest. Caught by running this against
+    the real published blob rather than by reading it.
+    """
+    if get_origin(annotation) is list:
+        return None
+    for cand in (annotation, *get_args(annotation)):
+        if get_origin(cand) is list:
+            continue
+        if isinstance(cand, type) and issubclass(cand, BaseModel):
+            return cand
+    return None
+
+
+def _item_model(annotation) -> type[BaseModel] | None:
+    """`X` if `annotation` is `list[X]` (or `list[X] | None`) and `X` is one of our models."""
+    for cand in (annotation, *get_args(annotation)):
+        if get_origin(cand) is list:
+            inner = get_args(cand)
+            if inner and isinstance(inner[0], type) and issubclass(inner[0], BaseModel):
+                return inner[0]
+    return None
+
+
+def missing_declared_fields(blob, model: type[BaseModel], *, where: str = "") -> list[str]:
+    """Every field `model` (and its nested models) declares that `blob` does NOT carry, as paths.
+
+    ⛔⛔ THIS ASKS THE QUESTION `model_validate` CANNOT (NF-INC-0917B). A field declared REQUIRED
+    WITH A DEFAULT can never fail validation by being absent — the default lands on the validated
+    object, and if the caller then writes the INPUT dict the field reaches nobody. That is exactly
+    how a manifest missing `framing` passed its own guard and took `/fantasy/weekly` down for 758
+    minutes. `model_validate` answers "could this become a valid object"; this answers "is the
+    contract ON THE WIRE", and only the second question is the one a published artifact has to pass.
+
+    ⭐ DERIVED FROM THE MODELS, NEVER A HAND LIST, and it RECURSES: a nested contract added later
+    (or a field added to `NflWeeklyLineage`) is covered the moment it is declared, with nothing to
+    remember. A hand-written key list is the denylist hazard `PAID_WEEKLY_PLAYER_FIELDS` is
+    derived to avoid, one contract over.
+
+    Returns PATHS (`manifest.lineage.model_family`) rather than bare names so a caller's refusal
+    says where to look. An explicit `null` COUNTS AS PRESENT — the contract declares nullable
+    fields on purpose and a declared null carries no value (the same reason nothing here is
+    serialised with `exclude_none`).
+    """
+    pre = f"{where}." if where else ""
+    if not isinstance(blob, dict):
+        return [f"{where or '<root>'} is {type(blob).__name__}, not an object"]
+    out = [f"{pre}{f}" for f in model.model_fields if f not in blob]
+    for name, field in model.model_fields.items():
+        if name not in blob or blob[name] is None:
+            continue
+        sub = _nested_model(field.annotation)
+        if sub is not None:
+            out += missing_declared_fields(blob[name], sub, where=f"{pre}{name}")
+            continue
+        item = _item_model(field.annotation)
+        if item is not None and isinstance(blob[name], list):
+            for i, row in enumerate(blob[name]):
+                out += missing_declared_fields(row, item, where=f"{pre}{name}[{i}]")
+    return out
 
 
 def _served_texts(models=CONTRACT_MODELS) -> list[tuple[str, str]]:

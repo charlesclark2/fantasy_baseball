@@ -25,6 +25,8 @@ from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from app.backend.dependencies import (
     get_admin_user,
@@ -336,7 +338,8 @@ def nfl_board(
 # outside this repo's IaC. That flip is also what makes `services/jwt_verify.py`
 # load-bearing here; neither free route reads a token at all, which is the strongest
 # available statement that one cannot help.
-@board_router.get("/nfl/weekly/manifest")
+@board_router.get("/nfl/weekly/manifest",
+                  response_model=nfl_weekly.NflWeeklyManifestResponse)
 def nfl_weekly_manifest(
     season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
     week: int | None = Query(default=None, ge=1, le=22),
@@ -359,7 +362,67 @@ def nfl_weekly_manifest(
     data = _load_json(nfl_weekly.weekly_manifest_key(season, week))
     if data is None:
         raise HTTPException(status_code=404, detail="Weekly projection not found")
-    return entitlement.open_manifest_payload(data)
+    # ⛔⛔ NF-INC-0917B — THE SECOND LINE, AND THE ONE THAT DOES NOT NEED A BOX DEPLOY.
+    #
+    # This used to `return entitlement.open_manifest_payload(data)` — the published blob, verbatim,
+    # with no coercion between the builder and the browser. The builder's own guard could not close
+    # the gap either (it validated a dict and discarded the result), so a field declared REQUIRED
+    # WITH A DEFAULT reached nobody: `/fantasy/weekly` died on `framing.interval_note` for 758
+    # minutes while `framing` had never once been on the wire.
+    #
+    # The builder fix makes the BLOB complete. This makes the RESPONSE complete — a different
+    # guarantee, and the one worth having: a pass-through route can always omit a key, the two
+    # fixes ship down different pipes (box CD on merge to `main`; this one only when the operator
+    # runs `deploy.sh`), and there is no ordering of those two deploys in which some window does
+    # not exist. This half is also what completes every blob ALREADY sitting in S3, which the
+    # builder fix by definition cannot reach.
+    #
+    # ⭐ WHAT COMPLETES THE PAYLOAD IS THE `response_model`, AND THE `try` BELOW IS NOT A SECOND
+    # COPY OF IT — stating this precisely because the first draft of this comment claimed the two
+    # were redundant halves and that is measurably false. `NflWeeklyManifestResponse` INHERITS the
+    # contract, so it fills every defaulted field on its own; validating against the bare contract
+    # first adds nothing to the RESULT. What it adds is a place to STAND: it is the only point at
+    # which a contract failure is catchable, because the `response_model` validates after this
+    # handler has returned, where there is nothing left to catch it.
+    #
+    # ⚠️⚠️ AND THAT MATTERS BECAUSE THE COERCION MAY NOT BECOME A NEW WAY FOR THIS ROUTE TO GO
+    # DOWN, which is the one direction in which this fix could be WORSE than the pass-through it
+    # replaces. Coercion is here to ADD defaults; a blob that omits a field the contract REQUIRES
+    # is a different failure, it raises, and a raise here is a 500 on a route the page cannot
+    # render without.
+    #
+    # ⭐ THE REALISTIC TRIGGER IS NOT EXOTIC: adding a required field to the contract is an ordinary
+    # change, and `app/**` does not trigger the box deploy (deliberately), so for one build cycle
+    # EVERY manifest already in S3 is short of it. Hard-failing would take every published week's
+    # page down for a contract edit that shipped nothing — trading a silent incompleteness for a
+    # loud outage, which is not an improvement, it is the same mistake with better manners.
+    #
+    # So the contract failure DEGRADES to the pass-through and says so loudly. The page has been
+    # tolerant of a missing block since PR #1143 and renders its own absence copy, so the degraded
+    # state is honest and visible rather than swallowed. ⚠️ `JSONResponse` is what makes this
+    # reachable: returning a bare dict would be re-validated against `response_model` and raise
+    # again, one layer further out, where there is no handler at all.
+    # ⚠️ THE WHOLE ASSEMBLY IS INSIDE THE `try`, not just the first step. The second validate can
+    # raise too — `lockedSeason` and `freeBoard` are REQUIRED here and come from
+    # `entitlement_envelope`, so an envelope change would take this route down rather than merely
+    # being stripped. CI catches that
+    # (`test_the_envelope_and_the_response_model_agree_in_both_directions`), but "CI catches it" is
+    # a claim about a process and this is a claim about a request: whatever goes wrong while
+    # BUILDING the response, serving the blob uncoerced is what the route did for months and is
+    # strictly better than a 500 on a page that cannot render without it.
+    try:
+        shaped = nfl_weekly.NflWeeklyManifest.model_validate(data).model_dump()
+        return nfl_weekly.NflWeeklyManifestResponse.model_validate(
+            entitlement.open_manifest_payload(shaped)
+        )
+    except ValidationError:
+        logger.error(
+            "[ALERT] the weekly manifest response for %s wk%s could not be built to contract — "
+            "either the published blob omits a REQUIRED field or the entitlement envelope has "
+            "changed shape. Serving the blob uncoerced so the page still renders; the payload is "
+            "INCOMPLETE and the artifact needs rebuilding.", season, week, exc_info=True,
+        )
+        return JSONResponse(entitlement.open_manifest_payload(data))
 
 
 @board_router.get("/nfl/weekly/projections")

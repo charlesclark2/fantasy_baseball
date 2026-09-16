@@ -759,6 +759,78 @@ test("framing ABSENT: the page renders and STATES the absence — it does not cr
   await expectNoNaN(page)
 })
 
+// ══ 8a′ — NF-INC-0917B: THE WHOLE DEFAULTED SET, NOT JUST THE KEY THAT HAPPENED TO CRASH ════════
+//
+// ⭐ WHY THE PAIR ABOVE IS NECESSARY BUT NOT SUFFICIENT. `withoutFraming` deletes the one key
+// production omitted that the page dereferenced. The MECHANISM omits every DEFAULTED field — the
+// live manifest was short of nine — and `framing` was fatal only because it is the only
+// object-valued one: an absent object throws on its first property read, an absent scalar renders
+// `undefined`. So a fixture naming one key by hand describes today's page, not the defect. The
+// first component to read `interval_lo_level` would need someone to remember to extend the
+// transform, and remembering is the thing that failed.
+//
+// ⛔ HENCE THE SET IS DERIVED, NOT TYPED OUT. `nfl-weekly-contract-defaults.json` is written by the
+// fixture builder from `model_fields` on the shipping contract, so a field added with a default
+// joins this degenerate on the next build with nobody in the loop. TypeScript cannot introspect
+// pydantic, so the authority travels as data — the same shape as the paid set being derived from
+// the scorer's own map.
+
+const CONTRACT_DEFAULTS: Record<string, string[]> = JSON.parse(
+  readFileSync(join(process.cwd(), "e2e", "fixtures", "nfl-weekly-contract-defaults.json"), "utf8"),
+)
+const DEFAULTED_MANIFEST_FIELDS = CONTRACT_DEFAULTS.NflWeeklyManifest ?? []
+const DEFAULTED_LINEAGE_FIELDS = CONTRACT_DEFAULTS.NflWeeklyLineage ?? []
+
+/** The real manifest with EVERY defaulted field removed, AT BOTH LEVELS — byte-for-byte the shape
+ *  the builder actually shipped. The nested half matters: the live `lineage` was missing four of
+ *  its own defaults too, so a degenerate that stripped only the top level would still be a shape
+ *  production never served. */
+const withoutDefaultedFields = (pathname: string, body: any) => {
+  if (pathname !== "/fantasy/nfl/weekly/manifest") return body
+  const out = { ...body }
+  for (const k of DEFAULTED_MANIFEST_FIELDS) delete out[k]
+  if (out.lineage) {
+    out.lineage = { ...out.lineage }
+    for (const k of DEFAULTED_LINEAGE_FIELDS) delete out.lineage[k]
+  }
+  return out
+}
+
+test("the derived degenerate really strips more than `framing` — else it is the same test twice", () => {
+  // Non-vacuity in three directions (NF1.7 (a)): the derived list is real, it is WIDER than the
+  // single key, and the fixture actually carries the fields it claims to strip. Any one of these
+  // failing makes the clause below either vacuous or a duplicate of 8a.
+  expect(DEFAULTED_MANIFEST_FIELDS.length,
+    "no defaulted fields in the derived list — the degenerate would strip nothing").toBeGreaterThan(1)
+  expect(DEFAULTED_MANIFEST_FIELDS).toContain("framing")
+  const present = DEFAULTED_MANIFEST_FIELDS.filter((k) => k in MANIFEST)
+  expect(present, "the fixture carries none of the defaulted fields — is the builder dumping?")
+    .toEqual(DEFAULTED_MANIFEST_FIELDS)
+
+  const stripped = withoutDefaultedFields("/fantasy/nfl/weekly/manifest", MANIFEST)
+  expect(DEFAULTED_MANIFEST_FIELDS.filter((k) => k in stripped)).toEqual([])
+  // …and every REQUIRED field survives, or the absent case would be testing a mangled manifest
+  // rather than a manifest missing its defaults.
+  expect(stripped.season).toBe(MANIFEST.season)
+  expect(stripped.week).toBe(MANIFEST.week)
+  expect(stripped.lineage, "lineage itself must survive — the page reads served_version off it").toBeTruthy()
+  expect(stripped.lineage.served_version, "a REQUIRED lineage field was stripped").toBeTruthy()
+  expect(DEFAULTED_LINEAGE_FIELDS.length, "no nested defaults — the nested half strips nothing")
+    .toBeGreaterThan(0)
+  expect(DEFAULTED_LINEAGE_FIELDS.filter((k) => k in stripped.lineage)).toEqual([])
+  expect(withoutDefaultedFields("/fantasy/nfl/weekly/projections", FREE)).toBe(FREE)
+})
+
+test("every defaulted field absent: the page still renders and still states the absence", async ({ page }) => {
+  const { errors } = await openWeekly(page, { transform: withoutDefaultedFields })
+  expectNoPageErrors(errors)
+  await expect(page.locator('[data-testid="weekly-week-label"]')).toBeVisible()
+  await expect(page.locator('[data-testid="weekly-row"]').first()).toBeVisible()
+  await expect(page.locator('[data-testid="weekly-provenance"]')).toBeVisible()
+  await expect(page.locator('[data-testid="weekly-framing-absent"]')).toBeVisible()
+  await expectNoNaN(page)
+})
+
 // ══ 8b — provenance: every vintage on one line, in one format ═══════════════════════════════════
 
 test("the provenance line renders every input vintage in one readable format", async ({ page }) => {
