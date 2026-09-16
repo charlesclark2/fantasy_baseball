@@ -368,11 +368,12 @@ def nfl_weekly_manifest(
     # WITH A DEFAULT reached nobody: `/fantasy/weekly` died on `framing.interval_note` for 758
     # minutes while `framing` had never once been on the wire.
     #
-    # The builder fix makes the BLOB complete. This makes the RESPONSE complete — which is a
-    # different guarantee and the one worth having, because a pass-through route can always omit a
-    # key and these two halves ship down different pipes (box CD on merge to `main`; this one only
-    # when the operator runs `deploy.sh`). Either half alone leaves a window; the coercion is what
-    # holds while the other is in flight, and what holds for every blob already sitting in S3.
+    # The builder fix makes the BLOB complete. This makes the RESPONSE complete — a different
+    # guarantee, and the one worth having: a pass-through route can always omit a key, the two
+    # fixes ship down different pipes (box CD on merge to `main`; this one only when the operator
+    # runs `deploy.sh`), and there is no ordering of those two deploys in which some window does
+    # not exist. This half is also what completes every blob ALREADY sitting in S3, which the
+    # builder fix by definition cannot reach.
     #
     # ⭐ WHAT COMPLETES THE PAYLOAD IS THE `response_model`, AND THE `try` BELOW IS NOT A SECOND
     # COPY OF IT — stating this precisely because the first draft of this comment claimed the two
@@ -399,18 +400,27 @@ def nfl_weekly_manifest(
     # state is honest and visible rather than swallowed. ⚠️ `JSONResponse` is what makes this
     # reachable: returning a bare dict would be re-validated against `response_model` and raise
     # again, one layer further out, where there is no handler at all.
+    # ⚠️ THE WHOLE ASSEMBLY IS INSIDE THE `try`, not just the first step. The second validate can
+    # raise too — `lockedSeason` and `freeBoard` are REQUIRED here and come from
+    # `entitlement_envelope`, so an envelope change would take this route down rather than merely
+    # being stripped. CI catches that
+    # (`test_the_envelope_and_the_response_model_agree_in_both_directions`), but "CI catches it" is
+    # a claim about a process and this is a claim about a request: whatever goes wrong while
+    # BUILDING the response, serving the blob uncoerced is what the route did for months and is
+    # strictly better than a 500 on a page that cannot render without it.
     try:
         shaped = nfl_weekly.NflWeeklyManifest.model_validate(data).model_dump()
+        return nfl_weekly.NflWeeklyManifestResponse.model_validate(
+            entitlement.open_manifest_payload(shaped)
+        )
     except ValidationError:
         logger.error(
-            "[ALERT] weekly manifest %s wk%s does not satisfy its own contract — a REQUIRED field "
-            "is absent from the published blob. Serving it uncoerced so the page still renders; "
-            "the artifact needs rebuilding.", season, week, exc_info=True,
+            "[ALERT] the weekly manifest response for %s wk%s could not be built to contract — "
+            "either the published blob omits a REQUIRED field or the entitlement envelope has "
+            "changed shape. Serving the blob uncoerced so the page still renders; the payload is "
+            "INCOMPLETE and the artifact needs rebuilding.", season, week, exc_info=True,
         )
         return JSONResponse(entitlement.open_manifest_payload(data))
-    return nfl_weekly.NflWeeklyManifestResponse.model_validate(
-        entitlement.open_manifest_payload(shaped)
-    )
 
 
 @board_router.get("/nfl/weekly/projections")

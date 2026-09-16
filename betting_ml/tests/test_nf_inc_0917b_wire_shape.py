@@ -588,8 +588,36 @@ def test_an_uncoercible_blob_degrades_rather_than_500ing(store_missing_a_require
     served = json.loads(body)
     assert served["season"] == 2026 and served["week"] == 2
     assert "locked" in served, "the entitlement envelope was lost on the degraded path"
-    assert any("does not satisfy its own contract" in r.message or
-               "does not satisfy its own contract" in r.getMessage() for r in caplog.records), (
-        "the route degraded SILENTLY — that is the swallow-and-continue class this repo keeps "
-        f"getting bitten by; records were {[r.getMessage()[:60] for r in caplog.records]}"
+    # ⚠️ PINNED ON WHAT AN OPERATOR CAN ACT ON, NOT ON THE PROSE. The first cut of this clause
+    # matched a sentence fragment and went red the moment the message was reworded — a guard
+    # testing the author's typing rather than the behaviour. What has to be true is that the degrade
+    # is logged at ERROR and NAMES THE SLATE, because "a manifest somewhere is incomplete" is not
+    # something anyone can act on.
+    errs = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert errs, (
+        "the route degraded SILENTLY — the swallow-and-continue class this repo keeps getting "
+        f"bitten by; records were {[(r.levelname, r.getMessage()[:50]) for r in caplog.records]}"
+    )
+    named = [r.getMessage() for r in errs if "2026" in r.getMessage() and "wk2" in r.getMessage()]
+    assert named, f"the degrade was logged but does not name the slate: {[r.getMessage()[:80] for r in errs]}"
+
+
+def test_the_envelope_and_the_response_model_agree_in_both_directions():
+    """⭐ THE OTHER DIRECTION, which the keys-subset clause above does not cover.
+
+    That clause stops the envelope GROWING a key the model would strip. This one stops the envelope
+    LOSING a key the model REQUIRES — `lockedSeason` and `freeBoard` have no defaults, so an
+    envelope that stopped emitting one would make every response un-buildable. Both directions are
+    derived by calling `open_manifest_payload`, so neither can be satisfied by a stale hand list.
+    """
+    enveloped = entitlement.open_manifest_payload(
+        C.NflWeeklyManifest.model_validate(_HISTORICAL_MANIFEST).model_dump())
+    required = {
+        n for n, f in C.NflWeeklyManifestResponse.model_fields.items()
+        if f.is_required() and n not in C.NflWeeklyManifest.model_fields
+    }
+    assert required, "no required envelope fields — this guard is asserting on nothing"
+    assert required - set(enveloped) == set(), (
+        f"`NflWeeklyManifestResponse` REQUIRES {sorted(required - set(enveloped))}, which "
+        "`open_manifest_payload` no longer supplies — every response would fail to build"
     )
