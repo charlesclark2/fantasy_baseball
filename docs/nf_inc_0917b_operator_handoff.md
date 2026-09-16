@@ -40,11 +40,31 @@ that the spec was written around **is already discharged** — #1139 merged 2026
 the NF-INC-0916 session has closed. Verified by content rather than by merge status:
 
 ```bash
-# LAPTOP, repo root. Read-only, instant.
+# LAPTOP, repo root. Read-only, instant. Prints the matching LINES, not a count — see the note below.
 git fetch origin
-git show origin/main:quant_sports_intel_models/football/nfl/fantasy/run_weekly_serving.py | grep -c "NF-INC-0916"   # expect 2
-git show origin/main:frontend/lib/weekly-suppression.ts | grep -c 'WEEKLY_NUMBERS_WITHHELD = true'                  # expect 1
+git show origin/main:quant_sports_intel_models/football/nfl/fantasy/run_weekly_serving.py \
+  | grep -n "assert_stat_vintage_reaches_training("     # expect 1 CALL line, not a comment
+git show origin/main:frontend/lib/weekly-suppression.ts \
+  | grep -n "WEEKLY_NUMBERS_WITHHELD = true"            # expect the assignment itself
 ```
+
+⚠️ **THESE PRINT LINES RATHER THAN COUNTS, AND THAT IS NOT STYLE.** The first draft of this block
+was `grep -c "NF-INC-0916"  # expect 2` — and **both matches in that file are COMMENTS**
+(`# ⛔ NF-INC-0916 — REFUSE TO TRAIN…`, line 177; `# ⛔⛔ NF-INC-0916 — the manifest's own…`, line
+271). It would have returned the expected `2` with every line of gate code deleted, leaving only the
+prose describing it. That is INC-38's "a comment cannot satisfy a guard", inside a verification
+command — so the check now names the **call** that must exist, and prints it so you can see it is
+code. ⛔ Do not simplify these back to `-c`: a count answers "how many lines contain something", never
+"is the thing there".
+
+⚠️⚠️ **AND THE SHORTER PATTERN IS WRONG TOO — proven, not guessed.** Rewriting the builder check as
+`grep -n "model_validate(manifest).model_dump()"` looked like a tightening and is not: that
+substring **already matches on unfixed `main`**, at line 295, inside
+`C.assert_best_alpha_is_zero(C.NflWeeklyManifest.model_validate(manifest).model_dump())` — the
+pre-fix throwaway. A check that passes on the state it exists to detect is worse than no check. The
+discriminating token is the **assignment prefix** (`manifest = …`), which is the entire substance of
+this fix, so that is what the command anchors on. Verified two-sided: **0 matches on `origin/main`,
+1 on the branch.**
 
 ⚠️ `main` is currently **3 commits ahead of `dev`** (#1139's merge commit, #1145, and its record
 commit). Merge `main` into `dev` before the promotion, or the promote PR will show a confusing diff.
@@ -56,8 +76,9 @@ merge an earlier `dev` snapshot with every signal green:
 # LAPTOP, repo root. Read-only, instant.
 git fetch origin
 git show origin/main:quant_sports_intel_models/football/nfl/fantasy/run_weekly_serving.py \
-  | grep -c "manifest = C.NflWeeklyManifest.model_validate(manifest).model_dump()"   # expect 1
-git show origin/main:frontend/next.config.mjs | grep -c "worker-src"                  # expect 2 (comment + directive)
+  | grep -n "^ *manifest = C.NflWeeklyManifest.model_validate"   # expect the ASSIGNMENT line
+git show origin/main:frontend/next.config.mjs \
+  | grep -n "\"worker-src 'self' blob:\""                 # expect the DIRECTIVE, quoted — not the comment
 git rev-list --count origin/main..origin/dev                                          # expect 0
 ```
 
