@@ -50,9 +50,13 @@ _HELD = _REPO / "frontend/data/changelog-held.json"
 _FLAG_TS = _REPO / "frontend/lib/weekly-suppression.ts"
 _PAGE_TSX = _REPO / "frontend/components/fantasy/weekly-page.tsx"
 _CI_YML = _REPO / ".github/workflows/ci.yml"
+_INGEST = _REPO / "quant_sports_intel_models/football/nfl/ingest/in_season_stats.py"
+_JOB = _REPO / "pipeline/jobs/sports_nfl_weekly_serving_job.py"
+_SFRESH = _REPO / "betting_ml/monitoring/nfl_weekly_stats_freshness.py"
 
 _GUARD = _TESTS / "test_nf_inc_0916_promotion_gate.py"
-_GUARD_FILES = (_GUARD,)
+_FEED = _TESTS / "test_nf_inc_0916_training_feed.py"
+_GUARD_FILES = (_GUARD, _FEED)
 
 #: An unrelated clause that must stay GREEN through every mutation — otherwise a RED is not
 #: attributable to the guard it is credited to. Deliberately one that ALSO reads `ci.yml`, so a
@@ -64,7 +68,7 @@ NOT_SELECTED = (
 )
 
 _BAK_SUFFIX = ".redproof.bak"
-_RESTORABLE = {".ts", ".tsx", ".json", ".yml"}
+_RESTORABLE = {".ts", ".tsx", ".json", ".yml", ".py"}
 
 def _held_item_json() -> str:
     """The deferred item, serialised exactly as `changelog.json` carries an item.
@@ -153,6 +157,51 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "            backend:\n              - '**'\n",
      "            backend:\n              - '**'\n              - 'frontend/lib/weekly-suppression.ts'\n",
      f"{_GUARD}::test_the_backend_filter_was_not_widened_to_reach_the_frontend"),
+
+    # ══ NODE 1 — the training feeds have an owner, an order and an SLA ════════════════════════
+    ("the training-feed set is silently emptied, so the ingest pulls nothing and reports success",
+     _INGEST,
+     'WEEKLY_STAT_SOURCES: list[str] = ["stats_player_week", "snap_counts"]',
+     "WEEKLY_STAT_SOURCES: list[str] = []",
+     f"{_FEED}::test_the_two_training_feeds_are_registered_free_nflverse_sources"),
+
+    ("the freshness leg is unwired, so nothing judges whether the feed actually advanced",
+     _JOB,
+     "    nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=nfl_weekly_stats_ingest_op()))",
+     "    nfl_weekly_serving_op(start=nfl_weekly_stats_ingest_op())",
+     f"{_FEED}::test_the_freshness_leg_is_downstream_of_the_ingest_it_judges"),
+
+    ("the ingest subprocess loses its finite timeout (INC-32)",
+     _JOB,
+     "        proc = run_bounded(cmd, cwd=str(_APP_DIR), env=env,\n"
+     "                           timeout=NFL_WEEKLY_STATS_INGEST_TIMEOUT_SECONDS)",
+     "        proc = subprocess.run(cmd, cwd=str(_APP_DIR), env=env,\n"
+     "                              capture_output=True, text=True)",
+     f"{_FEED}::test_the_ingest_subprocess_carries_a_finite_timeout"),
+
+    ("the grace window is tightened below the vendor's measured publication lag",
+     _SFRESH,
+     "SETTLE_HOURS = 24.0",
+     "SETTLE_HOURS = 4.0",
+     f"{_FEED}::test_the_settle_window_is_longer_than_the_measured_publication_lag"),
+
+    ("the PENDING hole is reopened: a season with NO rows reads healthy inside the window",
+     _SFRESH,
+     "    explicable = gap == 1 or (reading.last_week is None and last_completed_week == 1)",
+     "    explicable = True",
+     f"{_FEED}::test_the_feed_is_judged_against_the_week_that_was_actually_played"),
+
+    ("an unreadable feed is scored healthy instead of warned about (NF1.7(a))",
+     _SFRESH,
+     '"verdict": "UNREADABLE", "severity": "WARN", "source": reading.source,',
+     '"verdict": "UNREADABLE", "severity": None, "source": reading.source,',
+     f"{_FEED}::test_a_feed_that_cannot_be_read_is_warned_about_and_never_scored_healthy"),
+
+    ("one stale feed is silenced by a healthy sibling (silent-by-aggregation)",
+     _SFRESH,
+     "    return max(sev, key=lambda s: order.get(s, 0)) if sev else None",
+     "    return max(sev, key=lambda s: order.get(s, 0)) if len(sev) == len(verdicts) else None",
+     f"{_FEED}::test_one_stale_feed_pages_even_when_its_sibling_is_healthy"),
 ]
 
 
@@ -179,7 +228,9 @@ def _sweep_stale_backups() -> list[str]:
     """
     restored = []
     for root in (_REPO / "frontend/data", _REPO / "frontend/lib",
-                 _REPO / "frontend/components", _REPO / ".github/workflows"):
+                 _REPO / "frontend/components", _REPO / ".github/workflows",
+                 _REPO / "quant_sports_intel_models/football/nfl/ingest",
+                 _REPO / "pipeline/jobs", _REPO / "betting_ml/monitoring"):
         for bak in root.rglob(f"*{_BAK_SUFFIX}"):
             target = Path(str(bak)[: -len(_BAK_SUFFIX)])
             assert target.suffix in _RESTORABLE, (

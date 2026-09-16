@@ -40,10 +40,10 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from dagster import Out, in_process_executor, job, op
+from dagster import In, Nothing, Out, in_process_executor, job, op
 
 _APP_DIR = Path(os.environ.get("APP_DIR", "/app"))
 _FANTASY = "quant_sports_intel_models.football.nfl.fantasy"
@@ -64,6 +64,14 @@ NFL_WEEKLY_CACHE_BUCKET = os.environ.get("CACHE_BUCKET", "credence-prod-s3-api-c
 #: `test_nf_c6_ph2_weekly_serving.py` so the two owners of this code cannot drift.
 EXIT_AWAITING_ROSTERS = 3
 
+# NF-INC-0916 node 1 — the training-feed ingest that runs immediately before the build.
+# Two unauthenticated nflverse release reads plus two Delta partition writes; measured in seconds,
+# so this ceiling is orders of magnitude of headroom rather than a snug fit. INC-32: a finite
+# timeout on every subprocess on a Dagster path, and `run_bounded` kills the whole process group
+# on expiry rather than orphaning a grandchild.
+NFL_WEEKLY_STATS_INGEST_TIMEOUT_SECONDS = int(
+    os.environ.get("NFL_WEEKLY_STATS_INGEST_TIMEOUT_SECONDS", "900"))
+
 
 def _page(context, title: str, body: str, *, severity: str, dedup_key: str) -> None:
     """Page, and mirror it into the step log. Distinct `dedup_key` per failure mode so one noisy
@@ -74,7 +82,155 @@ def _page(context, title: str, body: str, *, severity: str, dedup_key: str) -> N
     context.log.warning("ALERT [nfl weekly] %s — %s", title, body)
 
 
-@op(out=Out(None))
+@op(out=Out(Nothing))
+def nfl_weekly_stats_ingest_op(context):
+    """NF-INC-0916 node 1 — refresh the weekly model's TRAINING FEEDS, immediately before the
+    build that learns from them.
+
+    ⭐ WHY THIS OP IS HERE AND NOT ON ITS OWN SCHEDULE. `stats_player_week` and `snap_counts` are
+    what `run_weekly_serving` trains on, and until this op existed NOTHING ingested either of them
+    on any cadence — which is the incident: the 2026 week-1 training rows carried no stat line,
+    `attach_labels` filled them with zeros under the retained-zero convention, and the hurdle
+    learned a `P(zero)` from a week nobody had played. Population-matched against realized scoring
+    the served point ran at roughly a third of reality.
+
+    Sitting it in THIS job, upstream of the build, is the INC-25 rule in its strongest form: the
+    consumer is refreshed downstream of its feed IN THE SAME RUN, so there is no cron window in
+    which the build reads a lake the ingest has not touched — and no second schedule that can
+    silently revert to STOPPED while everything stays green (NF-INFRA1).
+
+    ⛔ NOT `ROLL_FORWARD_SOURCES`, and that is measured rather than stylistic: the roll-forward
+    fires Monday 06:15 PT, an NFL week closes Monday NIGHT, and the vendor publishes it the next
+    morning — so on a weekly cadence the just-completed week is missing for a full seven days, and
+    under the retained-zero convention a missing line is a zero. See
+    `ingest/in_season_stats.py`, which holds the measurement and asserts the exclusivity.
+
+    ⚖️ ALERT-LOUD-BUT-CONTINUE. A failed ingest pages and does NOT sink the run: the build can
+    still produce a correct projection from the weeks that DID land, and this job's own doctrine is
+    that a missed rebuild costs freshness rather than availability. The protection against training
+    on what did not land is the target week's COVERAGE REFUSAL inside the builder, not this op's
+    exit code — a gate belongs at the instrument, not at the feed.
+    """
+    from betting_ml.utils.bounded_subprocess import run_bounded
+
+    cmd = [sys.executable, "-m",
+           "quant_sports_intel_models.football.nfl.ingest.in_season_stats"]
+    context.log.info("[nfl weekly stats] %s", " ".join(cmd))
+    env = {**os.environ, "SPORTS_LAKE_REGION": os.environ.get("SPORTS_LAKE_REGION", "us-east-2")}
+    try:
+        proc = run_bounded(cmd, cwd=str(_APP_DIR), env=env,
+                           timeout=NFL_WEEKLY_STATS_INGEST_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        proc = subprocess.CompletedProcess(
+            cmd, returncode=124, stdout=(exc.stdout or ""), stderr="timeout")
+
+    for line in (proc.stdout or "").splitlines()[-40:]:
+        context.log.info("[stats] %s", line)
+    context.log.info("[METRIC] nfl_weekly_stats_ingest_exit=%d", proc.returncode)
+
+    if proc.returncode != 0:
+        for line in (proc.stderr or "").splitlines()[-40:]:
+            context.log.warning("[stats:stderr] %s", line)
+        _page(context, "NFL weekly training-feed ingest FAILED",
+              "`in_season_stats` exited "
+              f"{proc.returncode}. The build below still runs — it can project from the weeks that "
+              "already landed — but it is now training on a feed that did not advance this cycle, "
+              "which is the NF-INC-0916 mechanism. The freshness leg reports which week each feed "
+              "is actually at.\n\n"
+              f"stderr tail:\n{(proc.stderr or '')[-1500:]}",
+              severity="CRITICAL", dedup_key="nfl_weekly_stats:ingest")
+
+
+def _slate_end_utc(sched, week):
+    """When the given week's slate actually FINISHED, in UTC.
+
+    ⚠️ `gameday` is a DATE, not a kickoff instant, and the last game of an NFL week is the Monday
+    night one — it ends around 23:30 PT, i.e. ~06:30 UTC the FOLLOWING day. Taking the bare date
+    would start the publication-grace window ~6-7 hours early and let the monitor call STALE while
+    the vendor was still inside its normal, measured lag.
+
+    Returns `None` when it cannot be resolved; `classify` then judges the week mismatch with no
+    grace window at all, which can only ever cost a FALSE ALARM rather than a missed finding.
+    """
+    if week is None:
+        return None
+    try:
+        import pandas as pd
+
+        last_day = pd.Timestamp(sched.loc[sched["week"] == week, "gameday"].max())
+        if pd.isna(last_day):
+            return None
+        end = (last_day.to_pydatetime().replace(tzinfo=timezone.utc)
+               if last_day.tzinfo is None else last_day.to_pydatetime())
+        # +30.5 h from midnight of the last gameday ≈ 06:30 UTC next day ≈ 23:30 PT.
+        return end + timedelta(hours=30.5)
+    except Exception:  # noqa: BLE001 — a grace window we cannot compute is simply absent
+        return None
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def nfl_weekly_stats_freshness_op(context):
+    """Is each training feed actually carrying the last week that was played?
+
+    ⛔ DOWNSTREAM OF THE INGEST, deliberately. A guard positioned UPSTREAM of the op that writes
+    what it checks reads a store one cycle behind and pages on a date the same run heals moments
+    later — INC-40, where the tell was that the date named read healthy by the time a human looked.
+
+    ⭐ AND IT IS A CONTENT CHECK, NOT A COMMIT-TIME CHECK (INC-41). A Delta commit timestamp says
+    when we last WROTE; a daily ingest re-landing the same stale vendor file would refresh it every
+    day while the content stood still. The question is which WEEK the feed carries, judged against
+    the SCHEDULE — never against the feed itself, which would be circular.
+
+    ALERT-tier, never HALT: it judges, it does not gate, and it never raises.
+    """
+    from betting_ml.monitoring import nfl_weekly_stats_freshness as SF
+    from quant_sports_intel_models.football.nfl.ingest.in_season_stats import WEEKLY_STAT_SOURCES
+
+    season = int(os.environ.get("NFL_FANTASY_SEASON", "2026"))
+    try:
+        from quant_sports_intel_models.football.nfl.ingest.query_lake import delta, q
+
+        sched = q(f"select week, gameday, home_score from {delta('schedules')} "
+                  f"where season = {season} and game_type = 'REG'")
+        played = sched[sched["home_score"].notna()]
+        last_completed_week = int(played["week"].max()) if len(played) else None
+        slate_ended = _slate_end_utc(sched, last_completed_week)
+    except Exception as exc:  # noqa: BLE001
+        # ⚠️ UNEVALUABLE IS WARN, NEVER HEALTHY (NF1.7(a)). This module exists because a year of
+        # green runs examined nothing.
+        _page(context, "NFL training-feed freshness: could not resolve the completed week",
+              f"{type(exc).__name__}: {exc}. The feeds were NOT judged — reported UNVERIFIED "
+              "rather than healthy.",
+              severity="WARN", dedup_key="nfl_weekly_stats_freshness:unresolvable")
+        return
+
+    verdicts = []
+    for src in WEEKLY_STAT_SOURCES:
+        try:
+            from quant_sports_intel_models.football.nfl.ingest.query_lake import delta, q
+
+            df = q(f"select max(week) lw, count(*) n from {delta(src)} where season = {season}")
+            lw = df["lw"].iloc[0]
+            reading = SF.FeedReading(src, None if lw is None or lw != lw else int(lw),
+                                     int(df["n"].iloc[0]))
+        except Exception as exc:  # noqa: BLE001
+            reading = SF.FeedReading(src, None, 0, error=f"{type(exc).__name__}: {exc}")
+        v = SF.classify(reading, season=season, last_completed_week=last_completed_week,
+                        slate_ended=slate_ended)
+        verdicts.append(v)
+        context.log.info("[METRIC] nfl_weekly_stats_feed=%s verdict=%s last_week=%s",
+                         src, v["verdict"], v["last_week"])
+        context.log.info("[nfl weekly stats] %s", v["detail"])
+
+    severity = SF.worst(verdicts)
+    if severity:
+        bad = [v for v in verdicts if v.get("severity")]
+        _page(context, "NFL weekly training feed is not advancing",
+              "\n\n".join(f"- {v['verdict']}: {v['detail']}" for v in bad),
+              severity=severity, dedup_key="nfl_weekly_stats_freshness:stale")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(None))
 def nfl_weekly_serving_op(context):
     """Build the target week's projection, publish it, then verify what was published.
 
@@ -196,8 +352,19 @@ def _verify_published(context, started: datetime) -> None:
 
 @job(executor_def=in_process_executor)
 def sports_nfl_weekly_serving_job():
-    """Rebuild + publish the NFL weekly projection for the next unplayed week, then verify it."""
-    nfl_weekly_serving_op()
+    """Refresh the training feeds, judge them, then rebuild + publish + verify the weekly
+    projection.
+
+    ⭐ THE ORDER IS THE POINT (NF-INC-0916 node 1). `in_process_executor` runs ops one at a time in
+    topological order, so chaining the ingest ahead of the build is what makes "the consumer reads
+    a feed this run refreshed" true BY CONSTRUCTION rather than by two crons happening to fire in
+    the right order — the INC-25 rule, whose violation is how a serving consumer ends up a full
+    cycle behind its own inputs.
+
+    The freshness leg sits between them so its verdict is in the log BEFORE the build's outcome,
+    which is the order a reader wants; it never raises and never gates.
+    """
+    nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=nfl_weekly_stats_ingest_op()))
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

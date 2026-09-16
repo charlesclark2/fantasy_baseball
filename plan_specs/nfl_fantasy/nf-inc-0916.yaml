@@ -172,6 +172,64 @@ spec:
       (desktop + mobile); `tsc` clean; the page's own `metadata.description`
       is flag-driven too, because the shipped one promised exactly what the
       page now withholds.
+    node1: >
+      DONE (code) — the verification came FIRST and it changed the fix's
+      shape, which is exactly what the spec's precondition was for.
+      (a) THE SOURCE ADVANCES, measured live 2026-09-15/16: both vendor
+      files exist for 2026 and carry week 1 (`stats_player_week` 1,118
+      rows; `snap_counts` 1,492). The cadence: an NFL week CLOSES on a
+      Monday night (2026 wk1 ran 09-09 → 09-14) and the vendor publishes
+      it the NEXT MORNING — `snap_counts_2026.parquet` republished
+      2026-09-15T11:25:15Z and `stats_player_week_2026.parquet` at
+      14:21:38Z, i.e. 5-8 h after the slate ended.
+      (b) THE WRITE SCOPE IS SAFE, and for a reason that is not obvious
+      from the write side: `_nflverse_seasonal` reads the WHOLE season
+      file every time (nflverse publishes one cumulative file per
+      season, not per week), so `replaceWhere season = N` replaces the
+      partition with a SUPERSET — cumulative, idempotent. And
+      `write_dataframe` SKIPS a 0-row frame, so a not-yet-published week
+      can never overwrite a good partition with an empty one. The danger
+      is real in general and absent here.
+      ⭐ (c) THE CADENCE FINDING THAT CHANGED THE FIX: the roll-forward
+      fires MONDAY 06:15 PT (`NFL_ROLL_FORWARD_CRON`). A week closes
+      Monday NIGHT and publishes Tuesday morning, so on a weekly cadence
+      the just-completed week is missing for a FULL SEVEN DAYS — and
+      under the retained-zero convention a missing line is a zero. That
+      is this incident recurring weekly at one-sixteenth the size. ⇒ the
+      feeds are NOT added to `ROLL_FORWARD_SOURCES`. They are ingested by
+      `nfl_weekly_stats_ingest_op`, the FIRST op of
+      `sports_nfl_weekly_serving_job`, immediately upstream of the build
+      that learns from them — the INC-25 rule in its strongest form (the
+      consumer is refreshed downstream of its feed IN THE SAME RUN, so
+      there is no cron window and no second schedule that can silently
+      revert to STOPPED). `roll_forward.py`'s own scope boundary had
+      already said the realized-game stack belongs "on their own
+      cadence"; that cadence had never been built.
+      ONE OWNER is mechanical: `in_season_stats` asserts at import that
+      neither name is in `ROLL_FORWARD_SOURCES`, and a guard clause says
+      it by name.
+      FRESHNESS CONTRACT: `nfl_weekly_stats_freshness` judges each feed's
+      CONTENT (which week it carries) against the SCHEDULE — never a
+      Delta commit time (INC-41: a daily re-land of a stale vendor file
+      refreshes the commit while the content stands still), and never
+      against the feed itself (circular). Five states, and PENDING is
+      load-bearing: without it the monitor pages every Monday night on
+      the vendor's normal lag, which is how a monitor gets muted.
+      SETTLE_HOURS = 24 against a measured 5-8 h lag.
+      VERIFIED: the ingest ran end-to-end to a LOCAL Delta root (1,118 /
+      1,492 rows, matching the vendor exactly) — zero production impact.
+      16 guard clauses green; 18/18 red proof.
+    node1_open: >
+      ⏭️ OPERATOR: the production backfill has NOT been run from this
+      session (it writes production S3). It is listed in the handoff as
+      a paste-ready laptop command. ⚠️ NOTE it may be a no-op: the lake
+      ALREADY holds 2026 wk1 for both feeds (1,118 / 1,492 rows), written
+      2026-09-16T02:43Z as a ONE-OFF — the Delta history shows nothing
+      else for these tables since the 2026-07-18 historical backfill,
+      while `weekly_rosters` (a real roll-forward source) writes several
+      times a day. That contrast is what proves the premise: the rows are
+      present and the CADENCE was absent, which is the `stg_ref_players`
+      shape and is invisible to a row count.
     node0_scope_note: >
       ⚠️ RENDERING ONLY, per the spec — the free API and CDN routes still SERVE
       the defective numbers, so a reader who fetches
@@ -236,6 +294,23 @@ spec:
       which is currently false, and the absent state asserts the component head
       produced nothing for that player, which is not what happened. Three
       states, three sentences — the rule this surface was already built on.
+
+      ── ⑥ NF-WK-RC1 IS A CONSUMER OF THESE TABLES, NOT AN INGEST OWNER — checked,
+      because the kickoff flagged a possible collision. Its node 1 is a DIAGNOSIS
+      ("name the realized weekly stat-line source in the lake … find its cadence"),
+      and the table it will land on is `stats_player_week`. There is therefore no
+      two-writer risk, and RC1's cadence question is answered by this node: the
+      feed is owned by `nfl_weekly_stats_ingest_op`, refreshed daily immediately
+      before the weekly build, and a completed week lands the morning after its
+      Monday-night close (measured 5-8 h). RC1 should read, not ingest.
+
+      ── ⑦ THE ROLL-FORWARD JOB DEFINES `NFL_ROLL_FORWARD_TIMEOUT_SECONDS` AND
+      NEVER USES IT. `nfl_roll_forward_ingest_op` calls `run_roll_forward(season)`
+      in-process with no bound, so the constant is a declaration with no
+      production behind it (the NF-C0e wired≠invoked class). Not touched here —
+      it is another story's op and the fix is not free (an in-process call needs
+      either a subprocess or a job-level `dagster/max_runtime`) — but it is the
+      same INC-32 exposure this story's own ingest was careful to avoid.
 
       ── ⑤ `run_nf_c6_ph2_promotion_review.component_coherence` now NAMES its
       sign convention (components − head) in both its docstring and the emitted
