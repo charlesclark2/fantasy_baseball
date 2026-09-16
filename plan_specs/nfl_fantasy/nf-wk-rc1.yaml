@@ -268,6 +268,7 @@ spec:
       - "league_scoring.py / NF-EPIC 1 / G100 — the one-scorer rule and entitlement standard bind verbatim; REALIZED_STAT_FIELD derives from the scorer's map."
       - "NF-WK-FE1 (Done) — public weekly page untouched; Phase B here is the next frontend occupant (verify none other open)."
       - "Entrypoint sibling sweep (GyD9hoeD) — if this story adds a publish/serving entrypoint, it ships WITH an executing smoke from day one (never joins the zero-callers list)."
+      - "NF-WVR1 (IN FLIGHT) — ⚠️ SEAM SPLIT, PM-ratified 2026-09-16, recorded so neither session duplicates the other's fetch: RC1 owns the WEEKLY MATCHUP fetch (`sleeper_matchups.fetch_week`, `/matchups/{week}`, STARTERS-ONLY and deliberately FROZEN point-in-time — a recap must be stable after it renders). WVR1 owns the ROSTER REFRESH (a method on `platform_import/sleeper.py` beside `_fetch_teams`, `/league/{id}/rosters`, the FULL rostered set and deliberately CURRENT — a stale FA pool recommends rostered players). Two different objects on one host with correctly OPPOSITE freshness semantics; neither supersedes the other. WVR1 node 1 (`docs/nf_wvr1_fa_pool_diagnosis.md` §3) is the analysis of record."
   triedLedger:
     files:
       - "NF-WK-MT1 closeout (the endpoint + gate pattern this story mirrors; the probe and fixture lessons)"
