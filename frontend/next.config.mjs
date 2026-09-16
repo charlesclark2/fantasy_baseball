@@ -25,6 +25,20 @@ const securityHeaders = [
       // published fixtures by `test_e9_46_image_hosts_are_allowlisted.py`.
       "img-src 'self' data: blob: https://a.espncdn.com https://img.mlbstatic.com https://static.www.nfl.com",
       "font-src 'self'",
+      // ⛔ WITHOUT THIS LINE SESSION REPLAY IS OFF IN PRODUCTION, AND NOTHING SAYS SO (NF-INC-0917).
+      //
+      // Sentry's replay integration runs its compression in a Worker created from a `blob:` URL.
+      // `worker-src` has no entry here, so it fell back to `default-src 'self'` and the browser
+      // refused the worker — a console warning, no server-side signal, and no replay attached.
+      // `replaysOnErrorSampleRate` is 1.0, so a replay WAS attempted for the TypeError that took
+      // `/fantasy/weekly` down for 758 minutes: the one issue in this product's history that most
+      // needed a recording is the one that has none.
+      //
+      // ⚠️ `blob:` IS THE LOAD-BEARING TOKEN, not `'self'` — the worker is constructed from a blob
+      // rather than fetched from our origin, so an entry naming only `'self'` reads as a fix and
+      // changes nothing. Kept narrow deliberately: this permits workers from our own origin and
+      // from blobs we ourselves construct, and no third-party host gains anything.
+      "worker-src 'self' blob:",
       // Cognito + our own API + PostHog + Sentry
       [
         "connect-src 'self'",

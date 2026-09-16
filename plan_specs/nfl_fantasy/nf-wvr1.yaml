@@ -447,3 +447,119 @@ spec:
       the driver block is not the same vintage as the number it sits beside.
       For whoever owns NF1.5 to confirm or dismiss — not a WVR1 finding.
 
+
+      ⑩ A RIDER ON ⑧'s OPEN QUESTION ("who wires RC1's realized publisher?"), from
+      NF-INC-0917B's serving-writer census (2026-09-16) and INDEPENDENTLY SPOT-CHECKED
+      here rather than relayed on trust: of the writers that publish to the SERVING
+      api-cache, exactly ONE validates its published output against a declared
+      contract — `run_weekly_serving.py`, which runs `NflWeeklyManifest` /
+      `NflWeeklyPayload` / `NflWeeklyCurrent` `.model_validate(...)` over the very
+      blobs it writes. My check of six sibling writers (export_track_record_json,
+      export_draft_board_json, export_player_history_json, run_sleeper_player_ingest,
+      run_nf_serving_board_snapshot, run_nf_d21_publish) found none that does —
+      ⚠️ `run_nf_d21_publish`'s `GP.validate(...)` is a GATE check, not an
+      output-contract check on the published artifact, so it does not count and a
+      keyword grep alone would have miscounted it.
+      ⇒ WHEN RC1's `realized_week.publish` IS WIRED IT BECOMES THE 11TH SUCH WRITER,
+      and a contract is far cheaper to add BEFORE it has published history than after
+      (once weeks are on the wire, tightening a contract is retroactive over stored
+      artifacts — the E9.49 class). So ⑧'s question to the PM is really two: WHO wires
+      it, and DOES IT SHIP WITH A DECLARED CONTRACT. ⛔ Not a WVR1 scope request — WVR1
+      consumes that artifact and does not own it — and NF-INC-0917B carries the census
+      itself in its own followUps, so the PM will see it from both sides; recorded here
+      only because it rides on a question this story raised.
+
+
+      ⑪ ⛔⛔ CORRECTION TO ⑧ AND ⑩ — I WAS WRONG THAT RC1's REALIZED PUBLISHER HAS NO
+      CALLER (2026-09-16). It has a full CLI entrypoint,
+      `quant_sports_intel_models/football/nfl/fantasy/run_realized_week.py`
+      (`--season --week --publish --smoke`, bucket defaulting to CACHE_BUCKET), and RC1
+      built it deliberately so it "can never join the zero-callers list". My grep was
+      scoped to `pipeline/ scripts/ services/` and never looked in
+      `quant_sports_intel_models/…/fantasy/`, which is where the runner lives — the
+      INC-27 "grep the WHOLE repo, not just the DAG" lesson, landing on the session that
+      had just cited INC-27 at someone else. I asserted the absence in a commit message
+      and to the PM twice before checking the directory the module itself lives in.
+      ⇒ THE CORRECTED STATE, each half measured:
+        • an OPERATOR COMMAND EXISTS and is paste-ready:
+          `uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_realized_week
+           --season 2026 --week 1 --publish`  (reads the LAKE, so laptop per the
+          data-fix-defaults-to-the-laptop rule; `--smoke` dry-builds first; it REFUSES to
+          publish a `not_started` week rather than writing a zero-row artifact);
+        • what is genuinely MISSING is the RECURRING WIRING — nothing outside tests
+          references `run_realized_week`, so there is no op, schedule or cron; a week gets
+          published only when a human runs it;
+        • the ARTIFACT IS STILL UNPUBLISHED (S3 `fantasy/nfl/realized/` empty, verified
+          two-sided against a control prefix) — that half of ⑧ was measured directly and
+          STANDS.
+      ⇒ so the fact columns are unblocked by ONE OPERATOR RUN TODAY, not by a wiring
+      project; the wiring question survives for the RECURRING cadence (weeks 2..18).
+      The PM question is therefore: run it now for week 1, and separately decide who owns
+      the recurring cadence + whether it ships with a declared contract (⑩).
+
+      ⑩ᵃ AMENDMENT TO ⑩ — the census denominator is 12, NOT 10 (NF-INC-0917B, who found
+      their own defect while checking mine). A per-file scan keyed on a file calling
+      `put_object(` ITSELF misses a publisher that DELEGATES its upload to a shared
+      helper; two do — `run_nf_d21_publish` (via `GP.copy_tree_uploader`) and
+      `run_realized_week` (via `_maybe_publish`). Verified here: both carry
+      `put_object=0` and `model_validate=0`. Same INC-27 family as ⑪, facing the WRITER
+      side. The headline SURVIVES — still exactly ONE contracted writer
+      (`run_weekly_serving.py`) — but of 12, and by luck rather than method, so it is
+      recorded that way rather than quietly shown as a better number.
+      ⚠️ TWO SCOPE LIMITS, both theirs, both worth keeping attached to the number:
+      (a) my `\.validate\(` false-positive point applies to a NAIVE pattern, NOT to
+      their scan, which uses `\.model_validate\w*\(` and matches neither
+      `run_nf_d21_publish` nor `write_serving_store`; (b) the scan asks whether a file
+      validates ANYTHING, not whether it validates THE BLOB IT WRITES — no such case
+      arose (only one file matched at all), but it is a SCREEN, NOT A PROOF, and neither
+      story may quote it as one.
+      ⇒ and it lands on ⑪: `run_realized_week` is ALREADY the 12th uncontracted serving
+      writer, not a hypothetical one — the artifact has no declared contract today and no
+      published history yet, which is exactly the cheap window (E9.49 is the bill for the
+      other order).
+
+
+      ⑩ᵇ PROVENANCE ON ⑩ᵃ — ⚠️ THIS ENTRY WAS ITSELF WRONG ON FIRST WRITING AND IS
+      CORRECTED IN PLACE (2026-09-16). What it said: "a reader checking `dev` today finds
+      the UNCORRECTED census and would conclude 10." MEASURED, and false — on
+      `origin/dev`'s copy of `plan_specs/nfl_fantasy/nf-inc-0917b.yaml`:
+        `10 WRITERS` 0 · `12 WRITERS` 0 · `EXACTLY ONE` 0 · `1 of 10` 0 · `1 of 12` 0
+        `status: ACCEPTED` · `verdict: null` · closeout still the PM's placeholder
+        ("Findings land HERE. PM triages into…")
+        every "census" hit is PM ACCEPTANCE-CRITERIA PROSE — the instruction to PERFORM
+        one ("a census of other publish paths that validate-and-discard…") plus an
+        OverlapCheck line. Not a result.
+      ⇒ THE ACCURATE FORM: the census does not exist on `dev` IN ANY FORM. The figure 10
+      never existed in any record anywhere — only in an intermediate commit on
+      NF-INC-0917B's branch and in inter-session messages. When #1152 lands it arrives
+      ALREADY CORRECTED at 12. My original wording would have sent a reader hunting a
+      wrong number that is not there — worse than the ambiguity it was trying to close.
+      ⇒ ⑩ᵃ's number is PENDING ON #1152 (still open); ⑪'s "unblocked by one operator run"
+      is true of `run_realized_week` INDEPENDENTLY of that PR — the two are not one
+      landing.
+      ⭐ THE MECHANISM, because it is the rule below for the THIRD time and this one is
+      mine: NF-INC-0917B's warning was about STATUS ("don't let it read as landed") and I
+      converted it into a claim about CONTENT ("a reader would find 10") WITHOUT READING
+      THE FILE. Worse, I had run a grep — `grep -cE "12|denominator|copy_tree_uploader|
+      _maybe_publish"` returned **2** — and read a COUNT as evidence that a census result
+      existed, when the two hits were incidental and the three SPECIFIC markers all
+      returned 0. ⇒ SUB-RULE, cheap and general: A GREP COUNT IS NOT EVIDENCE OF WHAT
+      MATCHED. Print the matching LINES before drawing a conclusion from a non-zero count;
+      `-c` answers "how many lines contain something", never "is the thing there".
+
+      ⭐ THE GENERAL FORM, which is the part worth keeping once both anecdotes fade
+      (NF-INC-0917B's articulation, adopted here because it is better than mine):
+      A SCOPED SCAN ANSWERS A QUESTION ABOUT ITS SCOPE, NOT ABOUT THE REPO — and the scope
+      is chosen BEFORE you know where the answer lives, which is what makes this
+      SYSTEMATIC rather than careless. INC-27 is usually quoted as "grep the whole repo
+      before dropping a table"; the wider shape is that ANY COMPLETENESS CLAIM — "N
+      writers", "no callers", "nothing reads this", "zero rows therefore not running" —
+      INHERITS THE BOUNDARY OF THE SCAN THAT PRODUCED IT, AND MUST CARRY THAT BOUNDARY
+      WITH IT. Two instances inside one hour, from opposite sides: their per-file
+      `put_object(` scan could not see a DELEGATING writer (undercount, 10 vs 12); my
+      `pipeline/ scripts/ services/` grep could not see a caller living beside its own
+      module (a false ABSENCE asserted to the PM twice). ⚠️ And the honest tail, theirs:
+      the corrected instrument keys on `put_object(` OR A KNOWN UPLOAD-HELPER LIST, and
+      that helper list is ITSELF a scope — the set measured today, not a closed one. The
+      same failure is one unusual helper away. A completeness claim is a claim about a
+      boundary; state the boundary.

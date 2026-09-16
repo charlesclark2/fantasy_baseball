@@ -1338,7 +1338,7 @@ export const WEEKLY_READ_FAILED =
  * A stated absence is the honest answer; a crash is not, and neither is silence.
  */
 export const WEEKLY_FRAMING_ABSENT =
-  "The measurement notes that belong with these numbers did not come through with this week's build, so we are not showing them rather than writing our own version of them from memory. What the range means is unchanged — it is on the “80% range” column heading itself — and the projections above are unaffected."
+  "The measurement notes that belong with these numbers did not come through with this week's build, so we are not showing them rather than writing our own version of them from memory. What the range means is unchanged — it is on the “80% range” column heading itself — and nothing else on this page depends on them."
 
 // ── the PPR-native framing, and why there is no format picker ────────────────────────────────────
 
