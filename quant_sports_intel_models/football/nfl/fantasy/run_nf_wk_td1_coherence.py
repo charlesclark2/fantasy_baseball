@@ -7,7 +7,7 @@
     LAPTOP (before + after, once a post-emission payload has been staged):
       uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_nf_wk_td1_coherence \
         --before …/nf_wk_td1_before_week2_players.json \
-        --after  …/artifacts/weekly_serving/weekly/2026/2/players.json \
+        --after  …/artifacts/weekly_serving/2026/2/players.json \
         --out    …/ablation_results/nf_wk_td1_coherence.json
 
 ⭐ THE METHOD IS MT1's, VERBATIM, AND DEVIATING FROM IT BREAKS COMPARABILITY. Component sum uses

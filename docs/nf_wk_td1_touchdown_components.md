@@ -361,7 +361,7 @@ uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_weekly_servi
 **Success looks like:** it exits 0 and logs
 `component line: 11 field(s) non-null on all N projected rows` plus
 `[METRIC] weekly_component_fields_complete=11`. It writes
-`artifacts/weekly_serving/weekly/2026/2/players.json`. ⛔ If it raises
+`artifacts/weekly_serving/2026/2/players.json`. ⛔ If it raises
 `… component value(s) are NULL on projected players`, the emission did not take —
 that refusal is the point and should stop the run.
 
@@ -371,7 +371,7 @@ that refusal is the point and should stop the run.
 cd /Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy
 uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_nf_wk_td1_coherence \
   --before quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_wk_td1_before_week2_players.json \
-  --after  quant_sports_intel_models/football/nfl/fantasy/artifacts/weekly_serving/weekly/2026/2/players.json \
+  --after  quant_sports_intel_models/football/nfl/fantasy/artifacts/weekly_serving/2026/2/players.json \
   --out    quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_wk_td1_coherence.json
 ```
 
