@@ -136,11 +136,34 @@ spec:
           `replaysOnErrorSampleRate: 1.0`, and the CSP's `connect-src` DOES allow
           `https://*.sentry.io` — so the exception itself had a clear path off the page
           and was almost certainly RECORDED for all 12.6 hours while nobody was told.
-          ⇒ do NOT spend the follow-up building capture we already have; spend it on the
-          NOTIFICATION rule (an alert on a spike in unhandled client exceptions, or on
-          any error on a serving route). Confirm by looking for the TypeError in Sentry
-          for 2026-09-15T15:33Z onward — if it is there, that is the whole finding.
-          It is the difference between a 12.6-hour outage and a 10-minute one.
+          ✅ CONFIRMED BY THE OPERATOR 2026-09-16 — THE HEDGE IS RESOLVED, AND IN THE
+          MORE ACTIONABLE DIRECTION. The issue IS in Sentry. Captured event
+          2026-09-16T03:47:19Z (23 minutes before this investigation opened, and ~12h
+          into the outage), stack resolved through source maps to the exact line —
+          `weekly-page.tsx:539:40` — on deployment `dpl_8Cme8NUPwaTFWwpQtd4GJamKzRWz`
+          (sha `5f597e7e`), which is the inherited build named in `introducing-deploy`.
+
+          ⇒ EVERY LAYER OF THE PIPELINE WORKED EXCEPT THE LAST ONE. The exception was
+          raised, caught by the global handler, sent over `connect-src`, ingested,
+          grouped, and SOURCE-MAPPED to a file and column — and no human was told for
+          twelve hours. There is nothing to build here: the fix is a NOTIFICATION RULE
+          in the Sentry UI, not an integration in this repo. ⛔ Do NOT spend the
+          follow-up on capture.
+
+          ⭐ THE BREADCRUMBS ALSO SETTLE THE "HTTP 200 WHILE DOWN" POINT WITH EVIDENCE
+          RATHER THAN INFERENCE: both reads immediately before the throw are recorded
+          `status_code: 200` (`/api/public/weekly-manifest?season=2026` and
+          `…/weekly-projections?season=2026`). The API was healthy, the transport was
+          healthy, and the page died on the SHAPE of a successful response — which is
+          precisely why no status-code-shaped monitor anywhere in this system could have
+          seen it, and why the notification rule must key on CLIENT EXCEPTIONS rather
+          than on availability.
+
+          ⚠️ AND THE COST OF THE CSP GAP BELOW IS NOW DEMONSTRATED, NOT HYPOTHESISED:
+          `replaysOnErrorSampleRate: 1.0` means a replay was ATTEMPTED for this very
+          event and the `worker-src` fallback blocked the worker — so the one issue that
+          most needed a replay has none attached. Cheap to confirm: open the issue and
+          look for a replay. There will not be one.
       - id: sentry-replay-csp-worker-src
         summary: >
           COSMETIC, NOT THE CAUSE, and confirmed so before being set aside: the
