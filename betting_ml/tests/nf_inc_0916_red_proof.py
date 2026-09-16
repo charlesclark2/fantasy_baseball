@@ -53,10 +53,14 @@ _CI_YML = _REPO / ".github/workflows/ci.yml"
 _INGEST = _REPO / "quant_sports_intel_models/football/nfl/ingest/in_season_stats.py"
 _JOB = _REPO / "pipeline/jobs/sports_nfl_weekly_serving_job.py"
 _SFRESH = _REPO / "betting_ml/monitoring/nfl_weekly_stats_freshness.py"
+_WS = _REPO / "quant_sports_intel_models/football/nfl/fantasy/weekly_serving.py"
+_RUNNER = _REPO / "quant_sports_intel_models/football/nfl/fantasy/run_weekly_serving.py"
 
 _GUARD = _TESTS / "test_nf_inc_0916_promotion_gate.py"
 _FEED = _TESTS / "test_nf_inc_0916_training_feed.py"
-_GUARD_FILES = (_GUARD, _FEED)
+_REFUSE = _TESTS / "test_nf_inc_0916_training_refusal.py"
+_PH2 = _TESTS / "test_nf_c6_ph2_weekly_serving.py"
+_GUARD_FILES = (_GUARD, _FEED, _REFUSE, _PH2)
 
 #: An unrelated clause that must stay GREEN through every mutation — otherwise a RED is not
 #: attributable to the guard it is credited to. Deliberately one that ALSO reads `ci.yml`, so a
@@ -202,6 +206,74 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "    return max(sev, key=lambda s: order.get(s, 0)) if sev else None",
      "    return max(sev, key=lambda s: order.get(s, 0)) if len(sev) == len(verdicts) else None",
      f"{_FEED}::test_one_stale_feed_pages_even_when_its_sibling_is_healthy"),
+
+    # ══ NODE 2 — the refusals at the instrument ═══════════════════════════════════════════════
+    ("the coverage floor is raised to a level real historical weeks fall below",
+     _WS,
+     "TRAIN_STAT_COVERAGE_FLOOR = 0.30",
+     "TRAIN_STAT_COVERAGE_FLOOR = 0.50",
+     f"{_REFUSE}::test_the_floor_sits_below_every_week_in_the_measured_history"),
+
+    ("the floor is dropped to zero, which the defect itself satisfies",
+     _WS,
+     "TRAIN_STAT_COVERAGE_FLOOR = 0.30",
+     "TRAIN_STAT_COVERAGE_FLOOR = 0.0",
+     f"{_REFUSE}::test_the_floor_sits_below_every_week_in_the_measured_history"),
+
+    ("the gate keys on ZEROS instead of coverage — it would refuse a real low-scoring week",
+     _WS,
+     '             .agg(n=("_has_stat_row", "size"), coverage=("_has_stat_row", "mean"))',
+     '             .agg(n=("_has_stat_row", "size"), coverage=("fantasy_points", lambda v: float((v > 0).mean())))',
+     f"{_REFUSE}::test_the_retained_zero_convention_is_not_repealed"),
+
+    ("byes are counted against coverage, so the verdict depends on how many teams were off",
+     _WS,
+     '    played = frame[frame["_has_game"].astype(bool)]',
+     "    played = frame",
+     f"{_REFUSE}::test_byes_are_excluded_from_coverage"),
+
+    ("the TARGET week is judged, which would refuse every build there has ever been",
+     _WS,
+     "    hist = played[key < target.season * 100 + target.week]",
+     "    hist = played[key <= target.season * 100 + target.week]",
+     f"{_REFUSE}::test_the_target_week_is_not_judged"),
+
+    ("an empty examination is scored as a pass (NF1.7(a))",
+     _WS,
+     '    if cov.empty:\n        raise WeeklyServingError(',
+     '    if False:\n        raise WeeklyServingError(',
+     f"{_REFUSE}::test_it_refuses_an_empty_examination"),
+
+    ("the manifest's two-field proof stops refusing the pair the incident published",
+     _WS,
+     "    if sa < (int(tt_s), int(tt_w)):",
+     "    if False:",
+     f"{_REFUSE}::test_the_manifest_gate_fires_on_the_exact_state_the_incident_published"),
+
+    ("the build defines the coverage refusal and never calls it (wired != invoked)",
+     _RUNNER,
+     "    stat_cov = WS.assert_training_stat_coverage(frame, target=target, vintage=vintage)",
+     '    stat_cov = {"min_coverage": 1.0, "n_weeks_checked": 0, "min_week": "n/a", "floor": 0.0}',
+     f"{_REFUSE}::test_the_build_invokes_both_refusals"),
+
+    ("the build stops calling the manifest refusal",
+     _RUNNER,
+     "    sv = WS.assert_stat_vintage_reaches_training(vintage)",
+     '    sv = {"evaluable": False}',
+     f"{_REFUSE}::test_the_build_invokes_both_refusals"),
+
+    # ⚠️ RE-ANCHORING AN EXISTING GUARD CAN WEAKEN IT. Node 1's second op gave this module a second
+    # `.classify(` call, so NF-C6-PH2's module-wide scan failed on code unrelated to its property
+    # and had to be scoped to the op it always meant. This case proves the scoping did not cost it
+    # its teeth: the defect it exists to catch must still turn it RED.
+    ("the re-anchored NF-C6-PH2 kickoff guard: the escalation input is dropped again",
+     _JOB,
+     "    verdict = WF.classify(reading, expected_week=expected_week,\n"
+     "                          served_slate_ends=served_slate_ends,\n"
+     "                          expected_kickoff=expected_kickoff)",
+     "    verdict = WF.classify(reading, expected_week=expected_week,\n"
+     "                          served_slate_ends=served_slate_ends)",
+     f"{_PH2}::test_the_freshness_op_actually_supplies_the_expected_kickoff"),
 ]
 
 
@@ -227,7 +299,8 @@ def _sweep_stale_backups() -> list[str]:
     real file mutated and reports success.
     """
     restored = []
-    for root in (_REPO / "frontend/data", _REPO / "frontend/lib",
+    for root in (_REPO / "quant_sports_intel_models/football/nfl/fantasy",
+                 _REPO / "frontend/data", _REPO / "frontend/lib",
                  _REPO / "frontend/components", _REPO / ".github/workflows",
                  _REPO / "quant_sports_intel_models/football/nfl/ingest",
                  _REPO / "pipeline/jobs", _REPO / "betting_ml/monitoring"):

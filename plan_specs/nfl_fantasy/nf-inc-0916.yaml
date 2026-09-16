@@ -230,6 +230,54 @@ spec:
       times a day. That contrast is what proves the premise: the rows are
       present and the CADENCE was absent, which is the `stg_ref_players`
       shape and is invisible to a row count.
+    node2: >
+      DONE (code). TWO refusals on TWO substrates, both RED-proven with
+      the exact historical state AND baseline-passed against the real
+      lake.
+      (1) FRAME-SIDE — `assert_training_stat_coverage` refuses any
+      TRAINING week whose share of rows matching a real stat line falls
+      below a floor. ⭐ It keys on `_has_stat_row` — whether a stat line
+      was JOINED — never on the VALUE that came back, so the
+      retained-zero convention is untouched: a player who played and
+      scored nothing HAS a stat row and is a true zero. Byes are
+      excluded (a bye has no stat line by definition). The target week
+      is excluded (it legitimately has no outcome). It refuses an EMPTY
+      examination and a frame that lost its columns (NF1.7(a)). It runs
+      BEFORE the fit — there is nothing to learn from fabricated labels
+      except a wrong P(zero), and the fit is the nine-minute step.
+      ⭐ THE FLOOR IS MEASURED, AND THE MEASUREMENT OVERTURNED THE
+      INSTINCT. Built through the real code path over 2016-2026 (216
+      weeks, byes excluded): per-season minima 0.4157 (2016 wk1) to
+      0.6942, medians ~0.68. A 0.60 floor would have refused 5 healthy
+      weeks; 0.50 — the instinctive pick — would have refused 1 (2016
+      wk1). 0.30 refuses 0 of 216 and sits 0.116 below the worst week
+      ever observed, while the defect measures 0.0000.
+      (2) MANIFEST-SIDE — `assert_stat_vintage_reaches_training` refuses
+      a payload whose `stats_as_of` trails `train_through`. That is the
+      incident's own two-field proof: both fields were computed
+      CORRECTLY and NOTHING EVER COMPARED THEM. They can disagree
+      because `train_through` comes from the training frame's newest row
+      (built off the ROSTER spine), so it can name a week whose every
+      label was fabricated. A second, independent reading of the same
+      defect — the frame vs the artifact a human and the monitor
+      actually see.
+      TWO-SIDED AGAINST REAL DATA: with today's lake the coverage gate
+      PASSES (216 weeks checked, worst 2016-W1 at 0.4157); with 2026
+      stats withheld — the state the incident trained on — it REFUSES,
+      naming `2026 wk 1=0.0000 (n=520)`. The manifest gate refuses
+      ('2025-W18', 2026 wk 1) and passes ('2026-W1', 2026 wk 1).
+      19 guard clauses; red proof now 28/28.
+    node2_note: >
+      ⚠️ ONE EXISTING GUARD WAS RE-ANCHORED, not weakened, and it is
+      called out because that is the dangerous-looking edit.
+      NF-C6-PH2's `test_the_freshness_op_actually_supplies_the_expected_kickoff`
+      AST-scanned the WHOLE job module for a `.classify(` call — correct
+      while the module held exactly one. Node 1's freshness op added a
+      second, over a different classifier with a different signature, so
+      the unscoped form failed on code unrelated to its property. It is
+      now scoped to `nfl_weekly_freshness_op`, the op it always meant;
+      the assertion itself is unchanged, and a red-proof case shows the
+      defect it exists to catch still turns it RED.
     node0_scope_note: >
       ⚠️ RENDERING ONLY, per the spec — the free API and CDN routes still SERVE
       the defective numbers, so a reader who fetches

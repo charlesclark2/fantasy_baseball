@@ -444,6 +444,170 @@ def build_serving_matrix(src: dict[str, pd.DataFrame], *, target: TargetWeek,
     return modeled, audit, frame
 
 
+#: The lowest per-week stat coverage a TRAINING week may carry before the build refuses.
+#:
+#: ⭐ MEASURED OVER THE POPULATION IT WILL JUDGE, not chosen from the armchair — and the
+#: measurement overturned the first instinct. Built through this module's own code path over
+#: 2016-2026 (216 weeks, byes excluded):
+#:
+#:     per-season minimum   0.4157 (2016 wk 1, n=777)  … 0.6942 (2026 wk 1)
+#:     median               ~0.68 every season, range 0.6705-0.7016
+#:     floor 0.60 would have REFUSED 5 of 216 healthy weeks
+#:     floor 0.50 would have REFUSED 1 of 216 healthy weeks  ← the instinctive choice, and wrong
+#:     floor 0.40 refuses 0 of 216
+#:     floor 0.30 refuses 0 of 216, and sits 0.116 below the worst healthy week ever observed
+#:
+#: The defect this exists to catch measures **0.0000** — 2026 week 2 carried 500 rows with a game
+#: and not one stat row — so the floor has 0.30 of margin on the side that matters and 0.116 on the
+#: side that costs a false refusal. ⛔ Do not raise it toward the healthy band "to catch more": the
+#: band's lower tail is real historical weeks, and a build that refuses to publish is a product
+#: outage. A SMALL partial landing is the FRESHNESS CONTRACT's job (it compares weeks), not this
+#: gate's — this one catches the week that did not land at all.
+TRAIN_STAT_COVERAGE_FLOOR = 0.30
+
+
+def training_stat_coverage(frame: pd.DataFrame, *, target: TargetWeek) -> pd.DataFrame:
+    """Per-week share of TRAINING rows that matched a real stat line.
+
+    ⭐ `_has_stat_row` IS THE DISCRIMINATOR, and it is the reason this gate does not touch the
+    retained-zero convention. `attach_labels` LEFT-joins the stat feed and keeps every non-match as
+    `fantasy_points = 0.0`; a player who genuinely played and scored nothing HAS a stat row, so he
+    is a TRUE zero and counts as covered. What the column separates is the true zero from the
+    FABRICATED one — a row whose zero exists only because no stat line was ever joined to it.
+
+    ⚠️ BYE ROWS ARE EXCLUDED. A bye has no stat line BY DEFINITION, so counting byes against
+    coverage would make the gate's reading depend on how many teams were off that week — a number
+    with nothing to do with whether the feed landed.
+    """
+    required = {"season", "week", "_has_game", "_has_stat_row"}
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise WeeklyServingError(
+            f"the frame is missing {missing} — the coverage gate cannot be evaluated, which is not "
+            "the same as it passing (NF1.7(a))"
+        )
+    # ⚠️ EMPTY IS HANDLED BEFORE THE MASK, and it is a pandas quirk rather than fussiness: boolean-
+    # masking a zero-row frame whose mask column is object-dtype returns a frame with NO COLUMNS
+    # AT ALL, so the very next line raises `KeyError: 'season'` — a confusing error in place of the
+    # clean "this gate examined nothing" refusal the caller is owed.
+    if frame.empty:
+        return pd.DataFrame(columns=["season", "week", "n", "coverage"])
+    played = frame[frame["_has_game"].astype(bool)]
+    if played.empty:
+        return pd.DataFrame(columns=["season", "week", "n", "coverage"])
+    # Training = strictly before the target week, on the same (season, week) ordering the runner
+    # uses to build `train`.
+    key = played["season"].astype(int) * 100 + played["week"].astype(int)
+    hist = played[key < target.season * 100 + target.week]
+    if hist.empty:
+        return pd.DataFrame(columns=["season", "week", "n", "coverage"])
+    g = (hist.groupby(["season", "week"])
+             .agg(n=("_has_stat_row", "size"), coverage=("_has_stat_row", "mean"))
+             .reset_index())
+    return g.sort_values(["season", "week"]).reset_index(drop=True)
+
+
+def assert_training_stat_coverage(
+    frame: pd.DataFrame, *, target: TargetWeek, vintage: dict | None = None,
+    floor: float = TRAIN_STAT_COVERAGE_FLOOR,
+) -> dict:
+    """⛔ REFUSE to train on a week whose stat line never landed — NF-INC-0916's own mechanism.
+
+    The incident: `stats_player_week` and `snap_counts` had no scheduled ingest, so the 2026 week-1
+    training rows matched nothing, `attach_labels` filled them with zeros under the retained-zero
+    convention, and the hurdle learned a `P(zero)` from a week nobody had played. Population-matched
+    against realized scoring the served point ran at roughly a third of reality, and at quarterback
+    roughly a fifth. Nothing anywhere was red: a fabricated zero is a valid float.
+
+    ⭐ THE REFUSAL KEYS ON COVERAGE ABSENCE, NEVER ON ZEROS. The retained-zero convention is not
+    repealed and must not be — a real stat line of zeros is a true zero and the model should learn
+    it. What is refused is a week for which NO stat line was joined at all.
+
+    ⛔ AND IT REFUSES ON AN EMPTY EXAMINATION. A gate that inspected no weeks has not passed
+    (NF1.7(a)); this whole incident is what a year of green runs examining nothing looks like.
+    """
+    cov = training_stat_coverage(frame, target=target)
+    if cov.empty:
+        raise WeeklyServingError(
+            "the training stat-coverage gate examined ZERO weeks — it cannot have passed. Either "
+            "there are no training rows before "
+            f"{target.season} wk {target.week}, or the frame lost its coverage columns."
+        )
+    bad = cov[cov["coverage"] < float(floor)]
+    if len(bad):
+        worst = bad.sort_values("coverage").iloc[0]
+        listed = ", ".join(f"{int(r.season)} wk {int(r.week)}={r.coverage:.4f} (n={int(r.n)})"
+                           for r in bad.itertuples())
+        hint = ""
+        if vintage:
+            hint = (f" The manifest would have recorded stats_as_of="
+                    f"{vintage.get('stats_as_of')!r} beside train_through="
+                    f"{vintage.get('train_through_season')} wk {vintage.get('train_through_week')}"
+                    " — those two disagreeing is the signature.")
+        raise WeeklyServingError(
+            f"{len(bad)} training week(s) carry stat coverage below the {floor:.2f} floor: {listed}."
+            f" The worst is {int(worst.season)} wk {int(worst.week)} at {worst.coverage:.4f}."
+            " Under the retained-zero convention those rows are labelled 0.0 without ever having"
+            " matched a stat line, so the fit would learn a P(zero) from a week that was never"
+            " played — NF-INC-0916." + hint +
+            " Check that `nfl_weekly_stats_ingest_op` ran, and that the vendor has published the"
+            " week (a completed week lands the morning after its Monday-night close)."
+        )
+    return {"n_weeks_checked": int(len(cov)),
+            "min_coverage": float(cov["coverage"].min()),
+            "min_week": f"{int(cov.loc[cov['coverage'].idxmin(), 'season'])}-"
+                        f"W{int(cov.loc[cov['coverage'].idxmin(), 'week'])}",
+            "floor": float(floor)}
+
+
+def stat_vintage_tuple(raw: object) -> tuple[int, int] | None:
+    """`"2025-W18"` → `(2025, 18)`; `None` when it cannot be parsed."""
+    if not isinstance(raw, str) or "-W" not in raw:
+        return None
+    season, _, week = raw.partition("-W")
+    try:
+        return int(season), int(week)
+    except ValueError:
+        return None
+
+
+def assert_stat_vintage_reaches_training(vintage: dict) -> dict:
+    """⛔⛔ NF-INC-0916's TWO-FIELD PROOF, AS A REFUSAL — and it is the cheapest gate in the story.
+
+    The incident was provable from the published manifest ALONE, with no re-derivation and no box:
+    `stats_as_of: "2025-W18"` sat beside `train_through: 2026 wk 1`. BOTH FIELDS WERE COMPUTED
+    CORRECTLY. What was missing is that anything ever compared them.
+
+    They can disagree because they come from different places: `train_through` is the training
+    frame's own newest row, and that frame is built off the ROSTER spine — so it can name a week
+    whose every label was fabricated by the retained-zero LEFT join, while the stat feed's own
+    vintage quietly says the feed never reached that week.
+
+    ⭐ A SECOND, INDEPENDENT READING OF THE SAME DEFECT, deliberately. `assert_training_stat_coverage`
+    reads the FRAME; this reads the MANIFEST — the artifact a human and the freshness monitor
+    actually see. A change that fixed one without the other still cannot publish quietly.
+
+    ⚠️ AN UNPARSEABLE `stats_as_of` IS SILENT HERE, and that is defensible ONLY because the frame-
+    side gate covers the same defect. A single gate failing open is the shape this whole incident
+    is about.
+    """
+    sa = stat_vintage_tuple(vintage.get("stats_as_of"))
+    tt_s, tt_w = vintage.get("train_through_season"), vintage.get("train_through_week")
+    if sa is None or tt_s is None or tt_w is None:
+        return {"evaluable": False, "stats_as_of": vintage.get("stats_as_of"),
+                "train_through": [tt_s, tt_w]}
+    if sa < (int(tt_s), int(tt_w)):
+        raise WeeklyServingError(
+            f"the stat feed reaches {vintage['stats_as_of']} but training reaches {tt_s} wk {tt_w} "
+            "— the newest training week is BEYOND the newest week the stat feed carries, so its "
+            "labels cannot have come from a stat line. That pair is the NF-INC-0916 signature, and "
+            "it sat in the published manifest for the whole incident with nothing comparing the "
+            "two fields. Refusing to publish."
+        )
+    return {"evaluable": True, "stats_as_of": vintage["stats_as_of"],
+            "train_through": [int(tt_s), int(tt_w)]}
+
+
 def assert_pit_gate_non_vacuous(audit: dict) -> dict:
     """The point-in-time gate must have EXAMINED something.
 
