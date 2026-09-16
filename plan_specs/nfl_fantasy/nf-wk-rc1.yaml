@@ -10,7 +10,7 @@ metadata:
   name: nf-wk-rc1
   vertical: nfl_fantasy
   card: https://trello.com/c/3D2HnxXv   # EPIC NF-SEASON; RC1 card linked at kickoff by PM
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     After each NFL week completes, every imported league gets (a) a
@@ -54,13 +54,154 @@ spec:
         near-complete coverage; report honestly whatever it is —
         a term the source doesn't carry renders as captured with the
         adjacent disclosure, exactly the MT1 discipline.
+        ✅ NODE 1 COMPLETE + PM-ACCEPTED 2026-09-16 —
+        `docs/nf_wk_rc1_realized_source_diagnosis.md`. Source =
+        `nflverse.stats_player_week`; FINAL gate is a COUNT not a clock
+        (`distinct game_id == the schedule's game count`); map =
+        `app/backend/services/realized_stat_fields.py`, derived from
+        the scorer's key set and reproduced against nflverse's own
+        `fantasy_points_ppr` to 3.55e-15 over all 1,118 real 2026 wk-1
+        rows. ⚠️ TIMING PREMISE CORRECTED: WEEK 1 is the first
+        completed week (finished Mon 09-14); week 2 opens Thu 09-17 and
+        completes Mon 09-21 — not "Tue 09-16" as written below.
+        ⚠️ D2 RULED (2026-09-16): TEAM D/ST IS BUILT IN PHASE A —
+        points allowed from `schedules`, yards allowed from
+        `stats_team_week`, the D/ST term map derived from the scorer's
+        key set like everything else, never hand-typed. Parity adapts:
+        reproduce an independently-computed figure where one exists;
+        where none does, prove the construction TWO-SIDED (a deliberate
+        weight mutation moves it; a fabricated points-allowed is
+        caught) and SAY IN THE RECORD that this map has no external
+        cross-check. If the team-level path turns out not to be
+        cheap-ish, STOP AND REPORT rather than absorbing the growth.
+        # ⚠️⚠️ D2 DISPOSITION 2026-09-16 — THE STOP CONDITION FIRED AND THE PM RULED (C).
+        # An independently-computed figure DID exist (Sleeper scores every started defence under
+        # the league's own settings), and against it the construction reproduced only 35 of 48
+        # team-weeks across four weeks (disagreeing 1/3/6/3 of 12) — SYSTEMATIC, not a stat
+        # correction. One mechanism was found + fixed (nflverse keeps `fumble_recovery_tds`
+        # separate from `def_tds`) with marginal effect; at least one remains unidentified.
+        # ⇒ RULED (C), quoting the disposition: "the D/ST seat serves Sleeper's
+        # `starters_points`, PROVENANCE-LABELED ON THE SURFACE (the league's own figure, stated
+        # plainly — NOT a footnote), every other seat scored by our scorer, and the coverage
+        # report says honestly that D/ST terms are LEAGUE-PUBLISHED rather than covered. Team
+        # totals and PF/PA then agree exactly with the league's standings, which is the property
+        # the surface must have."
+        # ⛔ OPTION (A) — a stated D/ST absence — is REFUSED, and the ground matters: D/ST is one
+        # of nine seats, so an absence does not leave a hole, it makes every team total and the
+        # STANDINGS systematically disagree with the league's own page. That is D1's
+        # plausible-but-wrong shape one column over, and checking our numbers against their league
+        # page is a user's FIRST act on a recap.
+        # ⭐ THE ONE-SCORER RULE IS NOT BREACHED: it exists to prevent a FOURTH IMPLEMENTATION of
+        # our scoring policy; consuming the league's published figure is not an implementation, it
+        # is CITING THE AUTHORITY. On a factual surface the league's own number IS the fact, and
+        # our 27%-divergent construction would substitute an unvalidated estimate for a known one.
+        # 🔬 THE CONSTRUCTION STILL RUNS, AS A DIVERGENCE RECORDER, UNDER ONE HARD CONSTRAINT:
+        # ⛔ IT RECORDS DATA, NEVER A PAGE. "A comparison known to fail on ~27% of team-weeks that
+        # paged would be the muted-monitor pattern arriving on day one." Log the per-week
+        # divergence set (which teams, ours vs theirs, delta) to an artifact (B) consumes; NO
+        # alert threshold until (B) explains the known residual, because before then a NEW
+        # mechanism and a KNOWN one are indistinguishable in the stream.
+        # ⭐ THE PLAYER SEATS ARE THE MIRROR IMAGE and their expectation is DECLARED SEPARATELY:
+        # they reproduce Sleeper exactly today, so a player-seat divergence IS page-worthy signal
+        # and MAY alert; the D/ST seat EXPECTS divergence and only records.
+        # 📌 CARRIED TO CLOSEOUT: (a) the SEA wk1 case verbatim (ours 6.00 vs Sleeper 8.00, the
+        # realized line fully accounted, no term in the complete 56-key settings able to supply
+        # the 2) as (B)'s cleanest reproduction target, alongside the MH2.2 boundary already on
+        # the card — NO settings term may be invented to force agreement; if Sleeper's number
+        # cannot be derived from stats plus settings, THAT IS THE FINDING. (b) the proven-but-
+        # unwired corrections (points-allowed != opponent score, with the MIN 24->17 tier-crossing
+        # proof; negative `sack_yards_lost`; LA/LAR) stay committed as VALIDATED COMPONENTS
+        # AWAITING (B) — they do NOT wire into the served seat under (C), and ⛔ nothing may
+        # quietly wire them later without the harness passing.
+        # (B) is carded by the PM as fXIYuvMN.
+    # ⚠️⚠️ AMENDED 2026-09-16 (PM ruling D1 = option A, ratified) — THE ORIGINAL PHASE A
+    # DESCRIBED A CONTRACT THE STORED DATA CANNOT SATISFY. Node 1 verified the spec's premises
+    # against the running system and found we hold NONE of the three inputs it assumed:
+    #   • no team's week-N STARTED LINEUP — `LEAGUE_ROSTER_PLAYER_FIELDS` is
+    #     ("name","position","team"); `starter` is DELIBERATELY dropped for other teams, and the
+    #     caller's own `imported_roster.starter` is the IMPORT-TIME flag, not that week's lineup;
+    #   • no weekly MATCHUP schedule or results — so record / PF-PA / "opponent result" are not
+    #     computable from the league record at all;
+    #   • rosters are an IMPORT-TIME SNAPSHOT, never re-fetched — a week-1 recap built from a
+    #     week-3 import misattributes players to teams.
+    # PM RULING, quoted: "A recap crediting benched players beside a 'power ranking' that isn't the
+    # standings is plausible-but-wrong on a factual surface, and the factual surface is the one
+    # place this program can least afford it." Option (B) (roster-level reframe) is EXPLICITLY
+    # REFUSED; (C) (narrow to the caller's own team) is refused too, and the reason is recorded
+    # because it is not obvious: "the stale-roster problem poisons even the caller's-own-team
+    # version — a week-1 recap from a week-3 import misattributes players regardless of whose team
+    # it is, so narrowing the audience doesn't narrow the defect."
+    # ⇒ THE WEEKLY MATCHUP RE-FETCH IS FUNDED INSIDE THIS STORY ("RC1 grows rather than spawning a
+    # successor, since without it the story has no honest deliverable").
+    #
+    # ⭐ AND THE PRIVACY-OF-COMPARISON DESIGN IS SUPERSEDED ONLY HERE, NARROWLY: dropping `starter`
+    # for other teams was a deliberate choice for the SEASON surface. A PLAYED week's lineups are
+    # the league's own public record on the platform, so the fetch supersedes it FOR RECAPS ONLY —
+    # the season fields stay untouched, and the recap sources its lineups ONLY from the fetched
+    # week, never from the stored season snapshot.
+    # ⚠️⚠️ PHASE A AMENDED AGAIN 2026-09-16 (PM ruling (i)) — THE STANDINGS FACT IS THE LEAGUE'S
+    # OWN TOTAL. Measuring the (C) build found team totals agreeing with the league on only 14 of
+    # 48 real team-weeks — NOT a defect: the league scores terms we legitimately CAPTURE (its `fum`
+    # any-fumble penalty has no canonical scorer key; the three 40+ yard TD bonuses have no
+    # realized source, because `passing_40` counts 40+ yard PLAYS and mapping it would be a
+    # wrong-key). So the property the D2 disposition required was not delivered by the D/ST fix.
+    # RULED (i), and the DIVISION OF LABOUR is the design: "The league's published platformTotal is
+    # the standings fact; our scorer is the explanation — per-seat, per-term, with coverage — which
+    # is the thing it is genuinely better at and the thing no league page provides."
+    # ⛔ (ii) "close `fum` and accept the rest" REFUSED, and the reason is recorded as a PROGRAM
+    # PRINCIPLE: "a number that's right sometimes is harder to trust than one that's openly derived
+    # differently — 56% agreement is the worst of all worlds." (iii) abandons the property the
+    # surface exists to have.
+    # 📐 BINDING PRESENTATION CONSTRAINTS: the seat-sum-vs-displayed-total gap is disclosed
+    # ADJACENT to the total (MT1 ruling ③ — not a panel, not a footnote) and is SPECIFIC, naming
+    # the terms from the coverage report ("this league also scores fumbles and 40+ yard TD
+    # bonuses, which the breakdown doesn't itemize yet"), NEVER a vague "totals may differ".
+    # Per-seat provenance labelling stays. ⛔ The total and the breakdown must NEVER be presented
+    # as two estimates of one number — one is the league's record, the other is our itemisation of
+    # what we can itemise (served as `standingsTotal` vs `itemisedTotal`, deliberately different
+    # names).
+    # 🔬 AMENDMENT 1 — THE PLAYER-SEAT CROSS-CHECK DOWNGRADES TO RECORD-ONLY, same as D/ST. The
+    # earlier clause had player seats expect equality and permitted to alert; that premise is now
+    # MEASURED FALSE for legitimate reasons (6-20 of ~94 per week, all captured terms). ALL seats
+    # record, NO seat pages; "an alert whose baseline includes known-legitimate divergence is the
+    # muted-monitor pattern". Alerting returns TERM BY TERM as the captured set shrinks, so where
+    # the expected gap is computable from a captured term (`fum` = −1.0 × fumbles) the EXPLAINED
+    # and UNEXPLAINED portions are recorded separately — the unexplained residual is the future
+    # alert's clean signal. Measured: 61 diverging seats over 4 weeks, 36 explained by `fum`, 25
+    # unexplained.
+    # 🚫 AMENDMENT 2 — A PLATFORM WE CANNOT FETCH HAS NO STANDINGS AT ALL, rather than approximate
+    # ones (the stated-absence ruling applied consistently). The ESPN/Yahoo absence copy on a
+    # league view says STANDINGS specifically, not just recaps.
+    # 🗂️ CLOSURE WORK IS PM-CARDED AS 1KQeqWC0, NOT THIS STORY'S: `fum` (⚠️ an ENTITLEMENT-SURFACE
+    # change — `PAID_PLAYER_FIELDS` derives from `STAT_FIELD`, so it returns to the PM before
+    # merging) and the 40p bonuses (needs `pbp` ingest, unclaimed by INC-0916 — the one-ingest-owner
+    # discipline applies when it is pulled).
+    # 📌 THE PROPERTY STATEMENT FOR THE RECORD: "our recap never contradicts the user's league
+    # page, and everything we add beyond the league page is itemized and covered or stated as
+    # captured."
     - description: >
-        PHASE A — SERVING, verified before page code: paid authed
-        endpoints on the my-teams/league-board pattern: (1) weekly
-        recap per league (per-team: per-slot realized league points
-        + team total + opponent result; absences per ABSENCE_REASONS
-        — a player with no realized line renders a stated absence:
-        bye / inactive / no-line-recorded distinguishable); (2) power
+        PHASE A — SERVING, verified before page code. FIRST the WEEKLY
+        MATCHUP RE-FETCH (PM ruling D1/A, 2026-09-16): SLEEPER FIRST
+        (`/league/{id}/matchups/{week}` — unauthenticated, a host we
+        already call), giving each team's ACTUAL started lineup and the
+        week's ACTUAL matchup result. Fetched weeks are STORED
+        SERVER-SIDE, keyed league/week and CONTENT-TIMESTAMPED, as the
+        POINT-IN-TIME record the recap is built from: "a recap must be
+        stable after it renders, not silently re-derived from a later
+        fetch; a re-fetch that changes a stored final week is a NAMED
+        EVENT, not an overwrite". Cadence sized to the weekly product
+        (POST-FINAL, never a polling loop); the fan-out over imported
+        leagues is BOUNDED and REFUSES LOUDLY over its cap. ESPN and
+        YAHOO render STATED, DISTINGUISHABLE absences — ESPN's is
+        STRUCTURAL (the paste flow re-fetches nothing; say so in the
+        absence copy in plain words), Yahoo's is the known app-side
+        OAuth gap (its record card exists; do NOT chase it here).
+        THEN the paid authed endpoints on the my-teams/league-board
+        pattern: (1) weekly recap per league (per-team: per-slot
+        realized league points off the FETCHED lineup + team total +
+        the fetched opponent result; absences per ABSENCE_REASONS — a
+        player with no realized line renders a stated absence: bye /
+        inactive / no-line-recorded distinguishable); (2) power
         rankings per league (per-team: record, league-scored PF/PA,
         rank, and the rank's stated arithmetic). Contracts
         Pydantic-declared, additive; 401-anon at the gateway;
@@ -137,7 +278,8 @@ spec:
       - "League-scored projected-vs-actual as the headline comparison — ruled out until TD1 lands (a TD-less projected yardstick judging a TD-complete actual misattributes every TD to 'outperformance')."
   supersedes: []
   dependsOn:
-    - "Week 2 completing (Tue night) + the realized-line landing node 1 establishes; no dependency on TD1 or gate 3 BY DESIGN"
+    - "WEEK 1 completing (it did, Mon 2026-09-14) + the realized-line landing node 1 establishes; no dependency on TD1 or gate 3 BY DESIGN. ⚠️ the original 'week 2 completing Tue night' is CORRECTED — week 1 is the first completed week; week 2 completes Mon 09-21."
+    - "⛔ INGEST OWNERSHIP SPLIT (PM ruling 2026-09-16, one ingest owner per table — NEVER two writers): NF-INC-0916 owns `stats_player_week` + `snap_counts` (its spec claims exactly those two) and RC1 CONSUMES what it stands up; `schedules` is ALREADY in `ROLL_FORWARD_SOURCES`; RC1 owns `stats_team_week` ALONE, under the same verify-the-source-advances + freshness discipline, recorded in BOTH closeouts. ⛔ RC1 does NOT touch ROLL_FORWARD_SOURCES for stats_player_week/snap_counts."
   feedsInto:
     - "EPIC NF-SEASON's first shipped member; the weekly retention loop (recap email/surface cadence); waiver recs (member 3) reuse the realized-line inventory; power-rankings arithmetic becomes the transparent template"
 ---
