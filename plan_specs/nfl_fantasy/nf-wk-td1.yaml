@@ -10,7 +10,7 @@ metadata:
   name: nf-wk-td1
   vertical: nfl_fantasy
   card: https://trello.com/c/mYQoKNGx
-  status: DONE
+  status: IN_PROGRESS  # ⏭️ PM FLIP PENDING. Code complete, CI-green, PR #1137. Node 3's acceptance criterion ('record the before/after table') is NOT yet met: the AFTER side needs one ~9-min operator staging build (handoff step 2, `docs/nf_wk_td1_touchdown_components.md`). The BEFORE side, the forward per-position analysis and the refutation are recorded. A worker session does not flip this — see the NF-WK-FE1 / NF-C6-PH2 precedent.
 spec:
   description: >
     MT1's live-league gate measured that the weekly payload's TD keys
