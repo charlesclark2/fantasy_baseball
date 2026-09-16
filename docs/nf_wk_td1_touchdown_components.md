@@ -290,14 +290,31 @@ side of the arithmetic. `run_nf_wk_td1_coherence.py --after …` computes all of
 ## ⚠️ A LARGER DEFECT FOUND WHILE MEASURING — reported, not fixed, and NOT this story's
 
 The coherence numbers above are measured on a payload whose **absolute level is wrong by
-a factor of roughly 3–6×**:
+roughly 3×**.
 
-| POS | realized top-24 weekly mean (2024) | served 2026 wk 2 projection | ratio |
-|---|---:|---:|---:|
-| QB | 18.99 | 3.16 | **0.17** |
-| RB | 18.45 | 6.89 | 0.37 |
-| WR | 21.09 | 6.11 | 0.29 |
-| TE | 11.91 | 4.36 | 0.37 |
+⚠️ **CORRECTED FROM MY OWN FIRST CUT.** I first compared the served projection against the
+*realized top-24 by realized points*, which gave 0.17–0.37 — that comparison has a
+**selection confound** and overstates the effect: the realized top-24 selects the 24 who
+actually boomed, which no unbiased projection can or should match. The clean comparison
+is **population-matched** — both sides are game-day-rostered QB/RB/WR/TE player-weeks
+(~470–500 per week), and an unbiased projection's MEAN over a population must equal that
+population's realized mean:
+
+| POS | n served | mean PROJECTION | n realized | mean REALIZED | ratio |
+|---|---:|---:|---:|---:|---:|
+| QB | 88 | 1.345 | 13,462 | 6.549 | **0.205** |
+| RB | 113 | 2.585 | 21,895 | 5.555 | 0.465 |
+| WR | 179 | 2.057 | 31,110 | 5.743 | 0.358 |
+| TE | 120 | 1.433 | 18,086 | 3.565 | 0.402 |
+| **ALL** | **500** | **1.901** | **84,553** | **5.357** | **0.355** |
+
+⭐ **AND THE BAND NAMES THE MECHANISM PRECISELY.** Every one of the top ten projections
+carries **`fpP10 = 0.00`** against a plausible `fpP90` (McCaffrey 0.00 / 10.45 / 27.17;
+McBride 0.00 / 11.16 / 24.61). An elite running back's 10th percentile is not zero points.
+The p90 ceilings are roughly right, so the conditional-on-playing half of the champion's
+hurdle is broadly intact — **what is broken is the ZERO ATOM**, which is exactly what a
+whole training week of fabricated zeros would inflate. The level collapse is that atom
+dragging every mean toward zero, not a uniform scale error.
 
 **The mechanism is provable from the manifest alone.** It records
 `stats_as_of: "2025-W18"` (the newest week in the stats feed) beside

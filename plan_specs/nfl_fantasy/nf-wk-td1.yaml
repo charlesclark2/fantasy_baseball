@@ -213,9 +213,18 @@ spec:
       week-1 training row has NO stat row and `attach_labels` fills
       `fantasy_points = 0.0` under the retained-zero convention. The model trains
       on a whole week of fabricated zeros and every player's
-      `prior_week_box__ppr_l1` is 0.0 on the week-2 slate. MEASURED EFFECT: the
-      served projection's absolute level is wrong by ~3-6x — top-24 QB projected
-      3.16 against a realized 18.99 (ratio 0.17), RB 0.37, WR 0.29, TE 0.37. This
+      `prior_week_box__ppr_l1` is 0.0 on the week-2 slate. MEASURED EFFECT,
+      population-matched (both sides game-day-rostered QB/RB/WR/TE player-weeks,
+      so no selection confound): the served mean projection is 1.901 against a
+      realized population mean of 5.357 — a ratio of 0.355 overall, and 0.205 at
+      QB. ⭐ The band names the mechanism: every top-ten projection carries
+      `fpP10 = 0.00` against a plausible `fpP90` (McCaffrey 0.00/10.45/27.17), so
+      the conditional-on-playing half of the hurdle is broadly intact and what is
+      broken is the ZERO ATOM — exactly what a training week of fabricated zeros
+      inflates. ⚠️ An earlier cut of this measurement compared against the realized
+      TOP-24 and read 0.17-0.37; that comparison selects the players who actually
+      boomed and overstates the effect, and the population-matched figure above
+      supersedes it. This
       is the `stg_ref_players` "a table with NO SCHEDULED WRITER is a
       silent-staleness bomb" class applied to a MODEL's training substrate, and
       it holds for EVERY week of 2026 until the sources are added. ⚠️ It also
