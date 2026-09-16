@@ -61,11 +61,18 @@ spec:
           It never deployed, so it cannot be the cause — checked FIRST, before any fix.
       - id: page-down-duration
         summary: >
-          MINUTES OF PAGE-DOWN: 753 minutes (12.6 hours) from the first weekly publish
-          at 2026-09-15T15:32:59Z to the fix being cut at 2026-09-16T04:06Z, plus the
-          deploy tail. Every visitor to `/fantasy/weekly`, signed in or not, for that
-          whole window — the two free weekly reads are byte-identical for every caller,
-          so there was no cohort that escaped it.
+          MINUTES OF PAGE-DOWN: 758 minutes (12.6 hours) — from the first weekly
+          publish at 2026-09-15T15:32:59Z to the restoring production deployment
+          `6473589545` (sha `8e7fb86b`, PR #1143) at 2026-09-16T04:10:44Z. Every visitor
+          to `/fantasy/weekly`, signed in or not, for that whole window — the two free
+          weekly reads are byte-identical for every caller, so no cohort escaped it.
+
+          VERIFIED RESTORED 2026-09-16T04:11Z, cache-busted, in a real browser against
+          production: 500 rows render, the week label, absence panel and full provenance
+          line are present, the served interval notes are correctly ABSENT (0), the
+          screened suppression copy IS shown, no "client-side exception" text anywhere,
+          and ZERO page errors. The one remaining console error is the `worker-src` CSP
+          warning below — confirmed cosmetic, and now the ONLY error on the page.
 
           ⚠️ THE DURATION IS A LOWER BOUND ON THE DETECTION GAP, NOT ON THE HARM: the
           route returned HTTP 200 the entire time, so nothing we run would ever have
