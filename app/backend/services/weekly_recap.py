@@ -33,23 +33,48 @@ citing the authority. The provenance is carried per seat (`source`) and must be 
 the surface — the disposition's words: "not a footnote".
 
 ───────────────────────────────────────────────────────────────────────────────────────────────────
-🔬 THE DIVERGENCE RECORDER, AND ITS ONE HARD CONSTRAINT
+⭐⭐ THE STANDINGS FACT IS THE LEAGUE'S TOTAL; OUR SCORER IS THE EXPLANATION (PM ruling (i), 2026-09-16)
 ───────────────────────────────────────────────────────────────────────────────────────────────────
 
-Both seat kinds are compared against the platform's own figure, and THEIR EXPECTATIONS ARE DECLARED
-SEPARATELY because they are opposite:
+Measuring (C) found that team totals agreed with the league on only 14 of 48 real team-weeks — not
+from a defect, but because the league scores terms we legitimately CAPTURE (its `fum` any-fumble
+penalty has no canonical scorer key; the three 40+ yard TD bonuses have no realized source, because
+`passing_40` counts 40+ yard PLAYS and mapping it would be a wrong-key). So the property the D2
+disposition required was not delivered by the D/ST fix alone.
 
-  • PLAYER seats   expect EQUALITY. A divergence is real signal and MAY alert.
-  • The D/ST seat  expects DIVERGENCE (we know it fails ~27% of team-weeks). It RECORDS ONLY.
+The ruling extends the same reasoning one level up, and the DIVISION OF LABOUR is the design:
 
-⛔ The D/ST comparison must never page. Quoting the constraint: "a comparison known to fail on ~27%
-of team-weeks that paged would be the muted-monitor pattern arriving on day one." No threshold is
-set on it until the (B) story explains the known residual, because until then a NEW mechanism and a
-KNOWN one are indistinguishable in the stream.
+    the league's published `platformTotal` is the STANDINGS FACT;
+    our scorer is the EXPLANATION — per-seat, per-term, with coverage —
+    which is what no league page provides.
 
-⚠️ AND THE PLAYER-SEAT EXPECTATION IS ITSELF A MEASURED CLAIM, NOT AN ASSUMPTION. `player_expectation`
-is reported by `compare_to_platform` from what the run actually saw, so a caller can tell "these
-agree" from "we asserted they would".
+⛔ THE TWO ARE NEVER PRESENTED AS TWO ESTIMATES OF ONE NUMBER. One is the league's record; the other
+is our itemisation of what we can itemise. `total` (ours) and `standingsTotal` (theirs) are
+deliberately DIFFERENT FIELD NAMES so a consumer cannot casually swap them.
+
+⛔ AND THE GAP IS DISCLOSED ADJACENT TO THE TOTAL, SPECIFICALLY (the MT1 ruling-③ adjacency rule —
+not a panel, not a footnote), NAMING THE TERMS: the coverage report already knows which ones, so the
+copy says "this league also scores fumbles and 40+ yard TD bonuses, which the breakdown doesn't
+itemize yet" and never a vague "totals may differ". `itemisation_gap_note` builds exactly that
+sentence from the resolved coverage rather than from a constant.
+
+⚠️ A PLATFORM WE CANNOT FETCH HAS NO STANDINGS AT ALL, rather than approximate ones — the
+stated-absence ruling applied consistently. ESPN/Yahoo league views say STANDINGS specifically, not
+just recaps.
+
+───────────────────────────────────────────────────────────────────────────────────────────────────
+🔬 THE DIVERGENCE RECORDER: EVERY SEAT RECORDS, NO SEAT PAGES
+───────────────────────────────────────────────────────────────────────────────────────────────────
+
+The earlier clause had player seats expecting EQUALITY and permitted to alert. ⚠️ THAT PREMISE IS
+NOW MEASURED FALSE, for legitimate reasons: 6-20 of ~94 player seats per week diverge, every one of
+them explained by a captured term. So the ruling downgraded player seats to RECORD-ONLY alongside
+D/ST — "an alert whose baseline includes known-legitimate divergence is the muted-monitor pattern".
+
+⭐ ALERTING RETURNS TERM BY TERM AS THE CAPTURED SET SHRINKS, and this module prepares for that:
+where the expected gap is COMPUTABLE from a captured term (`fum` = −1.0 x fumbles), the EXPLAINED
+and UNEXPLAINED portions are recorded separately. The unexplained residual is the future alert's
+clean signal; the explained portion is arithmetic and must never be mistaken for evidence.
 """
 
 from __future__ import annotations
@@ -183,14 +208,24 @@ def score_week(
                 total += float(row["points"])
             seats.append(row)
 
+        # ⭐ THE STANDINGS FACT. A commissioner override, where the league set one, IS the league's
+        # record for that team — so it wins over the computed platform total rather than being
+        # carried beside it and ignored (a league that uses one has a REAL result different from
+        # the sum of its lineup, and our standings would otherwise disagree with its own page).
+        standings = (team.get("platformCustomTotal")
+                     if team.get("platformCustomTotal") is not None
+                     else team.get("platformTotal"))
         teams.append({
             "teamKey": team.get("teamKey"),
             "teamName": team.get("teamName"),
             "matchupId": team.get("matchupId"),
             "seats": seats,
-            "total": total,
-            "platformTotal": team.get("platformTotal"),
-            "platformCustomTotal": team.get("platformCustomTotal"),
+            # ⛔ TWO NAMES ON PURPOSE — see the header. `itemisedTotal` is OURS (the sum of what we
+            # could itemise); `standingsTotal` is the LEAGUE'S record. Never interchangeable.
+            "itemisedTotal": total,
+            "standingsTotal": standings,
+            "standingsSource": SOURCE_LEAGUE_PUBLISHED if standings is not None else None,
+            "itemisationGap": (None if standings is None else total - float(standings)),
         })
 
     return {
@@ -203,6 +238,14 @@ def score_week(
         "teams": teams,
         "matchups": matchups(teams),
         "coverage": coverage,
+        # ⛔ RENDERED ADJACENT TO THE TOTAL, never as a panel or a footnote (MT1 ruling ③). None
+        # when the league captures nothing, so a surface shows no disclosure rather than an empty
+        # one — a caveat that fires on nothing is one readers learn to skip.
+        "itemisationGapNote": itemisation_gap_note(coverage),
+        "standingsNote": (
+            "Team totals and results are your league's own published figures. The slot breakdown "
+            "is your league's scoring applied by us to the week's real stat line."
+        ),
     }
 
 
@@ -221,16 +264,24 @@ def matchups(teams: list[dict]) -> list[dict]:
     for mid, side in sorted(groups.items(), key=lambda kv: (kv[0] is None, kv[0])):
         entry = {
             "matchupId": mid,
-            "teams": [{"teamKey": s["teamKey"], "teamName": s["teamName"], "total": s["total"]}
+            "teams": [{"teamKey": s["teamKey"], "teamName": s["teamName"],
+                       "standingsTotal": s["standingsTotal"], "itemisedTotal": s["itemisedTotal"]}
                       for s in side],
         }
-        if len(side) == 2:
+        # ⭐ THE RESULT IS DECIDED ON THE LEAGUE'S OWN TOTAL, never on our itemisation. Deciding a
+        # head-to-head on our sum could hand a user a DIFFERENT WINNER from their league page,
+        # which is the worst available form of the disagreement this ruling exists to prevent.
+        a_t = side[0]["standingsTotal"] if side else None
+        b_t = side[1]["standingsTotal"] if len(side) == 2 else None
+        if len(side) == 2 and a_t is not None and b_t is not None:
             a, b = side
             entry["winnerTeamKey"] = (
-                None if a["total"] == b["total"]
-                else (a if a["total"] > b["total"] else b)["teamKey"]
+                None if a_t == b_t else (a if a_t > b_t else b)["teamKey"]
             )
-            entry["tied"] = a["total"] == b["total"]
+            entry["tied"] = a_t == b_t
+        elif len(side) == 2:
+            # Named, never guessed: without the league's totals there is no result to report.
+            entry["resultUnavailable"] = True
         else:
             # Named rather than silent: "we could not pair this" is a fact the surface may render.
             entry["unpaired"] = True
@@ -238,25 +289,97 @@ def matchups(teams: list[dict]) -> list[dict]:
     return out
 
 
+#: A CAPTURED term → the realized column that would supply it, where one exists. This is what lets
+#: a divergence be split into an EXPLAINED portion (arithmetic) and an UNEXPLAINED residual (the
+#: future alert's clean signal).
+#:
+#: ⚠️ DELIBERATELY TINY, AND THAT IS THE HONEST STATE. `fum` is the only captured term whose value
+#: this line can supply today. The three 40+ yard TD bonuses CANNOT be explained here — deriving
+#: them needs `pbp`, and `passing_40` counts 40+ yard PLAYS rather than touchdowns, so mapping it
+#: would be a wrong-key that scores silently (node 1 measured it exceeding the touchdown count).
+#: A term absent from this map leaves its share in the UNEXPLAINED residual, which is the correct
+#: place for it: unexplained means "we cannot account for this", not "this is wrong".
+EXPLAINABLE_CAPTURED_TERMS: dict[str, str] = {
+    "fum": "fumbles_total",
+}
+
+
+#: Lake columns a caller must ALSO select for the explained/unexplained split to work — DERIVED, so
+#: teaching a new captured term widens the read automatically.
+#:
+#: ⚠️ THIS CONSTANT EXISTS BECAUSE ITS ABSENCE WAS A SILENT NO-OP. `fumbles_total` is not among the
+#: columns `realized_stat_fields.REALIZED_STAT_COLUMNS` selects (the fumble term maps to the three
+#: per-phase columns), so the first cut of the split ran with no input and reported `explained` as
+#: 0.0 for every seat — the explanation mechanism was declared and never fed, which reads exactly
+#: like "nothing is explainable" (the NF-C0e wired-≠-invoked shape). The tell was that UNEXPLAINED
+#: equalled DIVERGING in all four measured weeks while closing `fum` demonstrably moved agreement
+#: from 14/48 to 27/48.
+EXPLANATION_COLUMNS: tuple[str, ...] = tuple(sorted(set(EXPLAINABLE_CAPTURED_TERMS.values())))
+
+
+def itemisation_gap_note(coverage: dict) -> str | None:
+    """The sentence rendered ADJACENT to the total, naming the terms that explain the gap.
+
+    ⛔ SPECIFIC, NEVER GENERIC (the ruling): "the coverage report already names which terms explain
+    the gap, so the copy says so, never a vague 'totals may differ'." Built from the RESOLVED
+    coverage rather than a constant, so a league that captures nothing gets no sentence at all and
+    a league that captures something gets its OWN terms named.
+    """
+    captured = sorted(
+        t["key"] for t in (coverage.get("terms") or [])
+        if t.get("verdict") == "captured" and abs(float(t.get("weight") or 0.0)) > 0
+    )
+    if not captured:
+        return None
+    labels = {
+        "fum": "fumbles", "pass_td_40p": "40+ yard passing TD bonuses",
+        "rush_td_40p": "40+ yard rushing TD bonuses", "rec_td_40p": "40+ yard receiving TD bonuses",
+        "fumble_rec_td": "fumble-recovery touchdowns", "pat_missed": "missed extra points",
+        "st_player_td": "return touchdowns",
+    }
+    named = []
+    for key in captured:
+        label = labels.get(key)
+        if label and label not in named:
+            named.append(label)
+    if not named:
+        # ⚠️ Honest rather than silent: we know the gap has a cause and cannot name it in words yet.
+        return ("This league scores terms our breakdown does not itemize yet, so the slot points "
+                "below do not add up to the total above.")
+    if len(named) == 1:
+        subject = named[0]
+    else:
+        subject = ", ".join(named[:-1]) + " and " + named[-1]
+    return (f"This league also scores {subject}, which the breakdown below doesn't itemize yet — "
+            "so the slot points don't add up to the total above.")
+
+
 def compare_to_platform(
     scored: dict,
     *,
     dst_constructed: dict[str, float] | None = None,
+    captured_weights: dict[str, float] | None = None,
+    realized_by_seat: dict[tuple, dict] | None = None,
     tolerance: float = 1e-9,
 ) -> dict:
     """Our per-seat points vs the platform's own, with the two seat kinds reported SEPARATELY.
 
-    ⛔ THIS FUNCTION DOES NOT DECIDE TO ALERT, and that separation is deliberate: the D/ST leg is
-    known to diverge and must never page (see the header), while the player leg is real signal. A
-    caller reads `playerSeats` for an alert decision and `dstSeats` for the (B) artifact.
+    ⛔ NO SEAT PAGES — EVERY SEAT RECORDS (PM amendment, 2026-09-16). The earlier design let player
+    seats alert on the premise that they reproduce the platform exactly; that premise was MEASURED
+    FALSE (6-20 of ~94 per week, every one explained by a captured term), so alerting on it would
+    be the muted-monitor pattern on day one. `mayAlert` is False on both legs and is carried IN THE
+    DATA so a caller cannot wire an alert by reading only the numbers.
 
-    ⭐ `playerExpectation` is MEASURED, not asserted — it reports what this run actually saw, so a
-    reader can tell "these agree" from "someone wrote down that they would".
+    ⭐ THE SPLIT IS WHAT ALERTING COMES BACK ON. Where a captured term's value is computable
+    (`EXPLAINABLE_CAPTURED_TERMS`), its arithmetic contribution is recorded as `explained` and the
+    remainder as `unexplained`. The residual is the future alert's clean signal; the explained part
+    is arithmetic and must never be mistaken for evidence.
     """
     player_div: list[dict] = []
     dst_div: list[dict] = []
     player_n = dst_n = 0
     dst_unavailable: list[dict] = []
+    player_unexplained: list[dict] = []
     for team in scored.get("teams") or []:
         for seat in team.get("seats") or []:
             ours, theirs = seat.get("points"), seat.get("platformPts")
@@ -290,15 +413,32 @@ def compare_to_platform(
                     dst_div.append(rec)
             else:
                 player_n += 1
+                # ⭐ SPLIT THE DELTA. `explained` is what a captured term arithmetically accounts
+                # for: we did not apply the league's weight, so our number is higher by exactly
+                # (−weight × count). Sign follows `ours − theirs`.
+                explained = 0.0
+                key = (team.get("teamKey"), seat.get("seat"))
+                realized = (realized_by_seat or {}).get(key) or {}
+                for term, column in EXPLAINABLE_CAPTURED_TERMS.items():
+                    weight = float((captured_weights or {}).get(term) or 0.0)
+                    if weight and realized.get(column) is not None:
+                        explained += -weight * float(realized[column])
+                rec["explained"] = explained
+                rec["unexplained"] = delta - explained
                 if abs(delta) > tolerance:
                     player_div.append(rec)
+                    if abs(rec["unexplained"]) > tolerance:
+                        player_unexplained.append(rec)
     return {
         "playerSeats": {
             "compared": player_n, "diverging": len(player_div), "rows": player_div,
-            "expectation": "equality",
-            "mayAlert": True,
-            # MEASURED — see the docstring.
-            "playerExpectation": "held" if not player_div else "violated",
+            # ⭐ THE RESIDUAL AFTER CAPTURED TERMS ARE ACCOUNTED FOR — the quantity a future
+            # term-by-term alert keys on, kept separate from the raw divergence count.
+            "unexplained": len(player_unexplained), "unexplainedRows": player_unexplained,
+            "expectation": "divergence_known_pending_captured_terms",
+            # ⛔ Downgraded from True by the 2026-09-16 amendment — see the docstring.
+            "mayAlert": False,
+            "explainedBy": sorted(EXPLAINABLE_CAPTURED_TERMS),
         },
         "dstSeats": {
             "compared": dst_n, "diverging": len(dst_div), "rows": dst_div,

@@ -139,6 +139,46 @@ spec:
     # the league's own public record on the platform, so the fetch supersedes it FOR RECAPS ONLY —
     # the season fields stay untouched, and the recap sources its lineups ONLY from the fetched
     # week, never from the stored season snapshot.
+    # ⚠️⚠️ PHASE A AMENDED AGAIN 2026-09-16 (PM ruling (i)) — THE STANDINGS FACT IS THE LEAGUE'S
+    # OWN TOTAL. Measuring the (C) build found team totals agreeing with the league on only 14 of
+    # 48 real team-weeks — NOT a defect: the league scores terms we legitimately CAPTURE (its `fum`
+    # any-fumble penalty has no canonical scorer key; the three 40+ yard TD bonuses have no
+    # realized source, because `passing_40` counts 40+ yard PLAYS and mapping it would be a
+    # wrong-key). So the property the D2 disposition required was not delivered by the D/ST fix.
+    # RULED (i), and the DIVISION OF LABOUR is the design: "The league's published platformTotal is
+    # the standings fact; our scorer is the explanation — per-seat, per-term, with coverage — which
+    # is the thing it is genuinely better at and the thing no league page provides."
+    # ⛔ (ii) "close `fum` and accept the rest" REFUSED, and the reason is recorded as a PROGRAM
+    # PRINCIPLE: "a number that's right sometimes is harder to trust than one that's openly derived
+    # differently — 56% agreement is the worst of all worlds." (iii) abandons the property the
+    # surface exists to have.
+    # 📐 BINDING PRESENTATION CONSTRAINTS: the seat-sum-vs-displayed-total gap is disclosed
+    # ADJACENT to the total (MT1 ruling ③ — not a panel, not a footnote) and is SPECIFIC, naming
+    # the terms from the coverage report ("this league also scores fumbles and 40+ yard TD
+    # bonuses, which the breakdown doesn't itemize yet"), NEVER a vague "totals may differ".
+    # Per-seat provenance labelling stays. ⛔ The total and the breakdown must NEVER be presented
+    # as two estimates of one number — one is the league's record, the other is our itemisation of
+    # what we can itemise (served as `standingsTotal` vs `itemisedTotal`, deliberately different
+    # names).
+    # 🔬 AMENDMENT 1 — THE PLAYER-SEAT CROSS-CHECK DOWNGRADES TO RECORD-ONLY, same as D/ST. The
+    # earlier clause had player seats expect equality and permitted to alert; that premise is now
+    # MEASURED FALSE for legitimate reasons (6-20 of ~94 per week, all captured terms). ALL seats
+    # record, NO seat pages; "an alert whose baseline includes known-legitimate divergence is the
+    # muted-monitor pattern". Alerting returns TERM BY TERM as the captured set shrinks, so where
+    # the expected gap is computable from a captured term (`fum` = −1.0 × fumbles) the EXPLAINED
+    # and UNEXPLAINED portions are recorded separately — the unexplained residual is the future
+    # alert's clean signal. Measured: 61 diverging seats over 4 weeks, 36 explained by `fum`, 25
+    # unexplained.
+    # 🚫 AMENDMENT 2 — A PLATFORM WE CANNOT FETCH HAS NO STANDINGS AT ALL, rather than approximate
+    # ones (the stated-absence ruling applied consistently). The ESPN/Yahoo absence copy on a
+    # league view says STANDINGS specifically, not just recaps.
+    # 🗂️ CLOSURE WORK IS PM-CARDED AS 1KQeqWC0, NOT THIS STORY'S: `fum` (⚠️ an ENTITLEMENT-SURFACE
+    # change — `PAID_PLAYER_FIELDS` derives from `STAT_FIELD`, so it returns to the PM before
+    # merging) and the 40p bonuses (needs `pbp` ingest, unclaimed by INC-0916 — the one-ingest-owner
+    # discipline applies when it is pulled).
+    # 📌 THE PROPERTY STATEMENT FOR THE RECORD: "our recap never contradicts the user's league
+    # page, and everything we add beyond the league page is itemized and covered or stated as
+    # captured."
     - description: >
         PHASE A — SERVING, verified before page code. FIRST the WEEKLY
         MATCHUP RE-FETCH (PM ruling D1/A, 2026-09-16): SLEEPER FIRST
