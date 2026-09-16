@@ -196,6 +196,16 @@ spec:
           NOT load-bearing — requiring `__typename == "Runs"` is the correct reading of
           the response whether or not the probe is currently degraded — but it would say
           whether the PythonError hole was ever live or purely latent.
+      F9. ⚠️ THE DEPLOY THAT SHIPS A `deploy.sh` CHANGE RUNS THE **OLD** `deploy.sh` —
+          MEASURED, not assumed. `deploy.sh` does `git pull --ff-only` and keeps
+          executing; git's fast-forward UNLINKS and RECREATES the file, so the running
+          bash keeps its fd on the old inode and reads the old script to the end
+          (verified with a mid-file edit that shifts every later byte offset — no
+          misalignment, old lines executed). ⇒ the new drain takes effect from the
+          SECOND post-merge deploy, and the FIRST one must not be read as evidence
+          either way. Merge against an idle box. Worth knowing for every future
+          `deploy.sh` change, not just this one.
+
       F8. `_run_sports_dbt` still uses raw `subprocess.run` where its sibling refit job
           uses `bounded_subprocess.run_bounded`. On POSIX the CALLER is genuinely bounded
           (kill+wait, not the Windows communicate() path — verified), so this was NOT a

@@ -643,3 +643,64 @@ CI mocks all IO and cannot see a shell probe running against a live Dagit:
    run whose start time is after the deploy.
 3. **R6 is still worth one paste** when convenient — it says whether the drain probe is returning a
    well-formed `Runs` body today, i.e. whether the `PythonError` hole was ever live or purely latent.
+
+---
+
+## 9. Operator closeout
+
+### 9a. ⚠️ The deploy that ships this fix runs the OLD drain — measured, not assumed
+
+`deploy.sh` does `git pull --ff-only` and then continues executing. Git's fast-forward **unlinks
+and recreates** the file, so the running bash process keeps its open fd on the *old* inode and
+reads the *old* script to the end. Verified empirically (a running script with a mid-file edit that
+shifts every later byte offset still executed the original lines, with no misalignment).
+
+Two consequences:
+
+1. **The first post-merge deploy is not misbehaving and is not proof of anything** — it runs the
+   pre-fix drain. Do not judge the fix by its log.
+2. **The new drain takes effect from the second deploy onward.**
+
+⇒ **Merge when the box is idle.** One read, before merging:
+
+```bash
+docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml \
+  exec -T dagster-codeloc python - <<'PY'
+from dagster import DagsterInstance, RunsFilter, DagsterRunStatus as S
+with DagsterInstance.get() as inst:
+    live = inst.get_run_records(filters=RunsFilter(
+        statuses=[S.QUEUED, S.NOT_STARTED, S.STARTING, S.STARTED, S.CANCELING]), limit=20)
+    print("in flight:", len(live))
+    for rec in live:
+        print("  ", rec.dagster_run.status.value, rec.dagster_run.job_name, rec.dagster_run.run_id[:8])
+PY
+```
+
+`in flight: 0` ⇒ safe to merge. ⛔ Avoid **12:00–13:30 UTC** (`daily_ingestion_job`, ~86 min) and
+the top of each hour, which is the busiest minute on this box.
+
+### 9b. Steps
+
+| # | Step | Notes |
+|---|---|---|
+| 1 | Merge **PR #1129 → `dev`** | CI green on head `d4fcbf95`; PR head == local HEAD (no stale-head trap) |
+| 2 | Merge **`dev` → `main`** | ⚠️ **this IS the box deploy** — the change touches `pipeline/**`, `betting_ml/**` and `services/dagster/aws/**`, all CD paths. Do it against an idle box (9a). |
+| 3 | Confirm the change is actually on `main` | `git show origin/main:services/dagster/aws/deploy.sh \| grep -c 'statuses:\[QUEUED'` must be ≥1, and `git rev-list --count origin/main..origin/dev` must be 0. A standing `dev→main` PR can ship an *earlier* `dev` with every signal green (E11.24). |
+| 4 | **Verify the run tags landed** (post-deploy) | §8 step 2. The **NFL** build fires daily at 18:00 UTC in season and will show it first; the NCAAF build only fires on a gate-open day. Expect `max_runtime: 10800`, `group: sports_dbt_build`. |
+| 5 | **Verify the drain on the SECOND deploy** | its log should read `N in-flight run(s) active — waiting…` when a run is live. Before-state: five deploys on 09-14 logged `no in-flight runs` while runs *were* live. This is the RUNTIME GATE — CI mocks all IO and cannot see a shell probe against a live Dagit. |
+| 6 | Optional, ~10 s — **R6** | says whether the `PythonError`-reads-as-drained hole was ever live or purely latent. Not load-bearing. |
+| 7 | **Back-check the next NCAAF gate-open day** | next CFB games are Thu 09-17 / Sat 09-19, so the gate opens the following morning. Confirm `sports_ncaaf_dbt_build_job` ran green — and that it did **not** collide with the NFL build (Decision 3's shared group is what prevents that). |
+| 8 | **PM decisions** | `docs/ncaaf_inc_0914_pm_decisions.md` — four decisions, recommendations included. |
+| 9 | PM flips the spec `DONE` | `plan_specs/ncaaf/ncaaf-inc-0914.yaml` is at `SHIPPED_PENDING_VERIFICATION`; step 5 is what closes it. |
+
+### 9c. ⛔ What the operator does NOT need to do
+
+- **No data restore, and no manual `sports_ncaaf_dbt_build_job` re-run.** The marts were rebuilt
+  twice on 09-14 *after* the game day by `sports_ncaaf_roll_forward_job` (13:00:45) and
+  `sports_ncaaf_strength_refit_job` (14:30:27), both running the identical `ncaaf.staging` +
+  `ncaaf.marts` selectors; `dim_ncaaf_game` holds completed games through **2026-09-13**, the most
+  recent CFB game day; no CFB games have been played since; and the 09-15 tick correctly skipped on
+  the game-day gate. Firing a rebuild now would materialize the same rows from the same lake.
+- **No `.env` change, no schedule toggle, no crontab edit.** Nothing in this fix needs one.
+- **No re-run of the four other runs killed on 09-14.** All four are hourly/daily jobs that have
+  since run green many times (`sports_nfl_dbt_build_job` 09-15 18:00:44, 192.6 s).
