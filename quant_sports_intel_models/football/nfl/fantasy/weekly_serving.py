@@ -312,6 +312,99 @@ def assert_target_week_rosters_published(rosters: pd.DataFrame, *, target: Targe
     )
 
 
+def attach_component_labels(modeled: pd.DataFrame, stats: pd.DataFrame, *,
+                            components: tuple[str, ...] = WP.COMPONENTS,
+                            ) -> tuple[pd.DataFrame, dict]:
+    """Put every DECLARED component label on the matrix, so the component head can fit them all.
+
+    ⭐ THE DEFECT THIS CLOSES, MEASURED (NF-WK-TD1). `WP.COMPONENTS` declares eleven components and
+    `WEEKLY_COMPONENT_FIELD` serves eleven keys, but only SEVEN label columns reach the matrix:
+    `weekly_frame.attach_labels` keeps four optional stat columns (the volume line) and
+    `WP.engineer_features` merges three (the yardage line). `fit_component_head` then skips the
+    other four in silence —
+
+        for comp in components:
+            if comp not in train.columns:   # ← passing_tds / passing_interceptions /
+                continue                    #   rushing_tds / receiving_tds, every build
+
+    — and `build_players` writes the four keys as `None`. Measured on the published 2026 wk 2
+    payload: all 500 rows carried `passTd`/`passInt`/`rushTd`/`recTd` as null, so a league scoring
+    touchdowns scored ~none of them. The labels were never missing from the FEED: the serving read
+    (`run_nf_w1_weekly_bakeoff.load_sources_w1`) selects all four by name, so they are read from the
+    lake on every build and dropped two functions later.
+
+    ⭐ THE MISSING SET IS DERIVED, NOT LISTED, and that is the point rather than a nicety. A hand
+    list of the four would re-arm the exact defect it fixes — a twelfth component added to
+    `WP.COMPONENTS` would land null again, silently, and the next reader would repeat this
+    investigation. Deriving it also makes a DOUBLE MERGE structurally impossible (we merge only what
+    is absent), which is a stronger guarantee than `EM.attach_td_labels`'s raise-if-present: if
+    `engineer_features` ever starts carrying a column, this quietly becomes a no-op on it instead of
+    failing a serving build.
+
+    ⛔ THE REAL STAT FEED ONLY — never `feat_stats`. `build_serving_matrix` deliberately keeps two
+    feeds (its own comment says so): the opponent-grid stub supplies GROUP KEYS for the target week,
+    and a stub's zero reaching a LABEL would be a fabricated outcome, exactly as it would in
+    `attach_labels`. A target-week row therefore gets no match and is filled with the frame's
+    retained ZERO — inert, because `run_weekly_serving.build` trains strictly before the target week
+    (`modeled["gw"] < target_rows["gw"]`), so a label on an unplayed week is never read. That is
+    PROVEN by `test_nf_wk_td1_touchdown_components.py` rather than asserted here.
+
+    Two refusals, both loud (NF1.7 (a)) and both about a corrupt FEED rather than a double merge:
+      · a duplicate (season, week, gsis_id) key REFUSES — a label keyed on an unresolved grain
+        splits one player into two half-truths (the MLB-props grain lesson);
+      · a conservation mismatch REFUSES — the summed label on the matrix over matched keys must
+        equal the feed's sum over those same keys (the NF-W3 row-conservation rule for joins).
+    """
+    missing = tuple(c for c in components if c not in modeled.columns)
+    audit: dict = {"attached": list(missing),
+                   "already_present": [c for c in components if c in modeled.columns],
+                   "n_rows": int(len(modeled))}
+    if not missing:
+        return modeled, audit
+
+    absent_from_feed = [c for c in missing if c not in stats.columns]
+    if absent_from_feed:
+        raise WeeklyServingError(
+            f"the stats feed carries no column(s) {absent_from_feed} for declared component(s) the "
+            f"matrix also lacks. Serving them as null is how they were lost in the first place, so "
+            f"this refuses rather than degrades: either the feed's SELECT dropped them "
+            f"(`load_sources_w1`) or `WP.COMPONENTS` names a component the feed has never had."
+        )
+
+    keys = ["season", "week", "gsis_id"]
+    s = stats.rename(columns={"player_id": "gsis_id"})[keys + list(missing)].copy()
+    s = s[s["gsis_id"].notna()]
+    for c in ("season", "week"):
+        s[c] = s[c].astype("int64")
+    dup = int(s.duplicated(keys).sum())
+    if dup:
+        raise WeeklyServingError(
+            f"the stats feed carries {dup} duplicate (season, week, gsis_id) key(s) — refusing to "
+            f"attach component labels on an unresolved grain."
+        )
+
+    merged = modeled.merge(s, on=keys, how="left")
+    if len(merged) != len(modeled):
+        raise WeeklyServingError(
+            f"attaching component labels changed the row count {len(modeled)} → {len(merged)} — the "
+            f"join key is not unique on one side; refusing (NF-W3 conservation)."
+        )
+
+    feed_in_matrix = s.merge(modeled[keys].drop_duplicates(), on=keys, how="inner")
+    for c in missing:
+        matrix_sum = float(pd.to_numeric(merged[c], errors="coerce").sum())
+        feed_sum = float(pd.to_numeric(feed_in_matrix[c], errors="coerce").sum())
+        if abs(matrix_sum - feed_sum) > 1e-6:
+            raise WeeklyServingError(
+                f"component-label conservation FAILED for `{c}`: matrix {matrix_sum} vs "
+                f"feed-over-matched-keys {feed_sum} — the attach corrupted the label."
+            )
+        audit[f"{c}_total"] = matrix_sum
+        audit[f"{c}_filled_zero_rows"] = int(merged[c].isna().sum())
+        merged[c] = pd.to_numeric(merged[c], errors="coerce").fillna(0.0)
+    return merged, audit
+
+
 def build_serving_matrix(src: dict[str, pd.DataFrame], *, target: TargetWeek,
                          guard=None) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
     """History + the target week, assembled through `weekly_projection.assemble_matrix`.
@@ -342,6 +435,12 @@ def build_serving_matrix(src: dict[str, pd.DataFrame], *, target: TargetWeek,
         ignore_index=True,
     )
     modeled, audit = WP.assemble_matrix(frame, feat_stats, src["snaps"], src["schedule"], **kwargs)
+    # ⭐ EVERY DECLARED COMPONENT LABEL, AFTER the PIT gate and off the REAL feed (NF-WK-TD1).
+    # AFTER, because `assemble_matrix` reindexes to the gate's kept rows; the REAL feed, because a
+    # stub row reaching a label is a fabricated outcome — the same two-feed split this function
+    # already makes for `attach_labels` above, applied to the four labels that never had it.
+    modeled, label_audit = attach_component_labels(modeled, src["stats"])
+    audit = {**audit, "component_labels": label_audit}
     return modeled, audit, frame
 
 
@@ -690,6 +789,67 @@ def build_ros(target_rows: pd.DataFrame, target_q: np.ndarray,
             "mean": mean, "q16": q16, "q84": q84,
         }))
     return WP.ros_projection(pd.concat(parts, ignore_index=True)).set_index("gsis_id")
+
+
+def assert_component_line_complete(players: list[dict]) -> dict:
+    """Every SERVED row carries a real number for every declared component — both directions.
+
+    ⭐ THE ONE CHECK THAT WOULD HAVE CAUGHT THIS STORY'S DEFECT, and the shape matters: a check
+    asking WHICH FIELDS THE PAYLOAD CARRIES reports full coverage of all eleven
+    `WEEKLY_COMPONENT_FIELD` entries on the broken artifact and passes, because the keys were
+    present — they were merely `None`. Keys-present-but-null is exactly how this hid through a
+    contract validation, a promotion review and a live runtime gate. So this counts NON-NULL VALUES
+    and never keys.
+
+    Two directions, because they are different failures:
+      · a `projected` row missing a component is the silent-null defect returning. After
+        `attach_component_labels` the component head emits all eleven, so a null here means the
+        label attach or the head has regressed — and shipping it would restore a payload a league's
+        scorer reads as "this player scores no touchdowns".
+      · a row that is NOT projected carrying a component figure is a FABRICATION — a number for a
+        player the model did not project (NF-C6b/NF-K1: the one thing this payload may never
+        contain is a number we did not produce). A bye is the documented exception: its line is the
+        DETERMINISTIC identity zero NF-W1 pre-registered, not an estimate.
+
+    ⛔ THE REFUSAL LIVES HERE, IN THE BUILDER, AND NOT ON THE PYDANTIC CONTRACT. Making the fields
+    non-optional would be the tempting "stronger" move and it would break the ALREADY-PUBLISHED
+    pre-TD artifact on read — the NF-C0 deploy-skew rule: a response-shape change must be additive,
+    and the already-deployed client reads a payload whose TD keys are null. So the contract stays
+    tolerant of both artifacts and the BUILD is what refuses to make another one.
+    """
+    fields = sorted(C.WEEKLY_COMPONENT_FIELD.values())
+    missing: list[str] = []
+    fabricated: list[str] = []
+    n_projected = 0
+    for r in players:
+        status = r.get("status")
+        if status == "projected":
+            n_projected += 1
+            for f in fields:
+                if r.get(f) is None:
+                    missing.append(f"{r.get('id')} ({r.get('pos')}): {f}")
+        elif status != "bye":
+            for f in fields:
+                if r.get(f) is not None:
+                    fabricated.append(f"{r.get('id')}: {f}={r.get(f)}")
+    if missing:
+        raise WeeklyServingError(
+            f"{len(missing)} component value(s) are NULL on projected players — refusing to publish "
+            f"a payload whose component line a league's scorer reads as zero for those stats. This "
+            f"is the NF-WK-TD1 defect: the keys are PRESENT, so a fields-carried check passes on it. "
+            f"First few: {sorted(set(missing))[:8]}"
+        )
+    if fabricated:
+        raise WeeklyServingError(
+            f"{len(fabricated)} component value(s) sit on rows the model did not project — refusing "
+            f"to publish a number we did not produce (NF-C6b/NF-K1). First few: {fabricated[:8]}"
+        )
+    if not n_projected:
+        raise WeeklyServingError(
+            "the component-completeness check saw ZERO projected rows — it would pass on nothing "
+            "(NF1.7 (a)); refusing rather than reporting a vacuous green."
+        )
+    return {"n_projected": n_projected, "n_component_fields": len(fields), "checked": True}
 
 
 def build_players(universe: pd.DataFrame, qmap: dict[str, np.ndarray],
