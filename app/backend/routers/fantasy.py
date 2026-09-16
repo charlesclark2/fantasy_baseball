@@ -25,6 +25,8 @@ from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from app.backend.dependencies import (
     get_admin_user,
@@ -372,11 +374,42 @@ def nfl_weekly_manifest(
     # when the operator runs `deploy.sh`). Either half alone leaves a window; the coercion is what
     # holds while the other is in flight, and what holds for every blob already sitting in S3.
     #
-    # ⭐ COERCE FIRST, THEN ENVELOPE. `NflWeeklyManifestResponse` declares the envelope keys, so
-    # neither ordering could strip them — but doing it in this order keeps the model the sole author
-    # of the contract half and `entitlement` the sole author of the tier half.
+    # ⭐ WHAT COMPLETES THE PAYLOAD IS THE `response_model`, AND THE `try` BELOW IS NOT A SECOND
+    # COPY OF IT — stating this precisely because the first draft of this comment claimed the two
+    # were redundant halves and that is measurably false. `NflWeeklyManifestResponse` INHERITS the
+    # contract, so it fills every defaulted field on its own; validating against the bare contract
+    # first adds nothing to the RESULT. What it adds is a place to STAND: it is the only point at
+    # which a contract failure is catchable, because the `response_model` validates after this
+    # handler has returned, where there is nothing left to catch it.
+    #
+    # ⚠️⚠️ AND THAT MATTERS BECAUSE THE COERCION MAY NOT BECOME A NEW WAY FOR THIS ROUTE TO GO
+    # DOWN, which is the one direction in which this fix could be WORSE than the pass-through it
+    # replaces. Coercion is here to ADD defaults; a blob that omits a field the contract REQUIRES
+    # is a different failure, it raises, and a raise here is a 500 on a route the page cannot
+    # render without.
+    #
+    # ⭐ THE REALISTIC TRIGGER IS NOT EXOTIC: adding a required field to the contract is an ordinary
+    # change, and `app/**` does not trigger the box deploy (deliberately), so for one build cycle
+    # EVERY manifest already in S3 is short of it. Hard-failing would take every published week's
+    # page down for a contract edit that shipped nothing — trading a silent incompleteness for a
+    # loud outage, which is not an improvement, it is the same mistake with better manners.
+    #
+    # So the contract failure DEGRADES to the pass-through and says so loudly. The page has been
+    # tolerant of a missing block since PR #1143 and renders its own absence copy, so the degraded
+    # state is honest and visible rather than swallowed. ⚠️ `JSONResponse` is what makes this
+    # reachable: returning a bare dict would be re-validated against `response_model` and raise
+    # again, one layer further out, where there is no handler at all.
+    try:
+        shaped = nfl_weekly.NflWeeklyManifest.model_validate(data).model_dump()
+    except ValidationError:
+        logger.error(
+            "[ALERT] weekly manifest %s wk%s does not satisfy its own contract — a REQUIRED field "
+            "is absent from the published blob. Serving it uncoerced so the page still renders; "
+            "the artifact needs rebuilding.", season, week, exc_info=True,
+        )
+        return JSONResponse(entitlement.open_manifest_payload(data))
     return nfl_weekly.NflWeeklyManifestResponse.model_validate(
-        entitlement.open_manifest_payload(nfl_weekly.NflWeeklyManifest.model_validate(data).model_dump())
+        entitlement.open_manifest_payload(shaped)
     )
 
 

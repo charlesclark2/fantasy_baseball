@@ -61,6 +61,9 @@ API = REPO / "frontend/e2e/fixtures/api"
 OUT_FULL = API / "fantasy-nfl-weekly-players-entitled.synthetic.json"
 OUT_FREE = API / "fantasy-nfl-weekly-players-free.synthetic.json"
 OUT_MANIFEST = API / "fantasy-nfl-weekly-manifest.synthetic.json"
+#: ⭐ NOT an API payload — contract METADATA, which is why it sits beside this script rather
+#: than in `api/`. See `_contract_defaults` for what it is for.
+OUT_DEFAULTS = Path(__file__).resolve().parent / "nfl-weekly-contract-defaults.json"
 
 SEASON, WEEK = 2026, 2
 GENERATED_AT = "2026-09-16T11:30:00+00:00"
@@ -241,8 +244,38 @@ def build() -> tuple[dict, dict, dict]:
     return manifest, payload, free
 
 
+def _contract_defaults() -> dict[str, list[str]]:
+    """Which fields each weekly model DEFAULTS — derived from the models, for the E2E to strip.
+
+    ⛔⛔ THIS EXISTS SO THE DEGENERATE FIXTURE IS NOT A HAND LIST (NF-INC-0917B).
+
+    PR #1143 gave `weekly-projections.spec.ts` a payload with `framing` deleted, because that was
+    the key production omitted. But the mechanism omits EVERY defaulted field — the live manifest
+    was short of nine — and `framing` was merely the only one the page dereferenced. A degenerate
+    naming one key by hand therefore covers today's page rather than the defect: the first time a
+    component reads `interval_lo_level`, the fixture that could reproduce the failure would have to
+    be remembered and extended, which is exactly the remembering that fails.
+
+    Deriving the set from `model_fields` means a field added with a default joins the degenerate on
+    the next fixture build, with nobody in the loop. The TypeScript spec cannot introspect pydantic,
+    so the authority has to travel as data — the same reason `PAID_WEEKLY_PLAYER_FIELDS` is derived
+    from the scorer's own map rather than typed out.
+    """
+    return {
+        model.__name__: sorted(n for n, f in model.model_fields.items() if not f.is_required())
+        for model in (C.NflWeeklyManifest, C.NflWeeklyLineage, C.NflWeeklyPlayer)
+    }
+
+
 def main() -> None:
     manifest, payload, free = build()
+    defaults = _contract_defaults()
+    if "framing" not in defaults["NflWeeklyManifest"]:
+        raise SystemExit("`framing` is no longer a DEFAULTED manifest field — the degenerate "
+                         "fixture this file feeds would stop reproducing the outage")
+    OUT_DEFAULTS.write_text(json.dumps(defaults, indent=2, sort_keys=True) + "\n")
+    print(f"wrote {OUT_DEFAULTS.relative_to(REPO)} "
+          f"({sum(len(v) for v in defaults.values())} defaulted field(s))")
     for path, blob in ((OUT_MANIFEST, manifest), (OUT_FULL, payload), (OUT_FREE, free)):
         path.write_text(json.dumps(blob, indent=2, sort_keys=False) + "\n")
         print(f"wrote {path.relative_to(REPO)} ({path.stat().st_size:,} bytes)")

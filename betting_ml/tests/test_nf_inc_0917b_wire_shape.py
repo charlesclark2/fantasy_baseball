@@ -484,13 +484,20 @@ def test_the_weekly_builder_never_validates_and_discards():
 
 
 def test_the_manifest_route_carries_both_halves_of_the_fix():
-    """⭐ BOTH, AND THE REDUNDANCY IS DELIBERATE — which is why it needs its own guard.
+    """⭐ TWO SEPARABLE PROPERTIES, AND THE FIRST DRAFT OF THIS GUARD GOT THEIR RELATIONSHIP WRONG.
 
-    The response model and the explicit coercion protect against different failures: the model
-    enforces the shape on every return path and documents it, the coercion fills the contract from
-    a blob written before the builder was fixed. Because each ALONE is sufficient to keep the wire
-    complete today, no behavioural test can notice one of them being deleted — the other silently
-    covers for it. So the structural claim is made here, where a deletion is visible.
+    It claimed the `response_model` and the in-handler coercion were redundant halves that each
+    completed the payload. Measured: they are not. `NflWeeklyManifestResponse` inherits the
+    contract, so it fills every defaulted field BY ITSELF — deleting the in-handler coercion leaves
+    the wire complete. The two things that are genuinely separable, and that this asserts, are:
+
+      1. the route DECLARES its shape (`response_model`) rather than passing the S3 blob through;
+      2. a contract failure is CAUGHT (`ValidationError`) and degrades, instead of 500ing a route
+         the page cannot render without.
+
+    Neither is visible in the other's behaviour, which is why the claim is structural. ⚠️ Each
+    clause has its own isolating RED case in `nf_inc_0917b_red_proof.py` — a conjunction whose
+    clauses are only proven together proves neither (NF-D17).
     """
     import ast
 
@@ -508,12 +515,81 @@ def test_the_manifest_route_carries_both_halves_of_the_fix():
         "the weekly manifest route lost its response_model — it is a pass-through of the S3 blob "
         "again, which is the state the outage was served in"
     )
-    coerces = any(
-        isinstance(n, ast.Attribute) and n.attr == "model_validate"
-        for r in ast.walk(fn) if isinstance(r, ast.Return)
-        for n in ast.walk(r)
+    degrades = any(
+        isinstance(h.type, ast.Name) and h.type.id == "ValidationError"
+        for n in ast.walk(fn) if isinstance(n, ast.Try)
+        for h in n.handlers
     )
-    assert coerces, (
-        "the handler returns without coercing through the contract — a blob already sitting in S3 "
-        "would reach the wire with whatever fields it happens to carry"
+    assert degrades, (
+        "the handler has no ValidationError path — a published blob missing a field the contract "
+        "REQUIRES would 500 this route, and adding a required field is an ordinary change that "
+        "ships no new artifact, so every already-published week would go down with it"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 7. THE COERCION MUST NOT BECOME A NEW WAY FOR THE ROUTE TO GO DOWN
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+@pytest.fixture()
+def store_missing_a_required_field(monkeypatch):
+    """A published manifest short of a field the contract REQUIRES — not a hypothetical.
+
+    Adding a required field to `nfl_weekly.py` is an ordinary change, and `app/**` deliberately does
+    not trigger the box deploy, so for one build cycle every manifest already in S3 is short of it.
+    """
+    from app.backend.routers import fantasy
+    from app.backend.services import cost_guardrails, jwt_verify
+
+    cost_guardrails.get_limiter().reset()
+    broken = _degenerate(_HISTORICAL_MANIFEST, "n_players")
+
+    def fake_load(rel_key: str, sport: str = "nfl"):
+        if rel_key.endswith("current.json"):
+            return {"season": 2026, "week": 2, "generated_at": "x",
+                    "manifest_key": C.weekly_manifest_key(2026, 2),
+                    "players_key": C.weekly_players_key(2026, 2)}
+        if rel_key.endswith("manifest.json"):
+            return broken
+        return None
+
+    monkeypatch.setattr(fantasy, "_load_json", fake_load)
+    monkeypatch.setattr(jwt_verify, "_fetch_jwks", lambda: None)
+    jwt_verify.reset_jwks_cache()
+    return broken
+
+
+def test_the_degenerate_really_fails_validation(store_missing_a_required_field):
+    """NF1.7(a): if the blob still validated, the clause below would be testing the happy path."""
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError):
+        C.NflWeeklyManifest.model_validate(store_missing_a_required_field)
+
+
+def test_an_uncoercible_blob_degrades_rather_than_500ing(store_missing_a_required_field, caplog):
+    """⛔ THE ONE DIRECTION THIS FIX COULD HAVE BEEN WORSE THAN THE PASS-THROUGH IT REPLACES.
+
+    Coercion exists to ADD defaults. A blob missing a REQUIRED field is a different failure, and
+    hard-failing on it would take every published week's page down for a contract edit that shipped
+    no new artifact — a silent incompleteness traded for a loud outage, which is the same mistake
+    with better manners. The page has rendered a missing block honestly since PR #1143, so degrading
+    is the state that keeps the product up AND truthful.
+
+    ⭐ AND IT MUST SAY SO. A degrade nobody is told about is the swallow-and-continue class; the
+    handler logs at ERROR with the season and week, which is the strongest signal available on a
+    Lambda that has no `send_alert` path at all (E9.8-P2).
+    """
+    import logging
+
+    with caplog.at_level(logging.ERROR):
+        status, body = _call("/fantasy/nfl/weekly/manifest", "season=2026")
+    assert status == 200, f"a published blob became a 500: {body[:400]}"
+    served = json.loads(body)
+    assert served["season"] == 2026 and served["week"] == 2
+    assert "locked" in served, "the entitlement envelope was lost on the degraded path"
+    assert any("does not satisfy its own contract" in r.message or
+               "does not satisfy its own contract" in r.getMessage() for r in caplog.records), (
+        "the route degraded SILENTLY — that is the swallow-and-continue class this repo keeps "
+        f"getting bitten by; records were {[r.getMessage()[:60] for r in caplog.records]}"
     )

@@ -112,12 +112,14 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      '@board_router.get("/nfl/weekly/manifest")',
      f"{_GUARD}::test_the_manifest_route_carries_both_halves_of_the_fix"),
 
-    ("the route stops coercing, so a blob already in S3 reaches the wire as written",
+    # ⭐ THE SAME MUTATION, CREDITED TWICE ON PURPOSE. The degrade path is asserted BOTH
+    # structurally and behaviourally, and a conjunction whose clauses are only ever proven together
+    # proves neither (NF-D17) — so this isolates the ValidationError clause of the structural guard,
+    # while the case further down proves the behaviour it stands for.
+    ("the route loses its ValidationError path (structural clause, isolated)",
      _ROUTER,
-     "    return nfl_weekly.NflWeeklyManifestResponse.model_validate(\n"
-     "        entitlement.open_manifest_payload(nfl_weekly.NflWeeklyManifest.model_validate(data).model_dump())\n"
-     "    )",
-     "    return entitlement.open_manifest_payload(data)",
+     "    except ValidationError:",
+     "    except _NeverRaised:",
      f"{_GUARD}::test_the_manifest_route_carries_both_halves_of_the_fix"),
 
     ("the response model is the BARE contract, so the entitlement envelope is stripped (E9.41)",
@@ -125,6 +127,12 @@ CASES: list[tuple[str, Path, str, str, str]] = [
      "                  response_model=nfl_weekly.NflWeeklyManifestResponse)",
      "                  response_model=nfl_weekly.NflWeeklyManifest)",
      f"{_GUARD}::test_the_route_preserves_the_entitlement_envelope"),
+
+    ("an uncoercible blob 500s the route instead of degrading to the pass-through",
+     _ROUTER,
+     "    except ValidationError:",
+     "    except _NeverRaised:",
+     f"{_GUARD}::test_an_uncoercible_blob_degrades_rather_than_500ing"),
 
     # ── the CSP ─────────────────────────────────────────────────────────────────────────────────
     ("worker-src is gone, so session replay is silently off in production again",

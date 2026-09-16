@@ -1,0 +1,38 @@
+{
+  "NflWeeklyLineage": [
+    "component_head_status",
+    "model_family",
+    "scoring_contract_version",
+    "target"
+  ],
+  "NflWeeklyManifest": [
+    "framing",
+    "interval_hi_level",
+    "interval_lo_level",
+    "positions",
+    "ros_basis",
+    "ros_sigma_hi_level",
+    "ros_sigma_lo_level",
+    "scoring_system_id",
+    "season_type"
+  ],
+  "NflWeeklyPlayer": [
+    "home",
+    "opp",
+    "passAtt",
+    "passInt",
+    "passTd",
+    "passYds",
+    "q",
+    "rec",
+    "recTd",
+    "recYds",
+    "rosP10",
+    "rosP90",
+    "rosPpr",
+    "rushAtt",
+    "rushTd",
+    "rushYds",
+    "tgt"
+  ]
+}

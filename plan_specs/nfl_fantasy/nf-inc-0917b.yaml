@@ -144,8 +144,234 @@ spec:
   graph:
     nodes: []   # MINI — builder serializes validated model -> route response_model -> defaulted-field audit on served bytes -> weekly fixture-reachability -> CSP line + Sentry rule handoff + the two open verifications -> closeout
   closeout:
-    verdict: null
-    followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+    verdict: >
+      SHIPPED. The wire carries the contract. Both halves landed: the builder
+      serialises the validated model (rebinding `manifest`/`payload`/`current`,
+      so `stage()` and `publish()` — which both write `built[...]` — have no path
+      to S3 that skips it), and the route declares `response_model` and catches a
+      contract failure rather than 500ing on it. A write-path gate
+      (`assert_contract_shaped`) refuses a blob short of its own contract at the
+      write rather than one function upstream of it.
+
+      MEASURED, on the real published artifacts rather than inferred: coercion
+      ADDS 9 manifest fields + 4 inside `lineage` + `scoring_system_id` on the
+      players blob, REMOVES nothing, and changes no value on any of 500 rows.
+      Both published generations (pre-TD and the post-TD shape) coerce additively
+      and neither is rejected. `best_alpha = 0`; no model, number or value moved.
+
+      Guards RED-proven 12/12 attributably, case 1 being the historical line
+      itself. Every case is driven by the REAL published blob or by a key DELETED
+      from one — never a hand-written fixture, which is the shape that kept the
+      suite green through the whole outage.
+
+      ⚠️ NOT DONE HERE, and deliberately: the Sentry notification rule (operator
+      UI, config + proof path in `docs/nf_inc_0917b_operator_handoff.md`), the
+      live replay verification (needs the frontend deploy), and the combined-page
+      copy review (needs an operator eye — see follow-up 9).
+    followUps:
+      - id: census-pass-through-routes
+        summary: >
+          CENSUS (report-only, as specced): 15 serving routes carry the SAME
+          structural shape the weekly manifest had — no `response_model`, returning
+          a store blob verbatim. Measured by AST over `app/backend/routers/` (129
+          routes total; 51 declare a response_model, 78 do not; 16 of those read a
+          store, and 15 of the 16 return the raw dict — only
+          `/nfl/weekly/league-board` constructs a model and is therefore already
+          safe).
+
+          THE FIFTEEN: bets.py `/props/batters`, `/props/starters`; fantasy.py
+          `/mlb/prospects/board`, `/mlb/prospects/manifest`, `/nfl/board`,
+          `/nfl/league-board`, `/nfl/manifest`, `/nfl/projections`,
+          `/nfl/weekly/projections`, `/nfl/weekly/projections-full`;
+          fantasy_public.py `/manifest`, `/{season}`; players.py
+          `/{batter_id}/tb-projection`, `/{batter_id}/zone-overlay`,
+          `/{pitcher_id}/k-projection`.
+
+          ⚠️ THE RIGHT TRIAGE IS PER-ROUTE, NOT A SWEEP, and the reason is in this
+          story: a bare `response_model` on a route whose payload carries keys the
+          model does not declare SILENTLY DROPS THEM (E9.41). That is measured here,
+          not feared — `NflWeeklyManifest` drops
+          `entitled`/`freeBoard`/`locked`/`lockedSeason` from the live weekly
+          response, which is why this story shipped a response model that declares
+          the envelope. Any route on this list that goes through
+          `entitlement.open_*_payload` has the same trap. A blanket "add
+          response_model everywhere" PR would convert a missing-field class into a
+          dropped-field class across fifteen surfaces at once.
+
+          PM: this overlaps the entrypoint sweep (GyD9hoeD) + the hygiene bundles.
+      - id: census-validate-and-discard
+        summary: >
+          CENSUS, the other half: ZERO validate-and-discard sites remain repo-wide
+          outside tests (AST scan for `model_validate` / `model_validate_json` /
+          `parse_obj` as a bare expression statement, over app/, pipeline/,
+          scripts/, quant_sports_intel_models/, betting_ml/, frontend/e2e/).
+
+          There were exactly two, and both are fixed here: the weekly builder, and
+          — the one worth recording — `frontend/e2e/fixtures/build-nfl-weekly.py`,
+          which dumped the manifest and DISCARDED the payload's validation under a
+          comment reading "the contract, as the box enforces it". A fixture
+          generator is the closest thing this repo has to a second implementation
+          of the writer, and the two had drifted in exactly the place that mattered:
+          the fixtures were a THIRD shape, neither the contract nor the wire, so the
+          E2E suite could not have reproduced production even by accident.
+
+          ⭐ `test_the_weekly_builder_never_validates_and_discards` bans the pattern
+          in the runner by AST. Whether that ban should be repo-wide is a PM call:
+          it is a one-line generalisation, but a bare `model_validate` IS legitimate
+          as a pure assertion when nothing downstream writes the value, so a global
+          ban needs an exemption mechanism rather than just a wider glob.
+      - id: scoring-system-id-and-the-type-ranking
+        summary: >
+          A TENTH ABSENT FIELD, not in the spec's list: `scoring_system_id` was
+          missing from the served PLAYERS payload as well
+          (`/api/public/weekly-projections`, measured live 2026-09-16), and
+          `frontend/lib/nfl-weekly.ts` declares it REQUIRED on `NflWeeklyPayload`.
+          Fixed by the builder half.
+
+          ⭐ AND THE GENERALISATION, which is the part worth keeping: the reason
+          this one was latent while `framing` was fatal is a property of TYPE, not
+          of anyone's care. An absent OBJECT field throws on its first property read
+          (`framing.interval_note`); an absent SCALAR renders `undefined` and the
+          page limps on. `framing` is the only object-valued DEFAULTED field on this
+          contract — which is the whole mechanical reason the outage was one crash
+          and not a cascade, and it is a cheap risk-ranking for any contract with
+          defaults. Pinned by
+          `test_an_absent_object_throws_where_an_absent_scalar_only_renders_undefined`,
+          which fails if that set ever grows.
+
+          PM: the frontend mirror is a separate question. `framing` was widened to
+          optional by PR #1143; `scoring_system_id` is still declared required in TS
+          and is about to start arriving. Leaving it required is now CORRECT rather
+          than lucky, but nobody has decided that on purpose.
+      - id: the-guard-that-covered-the-wrong-blob
+        summary: >
+          A BUILDER-SIDE GUARD FOR EXACTLY THIS ALREADY EXISTED AND WAS SCOPED TO
+          THE ONE BLOB THAT WAS FINE.
+          `test_nf_c6_ph2_weekly_serving.py::test_the_builder_emits_every_field_the_contract_declares`
+          names the hazard precisely in its own docstring — "the E9.41
+          silently-dropped-field class arriving from the WRITER side" — and then
+          asserts set-equality for `NflWeeklyPlayer` only, which is the contract the
+          builder happened to populate by hand and which was complete on the wire
+          the whole time. The manifest, the payload envelope and the pointer had no
+          equivalent.
+
+          ⭐ Same shape as the incident's own finding, one level deeper: NF-INC-0917
+          found that the E2E ASSERTIONS existed but the fixtures could not reach the
+          broken state; this is the BUILDER guard existing but pointed at the wrong
+          object. Both are coverage that reads as total and is partial, and neither
+          is visible by reading the test — only by asking what it can see.
+      - id: e2e-fixture-reachability-weekly
+        summary: >
+          FIXTURE REACHABILITY, bounded to the weekly family as specced. Which
+          payload shapes can each weekly E2E's fixtures produce?
+
+          · `weekly-projections.spec.ts` — could produce ONLY what the shipping
+            writer emits until PR #1143 added `withoutFraming` (one key, deleted
+            from the real payload). NOW ALSO produces the full degenerate: this
+            story adds `withoutDefaultedFields`, which strips EVERY defaulted field
+            at BOTH levels (manifest + `lineage`) — byte-for-byte the shape
+            production served. ⭐ The set is DERIVED, not typed out:
+            `build-nfl-weekly.py` writes `nfl-weekly-contract-defaults.json` from
+            `model_fields`, so a field added with a default joins the degenerate on
+            the next fixture build with nobody in the loop. A hand list would cover
+            today's page rather than the defect — the first component to read
+            `interval_lo_level` would need someone to REMEMBER to extend the
+            transform, and remembering is the thing that failed.
+          · `weekly-projections-mobile.spec.ts` — writer-shaped only. Left as is:
+            it asserts layout, and no payload-shape branch is under test.
+          · `weekly-designation.spec.ts`, `stat-line-suppression.spec.ts` — already
+            PLANT their fixtures (both say so in their own headers), so they are not
+            in the class; `weekly-designation` plants because neither shipped fixture
+            carries `gameStatus` at all.
+
+          ⏳ AND A RETIREMENT IS NOW DUE, which nobody has actioned:
+          `build-nfl-weekly.py`'s header says "⚠️ RETIRE THESE ON THE FIRST PUBLISH
+          and re-capture raw from the live API (E9.64b)". The first publish happened
+          2026-09-15. ⭐ The live payload is the DEFECTIVE one, which makes it an
+          unusually valuable capture rather than a routine one — a fixture that can
+          disconfirm what the writer assumes is the entire point of capturing. PM:
+          worth carding, and worth capturing BEFORE the corrected build replaces it.
+      - id: fixture-reachability-repo-wide
+        summary: >
+          CENSUS LINE ONLY, explicitly out of scope per the spec: the repo-wide
+          fixture-reachability audit — for every E2E spec, which payload shapes can
+          its fixtures produce, and which branches are therefore structurally
+          untestable. NF-INC-0917 identified the class; this story bounded it to the
+          weekly family. PM: this is the general version and it is a real body of
+          work, not a checklist item.
+      - id: sentry-rule-and-the-two-verifications
+        summary: >
+          OPERATOR STEPS, written out paste-ready in
+          `docs/nf_inc_0917b_operator_handoff.md` §4 and §5.
+
+          (a) TWO Sentry rules, org `credence-sports` / project
+          `javascript-nextjs`: a FIRST-SEEN rule ("A new issue is created",
+          environment=production, level=error) — which is the one that would have
+          caught this, since the first event was at 15:33Z and a human found it at
+          ~03:47Z — and an absolute LOW-COUNT recurrence rule ("seen more than 4
+          times in 1 hour"). ⛔ NOT a percent-change/spike rule: this outage was a
+          low STEADY trickle from its very first event, so there is no percentage
+          increase to detect and a spike rule plausibly never fires. ⚠️ I have no
+          Sentry access, so none of it is verified — the handoff carries a proof
+          path (Preview, then a LABELLED synthetic event) because an alert rule
+          nobody has seen fire is the same class of object as the guard that was
+          green through this outage.
+
+          (b) Sentry last-seen vs the 04:10:44Z deploy — NEARLY closed by PR #1145
+          already: it records an event at 2026-09-16T03:47:19Z, which is before the
+          restoring deploy. What it does not state is whether that is the issue's
+          LAST event, which is the actual claim; that is a one-field read in the UI.
+
+          (c) The replay verification is blocked on the frontend deploy — the CSP
+          line has no server-side signal, so the only proof is forcing an error on
+          production afterwards and seeing a replay attach.
+      - id: combined-page-copy-review
+        summary: >
+          NOT DONE, AND HANDED BACK RATHER THAN GUESSED. The INC-0916 suppression is
+          live on `main`, so the weekly page now renders the withholding notice AND
+          — until the corrected manifest publishes — the INC-0917 framing-absence
+          panel. Nobody has seen them together; that was the point of the spec's
+          clause.
+
+          They are different facts and both are honest. The question is whether they
+          read as two apologies where one sentence would do.
+
+          ⭐ WHY THIS SESSION DID NOT MERGE THE COPY: the two have different
+          lifetimes. The framing absence disappears the moment the corrected build
+          publishes (hours); the suppression lifts only on the operator's
+          verdict-table read (card VicWAoZl, NF-INC-0916 node 4). Copy merging them
+          into one sentence is wrong as soon as either half resolves, and which
+          resolves first is not a thing this session can know. So: the operator
+          looks (handoff §5b, in a real browser — ⛔ never `curl | grep`, the weekly
+          table is client-rendered and React escapes apostrophes, which already
+          produced one false RED during this incident), and if it reads badly the
+          fix is a lead-in/ordering change the PM owns.
+      - id: main-is-ahead-of-dev
+        summary: >
+          PROCESS, worth a line because it nearly cost this session a wasted
+          verification: `main` is 3 commits ahead of `dev` (#1139's merge commit,
+          #1145 and its record commit). This worktree therefore held the
+          PRE-CONFIRMATION version of `nf-inc-0917.yaml`, whose `no-frontend-alerting`
+          follow-up still said "confirm by looking for the TypeError in Sentry" — a
+          check the operator had ALREADY made and recorded on `main`. Merge `main`
+          into `dev` before the next promote. (The repo's standing hazard is the
+          other direction — a long-open promote PR merging a stale `dev` — but it
+          reads both ways, and neither is visible from a branch.)
+      - id: the-coercion-degrade-is-a-named-trade
+        summary: >
+          RECORDED SO IT IS NOT DISCOVERED: the route coercion DEGRADES to the
+          pass-through (logging at ERROR with season and week) when a published blob
+          omits a field the contract REQUIRES, rather than raising.
+
+          This is the one direction in which this fix could have been worse than
+          what it replaced. Hard-failing would have meant that adding a required
+          field to `nfl_weekly.py` — an ordinary change, which does NOT trigger the
+          box deploy — took every already-published week's page down for a build
+          cycle. That trades a silent incompleteness for a loud outage, which is the
+          same mistake with better manners.
+
+          ⚠️ The honest cost: the degraded path is only as visible as a CloudWatch
+          ERROR line, because the API Lambda has no `send_alert` path at all
+          (E9.8-P2, already carded). The Sentry rules above do not cover it either —
+          they watch the CLIENT. PM: if the Lambda ever gets a paging path, this log
+          line is a candidate for it.
