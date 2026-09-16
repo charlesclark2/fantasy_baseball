@@ -65,7 +65,24 @@ def ncaab_odds_capture_op(context) -> None:
         context.log.warning(esc)
 
 
-@job(executor_def=in_process_executor, name="sports_ncaab_odds_capture_job")
+@job(
+    executor_def=in_process_executor,
+    name="sports_ncaab_odds_capture_job",
+    # ⭐⭐ THE MOST FREQUENT JOB THIS VERTICAL SHIPS — every 30 minutes across a 16h window, so
+    # ~32 fires a day — AND IT HAD NEITHER GUARD. `NCAAB_ODDS_TIMEOUT_SECONDS` was declared and
+    # never applied (it appeared once in the whole repo, at its own definition), and there was no
+    # `concurrency_group`, so ticks could STACK: `services/dagster/dagster.yaml` caps concurrent
+    # runs at 1 per unique `concurrency_group` value, and a job without one opts out of that cap
+    # entirely. On a 2-vCPU box stacked ticks are the INC-32 daemon-starvation shape, and
+    # `intraday_schedule_job` was the last job to be found in exactly this state (E11.26).
+    #
+    # The run tag bounds every wait at once; the group makes a slow tick QUEUE behind itself
+    # rather than overlap. Both matter more here than for the daily ingest simply because this
+    # one fires 32x as often — and it is also the job that would run unattended for weeks before
+    # the season, which is precisely when nobody is watching it.
+    tags={"dagster/max_runtime": NCAAB_ODDS_TIMEOUT_SECONDS,
+          "concurrency_group": "sports_ncaab_odds_capture"},
+)
 def sports_ncaab_odds_capture_job():
     ncaab_odds_capture_op()
 

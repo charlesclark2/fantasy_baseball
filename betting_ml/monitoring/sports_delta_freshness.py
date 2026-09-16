@@ -52,6 +52,27 @@ class SportsDeltaContract:
     #: final commit legitimately fresh right through July and start ageing again on August 1 —
     #: idle by DECLARATION rather than by a silently suppressed check.
     active_months: tuple[int, ...] | None = None
+    #: NCAAB-P0 — hours at the START of an active run during which a MISSING write is not yet a
+    #: defect, because the writer legitimately has nothing to write.
+    #:
+    #: 🔴 THE DEFECT THIS CLOSES, MEASURED BEFORE ARMING RATHER THAN AFTER IT PAGED. `active_months`
+    #: is MONTH-granular, so an NCAAB contract's clock restarts at 00:00 on November 1 — but the
+    #: D-I season tips ~November 3, and hoopR publishes `team_box_YYYY` only once games have been
+    #: PLAYED. So a 36h SLA on the box-score table breaches at **Nov 3 00:00Z, about twelve hours
+    #: BEFORE the first tip**, and keeps paging CRITICAL until the first box file lands — every
+    #: season, on a completely healthy pipeline, in the opening week when the monitor is most
+    #: likely to be believed. That is the same systematic-false-page failure `active_lag_hours`
+    #: was written to prevent at the season BOUNDARY, reappearing at the season's START because a
+    #: month boundary cannot express "the season has actually tipped".
+    #:
+    #: ⭐ IT IS A GRACE, NOT AN EXEMPTION, and the distinction is what keeps the contract
+    #: falsifiable. The budget is widened only while the active run is YOUNGER than this many
+    #: hours; past it the ordinary `max_lag_hours` applies unchanged. So "box scores have not
+    #: started yet" stays quiet, while "box scores never arrived at all" still pages — which a
+    #: blanket in-season exemption would have silenced forever (the NF1.7(a) vacuous-anchor class).
+    #:
+    #: Defaults to 0.0, so every pre-existing contract is byte-identical.
+    season_warmup_hours: float = 0.0
 
 
 # ── The registry ────────────────────────────────────────────────────────────────────────────
@@ -65,7 +86,62 @@ class SportsDeltaContract:
 #: (E9.48(c) / INC-37 / NCAAF-RF1).
 from betting_ml.monitoring.ncaaf_strength_refit import SEASON_MONTHS as _NCAAF_SEASON_MONTHS
 
+#: NCAAB-P0 — the season window, imported from the module that OWNS it rather than retyped, for
+#: the same reason as the NCAAF line above: a second literal is a second owner of the boundary.
+#: `ncaab_season` imports nothing from here, so this direction is one-way and cycle-free.
+from betting_ml.monitoring.ncaab_season import SEASON_MONTHS as _NCAAB_SEASON_MONTHS
+
 REGISTRY: tuple[SportsDeltaContract, ...] = (
+    # ── NCAAB (armed 2026-09-15, when the schedule's first AUTONOMOUS fire succeeded) ────
+    # ⚠️ DEFINED HERE, not imported from `ncaab_freshness`, and that is forced: that module
+    # imports `SportsDeltaContract` from THIS one, so importing its objects back is a cycle
+    # (measured: `partially initialized module` whenever ncaab_freshness is imported first).
+    # The season window comes from `ncaab_season`, which imports nothing from here — a one-way
+    # dependency, not an ordering trick. `ncaab_freshness.ARMED_IN_REGISTRY` names these two,
+    # and a guard cross-checks them against this registry.
+    SportsDeltaContract(
+        name="ncaab_schedules",
+        sport="ncaab",
+        source="schedules",
+        tier="raw",
+        # Daily writer. 36h tolerates a late run and one deploy window, not a skipped day.
+        max_lag_hours=36.0,
+        cadence="daily 14:00Z (sports_ncaab_ingest_schedule, RUNNING; first autonomous fire 2026-09-15)",
+        active_months=_NCAAB_SEASON_MONTHS,
+        why=("the game spine every NCAAB surface and model reads. Frozen, the slate silently "
+             "stops advancing while every job still reports success — hoopR overwrites the "
+             "current season's file in place, so a frozen mirror is indistinguishable from a "
+             "quiet day in every signal except this one"),
+        remediate=("run the ingest for the current season and READ THE RECEIPT: "
+                   "`uv run python -m quant_sports_intel_models.basketball.ncaab.ingest.handler "
+                   "--sources schedules`. It exits non-zero on an escalation rather than "
+                   "swallowing, and refuses to overwrite a good partition with an empty one"),
+    ),
+    SportsDeltaContract(
+        name="ncaab_team_box",
+        sport="ncaab",
+        source="team_box",
+        tier="raw",
+        max_lag_hours=36.0,
+        cadence="daily 14:00Z (sports_ncaab_ingest_schedule, RUNNING; first autonomous fire 2026-09-15)",
+        active_months=_NCAAB_SEASON_MONTHS,
+        why=("the box lines the possession estimate — and therefore every tempo and efficiency "
+             "figure — is computed from. Frozen, ratings keep serving off last week's games "
+             "with no error anywhere"),
+        remediate=("as ncaab_schedules, with `--sources team_box`. ⚠️ Before the season's first "
+                   "tip the upstream file legitimately 404s and the ingest reports "
+                   "`not published yet` — that is the expected pre-season state, which is why "
+                   "this contract is active_months-gated and not wall-clock"),
+        # ⭐ MEASURED BEFORE ARMING, NOT AFTER IT PAGED. `active_months` restarts this clock at
+        # 00:00 on Nov 1, but the season tips ~Nov 3 and hoopR publishes `team_box_YYYY` only
+        # once games have been PLAYED — so a bare 36h SLA breaches Nov 3 00:00Z, about twelve
+        # hours BEFORE the first tip, and pages CRITICAL right through opening week on a
+        # perfectly healthy pipeline. 120h covers the window opening -> first tip -> first box
+        # file with room to spare, and it is a GRACE not an exemption: from 120h in, the
+        # ordinary 36h SLA applies, so a feed that never starts at all still pages (verified at
+        # Nov 6 and Nov 20).
+        season_warmup_hours=120.0,
+    ),
     SportsDeltaContract(
         name="nfl_sleeper_injuries",
         sport="nfl",
@@ -176,6 +252,22 @@ def classify(contract: SportsDeltaContract, reading: DeltaReading,
                 "lag_hours": lag_hours,
                 "detail": (f"the newest commit (v{reading.version}, {lag_hours}h ago) wrote ZERO "
                            f"rows. The table is advancing but carrying nothing.")}
+    if contract.season_warmup_hours > 0.0:
+        # Hours since the CURRENT active run opened — a different quantity from `lag_hours`,
+        # which is measured from the last commit. Reusing the same clock keeps one owner for the
+        # window arithmetic (the rule `active_lag_hours` already documents).
+        run_age = (0.0 if contract.active_months is None
+                   else active_lag_hours(active_window_start(now, contract.active_months), now,
+                                         contract.active_months))
+        if run_age <= contract.season_warmup_hours:
+            return {"name": contract.name, "verdict": "WARMUP", "severity": None,
+                    "lag_hours": lag_hours,
+                    "detail": (f"{run_age:.1f}h into this season's active window, inside the "
+                               f"{contract.season_warmup_hours:.0f}h warmup. The writer has "
+                               f"nothing to write yet, which is not the same as having stopped — "
+                               f"the ordinary {contract.max_lag_hours}h SLA applies from "
+                               f"{contract.season_warmup_hours:.0f}h in, so a feed that never "
+                               f"starts still pages.")}
     if lag_hours > contract.max_lag_hours:
         # ≤2x the SLA is one missed cycle; beyond it the writer is not running at all.
         severity = "WARN" if lag_hours <= 2 * contract.max_lag_hours else "CRITICAL"

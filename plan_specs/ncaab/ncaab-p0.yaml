@@ -170,8 +170,15 @@ spec:
       454 team-versions with 80 teams multi-version, and Arizona correctly reading
       Pac-12 (21) for 2022-24 then Big 12 (8) from 2025.
 
-      ⭐ THE GATE EARNED ITS KEEP: it found THREE defects, none of which any gate
-      that runs before merge could see (CI mocks all IO). See followUp 10.
+      ⭐ AND THE SCHEDULE ITSELF WAS VERIFIED SEPARATELY, which is the check that is
+      easy to skip: `2026-09-15 14:00 SUCCESS` was its first AUTONOMOUS fire. Every
+      run before that was invoked by hand, which proves the JOB works and says
+      nothing about whether the SCHEDULE ticks — so E11.23's "silently never fires"
+      class is ruled out by EVIDENCE rather than by `default_status` reading
+      correctly in source.
+
+      ⭐ THE GATE EARNED ITS KEEP: it found FIVE defects, none of which any gate
+      that runs before merge could see (CI mocks all IO). See followUps 10 and 11.
 
       SHIPPED. All five nodes complete, verified against real data rather than
       fixtures. (1) CAPTURES: every Odds-API unit price measured on live
@@ -352,6 +359,59 @@ spec:
       on the box; a future one cannot use a single dbt build; and whether the box's
       dbt-runner container crashes on this workload is UNKNOWN AND UNTESTED —
       establish it before anything serves off these marts.
+
+      11) 🔧 CLOSE-OUT: THE CONTRACTS ARE ARMED, AND TWO MORE DEFECTS SURFACED
+      WHILE ARMING THEM — both found by MEASURING BEFORE the change rather than
+      after it paged.
+
+      (a) ⏰ ARMING `ncaab_team_box` AS DECLARED WOULD HAVE PAGED CRITICAL THROUGH
+      EVERY OPENING WEEK. `active_months` is MONTH-granular, so the contract's
+      clock restarts at 00:00 on Nov 1 — but the season tips ~Nov 3 and hoopR
+      publishes `team_box_YYYY` only once games have been PLAYED. Measured against
+      the module's own arithmetic: a 36h SLA breaches at Nov 3 00:00Z, about twelve
+      hours BEFORE the first tip, and keeps paging until the first box file lands.
+      That is the same systematic-false-page failure `active_lag_hours` was written
+      to prevent at the season BOUNDARY, reappearing at the season's START because a
+      month boundary cannot express "the season has actually tipped". CURE:
+      `SportsDeltaContract.season_warmup_hours` (120h here), which widens the budget
+      only while the active run is YOUNGER than that — a GRACE, not an exemption, so
+      "box scores have not started yet" is quiet while "box scores never arrived"
+      still pages. Pinned two-sided (quiet Nov 1/3/5; CRITICAL Nov 6 and Nov 20);
+      defaults to 0.0 so every pre-existing contract is byte-identical. ⚠️ Note the
+      earlier handoff RECOMMENDED arming this contract as-is — that recommendation
+      was wrong and was withdrawn on measurement, not on review.
+
+      (b) ⏱️ BOTH NCAAB JOBS RAN UNBOUNDED, AND THE CAPTURE COULD STACK.
+      `NCAAB_INGEST_TIMEOUT_SECONDS` and `NCAAB_ODDS_TIMEOUT_SECONDS` were DECLARED
+      AND NEVER APPLIED — each appeared EXACTLY ONCE in the repo, at its own
+      definition (the NF-C0e wired-not-invoked class). So both ops ran with no
+      budget on a Dagster worker, which is the INC-32 shape. The capture job also
+      carried no `concurrency_group`, and `dagster.yaml` caps concurrency PER GROUP
+      VALUE — a job without one opts out of the cap entirely, so at ~32 fires a day
+      its ticks could stack on a 2-vCPU box (exactly the state E11.26 found
+      `intraday_schedule_job` in). CURE: a `dagster/max_runtime` RUN TAG on both
+      (the right instrument because it bounds EVERY wait — HTTP, Delta commit, retry
+      backoff, plain in-process work — without enumerating them) plus a distinct
+      concurrency group each. Guarded via AST, deliberately: the explanatory
+      comments NAME both tag keys, so a text scan would pass with the tags deleted.
+
+      ⭐ AN IMPORT CYCLE THE ARMING FORCED, worth recording because the tempting fix
+      is the fragile one. `ncaab_freshness` imports `SportsDeltaContract` FROM
+      `sports_delta_freshness`, so the armed contracts must be DEFINED in the
+      registry module, and its NCAAB season window cannot be imported back —
+      measured: `cannot import name ... from partially initialized module` the
+      moment a test imports `ncaab_freshness` first, which is what the fast gate
+      does. Defining the window ABOVE the import also works and was REJECTED: it
+      survives only while statement order survives, and the first linter that hoists
+      imports breaks it silently. Instead `ncaab_season.py` owns the window and
+      imports nothing from either — a one-way dependency cannot be broken by
+      reordering, and it is how NCAAF already avoids the same cycle. All three
+      import orders are pinned by a test.
+
+      ⛔ STILL UNARMED ON PURPOSE: the two odds contracts, whose writer is the
+      operator's spend decision and is still OFF. A guard fails if they are armed
+      while the capture schedule is STOPPED — the rule is ARM WITH THE WRITER, in
+      both directions.
 
       9) 🚨 A DEFECT FOUND WHILE WRITING THE RUNTIME-GATE HANDOFF, and it would have
       fired on the first deploy. The free daily ingest job's docstring says "The

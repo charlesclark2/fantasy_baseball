@@ -24,13 +24,18 @@ class outright: the ingest is idempotent (a value-identical `replaceWhere season
 overwrite), a source the upstream has not published lands 0 rows and is SKIPPED rather than
 overwriting a good partition, and the whole run costs seconds of free compute.
 
-⚠️⚠️ RUNTIME GATE — THIS HAS NOT RUN ON THE BOX. CI mocks all IO, so neither this op nor its S3
-write is exercised by any gate that runs before merge. Two things must be verified by an actual
-run (they are in the P0 handoff):
-  1. The instance role can WRITE the `ncaab/` prefix of `credence-sports-lakehouse`. Prior
-     grants may cover only `ncaaf/`/`nfl/`, and a first-write-to-a-new-prefix needing a new IAM
-     grant is this repo's E8.5 class — invisible until a live run.
-  2. The box's DuckDB can read hoopR over HTTPS (httpfs), which the ingest needs for every feed.
+✅ RUNTIME GATE PASSED 2026-09-15. Both things CI structurally could not verify were verified
+by real runs on the box:
+  1. The instance role CAN write the `ncaab/` prefix of `credence-sports-lakehouse` — it did so
+     on the first attempt (`Found credentials from IAM Role: credence-dagster-ec2-role` ->
+     1,629 rows), so the E8.5 first-write-to-a-new-prefix risk did not materialise and no IAM
+     grant was needed.
+  2. The box's DuckDB reaches hoopR over HTTPS.
+⭐ And the SCHEDULE itself was verified separately, which is the check that is easy to skip:
+`2026-09-15 14:00 SUCCESS` was its first AUTONOMOUS fire. Every earlier run was invoked by hand,
+which proves the JOB works and says exactly nothing about whether the SCHEDULE ticks — the
+E11.23 "silently never fires" class is ruled out by evidence, not by `default_status` reading
+correctly in source.
 
 TIER: the ingest op RAISES on an escalation or an error, so the run fails and pages through the
 existing `run_failure_alert_sensor`. That is the correct tier for a spine feed — but note the
@@ -87,7 +92,19 @@ def ncaab_ingest_op(context) -> None:
         )
 
 
-@job(executor_def=in_process_executor, name="sports_ncaab_ingest_job")
+@job(
+    executor_def=in_process_executor,
+    name="sports_ncaab_ingest_job",
+    # ⭐ THE CONSTANT ABOVE WAS DECLARED AND NEVER APPLIED (NCAAB-P0 close-out). It appeared
+    # exactly once in the repo — at its own definition — so this op ran UNBOUNDED on a Dagster
+    # worker, which is the INC-32 class: an un-timed-out wait on a daemon path wedges the worker
+    # and, at worst, the sensor daemon behind it. A `dagster/max_runtime` RUN TAG is the right
+    # instrument rather than a per-call timeout, because it bounds EVERY wait — the HTTPS read of
+    # hoopR, the Delta commit, retry backoff, and plain in-process work — without anyone having
+    # to enumerate them (E11.26's lesson, where per-leg timeouts alone were insufficient).
+    tags={"dagster/max_runtime": NCAAB_INGEST_TIMEOUT_SECONDS,
+          "concurrency_group": "sports_ncaab_ingest"},
+)
 def sports_ncaab_ingest_job():
     ncaab_ingest_op()
 

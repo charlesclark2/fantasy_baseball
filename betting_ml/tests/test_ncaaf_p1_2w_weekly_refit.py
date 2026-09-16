@@ -460,18 +460,52 @@ def test_the_off_season_gap_is_idle_by_declaration_rather_than_a_breach():
         "declaration must still start the clock on August 1")
 
 
+#: Contracts that LEGITIMATELY declare a season window. Everything else must keep plain
+#: wall-clock lag, byte-identical.
+#:
+#: ⭐ A REGISTRY, NOT A SINGLE-NAME SKIP, and the difference is why this list exists. The clause
+#: below originally read `if contract.name == "ncaaf_team_strength_week": continue`, which
+#: expresses "every contract except that one" — so the FIRST windowed contract added by any other
+#: vertical turned this guard red for a completely legitimate change (NCAAB-P0 armed two). The
+#: property being defended is "a contract that predates NCAAF-P1.2W still gets wall-clock lag",
+#: and naming the exceptions expresses that directly. Adding a name here is deliberate friction:
+#: it should require thinking about whether the new contract really needs a window.
+_WINDOWED_CONTRACTS = frozenset({
+    "ncaaf_team_strength_week",   # NCAAF-P1.2W — the story that introduced active_months
+    "ncaab_schedules",            # NCAAB-P0 — Nov-Apr D-I season
+    "ncaab_team_box",             # NCAAB-P0 — ditto, plus a 120h season warmup
+})
+
+
+def test_the_windowed_contract_list_is_not_stale():
+    """⭐ ANTI-ROT, and it runs FIRST because the clause below is trivially satisfied by a list
+    that has drifted into naming contracts nobody has. A name that no longer exists would silently
+    widen the exemption for whatever is added next under a recycled name."""
+    live = {c.name for c in SDF.REGISTRY}
+    assert _WINDOWED_CONTRACTS <= live, (
+        f"named windowed contracts that are not in REGISTRY: {_WINDOWED_CONTRACTS - live}")
+    assert _WINDOWED_CONTRACTS, "the exemption list is empty — the clause below tests nothing"
+
+
 def test_the_active_window_does_not_change_any_pre_existing_contract():
     """MH2.7 — changing a SHARED instrument means the guards that PIN its output are the ones to
     check. Every contract that predates this story declares no window, so its lag must stay plain
     wall-clock, byte-identical."""
     now = datetime(2026, 5, 20, 16, 0, tzinfo=UTC)            # deliberately an NCAAF off-season day
+    checked = 0
     for contract in SDF.REGISTRY:
-        if contract.name == "ncaaf_team_strength_week":
+        if contract.name in _WINDOWED_CONTRACTS:
             continue
-        assert contract.active_months is None
+        checked += 1
+        assert contract.active_months is None, (
+            f"{contract.name} gained a season window. If that is intended, add it to "
+            f"_WINDOWED_CONTRACTS above — deliberately, not to make this test pass.")
+        assert contract.season_warmup_hours == 0.0, (
+            f"{contract.name} gained a season warmup, which changes its classify() path")
         verdict = SDF.classify(contract, _reading(40, now=now), now=now)
         assert verdict["lag_hours"] == 40.0, (
             f"{contract.name}'s lag arithmetic changed: {verdict['lag_hours']}")
+    assert checked, "no unwindowed contract was checked — the loop tested nothing"
 
 
 def test_the_active_lag_delegates_to_the_inc41_owner_rather_than_reimplementing_it():
