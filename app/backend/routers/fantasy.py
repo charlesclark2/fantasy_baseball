@@ -52,9 +52,10 @@ from app.backend.services import (
 # Aliased because `depth_targets` is also the name of the FIELD this module reads off a league
 # record and off a request payload; an unaliased import would shadow-read as the value in every
 # local scope that touches one, which is exactly the kind of thing a reviewer skims past.
-from app.backend.models import nfl_weekly
+from app.backend.models import nfl_recap, nfl_weekly
 from app.backend.services import depth_targets as depth_targets_service
-from app.backend.services import weekly_league_board
+from app.backend.services import weekly_league_board, weekly_recap, weekly_recap_store
+from app.backend.services.platform_import import sleeper_matchups
 
 logger = logging.getLogger(__name__)
 
@@ -1435,3 +1436,168 @@ def nfl_draft_assistant(
         "my_team_known": bool(payload.my_team),
     }
     return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐ NF-WK-RC1 — THE WEEKLY LEAGUE RECAP + POWER RANKINGS (EPIC NF-SEASON's first member)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# What a league's week ACTUALLY did, per slot, in that league's own scoring — the factual surface
+# that realized data can carry and a projection cannot.
+#
+# 🔒 ON `router` (`require_fantasy_access`), FOR THE REASON `/nfl/weekly/league-board` GIVES. The
+# free tier's ONE personalized league reaches `personal_router`; this is `DECISION_SUPPORT`, the
+# capability the pricing page sells, and moving a route between router objects is a pricing change
+# wearing a refactor's clothes. The QUOTA is still enforced, and a league that is not the caller's
+# is 404 (never 403) so an id they do not own is indistinguishable from one that does not exist.
+#
+# 🗄️ THE CACHE SIDE, DECIDED BEFORE THE HANDLERS WERE WRITTEN (the G100 rule): PER-CALLER by
+# construction — one user's league, one user's scoring. ⛔ Never in the CDN allowlist
+# (`frontend/app/api/public/[...path]/route.ts`) or `cost_guardrails._PUBLIC_CACHE_RULES`; every
+# request carries `Authorization`, so `cache_control_for` answers `private, no-store`
+# unconditionally. ⚠️ AND THE PATHS ARE SIBLINGS OF `…/weekly/projections`, NEVER CHILDREN — both
+# allowlists match a prefix followed by "/", so `…/weekly/projections/recap` would have INHERITED
+# the free route's public cache rule. `recap` / `power-rankings` collide with nothing.
+#
+# ⭐⭐ THE STANDINGS FACT IS THE LEAGUE'S OWN TOTAL (PM ruling (i), 2026-09-16). We serve
+# `standingsTotal` (theirs) beside `itemisedTotal` (our sum of the seats we could itemise), under
+# deliberately different names, with the gap disclosed adjacent and naming the league's own captured
+# terms. The property, in the ruling's words: "our recap never contradicts the user's league page,
+# and everything we add beyond the league page is itemized and covered or stated as captured."
+
+#: Platforms whose played weeks we can re-fetch. ⛔ ESPN is STRUCTURAL, not a gap we are working
+#: through: the paste import flow never lets this server call ESPN, so nothing about that league is
+#: re-fetchable. Yahoo is the known app-side OAuth entitlement gap (NF-C0-Yahoo-SPIKE).
+_RECAP_FETCHABLE = ("sleeper",)
+
+_RECAP_UNAVAILABLE: dict[str, str] = {
+    "espn": (
+        "We cannot show standings or a weekly recap for an ESPN league. ESPN leagues are imported "
+        "by pasting their data in once, which means we hold a snapshot and have no way to go back "
+        "and ask ESPN what each team actually started in a given week."
+    ),
+    "yahoo": (
+        "We cannot show standings or a weekly recap for a Yahoo league yet. Reading a played week "
+        "needs a Fantasy permission our Yahoo app has not been granted."
+    ),
+}
+
+
+def _recap_league(request: Request, user_id: str, league_id: str) -> dict:
+    """The caller's saved league, or 404 — the ownership + quota gate `/nfl/league-board` documents."""
+    records = [
+        r for r in dynamo.list_fantasy_leagues(user_id) if str(r.get("sport") or "nfl") == "nfl"
+    ]
+    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
+    served = entitlement.leagues_within_quota(records, quota)
+    record = next((r for r in served if str(r.get("league_id") or "") == league_id), None)
+    if record is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    return record
+
+
+def _recap_platform(record: dict) -> str:
+    return str(record.get("source_platform") or "").strip().lower()
+
+
+def _recap_week(record: dict, season: int, week: int) -> dict:
+    """One league-week, scored — from the POINT-IN-TIME record, fetching it once if absent.
+
+    ⭐ THE STORE IS READ FIRST, ALWAYS. A recap must be stable after it renders (the D1 ruling), so
+    a week we have already captured is never re-derived from a later fetch; the store's own
+    divergence handling is what turns a platform restatement into a named event rather than a
+    number that moves under a reader.
+    """
+    platform = _recap_platform(record)
+    league_id = str(record.get("source_league_id") or "")
+    fetched = weekly_recap_store.load(season, week, platform, league_id)
+    if fetched is None:
+        if platform not in _RECAP_FETCHABLE or not league_id:
+            raise HTTPException(status_code=422, detail=_RECAP_UNAVAILABLE.get(
+                platform, "We cannot read played weeks for this league's platform."))
+        try:
+            fetched = sleeper_matchups.fetch_week(league_id, week)
+        except sleeper_matchups.SleeperMatchupError as e:
+            # 422, not 502: the platform answered and what it returned cannot carry a recap. That
+            # is a different fact from "the platform is unreachable" and points at a different fix.
+            raise HTTPException(status_code=422, detail=str(e)) from e
+        weekly_recap_store.store(fetched)
+
+    realized = _load_json(nfl_recap.realized_players_key(season, week))
+    manifest = _load_json(nfl_recap.realized_manifest_key(season, week))
+    if realized is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"We have not recorded week {week}'s player statistics yet.")
+
+    scored = weekly_recap.score_week(
+        fetched=fetched,
+        realized_rows=realized.get("players") or [],
+        cfg=record,
+    )
+    state = str((manifest or {}).get("completeness") or "final")
+    scored["completeness"] = state
+    scored["completenessNote"] = nfl_recap.COMPLETENESS_NOTE.get(
+        state, nfl_recap.COMPLETENESS_NOTE["partial"])
+    return scored
+
+
+@router.get("/nfl/weekly/recap")
+def nfl_weekly_recap(
+    request: Request,
+    league_id: str = Query(..., description="a saved league id belonging to the caller"),
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    week: int = Query(..., ge=1, le=22),
+    user_id: str = Depends(require_fantasy_access),
+):
+    """ONE league's completed week: every team's ACTUAL lineup, scored per slot in its own scoring.
+
+    ⛔ A HALF-PLAYED WEEK NEVER RENDERS AS FINAL. `completeness` is derived from a COUNT (the
+    realized line's distinct games against the schedule's), never a clock — a clock rule calls a
+    15/16 week final the moment a game is postponed, silently.
+    """
+    record = _recap_league(request, user_id, league_id)
+    scored = _recap_week(record, season, week)
+    return nfl_recap.WeeklyRecap(
+        season=season, week=week, leagueId=league_id, leagueName=record.get("name"),
+        platform=_recap_platform(record),
+        completeness=scored["completeness"], completenessNote=scored["completenessNote"],
+        capturedAt=scored.get("capturedAt"), startingSlots=scored.get("startingSlots") or [],
+        teams=scored.get("teams") or [], matchups=scored.get("matchups") or [],
+        coverage=scored.get("coverage") or {},
+        itemisationGapNote=scored.get("itemisationGapNote"),
+        standingsNote=scored["standingsNote"],
+    ).model_dump()
+
+
+@router.get("/nfl/weekly/power-rankings")
+def nfl_weekly_power_rankings(
+    request: Request,
+    league_id: str = Query(..., description="a saved league id belonging to the caller"),
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    through_week: int = Query(..., ge=1, le=22),
+    user_id: str = Depends(require_fantasy_access),
+):
+    """The league's standings through a week — record and points, all from the league's own totals.
+
+    ⚠️ A WEEK WE CANNOT READ IS SKIPPED, NOT ZEROED, and `weeksIncluded` says which were counted: a
+    zero is a loss a team did not necessarily suffer, and a silently-dropped week makes a record
+    wrong with no way for a reader to notice.
+    """
+    record = _recap_league(request, user_id, league_id)
+    weeks: list[dict] = []
+    for wk in range(1, int(through_week) + 1):
+        try:
+            weeks.append(_recap_week(record, season, wk))
+        except HTTPException as e:
+            if e.status_code in (404, 422):
+                continue  # not recorded / not readable — excluded, and `weeksIncluded` shows it
+            raise
+    ranked = weekly_recap.power_rankings(weeks)
+    return nfl_recap.PowerRankings(
+        season=season, leagueId=league_id, leagueName=record.get("name"),
+        platform=_recap_platform(record),
+        throughWeek=ranked["throughWeek"], weeksIncluded=ranked["weeksIncluded"],
+        rows=ranked["rows"], rankingBasis=ranked["rankingBasis"],
+        standingsNote=ranked["standingsNote"],
+    ).model_dump()
