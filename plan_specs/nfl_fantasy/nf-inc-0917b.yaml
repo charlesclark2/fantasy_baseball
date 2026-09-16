@@ -220,6 +220,45 @@ spec:
           it is a one-line generalisation, but a bare `model_validate` IS legitimate
           as a pure assertion when nothing downstream writes the value, so a global
           ban needs an exemption mechanism rather than just a wider glob.
+      - id: census-publish-paths-without-a-contract
+        summary: >
+          THE CENSUS'S OTHER HALF, and it reframes the first one. The spec named the
+          draft board export, track record and player history as
+          validate-and-discard suspects. They are not — they are something else, and
+          the measurement is stark:
+
+          ⭐ OF THE 10 WRITERS THAT PUBLISH TO THE SERVING api-cache, EXACTLY ONE
+          VALIDATES AGAINST A DECLARED CONTRACT — `run_weekly_serving.py`, and only
+          because NF-C6-PH2 built it that way. The other nine
+          (`export_prospect_board_json`, `export_draft_board_json`,
+          `export_player_history_json`, `export_track_record_json`,
+          `run_nf_serving_board_snapshot`, `run_sleeper_player_ingest`,
+          `write_api_cache`, `write_ncaaf_serving_store`, `write_serving_store`)
+          reference no pydantic model at all. Of 26 further S3 writers (lake, raw,
+          research artifacts), zero validate — but those have no typed consumer, so
+          they are a different question.
+
+          ⚠️ THE DISTINCTION MATTERS AND CUTS BOTH WAYS. "No contract" is NOT the
+          defect this story fixed. The weekly manifest had a contract that DECLARED
+          nine fields and shipped without them — a promise not kept. A path with no
+          declaration makes no promise, so nothing can silently fall short of it, and
+          "add a model everywhere" is not automatically an improvement.
+
+          ⭐ WHAT MAKES FOUR OF THEM WORTH LOOKING AT ANYWAY: the draft board, track
+          record, player history and prospect board ARE consumed by typed frontend
+          code, so an assumed shape exists — it is just held in TypeScript only, with
+          nothing on the Python side to hold it to. That is the same
+          one-logical-thing-two-owners shape as the weekly contract before NF-C6-PH2,
+          minus the owner. Whether that is worth closing is a PM call about cost, and
+          the honest framing is "these surfaces have no declared contract" rather
+          than "these surfaces are broken" — nobody has measured whether any of them
+          is actually short of what its client reads.
+
+          Instrument, so this is re-runnable rather than a snapshot: AST scan for a
+          bare `model_validate`/`model_validate_json`/`parse_obj` expression
+          statement, plus a scan for S3 writers keyed on `put_object(` / a
+          `--publish` + boto3 pair, split on whether the file references the
+          api-cache.
       - id: scoring-system-id-and-the-type-ranking
         summary: >
           A TENTH ABSENT FIELD, not in the spec's list: `scoring_system_id` was
