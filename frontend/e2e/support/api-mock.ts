@@ -721,7 +721,13 @@ function recapPayload(mode: NonNullable<MockOptions["recap"]>, leagueId: string,
         winnerTeamKey: "1", tied: false, unpaired: null, resultUnavailable: null,
       },
     ],
-    coverage: { captured: gap ? ["fum", "pass_40p"] : [] },
+    // ⛔⛔ `finalNoGap` STILL CAPTURES TERMS, and that is the whole point of the mode. #1155's
+    // actual state was a league that scores fumbles and 40+ yard bonuses where NONE OF THEM MOVED
+    // that week — so the server returns a null note while `captured` is non-empty. A fixture with
+    // an EMPTY captured list describes a DIFFERENT league, one where even the defective
+    // implementation stays silent, so it cannot tell the two apart. The red proof caught exactly
+    // that: the #1155 case came back GREEN against a fixture that could not express the defect.
+    coverage: { captured: ["fum", "pass_40p"] },
     itemisationGapNote: gap ? E2E_RECAP_GAP_NOTE : null,
     standingsNote:
       "Team totals and results are your league's own published figures. The slot breakdown is " +

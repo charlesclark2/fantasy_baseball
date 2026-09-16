@@ -864,6 +864,21 @@ export function useActiveMlbLeague(): [string | null, (v: string | null) => void
   ]
 }
 
+// ── END of the E8.1 MLB prospect block ───────────────────────────────────────────────────────
+//
+// ⛔ THIS LINE IS LOAD-BEARING FOR A GUARD IN ANOTHER STORY.
+// `test_mlb_prospect_board_surface.py::test_the_prospect_hooks_refuse_to_issue_the_request_for_a_non_admin`
+// slices this file from the E8.1 header to HERE and asserts every `useQuery` inside gates on
+// `isAdmin`. It used to slice to END OF FILE, so every hook appended below E8.1 was swept into
+// "the MLB block" regardless of what it was — and NF-WK-RC1's two NFL hooks, which gate on
+// IDENTITY (`accessToken` + `leagueId`) exactly as `useLeagueBoard` does and must, failed it.
+//
+// ⭐ The guard's CLAIM was always right; its PROXY (a slice with no end) had drifted from it. So
+// the boundary is now a property of this FILE rather than of whatever happens to be appended next,
+// and the guard RAISES if this marker goes missing rather than silently reverting to EOF.
+//
+// ⇒ A new MLB PROSPECT hook goes ABOVE this line. Anything else goes below.
+
 // ── NF-WK-RC1 Phase B — the weekly recap + standings ─────────────────────────────────────────────
 //
 // ⚠️ IDENTITY, NOT ENTITLEMENT, in `enabled` — the same reasoning `useLeagueBoard` documents. The

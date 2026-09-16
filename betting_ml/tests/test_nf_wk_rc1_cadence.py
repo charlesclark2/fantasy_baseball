@@ -495,3 +495,77 @@ def test_the_pending_predicate_has_one_owner_at_the_construction_site():
     assert realized_dst.result_pending(None) is True
     assert realized_dst.result_pending(24) is False
     assert realized_dst.points_allowed(None, 0) is None
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 7 — THE SERVED CONTRACT AND THE CLIENT THAT READS IT CANNOT DRIFT (Phase B)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⛔ WHY THIS IS WORTH A GUARD RATHER THAN CARE. A wrong field name in a TypeScript interface does
+# not fail a build and does not throw: `undefined` renders as an empty cell, so the page reports a
+# blank as data. MT1 lost two operator round-trips to probes that invented field names, and the
+# same mistake one layer over is worse because a reader sees it as a fact about their league rather
+# than as an error.
+#
+# ⭐ AND IT READS BOTH SIDES FROM THEIR OWN SOURCE. The Pydantic model is the server's declaration
+# and the TS interface is the client's; a test that restated either would be a copy of the thing it
+# is checking (the NF-C0e "a test that reads a value back under the key the code wrote" class).
+
+_RECAP_TS = _REPO / "frontend/lib/fantasy.ts"
+
+
+def _ts_interface_fields(name: str) -> set[str]:
+    """The field names a TS interface declares, read out of the file rather than restated here."""
+    src = _RECAP_TS.read_text()
+    start = src.index(f"export interface {name} {{")
+    body = src[start:src.index("\n}", start)]
+    fields: set[str] = set()
+    for line in body.splitlines()[1:]:
+        stripped = line.strip()
+        # Skip comments and block-comment continuations; a field line is `name?: type` / `name: type`.
+        if not stripped or stripped.startswith(("//", "/*", "*")):
+            continue
+        head = stripped.split(":", 1)[0].strip()
+        if head and head.replace("?", "").isidentifier():
+            fields.add(head.rstrip("?"))
+    return fields
+
+
+def _model_fields(model_name: str) -> set[str]:
+    from app.backend.models import nfl_recap
+
+    return set(getattr(nfl_recap, model_name).model_fields)
+
+
+def test_the_client_types_match_the_served_recap_contract_exactly():
+    """Every field the server sends is declared by the client, and vice versa."""
+    for model, interface in (
+        ("RecapSeat", "RecapSeat"),
+        ("RecapTeam", "RecapTeam"),
+        ("WeeklyRecap", "WeeklyRecapPayload"),
+        ("PowerRankingRow", "PowerRankingRow"),
+        ("PowerRankings", "PowerRankingsPayload"),
+    ):
+        served = _model_fields(model)
+        declared = _ts_interface_fields(interface)
+        assert served, f"{model} declares no fields — this clause would pass on nothing"
+        assert declared, f"{interface} parsed to no fields — the reader is broken, not the contract"
+        assert served == declared, (
+            f"{model} (server) and {interface} (client) disagree.\n"
+            f"  only on the server: {sorted(served - declared)}\n"
+            f"  only on the client: {sorted(declared - served)}\n"
+            "A field the client does not declare renders as an empty cell, which the page reports "
+            "as data rather than as an error."
+        )
+
+
+def test_the_two_totals_keep_different_names_on_the_wire():
+    """⛔ PM ruling (i): the league's published total and our itemisation must never be presented as
+    two estimates of one number. A single `total` field is the first step to exactly that, so the
+    absence of one is asserted rather than left to a reviewer to notice."""
+    served = _model_fields("RecapTeam")
+    assert {"standingsTotal", "itemisedTotal"} <= served
+    assert "total" not in served, (
+        "RecapTeam grew a bare `total`. One name for two different facts is how the standings "
+        "record and our explanation of it get treated as interchangeable."
+    )
