@@ -72,6 +72,13 @@ EXIT_AWAITING_ROSTERS = 3
 NFL_WEEKLY_STATS_INGEST_TIMEOUT_SECONDS = int(
     os.environ.get("NFL_WEEKLY_STATS_INGEST_TIMEOUT_SECONDS", "900"))
 
+# NF-WK-RC1 ① — the realized-week publish. Two grouped lake counts plus, at most,
+# `RESTATEMENT_WINDOW_WEEKS` single-week builds and their S3 writes; measured at ~15 s for one week,
+# so this is orders of magnitude of headroom rather than a snug fit. INC-32: finite, and
+# `run_bounded` kills the process group on expiry rather than orphaning a grandchild.
+NFL_REALIZED_PUBLISH_TIMEOUT_SECONDS = int(
+    os.environ.get("NFL_REALIZED_PUBLISH_TIMEOUT_SECONDS", "900"))
+
 
 def _page(context, title: str, body: str, *, severity: str, dedup_key: str) -> None:
     """Page, and mirror it into the step log. Distinct `dedup_key` per failure mode so one noisy
@@ -230,6 +237,123 @@ def nfl_weekly_stats_freshness_op(context):
               severity=severity, dedup_key="nfl_weekly_stats_freshness:stale")
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def nfl_realized_week_publish_op(context):
+    """NF-WK-RC1 ① — publish every COMPLETED week's realized stat lines.
+
+    ⭐ WHY IT IS IN THIS JOB AND NOT ON ITS OWN SCHEDULE. It reads `stats_player_week`, which is
+    exactly what `nfl_weekly_stats_ingest_op` above writes — so this is the INC-25 rule in its
+    strongest form, the consumer refreshed downstream of its feed IN THE SAME RUN. A separate
+    schedule would be a bare clock racing that ingest, plus a second instigator that can silently
+    revert to STOPPED while everything stays green (NF-INFRA1/E11.23). Riding a job that already
+    self-starts (`default_status=RUNNING`) and is in `check_monitors_healthy_op`'s required set
+    means this cadence inherits a heartbeat rather than adding one more thing to watch.
+
+    ⛔ AND IT IS DELIBERATELY NOT DOWNSTREAM OF THE BUILD. `nfl_weekly_serving_op` RAISES on a
+    refusal — often correctly, when the builder fails closed — and hanging the realized publish off
+    it would mean a refused PROJECTION withholds the REALIZED facts, which are a different product
+    on a different input. Two unrelated failures must not share a fate. As an independent branch off
+    the ingest, each still runs when the other fails.
+
+    ⚖️ TIER — pages and RAISES on a failed publish, exactly as the sibling build does. The realized
+    artifact is what Phase B's recap renders from; "we published nothing and said nothing" is the
+    NF-FRESH1 shape this job's own header exists to refuse. A red run that leaves last week's
+    artifact serving beats a green one that shipped nothing.
+
+    ⭐ A RESTATEMENT PAGES *WARN*, NOT CRITICAL. The vendor restating a played week is a named
+    event, not an outage — the published week keeps serving and the new build is parked. Paging
+    CRITICAL on a thing that is working as designed is how a monitor gets muted before it ever
+    catches something (the D2 divergence-recorder constraint, one surface over).
+    """
+    from betting_ml.utils.bounded_subprocess import run_bounded
+
+    season = int(os.environ.get("NFL_FANTASY_SEASON", "2026"))
+    cmd = [sys.executable, "-m", f"{_FANTASY}.run_realized_week",
+           "--season", str(season), "--auto",
+           "--s3-bucket", NFL_WEEKLY_CACHE_BUCKET, "--publish"]
+    context.log.info("[nfl realized] %s", " ".join(cmd))
+    env = {**os.environ, "SPORTS_LAKE_REGION": os.environ.get("SPORTS_LAKE_REGION", "us-east-2")}
+    try:
+        proc = run_bounded(cmd, cwd=str(_APP_DIR), env=env,
+                           timeout=NFL_REALIZED_PUBLISH_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        proc = subprocess.CompletedProcess(
+            cmd, returncode=124, stdout=(exc.stdout or ""), stderr="timeout")
+
+    for line in (proc.stdout or "").splitlines()[-60:]:
+        context.log.info("[realized] %s", line)
+
+    summary = _parse_result_line(proc.stdout or "")
+    context.log.info("[METRIC] nfl_realized_publish_exit=%d", proc.returncode)
+
+    # ⛔ AN UNPARSEABLE RESULT IS A FAILURE, NEVER A PASS. Exit 0 with no summary means the run
+    # cannot say what it did, and "we could not tell" must not read as "nothing needed doing"
+    # (NF1.7(a)) — that is precisely how a cadence publishes nothing for a month while green.
+    if summary is None:
+        for line in (proc.stderr or "").splitlines()[-40:]:
+            context.log.warning("[realized:stderr] %s", line)
+        _page(context, "NFL realized week: the publish reported nothing readable",
+              f"`run_realized_week --auto` exited {proc.returncode} and printed no RESULT line, so "
+              "this run cannot say which weeks it published. Reported as a failure rather than a "
+              f"pass.\n\nstderr tail:\n{(proc.stderr or '')[-1500:]}",
+              severity="CRITICAL", dedup_key="nfl_realized_publish:unreadable")
+        raise Exception("NFL realized publish produced no readable RESULT")
+
+    planned = summary.get("planned") or []
+    results = summary.get("results") or []
+    events = summary.get("events") or []
+    errors = summary.get("errors") or []
+    context.log.info("[METRIC] nfl_realized_final_weeks=%s", summary.get("final_weeks"))
+    context.log.info("[METRIC] nfl_realized_planned=%d", len(planned))
+    context.log.info("[METRIC] nfl_realized_published=%d",
+                     sum(1 for r in results if r.get("action") in ("create", "upgrade",
+                                                                   "backfill_hash")))
+    context.log.info("[METRIC] nfl_realized_events=%d", len(events))
+    context.log.info("[METRIC] nfl_realized_errors=%d", len(errors))
+
+    if errors:
+        _page(context, "NFL realized week publish FAILED",
+              "The realized stat lines Phase B's recap renders from did not advance this cycle.\n\n"
+              + "\n".join(f"- wk{e['week']}: {e['error']}" for e in errors),
+              severity="CRITICAL", dedup_key="nfl_realized_publish:failed")
+        raise Exception(f"NFL realized publish failed for week(s) "
+                        f"{[e['week'] for e in errors]}")
+
+    if events:
+        _page(context, "NFL realized week: the vendor RESTATED a published week",
+              "The published week KEEPS SERVING and the new build is parked at a revision key — "
+              "nothing changed underneath a reader. This is a named event for a human to look at, "
+              "not an outage.\n\n"
+              + "\n".join(f"- wk{e['week']}: {e['action']} — {e['reason']}" for e in events),
+              severity="WARN", dedup_key="nfl_realized_publish:restated")
+
+    # ⭐ A CADENCE FIRE WITH NOTHING TO DO IS THE COMMON CASE AND MUST STAY LEGIBLE. Most fires land
+    # mid-week, when the newest week is still partial and every final week is already published.
+    # That is a clean skip, said out loud — never a silent success (the ALERT-loud tier).
+    if not planned:
+        context.log.info(
+            "⏸️ [nfl realized] nothing to publish: %s FINAL week(s), all already served",
+            len(summary.get("final_weeks") or []))
+    else:
+        context.log.info("[nfl realized] %s", "; ".join(
+            f"wk{r['week']}={r['action']}" for r in results))
+
+
+def _parse_result_line(stdout: str) -> dict | None:
+    """The `RESULT {json}` line the runner prints. `None` when it is absent or unparseable.
+
+    ⛔ THE *LAST* MATCHING LINE, and parsed as JSON rather than regexed out of prose: a log format
+    that drifts must break loudly here rather than silently matching something adjacent.
+    """
+    for line in reversed((stdout or "").splitlines()):
+        if line.startswith("RESULT "):
+            try:
+                return json.loads(line[len("RESULT "):])
+            except json.JSONDecodeError:
+                return None
+    return None
+
+
 @op(ins={"start": In(Nothing)}, out=Out(None))
 def nfl_weekly_serving_op(context):
     """Build the target week's projection, publish it, then verify what was published.
@@ -363,8 +487,19 @@ def sports_nfl_weekly_serving_job():
 
     The freshness leg sits between them so its verdict is in the log BEFORE the build's outcome,
     which is the order a reader wants; it never raises and never gates.
+
+    ⭐ AND THE REALIZED-WEEK PUBLISH (NF-WK-RC1 ①) HANGS OFF THE SAME INGEST, in parallel rather
+    than in series. It reads `stats_player_week` too, so it needs the same INC-25 ordering — but it
+    serves a DIFFERENT product (what happened) from the build (what we expect), and chaining them
+    would let a refused projection withhold the realized facts, or a lake hiccup in the realized
+    read sink a perfectly good projection. Independent branches: each still runs when the other
+    fails.
     """
-    nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=nfl_weekly_stats_ingest_op()))
+    landed = nfl_weekly_stats_ingest_op()
+    nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=landed))
+    # NF-WK-RC1 ① — an INDEPENDENT branch off the same ingest: it must not be withheld by a
+    # refused projection build, and must not withhold one. See the op's own docstring.
+    nfl_realized_week_publish_op(start=landed)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -488,3 +623,75 @@ def sports_nfl_weekly_freshness_job():
     silently STOPPED); riding a job that already self-starts and is heartbeat-checked is the fix.
     What remains is a convenience handle for an operator who wants the verdict on demand."""
     nfl_weekly_freshness_op()
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-WK-RC1 ① — the realized-week freshness BACKSTOP
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⛔ DEFINED HERE, INVOKED ELSEWHERE — exactly as `nfl_weekly_freshness_op` above. It shares this
+# module's bucket and paging helper, so defining it here keeps ONE owner; but it is INVOKED from
+# `sports_nfl_sleeper_injuries_job`, because the failure it exists to catch is THIS job not running
+# at all, and a monitor hosted inside its own subject cannot see its subject stop.
+@op(out=Out(Nothing))
+def nfl_realized_freshness_op(context):
+    """ALERT (never HALT) — does every week the lake calls FINAL have a published artifact?
+
+    ⭐ A COUNT COMPARISON, NOT AN AGE CHECK. A published week is CORRECT to never change again, so
+    an mtime SLA on it would page daily on a healthy file (INC-45) while being blind to the producer
+    that succeeds writing nothing (NF-FRESH1). Both sides of this comparison come from outside the
+    artifact: the expectation from the lake, the actual from S3.
+
+    ⏳ ACTIVE-SEASON SEMANTICS: out of season no week is FINAL, so there is nothing to publish and
+    the verdict is INACTIVE — reported as its own state rather than as OK, because "nothing to
+    check" is not "checked and healthy" (NF1.7(a)).
+    """
+    import boto3
+
+    from betting_ml.monitoring import nfl_realized_freshness as RF
+
+    season = int(os.environ.get("NFL_FANTASY_SEASON", "2026"))
+    reading = RF.RealizedReading(season=season)
+    try:
+        from quant_sports_intel_models.football.nfl.fantasy import realized_week
+        from quant_sports_intel_models.football.nfl.ingest.query_lake import delta, q
+
+        sched = q(f"select week, gameday, count(*) n from {delta('schedules')} "
+                  f"where season = {season} and game_type = 'REG' group by week, gameday")
+        real = q(f"select week, count(distinct game_id) n from {delta('stats_player_week')} "
+                 f"where season = {season} and season_type = 'REG' group by week")
+        scheduled_by_week: dict[int, int] = {}
+        for r in sched.itertuples():
+            scheduled_by_week[int(r.week)] = scheduled_by_week.get(int(r.week), 0) + int(r.n)
+        realized_by_week = {int(r.week): int(r.n) for r in real.itertuples()}
+        states = realized_week.week_completeness_map(realized_by_week, scheduled_by_week)
+        reading.lake_final_weeks = {w for w, s in states.items() if s == "final"}
+        reading.slate_end_by_week = {
+            w: e for w in reading.lake_final_weeks
+            if (e := _slate_end_utc(sched, w)) is not None
+        }
+
+        s3 = boto3.client("s3", region_name="us-east-1")
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=NFL_WEEKLY_CACHE_BUCKET,
+                                       Prefix=f"fantasy/nfl/realized/{season}/"):
+            for obj in page.get("Contents") or []:
+                parts = obj["Key"].split("/")
+                # ⛔ `manifest.json` EXACTLY: a parked `manifest.revision-*.json` is NOT a served
+                # week, and counting one would let a restated week hide a genuine publishing gap.
+                if parts[-1] == "manifest.json" and parts[-2].isdigit():
+                    reading.published_weeks.add(int(parts[-2]))
+    except Exception as exc:  # noqa: BLE001
+        reading.error = f"{type(exc).__name__}: {exc}"
+
+    verdict = RF.classify(reading)
+    context.log.info("[METRIC] nfl_realized_freshness=%s missing=%s",
+                     verdict["verdict"], verdict.get("missing"))
+    context.log.info("[METRIC] nfl_realized_published_weeks=%s",
+                     sorted(reading.published_weeks))
+    context.log.info("[nfl realized freshness] %s", verdict["detail"])
+    if RF.is_problem(verdict):
+        _page(context, f"NFL realized week artifact {verdict['verdict']}", verdict["detail"],
+              severity=verdict["severity"],
+              dedup_key=f"nfl_realized_freshness:{verdict['verdict']}")
+

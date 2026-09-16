@@ -315,6 +315,31 @@ spec:
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
 
+
+      ── ⛔ INGEST OWNERSHIP SPLIT — RECORDED HERE BY NF-WK-RC1 AT THE PM's
+      DIRECTION (2026-09-16), so the record lives in BOTH closeouts rather than
+      only in the consumer's. ONE OWNER PER TABLE, named at the definition:
+      THIS STORY owns `stats_player_week` + `snap_counts` (ingested by
+      `nfl_weekly_stats_ingest_op`, deliberately NOT in `ROLL_FORWARD_SOURCES` —
+      the weekly cadence would leave a just-completed week missing for seven
+      days, and a missing line is a zero under the retained-zero convention).
+      NF-WK-RC1 owns `stats_team_week`, the one table in its set this story does
+      not cover, under the same verify-the-source-advances + freshness
+      discipline. `schedules` is ALREADY in `ROLL_FORWARD_SOURCES` and is
+      untouched by both. ⛔ RC1 does NOT add anything to `ROLL_FORWARD_SOURCES`
+      for the two tables above.
+
+      ⭐ AND A POINTER THIS STORY EARNED: RC1's followUp 2 (a published weekly
+      manifest carrying `stats_as_of: "2025-W18"` beside `rosters_as_of:
+      "2026-W2"`) is CLOSED against node 2's publish-path refusal here,
+      `weekly_serving.assert_stat_vintage_reaches_training`. RC1 verified the
+      refusal→human chain end to end by DRIVING it (the guard refuses the
+      historical pair and passes a healthy one; `run_weekly_serving.main`
+      catches only `WeeklyRostersNotPublished`, so it propagates to exit 1;
+      the real `nfl_weekly_serving_op` then pages CRITICAL with the refusal text
+      in the body). No second monitor was added — a freshness duplicate of this
+      refusal would be a second owner of one logical check.
+
       ── ① THE SUPPRESSION CANNOT REACH PRODUCTION WITHOUT THE HELD PROMOTION,
       AND ONE CHANGELOG LINE WAS THE ONLY THING MAKING THAT PROMOTION UNSAFE.
       Node 0 is frontend-only and Vercel production is `main`, so the withholding

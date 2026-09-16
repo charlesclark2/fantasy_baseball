@@ -204,7 +204,10 @@ def nfl_sleeper_injuries_freshness_op(context):
 # below spells out: a monitor hosted inside its own subject cannot see its subject stop. Importing
 # the op rather than re-implementing it keeps ONE definition — the alternative is two copies of a
 # policy that must agree (the "one logical rule, many owners" class this repo keeps being bitten by).
-from pipeline.jobs.sports_nfl_weekly_serving_job import nfl_weekly_freshness_op
+from pipeline.jobs.sports_nfl_weekly_serving_job import (
+    nfl_realized_freshness_op,
+    nfl_weekly_freshness_op,
+)
 
 @op(out=Out(Nothing))
 def nfl_published_board_freshness_op(context):
@@ -259,9 +262,12 @@ def sports_nfl_sleeper_injuries_job():
     stopped", which cannot live inside the job it watches.
 
     ⭐ …and NF-C6-PH2's WEEKLY freshness SLA for the same reason (`nfl_weekly_freshness_op`, whose
-    subject is `sports_nfl_weekly_serving_job`). Both are terminal, independent leaves: no `ins`,
-    so a Sleeper outage cannot blind either, and neither can withhold anything."""
+    subject is `sports_nfl_weekly_serving_job`), and NF-WK-RC1 ①'s REALIZED-week backstop
+    (`nfl_realized_freshness_op`), whose subject is the same job. All are terminal, independent
+    leaves: no `ins`, so a Sleeper outage cannot blind any of them, and none can withhold
+    anything."""
     landed = nfl_sleeper_injuries_ingest_op()
     nfl_sleeper_injuries_freshness_op(start=nfl_sleeper_injuries_rebuild_op(start=landed))
     nfl_published_board_freshness_op()
     nfl_weekly_freshness_op()
+    nfl_realized_freshness_op()
