@@ -54,13 +54,74 @@ spec:
         near-complete coverage; report honestly whatever it is —
         a term the source doesn't carry renders as captured with the
         adjacent disclosure, exactly the MT1 discipline.
+        ✅ NODE 1 COMPLETE + PM-ACCEPTED 2026-09-16 —
+        `docs/nf_wk_rc1_realized_source_diagnosis.md`. Source =
+        `nflverse.stats_player_week`; FINAL gate is a COUNT not a clock
+        (`distinct game_id == the schedule's game count`); map =
+        `app/backend/services/realized_stat_fields.py`, derived from
+        the scorer's key set and reproduced against nflverse's own
+        `fantasy_points_ppr` to 3.55e-15 over all 1,118 real 2026 wk-1
+        rows. ⚠️ TIMING PREMISE CORRECTED: WEEK 1 is the first
+        completed week (finished Mon 09-14); week 2 opens Thu 09-17 and
+        completes Mon 09-21 — not "Tue 09-16" as written below.
+        ⚠️ D2 RULED (2026-09-16): TEAM D/ST IS BUILT IN PHASE A —
+        points allowed from `schedules`, yards allowed from
+        `stats_team_week`, the D/ST term map derived from the scorer's
+        key set like everything else, never hand-typed. Parity adapts:
+        reproduce an independently-computed figure where one exists;
+        where none does, prove the construction TWO-SIDED (a deliberate
+        weight mutation moves it; a fabricated points-allowed is
+        caught) and SAY IN THE RECORD that this map has no external
+        cross-check. If the team-level path turns out not to be
+        cheap-ish, STOP AND REPORT rather than absorbing the growth.
+    # ⚠️⚠️ AMENDED 2026-09-16 (PM ruling D1 = option A, ratified) — THE ORIGINAL PHASE A
+    # DESCRIBED A CONTRACT THE STORED DATA CANNOT SATISFY. Node 1 verified the spec's premises
+    # against the running system and found we hold NONE of the three inputs it assumed:
+    #   • no team's week-N STARTED LINEUP — `LEAGUE_ROSTER_PLAYER_FIELDS` is
+    #     ("name","position","team"); `starter` is DELIBERATELY dropped for other teams, and the
+    #     caller's own `imported_roster.starter` is the IMPORT-TIME flag, not that week's lineup;
+    #   • no weekly MATCHUP schedule or results — so record / PF-PA / "opponent result" are not
+    #     computable from the league record at all;
+    #   • rosters are an IMPORT-TIME SNAPSHOT, never re-fetched — a week-1 recap built from a
+    #     week-3 import misattributes players to teams.
+    # PM RULING, quoted: "A recap crediting benched players beside a 'power ranking' that isn't the
+    # standings is plausible-but-wrong on a factual surface, and the factual surface is the one
+    # place this program can least afford it." Option (B) (roster-level reframe) is EXPLICITLY
+    # REFUSED; (C) (narrow to the caller's own team) is refused too, and the reason is recorded
+    # because it is not obvious: "the stale-roster problem poisons even the caller's-own-team
+    # version — a week-1 recap from a week-3 import misattributes players regardless of whose team
+    # it is, so narrowing the audience doesn't narrow the defect."
+    # ⇒ THE WEEKLY MATCHUP RE-FETCH IS FUNDED INSIDE THIS STORY ("RC1 grows rather than spawning a
+    # successor, since without it the story has no honest deliverable").
+    #
+    # ⭐ AND THE PRIVACY-OF-COMPARISON DESIGN IS SUPERSEDED ONLY HERE, NARROWLY: dropping `starter`
+    # for other teams was a deliberate choice for the SEASON surface. A PLAYED week's lineups are
+    # the league's own public record on the platform, so the fetch supersedes it FOR RECAPS ONLY —
+    # the season fields stay untouched, and the recap sources its lineups ONLY from the fetched
+    # week, never from the stored season snapshot.
     - description: >
-        PHASE A — SERVING, verified before page code: paid authed
-        endpoints on the my-teams/league-board pattern: (1) weekly
-        recap per league (per-team: per-slot realized league points
-        + team total + opponent result; absences per ABSENCE_REASONS
-        — a player with no realized line renders a stated absence:
-        bye / inactive / no-line-recorded distinguishable); (2) power
+        PHASE A — SERVING, verified before page code. FIRST the WEEKLY
+        MATCHUP RE-FETCH (PM ruling D1/A, 2026-09-16): SLEEPER FIRST
+        (`/league/{id}/matchups/{week}` — unauthenticated, a host we
+        already call), giving each team's ACTUAL started lineup and the
+        week's ACTUAL matchup result. Fetched weeks are STORED
+        SERVER-SIDE, keyed league/week and CONTENT-TIMESTAMPED, as the
+        POINT-IN-TIME record the recap is built from: "a recap must be
+        stable after it renders, not silently re-derived from a later
+        fetch; a re-fetch that changes a stored final week is a NAMED
+        EVENT, not an overwrite". Cadence sized to the weekly product
+        (POST-FINAL, never a polling loop); the fan-out over imported
+        leagues is BOUNDED and REFUSES LOUDLY over its cap. ESPN and
+        YAHOO render STATED, DISTINGUISHABLE absences — ESPN's is
+        STRUCTURAL (the paste flow re-fetches nothing; say so in the
+        absence copy in plain words), Yahoo's is the known app-side
+        OAuth gap (its record card exists; do NOT chase it here).
+        THEN the paid authed endpoints on the my-teams/league-board
+        pattern: (1) weekly recap per league (per-team: per-slot
+        realized league points off the FETCHED lineup + team total +
+        the fetched opponent result; absences per ABSENCE_REASONS — a
+        player with no realized line renders a stated absence: bye /
+        inactive / no-line-recorded distinguishable); (2) power
         rankings per league (per-team: record, league-scored PF/PA,
         rank, and the rank's stated arithmetic). Contracts
         Pydantic-declared, additive; 401-anon at the gateway;
@@ -137,7 +198,8 @@ spec:
       - "League-scored projected-vs-actual as the headline comparison — ruled out until TD1 lands (a TD-less projected yardstick judging a TD-complete actual misattributes every TD to 'outperformance')."
   supersedes: []
   dependsOn:
-    - "Week 2 completing (Tue night) + the realized-line landing node 1 establishes; no dependency on TD1 or gate 3 BY DESIGN"
+    - "WEEK 1 completing (it did, Mon 2026-09-14) + the realized-line landing node 1 establishes; no dependency on TD1 or gate 3 BY DESIGN. ⚠️ the original 'week 2 completing Tue night' is CORRECTED — week 1 is the first completed week; week 2 completes Mon 09-21."
+    - "⛔ INGEST OWNERSHIP SPLIT (PM ruling 2026-09-16, one ingest owner per table — NEVER two writers): NF-INC-0916 owns `stats_player_week` + `snap_counts` (its spec claims exactly those two) and RC1 CONSUMES what it stands up; `schedules` is ALREADY in `ROLL_FORWARD_SOURCES`; RC1 owns `stats_team_week` ALONE, under the same verify-the-source-advances + freshness discipline, recorded in BOTH closeouts. ⛔ RC1 does NOT touch ROLL_FORWARD_SOURCES for stats_player_week/snap_counts."
   feedsInto:
     - "EPIC NF-SEASON's first shipped member; the weekly retention loop (recap email/surface cadence); waiver recs (member 3) reuse the realized-line inventory; power-rankings arithmetic becomes the transparent template"
 ---
