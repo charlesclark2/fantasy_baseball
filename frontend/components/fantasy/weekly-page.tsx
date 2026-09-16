@@ -50,6 +50,7 @@ import {
   useWeeklyManifest,
   useWeeklyProjections,
   useWeeklyProjectionsFull,
+  type NflWeeklyFraming,
   type NflWeeklyManifest,
   type NflWeeklyPlayer,
   type WeeklyPosition,
@@ -58,6 +59,7 @@ import {
   WEEKLY_ABSENCE_HEADING,
   WEEKLY_ABSENCE_LABEL,
   WEEKLY_AWAITING_PUBLISH_DETAIL,
+  WEEKLY_FRAMING_ABSENT,
   WEEKLY_AWAITING_PUBLISH_TITLE,
   WEEKLY_BYE_DEFINITION,
   WEEKLY_BYE_LABEL,
@@ -397,10 +399,57 @@ function PlayerRow({
   )
 }
 
+/**
+ * The served framing notes — or an honest statement that they did not arrive.
+ *
+ * ⭐⭐ THIS COMPONENT EXISTS BECAUSE ITS ABSENT BRANCH WAS A PRODUCTION OUTAGE (NF-INC-0917). The
+ * page read `framing.interval_note` unguarded; the served manifest carried no `framing` at all, and
+ * `/fantasy/weekly` answered every visitor with React's white error page from the moment the first
+ * weekly build published. See `NflWeeklyManifest.framing` in `lib/nfl-weekly.ts` for WHY a declared
+ * field can be missing on the wire — a pass-through route plus a builder guard that validates a
+ * dict and then writes the dict.
+ *
+ * ⛔ A MISSING NOTE IS STATED, NEVER SWALLOWED. Rendering nothing would leave the numbers above
+ * standing with no caveat and no sign that a caveat was ever meant to be there, which is the
+ * merged-empty-state error this page is built to avoid — the reader could not tell "we have no
+ * caveat for you" from "there is nothing to caveat".
+ *
+ * ⚠️ EACH NOTE IS READ INDEPENDENTLY rather than gating both on the block. A partially-built
+ * `framing` is exactly as reachable as an absent one (same mechanism, one key instead of all of
+ * them), and a reader is entitled to the note that DID arrive.
+ */
+function FramingNotes({ framing }: { framing?: NflWeeklyFraming }) {
+  const interval = typeof framing?.interval_note === "string" ? framing.interval_note.trim() : ""
+  const ros = typeof framing?.ros_interval_note === "string" ? framing.ros_interval_note.trim() : ""
+  return (
+    <div className="mt-4 space-y-2">
+      {interval && (
+        <p data-testid="weekly-interval-note" className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2 text-[11px] leading-relaxed text-gray-500">
+          {interval}
+        </p>
+      )}
+      {ros && (
+        <p data-testid="weekly-ros-interval-note" className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2 text-[11px] leading-relaxed text-gray-500">
+          {ros}
+        </p>
+      )}
+      {(!interval || !ros) && (
+        <p data-testid="weekly-framing-absent" className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2 text-[11px] leading-relaxed text-gray-500">
+          {WEEKLY_FRAMING_ABSENT}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /** The manifest's absence COUNTS, each with the served `detail` rendered verbatim beside a short
  *  human label. ⭐ Three causes, three rows — never one merged "some players are missing". */
 function AbsencePanel({ manifest }: { manifest: NflWeeklyManifest }) {
-  const rows = manifest.absences.filter((a) => a.n > 0)
+  // ⚠️ `?? []` for the NF-INC-0917 reason, not a stylistic one: `absences` comes off the same
+  // unvalidated pass-through payload `framing` did, and `.filter` on an absent array is the
+  // identical crash. It was PRESENT in the live payload on 2026-09-15 — this is the cheap half
+  // of the sweep, not a defect sighting.
+  const rows = (manifest.absences ?? []).filter((a) => a.n > 0)
   if (!rows.length) return null
   return (
     <section data-testid="weekly-absences" className="mt-6 rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
@@ -639,34 +688,33 @@ export function WeeklyProjectionsPage() {
               the rest-of-season band — both are the payload's own prose, and both belong to the
               numbers directly above them. Rendering our own paraphrase would be writing claim copy
               no screening had looked at, and would drift from the measurement on the next re-score. */}
-          {manifest.data && (
-            <div className="mt-4 space-y-2">
-              <p data-testid="weekly-interval-note" className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2 text-[11px] leading-relaxed text-gray-500">
-                {manifest.data.framing.interval_note}
-              </p>
-              <p data-testid="weekly-ros-interval-note" className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-3 py-2 text-[11px] leading-relaxed text-gray-500">
-                {manifest.data.framing.ros_interval_note}
-              </p>
-            </div>
-          )}
+          {manifest.data && <FramingNotes framing={manifest.data.framing} />}
         </>
       )}
 
       {manifest.data && <AbsencePanel manifest={manifest.data} />}
 
-      {/* Provenance: WHEN each input was read, per input. One build date rendered over inputs of
+      {/* ⚠️ OPTIONAL-CHAINED FOR THE NF-INC-0917 REASON (`vintage()` already renders a missing value
+          as "unknown", which is why this degrades to a legible line rather than a blank one).
+          `input_vintage` and `lineage` are the only other NESTED reads this page makes off the
+          manifest, i.e. the only other values here that can THROW rather than render empty — a
+          missing SCALAR renders as nothing and is not a crash, so the scalars are deliberately left
+          alone. Both were verified PRESENT in the live payload on 2026-09-15; this is the sweep the
+          crash earned, not four more defects.
+
+          Provenance: WHEN each input was read, per input. One build date rendered over inputs of
           several vintages hides staleness (NF-FRESH2), and these are free on both sides for exactly
           that reason — withholding them from a free caller would leave the defect in place for half
           the audience. */}
       {manifest.data && (
         <p data-testid="weekly-provenance" className="mt-6 text-[11px] text-gray-600">
           Week {manifest.data.week} built {vintage(manifest.data.generated_at)} · rosters{" "}
-          {vintage(manifest.data.input_vintage.rosters_as_of)} · schedule{" "}
-          {vintage(manifest.data.input_vintage.schedule_as_of)} · stats{" "}
-          {vintage(manifest.data.input_vintage.stats_as_of)} · trained through{" "}
-          {manifest.data.input_vintage.train_through_season ?? "—"} week{" "}
-          {manifest.data.input_vintage.train_through_week ?? "—"} ·{" "}
-          {manifest.data.lineage.served_version}
+          {vintage(manifest.data.input_vintage?.rosters_as_of)} · schedule{" "}
+          {vintage(manifest.data.input_vintage?.schedule_as_of)} · stats{" "}
+          {vintage(manifest.data.input_vintage?.stats_as_of)} · trained through{" "}
+          {manifest.data.input_vintage?.train_through_season ?? "—"} week{" "}
+          {manifest.data.input_vintage?.train_through_week ?? "—"} ·{" "}
+          {manifest.data.lineage?.served_version ?? "unknown"}
         </p>
       )}
 

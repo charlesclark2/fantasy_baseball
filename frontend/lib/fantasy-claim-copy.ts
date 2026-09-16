@@ -1317,6 +1317,23 @@ export const WEEKLY_AWAITING_PUBLISH_DETAIL =
 export const WEEKLY_READ_FAILED =
   "We could not load this week's projections. That is a problem on our side rather than a gap in what we publish — please try again shortly."
 
+/**
+ * NF-INC-0917 — THE SERVED FRAMING NOTES ARE ABSENT FROM THE PAYLOAD.
+ *
+ * ⭐ A FOURTH STATE, and it is neither "nothing published" nor "the read failed": the week IS built
+ * and its numbers ARE here, but the manifest arrived without the `framing` block that carries their
+ * measurement caveats. That happens because `/nfl/weekly/manifest` is a PASS-THROUGH of the
+ * published S3 blob with no `response_model`, so a builder that omits a field ships a payload the
+ * declared contract would have rejected — which is exactly what took this page down on 2026-09-15.
+ *
+ * ⛔ IT DOES NOT PARAPHRASE THE MISSING NOTES. Writing our own version of a measurement caveat would
+ * be publishing claim copy no screening had ever seen, and it would drift from the measurement on
+ * the next re-score — the same reason the page renders the served prose verbatim when it IS there.
+ * A stated absence is the honest answer; a crash is not, and neither is silence.
+ */
+export const WEEKLY_FRAMING_ABSENT =
+  "The measurement notes that belong with these numbers did not come through with this week's build, so we are not showing them rather than writing our own version of them from memory. What the range means is unchanged — it is on the “80% range” column heading itself — and the projections above are unaffected."
+
 // ── the PPR-native framing, and why there is no format picker ────────────────────────────────────
 
 /**
