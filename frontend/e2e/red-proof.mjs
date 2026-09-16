@@ -49,7 +49,7 @@ const CASES = [
     // must reproduce the DEFECT, not merely edit the line the defect would live on.
     file: "components/fantasy/weekly-recap.tsx",
     from: "      {recap.itemisationGapNote && (\n        <p className=\"mt-2 border-l-2 border-amber-500/40 pl-2 text-xs text-amber-200/80\">\n          {recap.itemisationGapNote}\n        </p>\n      )}",
-    to: "      {((recap.coverage as any)?.captured ?? []).length > 0 && (\n        <p className=\"mt-2 border-l-2 border-amber-500/40 pl-2 text-xs text-amber-200/80\">\n          {"This league also scores fumbles and 40+ yard touchdown bonuses, which the breakdown below doesn't itemize yet — so the slot points don't add up to the total above."}\n        </p>\n      )}",
+    to: "      {((recap.coverage as any)?.captured ?? []).length > 0 && (\n        <p className=\"mt-2 border-l-2 border-amber-500/40 pl-2 text-xs text-amber-200/80\">\n          {\"This league also scores fumbles and 40+ yard touchdown bonuses, which the breakdown below doesn't itemize yet — so the slot points don't add up to the total above.\"}\n        </p>\n      )}",
     grep: "disclosure is ABSENT",
   },
   {
