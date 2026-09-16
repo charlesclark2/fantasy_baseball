@@ -10,7 +10,11 @@ metadata:
   name: nf-inj2c
   vertical: nfl_fantasy
   card: https://trello.com/c/Dsz8CROW
-  status: IN_PROGRESS(the DSR field is RULED — PM 2026-09-01 declared the binding family; node 3's prereg is written on that basis; the decisive run is downstream of the operator's node-3b re-measure)
+  status: DONE  # PM flip 2026-09-16 — closeout accepted 09-14: strict dominance held on all six
+  # measures; DSR 0.9306 vs the 0.95 bar REFUSED (the gate saying NO is the record); thesis
+  # confirmed separately from ship; field remedy measured closed (no NF-INJ2d); calendar
+  # re-test ~Feb 2028 (card yF2kNDlg). This line was the only outstanding artifact.
+  # (was: IN_PROGRESS(the DSR field is RULED — PM 2026-09-01 declared the binding family; node 3's prereg is written on that basis; the decisive run is downstream of the operator's node-3b re-measure)
 spec:
   description: >
     Fresh forward registration of the ASSIGNMENT-RULE fix — the mechanism

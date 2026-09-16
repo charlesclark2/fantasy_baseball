@@ -149,6 +149,112 @@ spec:
       `concurrency_group`. Guards RED-proven 7/7. Docs:
       docs/ncaaf_inc_0914_evidence_reads.md (§0 verdict, §7 fix, §8 verify).
 
+      ══ PM RULINGS (2026-09-15) — all four decisions, reasoning as given ═════
+      Prompt: docs/ncaaf_inc_0914_pm_decisions.md
+
+      D1 = B, FAIL-AND-ATTRIBUTE. PM: "Ratified on your own load-bearing fact:
+        every in-flight run is a subprocess of the recreated container, so
+        'non-terminal before the recreate' => dead is true by construction, not by
+        heuristic — which is what makes B safe to automate. C is refuted by INC-36's
+        own record (a long-blocked deploy raced two deploys), and D is explicitly
+        refused: it is INC-36's root cause re-proposed, and E2.1-r forbids raising a
+        bound to make a symptom vanish — record the refusal with both citations so it
+        stays refused."
+        ⛔ D (raise DRAIN_TIMEOUT) IS REFUSED, and the refusal is recorded with BOTH
+        citations so a future reader cannot re-propose it as new: (i) INC-36 — a
+        deploy parked in the drain for its full DRAIN_TIMEOUT is what pushed it past
+        the CD poll budget and let a second deploy race it; (ii) E2.1-r — a bound is
+        not raised to make a symptom vanish. ⛔ C (refuse the deploy) likewise refused
+        on INC-36's record.
+        SHIPPED, with all three PM constraints met:
+          * the failure event NAMES the deploy AND the commit SHA (a bare FAILED would
+            reproduce the cause-free alert one layer down — verified by rendering the
+            message and asserting the SHA is in it);
+          * the victim set is SNAPSHOTTED PRE-TEARDOWN (deploy.sh §4b) and never
+            re-derived after (§7b iterates only that list), so a run the NEW worker
+            started is untouchable. RED-proven: "the victim snapshot moves AFTER the
+            recreate" -> RED.
+          * ⭐ ONE DELIBERATE NARROWING OF THE PM'S WORDING, flagged rather than taken
+            silently: the PM said "non-terminal before the recreate", and the DOOMED
+            set is narrower than that — STARTING+STARTED only. The load-bearing fact
+            holds for runs with a WORKER PROCESS; a QUEUED/NOT_STARTED run is a ROW IN
+            POSTGRES, it SURVIVES the recreate untouched and the new daemon launches it
+            moments later, so marking it failed would be a FALSE attribution against a
+            live, working run — the mirror image of the defect being fixed. CANCELING
+            is excluded too (already being terminated deliberately; crediting its death
+            to the deploy would be wrong). The DRAIN still WAITS on the full
+            non-terminal set; only ATTRIBUTION is narrowed. Both halves RED-proven, incl.
+            a clause that the doomed set must be a STRICT SUBSET of the drain set so a
+            later tidy-up cannot "unify" them.
+        ⏭️ RUNTIME GATE OPEN — see the operator procedure in
+        docs/ncaaf_inc_0914_evidence_reads.md §10. CI mocks all IO, so the criterion is
+        NOT met until it has run on the box.
+
+      D2 = B, ORPHANED-RUN DETECTOR — FUNDED AS ITS OWN STORY, card OA5e6TT8. NOT
+        built in this session, by ruling. PM: "the gap is the absent liveness check,
+        not the ceiling's value, so no timeout can do better than bound the mystery;
+        and the incident's decisive table — three detection latencies from one event,
+        differing only by what instrumentation each job happened to carry — is exactly
+        the argument that detection should be a property of the box, not a per-job
+        accident." Option C (swap the run launcher) REFUSED: "DefaultRunLauncher's
+        subprocess model was a deliberate cost choice, and we don't swap launchers to
+        acquire one property."
+        ⚠️ THE 3-HOUR BOUND IS THE INTERIM RECORDED STATE, NOT THE ACCEPTED END STATE.
+
+      D3 = KEEP the shared concurrency_group in this PR. PM: "It's small, RED-proven,
+        and armed on a calendar trigger (the next day both game-day gates open), which
+        makes splitting it out a scheduling risk with zero offsetting benefit."
+        Requirement 1 (recorded in the PR description AND here): ⭐ THIS IS A SECOND,
+        DISTINCT DEFECT FOUND BY THE CENSUS — NOT A RIDER ON THE INCIDENT'S CAUSE. The
+        incident's cause is the drain's blind spot; the shared DuckDB file is an
+        independent latent collision that the concurrency census surfaced while
+        investigating, and it has never fired. Two causes, not one.
+        Requirement 2, QUEUE-BEHAVIOUR VERIFICATION (measured, not reasoned):
+          * ⭐ QUEUE TIME DOES NOT COUNT AGAINST `dagster/max_runtime` — and this
+            incident is its own proof. `check_run_timeout` reads `run_record.start_time`
+            (set at PIPELINE_START, after dequeue), not `create_timestamp`: run 06d7352c
+            was CREATED 18:00:00.70 and STARTED 18:00:47.67, and the kill landed at
+            22:01:20.14 = start+14400+tick, NOT create+14400. The 47 s it spent queued
+            was excluded. So a build queued behind its sibling cannot trip its own
+            10800 s ceiling.
+          * worst-case added wait = the sibling's whole runtime: NFL measured 192.6 s
+            (2026-09-15 18:00:44), NCAAF box-verified ~179 s — against a DAILY cadence
+            (86400 s). Two orders of magnitude of slack.
+          * NO FRESHNESS SLA IS HOSTED ON EITHER BUILD'S OUTPUT: INC-41's
+            `artifact_freshness.py` registry holds MLB lakehouse tables + `nfl_pit_*`
+            only; `sports_delta_freshness.py` holds exactly two contracts
+            (`nfl_sleeper_injuries`, `ncaaf_team_strength_week`), and the latter's Delta
+            is written by `run_team_strength` inside the MONDAY P1.2W refit job — a
+            different job in a different concurrency group. Nothing an SLA watches is
+            produced by these two jobs.
+          * NO w3pre-STYLE TIER BUDGET APPLIES: that is the MLB intraday tick
+            (`intraday_tick_budget`, 480 s legs / 1500 s job). These are standalone
+            daily jobs with no leg budget above them.
+
+      D4 = ACCEPT AND WATCH, recorded. PM: "post-#1129 the trade is deploy latency for
+        run safety, the latency is bounded (<=600 s) and predictable (12:00-13:28 UTC
+        daily), and the correct future lever is batching merges, never shortening the
+        drain (same E2.1-r family as 1-D)." One-line entry ADDED to
+        services/dagster/aws/BOX_OPERATIONS.md §6 — that document owns the box's
+        operating picture, and the census card (ZPmBj8PF) reads it from there. Extend,
+        do not fork.
+
+      MINOR = PIN IT, in this PR. `dagster>=1.11.5` -> `dagster==1.13.22` (the measured
+        box version). PM: "Your own diagnosis rested on source analysis of the
+        run-monitoring paths, and you had to verify 1.13.5 == 1.13.22 to trust it — that
+        verification cost is what an unpinned orchestrator charges on every future
+        incident." Pin-bump discipline recorded in the Dockerfile comment (bump
+        deliberately; re-check the run-monitoring paths on every bump). Resolution
+        VERIFIED before shipping so the pin cannot break the next image build: the
+        sibling `dagster-*` libs pin `dagster` exactly, so this one line locks the whole
+        family (dagster/-cloud/-webserver/-pipes/-graphql/-shared 1.13.22;
+        -dbt/-postgres/-snowflake 0.29.22).
+        ⚠️ DELIBERATE ASYMMETRY, stated rather than left to be discovered:
+        `pyproject.toml` keeps `dagster>=1.11.5` (uv.lock resolves 1.13.5). That governs
+        CI/dev, not the serving image, and re-locking was out of scope here — but it
+        means CI and the box can run different Dagster minors. Pinning the IMAGE to the
+        measured box version reduces the surprise rather than creating it.
+
       ══ FOLLOW-UPS ═══════════════════════════════════════════════════════════
       F1. ⭐⭐ THE HEADLINE INSTRUMENT GAP, UNFIXED AND NOT FIXABLE BY A TIMEOUT.
           `DefaultRunLauncher` does not implement `supports_check_run_worker_health`

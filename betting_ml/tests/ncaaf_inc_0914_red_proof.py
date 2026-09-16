@@ -48,13 +48,17 @@ CASES: list[tuple[str, Path, str, str, str, str, str | None]] = [
      "TestTheDrainDoesNotFailOpen::test_the_drain_waits_for_runs_that_have_not_reached_started_yet",
      "statuses:[QUEUED"),
 
+    # ⚠️ ANCHORED ON THE FOLLOWING LINE: the same typename branch now appears in BOTH in_flight()
+    # and doomed_runs(), so the bare snippet is an AMBIGUOUS-ANCHOR (the harness caught this).
+    # `print(len(...))` is in_flight()'s alone. ⛔ no must_vanish for the same reason — the token
+    # legitimately survives in the sibling function; the clause going RED is the proof.
     ("the probe stops branching on __typename, so a PythonError reads as drained",
      DEPLOY,
-     "if r.get('__typename') != 'Runs':\n    raise SystemExit(1)\n",
-     "",
+     "if r.get('__typename') != 'Runs':\n    raise SystemExit(1)\nprint(len(r.get('results', [])))",
+     "print(len(r.get('results', [])))",
      DEPLOY_SUITE,
      "TestTheDrainDoesNotFailOpen::test_a_graphql_level_error_is_unknown_rather_than_drained",
-     "!= 'Runs'"),
+     None),
 
     # The INC-36 clause this change sits inside — proof that widening the filter did not
     # weaken the fail-open guard that was already there.
@@ -64,6 +68,75 @@ CASES: list[tuple[str, Path, str, str, str, str, str | None]] = [
      "\"}' 2>/dev/null)\" \\\n    || echo 0",
      DEPLOY_SUITE,
      "TestTheDrainDoesNotFailOpen::test_in_flight_does_not_swallow_a_failed_probe_as_zero",
+     None),
+
+    # ══ Decision 1 (PM 2026-09-15) — fail-and-attribute ═══════════════════════════════════
+    # ⭐ THE ORDERING CONSTRAINT THE PM MADE EXPLICIT: "a run started by the new worker must be
+    # untouchable — guard that ordering with a RED proof". Moving the snapshot AFTER the recreate
+    # is exactly how that guarantee is lost, and the file still runs.
+    ("the victim snapshot moves AFTER the recreate",
+     DEPLOY,
+     'DOOMED_RUNS="$(doomed_runs)"',
+     'DOOMED_RUNS=""  # moved below',
+     DEPLOY_SUITE,
+     "TestADeployAttributesTheRunsItKills::test_the_snapshot_is_taken_before_the_recreate",
+     None),
+
+    # ⭐⭐ THE FALSE-ATTRIBUTION TRAP. A QUEUED run is a row in Postgres, NOT a subprocess: it
+    # SURVIVES the recreate and the new daemon launches it moments later. Widening the doomed set
+    # to match the drain set is the tempting tidy-up, and it would mark a live, working run FAILED.
+    ("the doomed set is widened to match the drain set, sweeping in QUEUED runs",
+     DEPLOY,
+     '--data \'{"query":"{ runsOrError(filter:{statuses:[STARTING,STARTED]}, limit:50)',
+     '--data \'{"query":"{ runsOrError(filter:{statuses:[QUEUED,NOT_STARTED,STARTING,STARTED]}, limit:50)',
+     DEPLOY_SUITE,
+     "TestADeployAttributesTheRunsItKills::test_the_doomed_set_excludes_queued_runs",
+     None),
+
+    ("the drain is narrowed to the doomed set, so it stops waiting for queued work",
+     DEPLOY,
+     "statuses:[QUEUED,NOT_STARTED,STARTING,STARTED,CANCELING]",
+     "statuses:[STARTING,STARTED]",
+     DEPLOY_SUITE,
+     "TestADeployAttributesTheRunsItKills::test_the_drain_waits_on_strictly_more_than_the_doomed_set",
+     "statuses:[QUEUED"),
+
+    # A bare FAILED reproduces the cause-free alert one layer down — the attribution IS the point.
+    ("the failure message stops naming the deploy's commit",
+     DEPLOY,
+     '-e DEPLOY_SHA="${NEW_HEAD}" ',
+     "",
+     DEPLOY_SUITE,
+     "TestADeployAttributesTheRunsItKills::test_the_failure_message_names_the_deploy_and_the_commit",
+     # ⛔ no must_vanish: `DEPLOY_SHA` still appears in the python body and `NEW_HEAD` all over the
+     # script; the clause reads the BLOCK, so the clause going RED is the proof.
+     None),
+
+    ("a run that finished on its own is overwritten instead of skipped",
+     DEPLOY,
+     "        if run.is_finished:",
+     "        if False:",
+     DEPLOY_SUITE,
+     "TestADeployAttributesTheRunsItKills::test_a_run_that_finished_on_its_own_is_skipped",
+     # ⛔ no must_vanish: `is_finished` also appears in 7b's explanatory COMMENT. That is precisely
+     # why _attribution_block strips comments — the raw scan was VACUOUS and this proof found it.
+     None),
+
+    # NF1.7(a): an unevaluable probe scored as "nothing to do" is the silent pre-fix behaviour.
+    ("an unverifiable snapshot is silently treated as an empty set",
+     DEPLOY,
+     '  log "  ALERT: could not snapshot in-flight runs before the recreate',
+     '  log "  could not snapshot in-flight runs before the recreate',
+     DEPLOY_SUITE,
+     "TestADeployAttributesTheRunsItKills::test_an_unverifiable_snapshot_attributes_nothing_and_says_so",
+     None),
+
+    ("a failed attribution rolls back an otherwise healthy deploy",
+     DEPLOY,
+     '    || log "  WARN: attribution step failed',
+     '    || rollback "attribution step failed',
+     DEPLOY_SUITE,
+     "TestADeployAttributesTheRunsItKills::test_a_failed_attribution_never_rolls_back_a_healthy_deploy",
      None),
 
     # ══ the DETECTION-LATENCY bound — the ceiling this job family never had ════════════════
