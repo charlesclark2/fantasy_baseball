@@ -458,3 +458,77 @@ def compare_to_platform(
             ),
         },
     }
+
+
+#: How the standings order is decided, SERVED so a reader can reproduce it by hand. The spec's
+#: constraint was "any additional ranking signal ONLY if it is a transparent arithmetic of served
+#: numbers — no opaque composite score", and this is deliberately the plainest thing that is also
+#: what a league page shows: record first, points for as the tiebreak.
+RANKING_BASIS = (
+    "Ranked by win-loss-tie record, then by total points for. Both are your league's own published "
+    "figures, so this order is the one your league page shows."
+)
+
+POWER_RANKINGS_NOTE = (
+    "Records and points here are your league's own published totals for each completed week."
+)
+
+
+def power_rankings(weeks: list[dict]) -> dict:
+    """Standings accumulated across completed weeks, from the LEAGUE'S OWN totals.
+
+    `weeks` are `score_week` outputs. ⛔ ONLY weeks whose result the league actually published are
+    counted, and `weeksIncluded` says which — a week silently dropped for a missing total would
+    make the record wrong with no way for a reader to notice.
+
+    ⚠️ A team with NO standings total in a week is skipped FOR THAT WEEK rather than scored zero: a
+    zero is a loss it did not necessarily suffer, and the ruling is explicit that a platform we
+    cannot read has no standings rather than approximate ones.
+    """
+    acc: dict[str, dict] = {}
+    included: list[int] = []
+    for wk in weeks:
+        week_no = wk.get("week")
+        totals = {
+            t["teamKey"]: t for t in wk.get("teams") or []
+            if t.get("standingsTotal") is not None
+        }
+        counted = False
+        for m in wk.get("matchups") or []:
+            side = [totals.get(str(t.get("teamKey"))) for t in m.get("teams") or []]
+            if len(side) != 2 or any(x is None for x in side):
+                continue
+            a, b = side
+            for me, them in ((a, b), (b, a)):
+                row = acc.setdefault(me["teamKey"], {
+                    "teamKey": me["teamKey"], "teamName": me.get("teamName") or "",
+                    "wins": 0, "losses": 0, "ties": 0,
+                    "pointsFor": 0.0, "pointsAgainst": 0.0, "weeksCounted": 0,
+                })
+                row["teamName"] = me.get("teamName") or row["teamName"]
+                row["pointsFor"] += float(me["standingsTotal"])
+                row["pointsAgainst"] += float(them["standingsTotal"])
+                row["weeksCounted"] += 1
+                if me["standingsTotal"] > them["standingsTotal"]:
+                    row["wins"] += 1
+                elif me["standingsTotal"] < them["standingsTotal"]:
+                    row["losses"] += 1
+                else:
+                    row["ties"] += 1
+            counted = True
+        if counted and week_no is not None:
+            included.append(int(week_no))
+
+    rows = sorted(
+        acc.values(),
+        key=lambda r: (-(r["wins"] + 0.5 * r["ties"]), -r["pointsFor"], r["teamName"]),
+    )
+    for i, row in enumerate(rows, start=1):
+        row["rank"] = i
+    return {
+        "rows": rows,
+        "weeksIncluded": sorted(included),
+        "throughWeek": max(included) if included else 0,
+        "rankingBasis": RANKING_BASIS,
+        "standingsNote": POWER_RANKINGS_NOTE,
+    }
