@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "fixed",
+        "text": "This week's NFL projections page is loading again. Shortly after the first weekly projection of the season published, the page stopped rendering for everyone: it expected the published file to carry the short notes that explain what the 80% range means and how the rest-of-season range is built, and that file arrived without them. Rather than show the page without those notes, it showed nothing at all \u2014 which was the wrong call twice over, because the projections themselves were complete and correct the whole time and are unchanged now. The page no longer depends on those notes being present: when they are there it prints them exactly as published, and when they are not it says so plainly and shows the projections, the ranges and the provenance line as normal. We have not written our own stand-in for a missing note, because the wording of a measurement caveat is part of the measurement."
+      },
+      {
+        "tag": "fixed",
         "text": "The draft board is rebuilding daily again. The automated rebuild that runs each morning stopped before it could publish, so for one cycle the board you were reading was the one built the previous evening \u2014 correct as far as it went, but missing that morning's weekly game-status listings, which change daily during the season, and the latest market data. Nothing was wrong with the projections themselves and no number has been revised; the rebuild simply could not finish, and rather than publish something incomplete it published nothing and kept serving the previous board. It is advancing again, and the checks that decide whether a board is fit to publish are unchanged."
       }
     ]
