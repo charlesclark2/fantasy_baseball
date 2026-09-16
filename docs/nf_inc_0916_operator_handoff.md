@@ -29,11 +29,27 @@ So the announcement has been **deferred** into `frontend/data/changelog-held.jso
 
 **After the promotion, verify by content (cache-busted), not by a green deploy:**
 
+⚠️ **Two traps in this check, both of which return `0` on a perfectly healthy page.** (a) React escapes `'` to `&#x27;`, so a grep string containing an apostrophe never matches the rendered HTML; (b) the weekly **table is client-rendered**, so `curl` of the server HTML cannot see a single cell — a grep for the notice proves only that the banner shipped, never that the numbers are withheld. Use both commands below.
+
 ```bash
-# LAPTOP
-curl -s "https://www.credencesports.com/fantasy/weekly?cb=$(date +%s)" | grep -c "We have taken this week's projected points down"
-# expect: 1
+# LAPTOP. ~2 s. The notice shipped (apostrophe-free fragment, deliberately).
+curl -s "https://www.credencesports.com/fantasy/weekly?cb=$(date +%s)" \
+  | grep -c "projected points down"
+# expect: 1   (withheld)   /   0 after node 4 (un-suppressed)
 ```
+
+```bash
+# LAPTOP. ~15 s. The CELLS are withheld — reads the shipped client bundle,
+# which is the only place the row rendering is decided.
+cd "$(mktemp -d)" && curl -s "https://www.credencesports.com/fantasy/weekly?cb=$(date +%s)" -o p.html \
+  && grep -o 'src="/_next/static/chunks/[^"]*"' p.html | sed 's/src="//;s/"//' \
+     | while read -r c; do curl -s "https://www.credencesports.com${c}"; echo; done > b.js \
+  && grep -c 'point:g,p10:g,p90:g,ros:g,rosP10:g,rosP90:g,band:!1,statLine:!1' b.js
+# expect: 1   (every model cell folded to the withheld singleton, no conditional)
+# after node 4 this goes to 0 and the row view carries real values instead.
+```
+
+Verified live 2026-09-16 on `dpl_54WZndz76f3GBdEWBUrcUWzd5Db9`: both return as expected.
 
 ⚠️ And the repo's standing hazard applies: a long-open `dev → main` PR can merge an **earlier** `dev` snapshot with every signal green. Verify `main`'s actual file content afterwards, never the merge status:
 
