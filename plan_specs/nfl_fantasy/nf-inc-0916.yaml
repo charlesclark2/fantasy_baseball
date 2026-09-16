@@ -11,7 +11,7 @@ metadata:
   name: nf-inc-0916
   vertical: nfl_fantasy
   card: https://trello.com/c/ISopvUYR
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     stats_player_week and snap_counts are absent from
@@ -155,9 +155,91 @@ spec:
   goalRef: { name: nf-inc-0916 }
   graph:
     nodes: []   # incident — suppress -> ingest (verify-advance + write-scope) -> class closure -> retrain + measure -> operator un-suppress -> #1137 merge -> lens lift -> closeout
+  progress:
+    node0: >
+      DONE (PR pending). The public weekly page withholds the point, the 80%
+      band, the interval bar, the rest-of-season figures and the paid per-stat
+      line; statuses (bye chip, opponent), the absence counts and their served
+      reasons, weeks-of-form, weeks-left, the framing panels and the provenance
+      line all stay. One constant — `WEEKLY_NUMBERS_WITHHELD` in
+      `frontend/lib/weekly-suppression.ts` — is the whole lever; the page
+      renders through `weeklyRowView`/`weeklyRowOrder` so the withheld and
+      restored pages are ONE code path, and the pure function is driven BOTH
+      ways in the e2e suite while a rendered clause pins the page to its output
+      (the composition, not either half, is the reversal's coverage). The
+      rendered clauses branch on the same constant, so the flip carries the
+      suite with it rather than demanding a rewrite. 28/28 weekly e2e green
+      (desktop + mobile); `tsc` clean; the page's own `metadata.description`
+      is flag-driven too, because the shipped one promised exactly what the
+      page now withholds.
+    node0_scope_note: >
+      ⚠️ RENDERING ONLY, per the spec — the free API and CDN routes still SERVE
+      the defective numbers, so a reader who fetches
+      `/api/public/weekly-projections` still gets them. That is the spec's
+      scope for node 0 (`node 0 touches only its rendering, never the serving
+      path`) and the publish-path half is node 2's manifest guard. Stated here
+      so the withholding is not mistaken for something stronger than it is.
   closeout:
     verdict: null
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      ── ① THE SUPPRESSION CANNOT REACH PRODUCTION WITHOUT THE HELD PROMOTION,
+      AND ONE CHANGELOG LINE WAS THE ONLY THING MAKING THAT PROMOTION UNSAFE.
+      Node 0 is frontend-only and Vercel production is `main`, so the withholding
+      ships only via the `dev` → `main` promotion (PR #1139) that is being held
+      because it also carries NF-WK-TD1's touchdown emission and a changelog
+      entry announcing it. Reading the two against each other: the EMISSION is
+      harmless under suppression — the only surface that renders a weekly stat
+      line is the paid panel, which is now withheld for entitled and unentitled
+      callers alike — so the box publishing touchdown columns nobody can see
+      costs nothing. The ANNOUNCEMENT is not harmless: it tells users about a
+      stat line the same release refuses to show them. ⇒ the announcement has
+      been DEFERRED into `frontend/data/changelog-held.json` (verbatim, with its
+      week, its gate and why), which unblocks the promotion, and node 4(ii)
+      restores it — which is exactly what the spec already says ("its changelog
+      entry publishes only now, when it is true"). ⚠️ THIS EDITS ANOTHER STORY'S
+      MERGED ARTIFACT and the operator should know it: the entry is not lost,
+      it is held, and the gate below makes restoring it mandatory rather than
+      remembered.
+
+      ── ② THE PROMOTION GATE IS NOW MECHANICAL, IN BOTH DIRECTIONS.
+      `betting_ml/tests/test_nf_inc_0916_promotion_gate.py`: while the flag is
+      armed no held item may appear in `changelog.json`; when the flag lifts the
+      held registry must be EMPTY. The second half is the one that matters at
+      node 4 — a reversal that flipped the constant and forgot the deferred
+      entry would silently drop an announcement users are owed, and nothing else
+      in the repo treats a missing changelog item as an error. RED-proven 11/11
+      (`betting_ml/tests/nf_inc_0916_red_proof.py`), including the two ways the
+      real restoration happens (verbatim, and lightly reworded on the way back
+      in). ⚠️ CI WIRING WAS PART OF THE GUARD, not an afterthought: the PR that
+      lifts the gate is frontend-only and would have run NO Python job at all
+      (the NCAAF-P3.9 finding), so `ci.yml` gained a `release_gate` filter — ONE
+      brace pattern, because under `predicate-quantifier: every` a multi-pattern
+      list selects nothing — and a job gated on it alone.
+
+      ── ③ THE ORDERING IS WITHHELD TOO, AND THAT IS A JUDGMENT THE OPERATOR MAY
+      REVERSE IN ONE LINE. The spec says "withholds the point and band"; the
+      table is additionally ordered by position-then-name rather than by the
+      model's point. Reasoning: within-position ordering "probably survives"
+      (TD1's own hedge), and publishing a hedged claim in the same breath as
+      withholding the firm one it is derived from is not defensible — a ranked
+      list with the numbers stripped still reads as a ranking, because it is
+      one. The notice says so plainly. `weeklyRowOrder` is the single lever if
+      the operator prefers the ordering kept.
+
+      ── ④ THE PAID STAT LINE IS WITHHELD FROM ENTITLED CALLERS TOO, and it
+      needed its own sentence rather than either existing one: the membership
+      lock asserts "the points projection and its range on this page are free",
+      which is currently false, and the absent state asserts the component head
+      produced nothing for that player, which is not what happened. Three
+      states, three sentences — the rule this surface was already built on.
+
+      ── ⑤ `run_nf_c6_ph2_promotion_review.component_coherence` now NAMES its
+      sign convention (components − head) in both its docstring and the emitted
+      artifact's `interpretation`, plus a machine-readable `sign_convention`
+      key. Neither computation was flipped (PM ruling, TD1 D5 item 5). The
+      artifact-side half is the load-bearing one: a figure gets quoted from the
+      artifact, not from the module.

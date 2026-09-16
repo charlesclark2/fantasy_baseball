@@ -1,0 +1,17 @@
+{
+  "note": "Changelog items DEFERRED out of a release, with the gate that holds them. An item lives here instead of in changelog.json when shipping it would announce something the product is simultaneously withholding, or cannot yet deliver. Restoring one is a move back into changelog.json under its stated week, VERBATIM — the text is kept here whole precisely so restoration is a copy rather than a rewrite. Enforced in BOTH directions by betting_ml/tests/test_nf_inc_0916_promotion_gate.py: while the gate is armed a held item may not appear in changelog.json, and when the gate lifts this file must be empty. Neither half can be forgotten, and neither is a human remembering.",
+  "held": [
+    {
+      "id": "nf-wk-td1-touchdown-emission",
+      "gate": "frontend/lib/weekly-suppression.ts:WEEKLY_NUMBERS_WITHHELD",
+      "held_on": "2026-09-16",
+      "week": "2026-09-14",
+      "restore_at": "NF-INC-0916 node 4(ii)",
+      "why": "NF-WK-TD1 made the weekly component line able to carry touchdowns, and the entry below announces it to users. NF-INC-0916 then found that the same model trains on a week of fabricated zeros and serves at roughly a third of realized scoring, so the weekly page now withholds the points, the band, the rest-of-season figures AND the projected stat line this entry is about. Publishing it would announce a stat line the page is simultaneously refusing to show. The emission itself is correct and is already merged to dev; only the ANNOUNCEMENT is held. It publishes at node 4, behind the retrained payload, when it is true.",
+      "item": {
+        "tag": "improved",
+        "text": "Weekly player projections now include touchdowns. The per-stat line under each weekly projection carried passing and rushing yards, carries, targets and catches, but its touchdown and interception rows were empty — so if your league scores touchdowns, those rules had nothing to score against and were marked as not applied. They are projected now, which means a league-scored weekly number reflects them for the first time. Two things worth saying plainly. Touchdowns are roughly a fifth of a typical player's fantasy points and more than a third of a quarterback's, so this is not a rounding change. And our weekly points figure and this stat line come from two separate models, so they have never matched exactly and still will not — adding touchdowns changes how far apart they sit, and in most cases widens it rather than closing it. The points figure is unchanged; what changed is that the stat line beneath it is no longer missing a fifth of the game."
+      }
+    }
+  ]
+}

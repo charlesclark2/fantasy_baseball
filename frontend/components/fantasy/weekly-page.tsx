@@ -79,7 +79,19 @@ import {
   WEEKLY_STAT_LINE_LOCK_DETAIL,
   WEEKLY_STAT_LINE_LOCK_TITLE,
   WEEKLY_STAT_LINE_NOTE,
+  WEEKLY_WITHHELD_CELL,
+  WEEKLY_WITHHELD_STAT_LINE,
+  WEEKLY_WITHHELD_TITLE,
+  weeklyWithheldDetail,
 } from "@/lib/fantasy-claim-copy"
+import {
+  WEEKLY_NUMBERS_WITHHELD,
+  WEEKLY_WITHHELD_SINCE,
+  weeklyRowOrder,
+  weeklyRowView,
+  type WeeklyCell,
+  type WeeklyRowView,
+} from "@/lib/weekly-suppression"
 import {
   EmptyBlock,
   FreemiumBoundary,
@@ -97,6 +109,30 @@ import {
  *  a DECLARED state, not a missing value — so it renders as an explicit absence rather than as a
  *  zero, which would be a different (and false) claim. */
 const fmt = (v: number | null | undefined) => (v == null ? "—" : num(v, 1))
+
+/**
+ * One number cell, in whichever of its three states it is in.
+ *
+ * ⭐ THE THREE RENDER DIFFERENTLY BECAUSE THEY ARE THREE DIFFERENT FACTS — the rule this whole
+ * surface is built on. An em-dash means "there is no number here" (a final week has no remaining
+ * horizon to sum). `WEEKLY_WITHHELD_CELL` means "there is a number and we are not showing it"
+ * (NF-INC-0916). Rendering the second as the first would tell a reader the model had nothing to
+ * say, which is untrue and is the merged empty state that costs an investigation every time it
+ * recurs.
+ *
+ * ⚠️ The withheld marker carries `data-withheld` so an assertion can find it structurally rather
+ * than by matching its prose, which is free to be reworded.
+ */
+function Cell({ c }: { c: WeeklyCell }) {
+  if (c.kind === "withheld") {
+    return (
+      <span data-withheld="1" className="text-[11px] uppercase tracking-wide text-gray-600">
+        {WEEKLY_WITHHELD_CELL}
+      </span>
+    )
+  }
+  return <>{c.kind === "absent" ? "—" : num(c.n, 1)}</>
+}
 
 /**
  * An input vintage, in the reader's own locale.
@@ -173,7 +209,7 @@ function OpponentCell({ p }: { p: NflWeeklyPlayer }) {
  *
  * ⛔ IT NEVER SUMS. There is no total here and no derived points figure anywhere in this tree.
  */
-function StatLinePanel({ player, paid, loading }: {
+function StatLinePanel({ player, paid, loading, view }: {
   player: NflWeeklyPlayer
   paid: NflWeeklyPlayer | null
   /** ⚠️ THE PAID READ IS A SEPARATE QUERY, so "it has not arrived yet" is a FOURTH state here and
@@ -184,9 +220,24 @@ function StatLinePanel({ player, paid, loading }: {
    *  several things costs an investigation every time it recurs; a state that means something
    *  untrue is worse than one that is merely ambiguous. */
   loading: boolean
+  /** The row's render plan. `view.statLine` is false while NF-INC-0916's withholding is armed. */
+  view: WeeklyRowView
 }) {
   const { groups } = useAuth()
   const entitled = canUse("decision_support", groups)
+
+  // ⭐ FIRST, AND FOR EVERY CALLER, ENTITLED OR NOT (NF-INC-0916). The stat line comes from the
+  // same fit as the points, so it is down for everyone — and the two branches below would both be
+  // FALSE here. The membership lock says "the points projection and its range on this page are
+  // free", which they currently are not; the absent state says the component head produced nothing
+  // for this player, which is not what happened. A withheld thing needs its own sentence.
+  if (!view.statLine) {
+    return (
+      <p data-testid="weekly-stat-line-withheld" className="rounded-md border border-[#262626] bg-[#101010] p-3 text-[11px] leading-relaxed text-gray-500">
+        {WEEKLY_WITHHELD_STAT_LINE}
+      </p>
+    )
+  }
 
   if (!entitled) {
     return (
@@ -258,6 +309,7 @@ function PlayerRow({
   domain,
   open,
   onToggle,
+  view,
 }: {
   p: NflWeeklyPlayer
   paid: NflWeeklyPlayer | null
@@ -265,6 +317,9 @@ function PlayerRow({
   domain: { min: number; max: number }
   open: boolean
   onToggle: () => void
+  /** What this row may draw. Produced ONCE by `weeklyRowView`; this component does not decide
+   *  again, which is what keeps the withheld and un-withheld pages a single code path. */
+  view: WeeklyRowView
 }) {
   return (
     <>
@@ -285,19 +340,32 @@ function PlayerRow({
         {/* ⭐ THE BAND RENDERS WITH THE POINT, EVERYWHERE THE POINT RENDERS. A weekly point without
             its interval overstates precision, and this is the surface where that matters most. */}
         <td className="px-3 py-2 text-right" data-testid="weekly-points">
-          <div className="font-semibold tabular-nums text-gray-100">{fmt(p.fpPpr)}</div>
-          <div className="text-[11px] tabular-nums text-gray-500" data-testid="weekly-band">
-            {fmt(p.fpP10)}–{fmt(p.fpP90)}
-          </div>
+          <div className="font-semibold tabular-nums text-gray-100"><Cell c={view.point} /></div>
+          {view.point.kind === "withheld" ? null : (
+            <div className="text-[11px] tabular-nums text-gray-500" data-testid="weekly-band">
+              <Cell c={view.p10} />–<Cell c={view.p90} />
+            </div>
+          )}
         </td>
+        {/* ⚠️ THE BAR IS WITHHELD WITH ITS NUMBERS, not merely unlabelled. It is a drawing of
+            p10/point/p90, so leaving it up would publish the shape of the same distribution the
+            cell beside it is declining to publish. */}
         <td className="w-28 px-3 py-2">
-          <IntervalBar p10={p.fpP10} point={p.fpPpr} p90={p.fpP90} min={domain.min} max={domain.max} />
+          {view.band && (
+            <div data-testid="weekly-band-bar">
+              <IntervalBar p10={p.fpP10} point={p.fpPpr} p90={p.fpP90} min={domain.min} max={domain.max} />
+            </div>
+          )}
         </td>
         <td className="px-3 py-2 text-right" data-testid="weekly-ros">
-          <div className="tabular-nums text-gray-300">{fmt(p.rosPpr)}</div>
-          <div className="text-[11px] tabular-nums text-gray-500" data-testid="weekly-ros-band">
-            {p.rosP10 == null || p.rosP90 == null ? "—" : `${fmt(p.rosP10)}–${fmt(p.rosP90)}`}
-          </div>
+          <div className="tabular-nums text-gray-300"><Cell c={view.ros} /></div>
+          {view.ros.kind === "withheld" ? null : (
+            <div className="text-[11px] tabular-nums text-gray-500" data-testid="weekly-ros-band">
+              {view.rosP10.kind === "absent" || view.rosP90.kind === "absent"
+                ? "—"
+                : <><Cell c={view.rosP10} />–<Cell c={view.rosP90} /></>}
+            </div>
+          )}
         </td>
         <td className="px-3 py-2 text-right tabular-nums text-gray-400" data-testid="weekly-ros-weeks">
           {p.rosWeeks}
@@ -320,7 +388,7 @@ function PlayerRow({
       {open && (
         <tr data-testid="weekly-detail" data-player-id={p.id} className="border-t border-[#141414] bg-[#0c0c0c]">
           <td colSpan={9} className="px-3 py-3">
-            <StatLinePanel player={p} paid={paid} loading={paidLoading} />
+            <StatLinePanel player={p} paid={paid} loading={paidLoading} view={view} />
           </td>
         </tr>
       )}
@@ -363,8 +431,13 @@ export function WeeklyProjectionsPage() {
   const [pos, setPos] = useState<string>("All")
   const [open, setOpen] = useState<string | null>(null)
 
+  /** ⚠️ ORDERED THROUGH `weeklyRowOrder` (NF-INC-0916). While the numbers are withheld the table
+   *  is ordered by position then name and carries no model quantity at all — a list ranked by a
+   *  figure we are declining to publish is still that figure's claim. The flag restores
+   *  `byWeeklyPoints` on reversal, so the ordering does not have to be remembered separately. */
   const rows = useMemo(() => {
-    const all = [...(projections.data?.players ?? [])].sort(byWeeklyPoints)
+    const all = [...(projections.data?.players ?? [])]
+      .sort(weeklyRowOrder(WEEKLY_NUMBERS_WITHHELD, byWeeklyPoints))
     return pos === "All" ? all : all.filter((p) => p.pos === pos)
   }, [projections.data, pos])
 
@@ -396,6 +469,25 @@ export function WeeklyProjectionsPage() {
           </div>
         )}
       </SurfaceHeader>
+
+      {/* ⭐⭐ NF-INC-0916 — THE WITHHOLDING NOTICE, FIRST ON THE PAGE AND UNCONDITIONAL.
+          Above the table, above the framing panel, and not behind a disclosure: a caveat behind a
+          click did not render (NF-C6P3), and this is not a caveat — it is the reason the columns
+          below are empty. It renders whenever the flag is armed, including on the states where
+          there is no table at all, because "we have taken the numbers down" and "this week has not
+          published yet" are different facts and a reader meeting the second alone would draw the
+          wrong conclusion about the first. */}
+      {WEEKLY_NUMBERS_WITHHELD && (
+        <section
+          data-testid="weekly-withheld-notice"
+          className="mb-5 rounded-lg border border-amber-900/50 bg-amber-950/20 p-4"
+        >
+          <h2 className="text-[13px] font-semibold text-amber-200">{WEEKLY_WITHHELD_TITLE}</h2>
+          <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-amber-100/70">
+            {weeklyWithheldDetail(WEEKLY_WITHHELD_SINCE)}
+          </p>
+        </section>
+      )}
 
       {/* ⭐ THE PPR-NATIVE PANEL, ABOVE THE TABLE. It answers "why is there no format picker"
           BEFORE a reader goes looking for one — and it says the other formats do not exist yet
@@ -512,6 +604,7 @@ export function WeeklyProjectionsPage() {
                     domain={domain}
                     open={open === p.id}
                     onToggle={() => setOpen(open === p.id ? null : p.id)}
+                    view={weeklyRowView(p, WEEKLY_NUMBERS_WITHHELD)}
                   />
                 ))}
               </tbody>
@@ -521,7 +614,12 @@ export function WeeklyProjectionsPage() {
           {/* The bye explainer, rendered whenever a bye is on the page. It exists because a zero in
               a points column is the single most misreadable cell here: it is a CERTAINTY, not a
               missing projection, and the row's own ROS number beside it is unaffected. */}
-          {rows.some((p) => p.status === "bye") && (
+          {/* ⚠️ WITHHELD WITH THE NUMBERS (NF-INC-0916), and the reason is in the copy itself: the
+              note exists to stop a reader misreading a ZERO in the points column, and there is no
+              zero in that column now — it also says a bye's rest-of-season figure "beside it" is
+              unaffected, and that figure is currently withheld too. The bye STATUS is unaffected
+              and still on every such row, in the opponent cell. */}
+          {!WEEKLY_NUMBERS_WITHHELD && rows.some((p) => p.status === "bye") && (
             <p data-testid="weekly-bye-note" className="mt-3 text-[11px] leading-relaxed text-gray-500">
               <span className="font-semibold text-gray-400">{WEEKLY_BYE_LABEL}:</span>{" "}
               {WEEKLY_BYE_DEFINITION}
