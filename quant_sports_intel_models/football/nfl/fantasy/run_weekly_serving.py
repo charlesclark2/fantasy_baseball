@@ -265,6 +265,13 @@ def build(target_season: int | None, target_week: int | None, *, now=None) -> di
             f"{list(C.PROJECTED_POSITIONS)}; a projectable position missing from the artifact is "
             "the NF-K1 class — refusing to publish the gap."
         )
+    # ⭐ COUNTS NON-NULL VALUES, NEVER KEYS (NF-WK-TD1). The pre-TD artifact carried all eleven
+    # component KEYS and four of them were null on every row, so a fields-carried check passed on
+    # the exact payload this refusal exists to stop.
+    comp_line = WS.assert_component_line_complete(players)
+    log.info("[METRIC] weekly_component_fields_complete=%d", comp_line["n_component_fields"])
+    log.info("component line: %d field(s) non-null on all %d projected rows",
+             comp_line["n_component_fields"], comp_line["n_projected"])
     C.NflWeeklyManifest.model_validate(manifest)
     C.NflWeeklyPayload.model_validate(payload)
     C.NflWeeklyCurrent.model_validate(current)

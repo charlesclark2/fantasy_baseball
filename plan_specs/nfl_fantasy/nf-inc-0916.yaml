@@ -1,0 +1,163 @@
+# Plan spec — NF-INC-0916 (incident: the live weekly projections serve at 0.355 of realized
+# levels — the model's two training feeds have NO scheduled ingest, so it trained on a week
+# of fabricated zeros)
+# Authored by PM 2026-09-16 from NF-WK-TD1's node-3 measurement. Operator rulings embedded:
+# the public page's point+band are SUPPRESSED until the corrected republish; PR #1137 (TD
+# emission) merge is HELD to ride this fix's retrain.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inc-0916
+  vertical: nfl_fantasy
+  card: https://trello.com/c/ISopvUYR
+  status: ACCEPTED
+spec:
+  description: >
+    stats_player_week and snap_counts are absent from
+    ROLL_FORWARD_SOURCES and referenced nowhere in pipeline/ — the
+    weekly model's two training feeds never ingest. Provable from the
+    published manifest alone: stats_as_of 2025-W18 beside
+    train_through 2026 wk 1, so the wk-1 training rows carry no stat
+    line and attach_labels fills fantasy_points=0.0 under the
+    retained-zero convention. Population-matched effect (both sides
+    game-day-rostered QB/RB/WR/TE): served/realized = 0.355 (QB
+    0.205, RB 0.465, WR 0.358, TE 0.402). The band names the
+    mechanism: every top-ten projection carries fpP10=0.00 against a
+    plausible fpP90 (McCaffrey 0.00/10.45/27.17) — the ceilings are
+    roughly right, so the conditional-on-playing half is intact and
+    the inflation sits in the hurdle's ZERO ATOM, exactly what an
+    all-zeros training week does to P(zero). Ordering largely
+    survives; the displayed number does not; QB is depressed ~2x
+    harder, distorting cross-position comparison on top.
+    best_alpha=0 — this incident IS the honesty product working:
+    a number we have measured at a third of reality does not stay on
+    a public surface unlabeled. ⛔ The fix is data + retrain through
+    the ALREADY-REGISTERED pipeline — no new modeling, no
+    hand-tuning of P(zero), no rescaling of outputs to look right
+    (MH2.2); the level must recover because the labels become real,
+    or the residual is reported as a finding.
+  acceptanceCriteria:
+    - description: >
+        NODE 0 — SUPPRESSION FIRST (operator-ruled, frontend-only,
+        auto-deploys on main, ships before anything else): the public
+        weekly page withholds the point and band, keeping statuses,
+        absences, and the page frame; copy through
+        fantasy-claim-copy.ts states plainly that weekly projections
+        are withheld while a data defect in the model's training feed
+        is corrected — honest, dated, no euphemism, no ETA promise.
+        The paid detail columns follow the same suppression (they are
+        the same substrate). Reversal is a small, named change
+        (flag or single-condition), exercised both ways in tests, so
+        un-suppression at node 5 is a two-line PR, not a rebuild.
+        Verify live by content, cache-busted.
+    - description: >
+        NODE 1 — THE INGEST, not "two strings in a list" until
+        proven: add stats_player_week and snap_counts to the weekly
+        roll-forward ONLY after verifying (a) each source actually
+        ADVANCES week over week at the vendor (the stg_ref_players
+        false-green lesson: a scheduled writer over a non-advancing
+        source is a green-forever lie) — state the vendor cadence and
+        when a completed week's stats land; (b) what the
+        season-scoped partition overwrite does to in-season weekly
+        data — if a season overwrite would clobber or truncate
+        prior weeks' rows, fix the write scope BEFORE scheduling it;
+        (c) both feeds get freshness contracts at their real cadence
+        with active-season semantics, so a stalled feed pages instead
+        of silently freezing again. Backfill the missing 2026 weeks
+        (wk 1, and wk 2 when complete) so no fabricated-zero week
+        remains in the training window.
+    - description: >
+        NODE 2 — CLASS CLOSURE AT THE INSTRUMENT (MH2.7), before the
+        retrain so the retrain itself is protected: attach_labels
+        filling an ENTIRE week with zeros is the mechanism — training
+        must REFUSE a target week whose stat coverage is zero (or
+        below a declared floor) rather than fabricate it, with the
+        refusal naming stats_as_of vs train_through; and the publish
+        path gains a manifest-level guard that a payload whose
+        stats_as_of trails train_through by a week or more cannot
+        publish silently (page or refuse — pick at the instrument and
+        say why). RED-prove both with the exact historical state
+        (stats_as_of 2025-W18 / train_through 2026-wk1) + baseline-
+        pass + NOT-SELECTED + resolve-every-node. The retained-zero
+        convention itself is not repealed — a player with a real
+        stat line of zeros is a true zero; the refusal keys on
+        COVERAGE absence, not on zeros.
+    - description: >
+        NODE 3 — RETRAIN + REPUBLISH through the registered pipeline,
+        then MEASURE: re-run the population-matched level measurement
+        (same method, quote it) — served/realized ratio overall and
+        per position, and the P10 zero-atom check (a top-tier back's
+        fpP10 must be plausibly nonzero; McCaffrey 0.00/10.45/27.17
+        is the before-row). Report the after-table beside TD1's
+        before-table. NO acceptance threshold is invented post hoc:
+        the criterion is that the fabricated-zero mechanism is gone
+        (no training week with zero coverage; stats_as_of >=
+        train_through) and the measured ratio is reported honestly
+        with per-position figures — the OPERATOR reads the table and
+        rules on un-suppression. Also re-measure in the same pass:
+        the component head's zero-clip bias (QB passing_tds 1.40x /
+        TE receiving_tds 3.41x were single-week, n=78/113 — this
+        retrain is the chance for a cleaner read) and the
+        head-vs-component coherence, since both TD1 expectations
+        predict movement here.
+    - description: >
+        NODE 4 — THE HELD CHAIN, in order, each gated on the one
+        before: (i) operator un-suppresses the page (two-line PR from
+        node 0's design) on the node-3 table; (ii) PR #1137 (TD
+        emission) merges — its changelog entry publishes only now,
+        when it is true; verify its CI green first (it was 6/10
+        in flight at handover) and rebase onto the retrain if needed;
+        (iii) the my-teams weekly lens hold (MT1 record nWl7DWtE)
+        lifts per the restated criterion. Fixture re-capture rides
+        the first post-fix publish (re-armed on manifest.n_bye > 0
+        per the standing assignment). Standing: worktree; PR -> dev;
+        box publish path unchanged; >2-min operator paste-ready; no
+        gate loosened; no Trello; roadmap frozen; the one-line
+        sign-convention doc fix (two conventions for one coherence
+        quantity) rides this branch; findings to closeout.followUps.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inc-0916
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "training feed" / "stats_player_week" / "level" (board Credence Sports, 2026-09-16)'
+    duplicates: []
+    adjacent:
+      - "NF-WK-TD1 (#1137 HELD, spec IN_PROGRESS-HELD) — found this; its emission merges at node 4(ii); its before-tables are node 3's comparators."
+      - "NF-WK-MT1 record (nWl7DWtE) — the lens hold, criterion restated 09-16 to THIS incident; lifts at node 4(iii)."
+      - "NF-WK-FE1 page — the suppressed surface; node 0 touches only its rendering, never the serving path."
+      - "NF-WK-RC1 (IN FLIGHT) — REALIZED stats; its node-1 source diagnosis and this story's ingest likely name the SAME nflverse tables — coordinate through the spec records, one ingest owner, never two writers on one table (INC-42/one-logical-thing lesson)."
+      - "Entrypoint sweep (GyD9hoeD, re-scoped) — if this story touches run_weekly_serving's success path, extending its executed coverage in-story is in scope."
+      - "stg_ref_players record — the verify-the-source-advances lesson, cited as binding."
+  triedLedger:
+    files:
+      - "docs/nf_wk_td1_pm_decisions.md + docs/nf_wk_td1_touchdown_components.md (the measurements: 0.355 population-matched, the manifest proof, the zero-atom band signature)"
+      - "ROLL_FORWARD_SOURCES + the weekly roll-forward job (where the two feeds join)"
+      - "attach_labels + the retained-zero convention (the mechanism; the refusal keys on coverage, not zeros)"
+      - "The published manifest (stats_as_of / train_through — the two-field proof that needs no box)"
+    recordedNulls:
+      - "Rescaling served outputs toward realized levels — ruled out ex ante (MH2.2): the labels become real or the residual is reported."
+      - "The session's first sizing (0.17–0.37 vs realized top-24) — superseded by the population-matched 0.355/QB 0.205 (selection confound); quote only the corrected figures."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "The public weekly page serving honest levels; #1137's TD debut; the MT1 lens lift; NF-OPT1's substrate; every future season's week-1 protected by the coverage refusal"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inc-0916-plan
+spec:
+  goalRef: { name: nf-inc-0916 }
+  graph:
+    nodes: []   # incident — suppress -> ingest (verify-advance + write-scope) -> class closure -> retrain + measure -> operator un-suppress -> #1137 merge -> lens lift -> closeout
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

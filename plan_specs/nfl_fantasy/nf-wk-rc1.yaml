@@ -1,0 +1,171 @@
+# Plan spec — NF-WK-RC1 (FULL tier: weekly league recaps + power rankings — EPIC NF-SEASON's
+# first shipped member; REALIZED stats, league-scored through the one scorer)
+# Authored by PM 2026-09-16. Chosen deliberately as the NF-SEASON member the TD gap does NOT
+# block: realized touchdowns exist in box scores even though projected ones don't yet exist
+# in the weekly payload. Backend before frontend inside the story (the standing rule).
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-wk-rc1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/3D2HnxXv   # EPIC NF-SEASON; RC1 card linked at kickoff by PM
+  status: ACCEPTED
+spec:
+  description: >
+    After each NFL week completes, every imported league gets (a) a
+    TEAM RECAP — each roster's REALIZED league-scored week: per-slot
+    actual points under the league's own settings, scored SERVER-SIDE
+    through league_scoring.py (the ONE scorer; no fourth
+    implementation, none of the three moved), with a per-team total
+    and the week's result — and (b) LEAGUE POWER RANKINGS derived
+    from realized results (record, league-scored points for/against,
+    and any additional ranking signal ONLY if it is a transparent
+    arithmetic of served numbers — no opaque composite score).
+    best_alpha=0; recaps are FACTUAL surfaces (what happened), which
+    is why realized data can carry claims projections cannot.
+    ⛔ BOUNDARIES: (i) the projected-vs-actual comparison, where
+    shown, runs in POINTS-HEAD PPR terms on both sides (the PPR
+    projection is complete — TD value lives implicitly in the head;
+    the league-scored projection is TD-less until NF-WK-TD1 lands and
+    MUST NOT be presented as the yardstick a league-scored actual is
+    judged against — if shown at all it carries the coverage
+    disclosure, adjacent to the number per the MT1 ruling ③ pattern);
+    (ii) no start/sit, no "should have started" imperatives — the
+    recap states what scored, never what the user ought to have done;
+    (iii) waiver/trade recommendations are NF-SEASON members 3–4, not
+    this story. Paid feature behind the existing membership
+    entitlement (the personalization wall, operator ruling 09-14/16).
+  acceptanceCriteria:
+    - description: >
+        NODE 1 — THE REALIZED-STAT DIAGNOSIS, before any endpoint:
+        name the realized weekly stat-line source in the lake (the
+        weekly model trains on historical weeks, so realized lines
+        exist — find the authoritative table, its cadence, its
+        content-timestamp discipline, and WHEN after Monday night it
+        is complete), and inventory its fields against league scoring
+        terms. Realized lines are RICHER than the 11 projected stats
+        — fumbles lost, two-point conversions, K/DST terms may all be
+        present — so the scorer needs a REALIZED_STAT_FIELD map that
+        is a superset of the projection map, derived the same way
+        (from the scorer's own map, never hand-typed). Produce the
+        same per-league coverage report the MT1 endpoint ships: which
+        of the league's terms the REALIZED line can score. Expect
+        near-complete coverage; report honestly whatever it is —
+        a term the source doesn't carry renders as captured with the
+        adjacent disclosure, exactly the MT1 discipline.
+    - description: >
+        PHASE A — SERVING, verified before page code: paid authed
+        endpoints on the my-teams/league-board pattern: (1) weekly
+        recap per league (per-team: per-slot realized league points
+        + team total + opponent result; absences per ABSENCE_REASONS
+        — a player with no realized line renders a stated absence:
+        bye / inactive / no-line-recorded distinguishable); (2) power
+        rankings per league (per-team: record, league-scored PF/PA,
+        rank, and the rank's stated arithmetic). Contracts
+        Pydantic-declared, additive; 401-anon at the gateway;
+        byte-identity/CDN rules untouched (authed routes, absent from
+        CDN allowlists; decide the cache side BEFORE writing).
+        SCORING PARITY proven not assumed: server-scored realized PPR
+        under a full-PPR config must equal an independently computed
+        PPR on the same line within float tolerance, on every covered
+        player of a real league week (the MT1 1e-9 pattern; the
+        method travels in the spec record). Runtime gate: operator
+        curls on the deployed Lambda against a real league and the
+        completed week — deploy.sh only, merged never means served;
+        the deploy discriminator must be an AUTHED read (G100-D1:
+        anon cannot distinguish deploy-missing from healthy) and
+        every probe field name read from the actual payload first
+        (the MT1 probe lesson: uniform absence ⇒ suspect the probe).
+    - description: >
+        PHASE B — THE SURFACE (this becomes the one-frontend-story-
+        at-a-time occupant; verify no other frontend story is open
+        before starting): the league view in my-teams gains the
+        weekly recap (per-team cards, slot breakdowns, absences
+        stated) and the power-ranking table with its arithmetic
+        visible. Copy through fantasy-claim-copy.ts: factual past
+        tense; no imperatives; no matchup language; where a
+        projected-vs-actual figure appears it is the PPR points-head
+        pair with one line stating why that scale (boundary (i)).
+        The season board, weekly lens hold (NF-WK-MT1/TD1), and
+        entitlement gates untouched; renderers gated per G100. This
+        story carries the NF-SEASON suite's first changelog entry —
+        written only when the surface renders a real completed week.
+    - description: >
+        TIMING + GUARDS: the first fully-scoreable week is week 2
+        (completes Tue 09-16 night; realized lines land per node 1's
+        finding — sequence the runtime gate after that landing).
+        Fixtures captured RAW from the live realized source once
+        landed (E9.64b); pre-completion state renders a stated
+        "week in progress" absence, never a partial total presented
+        as final (a Sunday-night read of a half-played week is the
+        dangerous default — the completeness gate from node 1 decides
+        when a week may render as FINAL, and rendering early must
+        say LIVE/PARTIAL explicitly or refuse). E2E per surface both
+        ways (scored week, absence-bearing week, anon-refused);
+        rendered-output assertions; parity RED-proven via deliberate
+        weight mutation; no scorer file outside app/backend/services
+        touched (guard-pinned); RED-proofs with unique anchors +
+        baseline-pass + NOT-SELECTED + resolve-every-node; owning CI
+        shard. Standing: worktree; PR -> dev; >2-min operator
+        paste-ready; no Trello; roadmap frozen; findings to
+        closeout.followUps.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-wk-rc1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "recap" / "power rankings" / "NF-SEASON" (board Credence Sports, 2026-09-16)'
+    duplicates: []
+    adjacent:
+      - "EPIC NF-SEASON (3D2HnxXv) — this is member (2), chosen first BECAUSE realized stats dodge the TD gap; members (1) OPT1, (3) waivers, (4) trades stay gated on TD1/gate 3."
+      - "NF-WK-MT1 (Done, PHASE_B_HELD) — the endpoint pattern, the 1e-9 parity method, the coverage-report discipline, ruling ③ (disclosure adjacent to the number) all inherited verbatim; the HELD lens is untouched by this story."
+      - "NF-WK-TD1 (IN FLIGHT) — projections substrate; disjoint files except the shared weekly artifact READ; boundary (i) exists so RC1 never waits on TD1."
+      - "league_scoring.py / NF-EPIC 1 / G100 — the one-scorer rule and entitlement standard bind verbatim; REALIZED_STAT_FIELD derives from the scorer's map."
+      - "NF-WK-FE1 (Done) — public weekly page untouched; Phase B here is the next frontend occupant (verify none other open)."
+      - "Entrypoint sibling sweep (GyD9hoeD) — if this story adds a publish/serving entrypoint, it ships WITH an executing smoke from day one (never joins the zero-callers list)."
+  triedLedger:
+    files:
+      - "NF-WK-MT1 closeout (the endpoint + gate pattern this story mirrors; the probe and fixture lessons)"
+      - "app/backend/services/league_scoring.py + STAT_FIELD (the one scorer; the map-derivation rule)"
+      - "The weekly model's training inputs (where realized weekly lines already live — node 1 names the table)"
+      - "app/backend/models/nfl_weekly.py ABSENCE_REASONS (extended additively if realized absences need new reasons)"
+    recordedNulls:
+      - "League-scored projected-vs-actual as the headline comparison — ruled out until TD1 lands (a TD-less projected yardstick judging a TD-complete actual misattributes every TD to 'outperformance')."
+  supersedes: []
+  dependsOn:
+    - "Week 2 completing (Tue night) + the realized-line landing node 1 establishes; no dependency on TD1 or gate 3 BY DESIGN"
+  feedsInto:
+    - "EPIC NF-SEASON's first shipped member; the weekly retention loop (recap email/surface cadence); waiver recs (member 3) reuse the realized-line inventory; power-rankings arithmetic becomes the transparent template"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-wk-rc1-plan
+spec:
+  goalRef: { name: nf-wk-rc1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-realized-diagnosis
+        desc: "Name the realized-stat source + completeness semantics; REALIZED_STAT_FIELD derived from the scorer's map; coverage report."
+      - id: 2-phase-a
+        desc: "Recap + power-rankings endpoints; parity clause; contracts; 401-anon."
+      - id: 3-runtime-gate
+        desc: "⛔ Operator: deploy.sh + authed curls on a real league after week 2 completes. No page code before this."
+      - id: 4-phase-b
+        desc: "League recap + power-rankings surface; factual copy; FINAL-vs-PARTIAL honesty."
+      - id: 5-verify
+        desc: "E2E both ways; live content verification cache-busted; changelog only on a real completed week."
+      - id: 6-closeout
+        desc: "Verdict + realized-line inventory + findings into closeout.followUps (waiver recs will reuse the inventory)."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
