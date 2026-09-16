@@ -30,6 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 POOL = ROOT / "app/backend/services/waiver_pool.py"
 SLEEPER = ROOT / "app/backend/services/platform_import/sleeper.py"
+ROUTER = ROOT / "app/backend/routers/fantasy.py"
 SUITE = "betting_ml/tests/test_nf_wvr1_waiver_pool.py"
 
 #: (label, file, old, new, test that MUST go red, token that must be GONE after the break)
@@ -82,6 +83,14 @@ BREAKS = [
         "test_the_roster_refresh_returns_the_stored_record_shape_and_drops_player_key",
         None,
     ),
+    (
+        "the refresh OR-s the stored truncation flag (a league ever truncated is refused forever)",
+        ROUTER,
+        '                "league_rosters_truncated": bool(truncated),',
+        '                "league_rosters_truncated": bool(record.get("league_rosters_truncated") or truncated),',
+        "test_a_successful_refresh_clears_a_stale_truncation_flag_rather_than_carrying_it_forever",
+        None,
+    ),
 ]
 
 
@@ -95,7 +104,7 @@ def run_suite(test: str | None = None) -> tuple[bool, str]:
 
 
 def main() -> int:
-    originals = {p: p.read_text() for p in (POOL, SLEEPER)}
+    originals = {p: p.read_text() for p in (POOL, SLEEPER, ROUTER)}
     # Restore at START-UP too: this harness's worst case is being killed mid-mutation.
     for p, text in originals.items():
         if p.read_text() != text:

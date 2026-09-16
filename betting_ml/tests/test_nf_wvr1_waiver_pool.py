@@ -279,3 +279,57 @@ def test_the_two_sleeper_fetches_stay_separate_objects():
         "deliberately opposite freshness semantics"
     )
     assert "_fetch_teams" in called, "the refresh must still delegate to the import's roster fetch"
+
+
+# ── 5. a refresh's own verdict replaces the stored truncation flag ───────────────────────────────
+
+def test_a_successful_refresh_clears_a_stale_truncation_flag_rather_than_carrying_it_forever():
+    """THE DEFECT: copying `LeagueSave`'s `or` semantics into the REFRESH path leaves any league
+    EVER truncated permanently refused — the feature silently dead for that user even after the
+    league shrank or the cap was raised.
+
+    The `or` is right on a SAVE (the importer slims before it sends, so a client's own truncation
+    claim must not be erased) and wrong here, because the refresh REPLACES the rosters wholesale
+    from a fetch that raises rather than returning a partial set. The flag must describe the set now
+    stored, not a set that no longer exists.
+
+    Source-inspected because the alternative is standing up DynamoDB: the assertion is that the
+    stored flag is NOT OR-ed into the refreshed one.
+    """
+    import ast
+    import inspect
+
+    from app.backend.routers import fantasy
+
+    src = inspect.getsource(fantasy.nfl_waiver_pool)
+    tree = ast.parse(src.strip())
+    assigned = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and node.value == "league_rosters_truncated"
+    ]
+    assert assigned, "the refresh no longer writes league_rosters_truncated at all"
+
+    # The refreshed value must be the fetch's own verdict. An `or` against the stored record is the
+    # defect this test exists to prevent.
+    stripped = "\n".join(
+        line for line in src.splitlines() if not line.strip().startswith("#")
+    )
+    idx = stripped.index('"league_rosters_truncated"')
+    assignment = stripped[idx:stripped.index("\n", idx)]
+    assert 'record.get("league_rosters_truncated")' not in assignment, (
+        "the stored truncation flag is being OR-ed into a refresh that replaced the rosters "
+        "wholesale — any league ever truncated would be refused forever"
+    )
+    assert "truncated" in assignment
+
+
+def test_completeness_is_still_checked_independently_of_the_truncation_flag():
+    """The safety argument for clearing a stale flag: `pool_refusals` compares stored teams against
+    the league's declared `n_teams` and refuses `rosters_incomplete` WITHOUT consulting the flag, so
+    a short roster set cannot slip through on a cleared flag."""
+    short = {
+        "n_teams": 12,
+        "league_rosters": [{"team_key": "1", "team_name": "A", "players": []}],
+        "league_rosters_truncated": False,       # ← flag says fine; the count does not
+    }
+    assert "rosters_incomplete" in waiver_pool.pool_refusals(short)

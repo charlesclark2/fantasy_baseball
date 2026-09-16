@@ -1696,10 +1696,26 @@ def nfl_waiver_pool(
                 **record,
                 "league_rosters": kept,
                 "league_rosters_synced_at": fresh["synced_at"],
-                # ⭐ OR, never assignment — `bound_league_rosters`' own rule: truncation is a claim
-                # that can only be added to, and a refresh that happens to fit must not erase a
-                # truncation the stored record already recorded.
-                "league_rosters_truncated": bool(record.get("league_rosters_truncated") or truncated),
+                # ⭐⭐ THE REFRESH'S OWN VERDICT REPLACES THE STORED ONE — deliberately NOT the
+                # `or` that `LeagueSave._bound_league_rosters` applies, and the difference is worth
+                # stating because the `or` is the obvious thing to copy.
+                #
+                # On a SAVE the `or` is right: the importer slims before it sends, so a client that
+                # already truncated has told us something true about rosters we are only partly
+                # seeing, and our own `False` must not erase it.
+                #
+                # Here the rosters are REPLACED WHOLESALE by a fetch that read every team from
+                # `/league/{id}/rosters` and RAISES rather than returning a partial set. So
+                # `truncated` describes exactly the set now stored, while the old flag described a
+                # set that no longer exists. Carrying it forward would leave any league EVER
+                # truncated permanently refused — the feature silently dead for that user even
+                # after the league shrank or the cap was raised.
+                #
+                # ⚠️ Safe because completeness is ALSO checked independently and per-request:
+                # `pool_refusals` compares stored teams against the league's declared `n_teams` and
+                # refuses on `rosters_incomplete`. That check does not depend on this flag, so
+                # clearing a stale flag cannot let a short roster set through.
+                "league_rosters_truncated": bool(truncated),
             }
             # ⚠️ PERSISTED BEST-EFFORT, AND A FAILED WRITE DOES NOT FAIL THE READ. The pool is
             # computed from `record` in memory either way, so a DynamoDB hiccup costs the freshness
