@@ -1,0 +1,438 @@
+# Plan spec — NF-INC-0916 (incident: the live weekly projections serve at 0.355 of realized
+# levels — the model's two training feeds have NO scheduled ingest, so it trained on a week
+# of fabricated zeros)
+# Authored by PM 2026-09-16 from NF-WK-TD1's node-3 measurement. Operator rulings embedded:
+# the public page's point+band are SUPPRESSED until the corrected republish; PR #1137 (TD
+# emission) merge is HELD to ride this fix's retrain.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inc-0916
+  vertical: nfl_fantasy
+  card: https://trello.com/c/ISopvUYR
+  status: IN_PROGRESS
+spec:
+  description: >
+    stats_player_week and snap_counts are absent from
+    ROLL_FORWARD_SOURCES and referenced nowhere in pipeline/ — the
+    weekly model's two training feeds never ingest. Provable from the
+    published manifest alone: stats_as_of 2025-W18 beside
+    train_through 2026 wk 1, so the wk-1 training rows carry no stat
+    line and attach_labels fills fantasy_points=0.0 under the
+    retained-zero convention. Population-matched effect (both sides
+    game-day-rostered QB/RB/WR/TE): served/realized = 0.355 (QB
+    0.205, RB 0.465, WR 0.358, TE 0.402). The band names the
+    mechanism: every top-ten projection carries fpP10=0.00 against a
+    plausible fpP90 (McCaffrey 0.00/10.45/27.17) — the ceilings are
+    roughly right, so the conditional-on-playing half is intact and
+    the inflation sits in the hurdle's ZERO ATOM, exactly what an
+    all-zeros training week does to P(zero). Ordering largely
+    survives; the displayed number does not; QB is depressed ~2x
+    harder, distorting cross-position comparison on top.
+    best_alpha=0 — this incident IS the honesty product working:
+    a number we have measured at a third of reality does not stay on
+    a public surface unlabeled. ⛔ The fix is data + retrain through
+    the ALREADY-REGISTERED pipeline — no new modeling, no
+    hand-tuning of P(zero), no rescaling of outputs to look right
+    (MH2.2); the level must recover because the labels become real,
+    or the residual is reported as a finding.
+  acceptanceCriteria:
+    - description: >
+        NODE 0 — SUPPRESSION FIRST (operator-ruled, frontend-only,
+        auto-deploys on main, ships before anything else): the public
+        weekly page withholds the point and band, keeping statuses,
+        absences, and the page frame; copy through
+        fantasy-claim-copy.ts states plainly that weekly projections
+        are withheld while a data defect in the model's training feed
+        is corrected — honest, dated, no euphemism, no ETA promise.
+        The paid detail columns follow the same suppression (they are
+        the same substrate). Reversal is a small, named change
+        (flag or single-condition), exercised both ways in tests, so
+        un-suppression at node 5 is a two-line PR, not a rebuild.
+        Verify live by content, cache-busted.
+    - description: >
+        NODE 1 — THE INGEST, not "two strings in a list" until
+        proven: add stats_player_week and snap_counts to the weekly
+        roll-forward ONLY after verifying (a) each source actually
+        ADVANCES week over week at the vendor (the stg_ref_players
+        false-green lesson: a scheduled writer over a non-advancing
+        source is a green-forever lie) — state the vendor cadence and
+        when a completed week's stats land; (b) what the
+        season-scoped partition overwrite does to in-season weekly
+        data — if a season overwrite would clobber or truncate
+        prior weeks' rows, fix the write scope BEFORE scheduling it;
+        (c) both feeds get freshness contracts at their real cadence
+        with active-season semantics, so a stalled feed pages instead
+        of silently freezing again. Backfill the missing 2026 weeks
+        (wk 1, and wk 2 when complete) so no fabricated-zero week
+        remains in the training window.
+    - description: >
+        NODE 2 — CLASS CLOSURE AT THE INSTRUMENT (MH2.7), before the
+        retrain so the retrain itself is protected: attach_labels
+        filling an ENTIRE week with zeros is the mechanism — training
+        must REFUSE a target week whose stat coverage is zero (or
+        below a declared floor) rather than fabricate it, with the
+        refusal naming stats_as_of vs train_through; and the publish
+        path gains a manifest-level guard that a payload whose
+        stats_as_of trails train_through by a week or more cannot
+        publish silently (page or refuse — pick at the instrument and
+        say why). RED-prove both with the exact historical state
+        (stats_as_of 2025-W18 / train_through 2026-wk1) + baseline-
+        pass + NOT-SELECTED + resolve-every-node. The retained-zero
+        convention itself is not repealed — a player with a real
+        stat line of zeros is a true zero; the refusal keys on
+        COVERAGE absence, not on zeros.
+    - description: >
+        NODE 3 — RETRAIN + REPUBLISH through the registered pipeline,
+        then MEASURE: re-run the population-matched level measurement
+        (same method, quote it) — served/realized ratio overall and
+        per position, and the P10 zero-atom check (a top-tier back's
+        fpP10 must be plausibly nonzero; McCaffrey 0.00/10.45/27.17
+        is the before-row). Report the after-table beside TD1's
+        before-table. NO acceptance threshold is invented post hoc:
+        the criterion is that the fabricated-zero mechanism is gone
+        (no training week with zero coverage; stats_as_of >=
+        train_through) and the measured ratio is reported honestly
+        with per-position figures — the OPERATOR reads the table and
+        rules on un-suppression. Also re-measure in the same pass:
+        the component head's zero-clip bias (QB passing_tds 1.40x /
+        TE receiving_tds 3.41x were single-week, n=78/113 — this
+        retrain is the chance for a cleaner read) and the
+        head-vs-component coherence, since both TD1 expectations
+        predict movement here.
+    - description: >
+        NODE 4 — THE HELD CHAIN, in order, each gated on the one
+        before: (i) operator un-suppresses the page (two-line PR from
+        node 0's design) on the node-3 table; (ii) PR #1137 (TD
+        emission) merges — its changelog entry publishes only now,
+        when it is true; verify its CI green first (it was 6/10
+        in flight at handover) and rebase onto the retrain if needed;
+        (iii) the my-teams weekly lens hold (MT1 record nWl7DWtE)
+        lifts per the restated criterion. Fixture re-capture rides
+        the first post-fix publish (re-armed on manifest.n_bye > 0
+        per the standing assignment). Standing: worktree; PR -> dev;
+        box publish path unchanged; >2-min operator paste-ready; no
+        gate loosened; no Trello; roadmap frozen; the one-line
+        sign-convention doc fix (two conventions for one coherence
+        quantity) rides this branch; findings to closeout.followUps.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inc-0916
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "training feed" / "stats_player_week" / "level" (board Credence Sports, 2026-09-16)'
+    duplicates: []
+    adjacent:
+      - "NF-WK-TD1 (#1137 HELD, spec IN_PROGRESS-HELD) — found this; its emission merges at node 4(ii); its before-tables are node 3's comparators."
+      - "NF-WK-MT1 record (nWl7DWtE) — the lens hold, criterion restated 09-16 to THIS incident; lifts at node 4(iii)."
+      - "NF-WK-FE1 page — the suppressed surface; node 0 touches only its rendering, never the serving path."
+      - "NF-WK-RC1 (IN FLIGHT) — REALIZED stats; its node-1 source diagnosis and this story's ingest likely name the SAME nflverse tables — coordinate through the spec records, one ingest owner, never two writers on one table (INC-42/one-logical-thing lesson)."
+      - "Entrypoint sweep (GyD9hoeD, re-scoped) — if this story touches run_weekly_serving's success path, extending its executed coverage in-story is in scope."
+      - "stg_ref_players record — the verify-the-source-advances lesson, cited as binding."
+  triedLedger:
+    files:
+      - "docs/nf_wk_td1_pm_decisions.md + docs/nf_wk_td1_touchdown_components.md (the measurements: 0.355 population-matched, the manifest proof, the zero-atom band signature)"
+      - "ROLL_FORWARD_SOURCES + the weekly roll-forward job (where the two feeds join)"
+      - "attach_labels + the retained-zero convention (the mechanism; the refusal keys on coverage, not zeros)"
+      - "The published manifest (stats_as_of / train_through — the two-field proof that needs no box)"
+    recordedNulls:
+      - "Rescaling served outputs toward realized levels — ruled out ex ante (MH2.2): the labels become real or the residual is reported."
+      - "The session's first sizing (0.17–0.37 vs realized top-24) — superseded by the population-matched 0.355/QB 0.205 (selection confound); quote only the corrected figures."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "The public weekly page serving honest levels; #1137's TD debut; the MT1 lens lift; NF-OPT1's substrate; every future season's week-1 protected by the coverage refusal"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inc-0916-plan
+spec:
+  goalRef: { name: nf-inc-0916 }
+  graph:
+    nodes: []   # incident — suppress -> ingest (verify-advance + write-scope) -> class closure -> retrain + measure -> operator un-suppress -> #1137 merge -> lens lift -> closeout
+  progress:
+    node0: >
+      DONE (PR pending). The public weekly page withholds the point, the 80%
+      band, the interval bar, the rest-of-season figures and the paid per-stat
+      line; statuses (bye chip, opponent), the absence counts and their served
+      reasons, weeks-of-form, weeks-left, the framing panels and the provenance
+      line all stay. One constant — `WEEKLY_NUMBERS_WITHHELD` in
+      `frontend/lib/weekly-suppression.ts` — is the whole lever; the page
+      renders through `weeklyRowView`/`weeklyRowOrder` so the withheld and
+      restored pages are ONE code path, and the pure function is driven BOTH
+      ways in the e2e suite while a rendered clause pins the page to its output
+      (the composition, not either half, is the reversal's coverage). The
+      rendered clauses branch on the same constant, so the flip carries the
+      suite with it rather than demanding a rewrite. 28/28 weekly e2e green
+      (desktop + mobile); `tsc` clean; the page's own `metadata.description`
+      is flag-driven too, because the shipped one promised exactly what the
+      page now withholds.
+    node1: >
+      DONE (code) — the verification came FIRST and it changed the fix's
+      shape, which is exactly what the spec's precondition was for.
+      (a) THE SOURCE ADVANCES, measured live 2026-09-15/16: both vendor
+      files exist for 2026 and carry week 1 (`stats_player_week` 1,118
+      rows; `snap_counts` 1,492). The cadence: an NFL week CLOSES on a
+      Monday night (2026 wk1 ran 09-09 → 09-14) and the vendor publishes
+      it the NEXT MORNING — `snap_counts_2026.parquet` republished
+      2026-09-15T11:25:15Z and `stats_player_week_2026.parquet` at
+      14:21:38Z, i.e. 5-8 h after the slate ended.
+      (b) THE WRITE SCOPE IS SAFE, and for a reason that is not obvious
+      from the write side: `_nflverse_seasonal` reads the WHOLE season
+      file every time (nflverse publishes one cumulative file per
+      season, not per week), so `replaceWhere season = N` replaces the
+      partition with a SUPERSET — cumulative, idempotent. And
+      `write_dataframe` SKIPS a 0-row frame, so a not-yet-published week
+      can never overwrite a good partition with an empty one. The danger
+      is real in general and absent here.
+      ⭐ (c) THE CADENCE FINDING THAT CHANGED THE FIX: the roll-forward
+      fires MONDAY 06:15 PT (`NFL_ROLL_FORWARD_CRON`). A week closes
+      Monday NIGHT and publishes Tuesday morning, so on a weekly cadence
+      the just-completed week is missing for a FULL SEVEN DAYS — and
+      under the retained-zero convention a missing line is a zero. That
+      is this incident recurring weekly at one-sixteenth the size. ⇒ the
+      feeds are NOT added to `ROLL_FORWARD_SOURCES`. They are ingested by
+      `nfl_weekly_stats_ingest_op`, the FIRST op of
+      `sports_nfl_weekly_serving_job`, immediately upstream of the build
+      that learns from them — the INC-25 rule in its strongest form (the
+      consumer is refreshed downstream of its feed IN THE SAME RUN, so
+      there is no cron window and no second schedule that can silently
+      revert to STOPPED). `roll_forward.py`'s own scope boundary had
+      already said the realized-game stack belongs "on their own
+      cadence"; that cadence had never been built.
+      ONE OWNER is mechanical: `in_season_stats` asserts at import that
+      neither name is in `ROLL_FORWARD_SOURCES`, and a guard clause says
+      it by name.
+      FRESHNESS CONTRACT: `nfl_weekly_stats_freshness` judges each feed's
+      CONTENT (which week it carries) against the SCHEDULE — never a
+      Delta commit time (INC-41: a daily re-land of a stale vendor file
+      refreshes the commit while the content stands still), and never
+      against the feed itself (circular). Five states, and PENDING is
+      load-bearing: without it the monitor pages every Monday night on
+      the vendor's normal lag, which is how a monitor gets muted.
+      SETTLE_HOURS = 24 against a measured 5-8 h lag.
+      VERIFIED: the ingest ran end-to-end to a LOCAL Delta root (1,118 /
+      1,492 rows, matching the vendor exactly) — zero production impact.
+      16 guard clauses green; 18/18 red proof.
+    node1_open: >
+      ⏭️ OPERATOR: the production backfill has NOT been run from this
+      session (it writes production S3). It is listed in the handoff as
+      a paste-ready laptop command. ⚠️ NOTE it may be a no-op: the lake
+      ALREADY holds 2026 wk1 for both feeds (1,118 / 1,492 rows), written
+      2026-09-16T02:43Z as a ONE-OFF — the Delta history shows nothing
+      else for these tables since the 2026-07-18 historical backfill,
+      while `weekly_rosters` (a real roll-forward source) writes several
+      times a day. That contrast is what proves the premise: the rows are
+      present and the CADENCE was absent, which is the `stg_ref_players`
+      shape and is invisible to a row count.
+    node2: >
+      DONE (code). TWO refusals on TWO substrates, both RED-proven with
+      the exact historical state AND baseline-passed against the real
+      lake.
+      (1) FRAME-SIDE — `assert_training_stat_coverage` refuses any
+      TRAINING week whose share of rows matching a real stat line falls
+      below a floor. ⭐ It keys on `_has_stat_row` — whether a stat line
+      was JOINED — never on the VALUE that came back, so the
+      retained-zero convention is untouched: a player who played and
+      scored nothing HAS a stat row and is a true zero. Byes are
+      excluded (a bye has no stat line by definition). The target week
+      is excluded (it legitimately has no outcome). It refuses an EMPTY
+      examination and a frame that lost its columns (NF1.7(a)). It runs
+      BEFORE the fit — there is nothing to learn from fabricated labels
+      except a wrong P(zero), and the fit is the nine-minute step.
+      ⭐ THE FLOOR IS MEASURED, AND THE MEASUREMENT OVERTURNED THE
+      INSTINCT. Built through the real code path over 2016-2026 (216
+      weeks, byes excluded): per-season minima 0.4157 (2016 wk1) to
+      0.6942, medians ~0.68. A 0.60 floor would have refused 5 healthy
+      weeks; 0.50 — the instinctive pick — would have refused 1 (2016
+      wk1). 0.30 refuses 0 of 216 and sits 0.116 below the worst week
+      ever observed, while the defect measures 0.0000.
+      (2) MANIFEST-SIDE — `assert_stat_vintage_reaches_training` refuses
+      a payload whose `stats_as_of` trails `train_through`. That is the
+      incident's own two-field proof: both fields were computed
+      CORRECTLY and NOTHING EVER COMPARED THEM. They can disagree
+      because `train_through` comes from the training frame's newest row
+      (built off the ROSTER spine), so it can name a week whose every
+      label was fabricated. A second, independent reading of the same
+      defect — the frame vs the artifact a human and the monitor
+      actually see.
+      TWO-SIDED AGAINST REAL DATA: with today's lake the coverage gate
+      PASSES (216 weeks checked, worst 2016-W1 at 0.4157); with 2026
+      stats withheld — the state the incident trained on — it REFUSES,
+      naming `2026 wk 1=0.0000 (n=520)`. The manifest gate refuses
+      ('2025-W18', 2026 wk 1) and passes ('2026-W1', 2026 wk 1).
+      19 guard clauses; red proof now 28/28.
+    node2_note: >
+      ⚠️ ONE EXISTING GUARD WAS RE-ANCHORED, not weakened, and it is
+      called out because that is the dangerous-looking edit.
+      NF-C6-PH2's `test_the_freshness_op_actually_supplies_the_expected_kickoff`
+      AST-scanned the WHOLE job module for a `.classify(` call — correct
+      while the module held exactly one. Node 1's freshness op added a
+      second, over a different classifier with a different signature, so
+      the unscoped form failed on code unrelated to its property. It is
+      now scoped to `nfl_weekly_freshness_op`, the op it always meant;
+      the assertion itself is unchanged, and a red-proof case shows the
+      defect it exists to catch still turns it RED.
+    node3: >
+      MEASUREMENT TOOLING DONE; THE RETRAIN ITSELF IS AN OPERATOR RUN
+      (~9 min, in the handoff). `run_nf_inc_0916_level` is now the ONE
+      method for the population-matched level read, and it REPRODUCES
+      TD1's before-table rather than approximating it: QB 0.205 / RB
+      0.466 / WR 0.358 / TE 0.402 / ALL 0.355 against TD1's recorded
+      0.205 / 0.465 / 0.358 / 0.402 / 0.355.
+      ⭐ TD1 recorded the figures without stating the realized
+      population's bounds, so it was RECOVERED BY REPRODUCTION — four
+      candidates scored against the record; 2016-2025 REG-only
+      reproduces WR exactly (5.743) and the rest within 0.008. Both
+      exclusions on the realized side are stated because they point in
+      OPPOSITE directions: a bye is not a player-week anyone could score
+      in (including it would FLATTER the projection), and the postseason
+      is a different population.
+      The zero-atom read is the discriminating half — a uniform scale
+      error and an inflated atom both depress the mean and have
+      different fixes — and it is two-sided, so it can come back clean.
+      ⛔ NO ACCEPTANCE THRESHOLD is asserted in the runner or its test.
+      The operator reads the table and rules on un-suppression.
+      ⚠️ The before-table artifact is COMMITTED
+      (`ablation_results/nf_inc_0916_level_before.{json,md}`) so the
+      after-run has a fixed comparator that cannot drift.
+    node0_scope_note: >
+      ⚠️ RENDERING ONLY, per the spec — the free API and CDN routes still SERVE
+      the defective numbers, so a reader who fetches
+      `/api/public/weekly-projections` still gets them. That is the spec's
+      scope for node 0 (`node 0 touches only its rendering, never the serving
+      path`) and the publish-path half is node 2's manifest guard. Stated here
+      so the withholding is not mistaken for something stronger than it is.
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
+
+      ── ① THE SUPPRESSION CANNOT REACH PRODUCTION WITHOUT THE HELD PROMOTION,
+      AND ONE CHANGELOG LINE WAS THE ONLY THING MAKING THAT PROMOTION UNSAFE.
+      Node 0 is frontend-only and Vercel production is `main`, so the withholding
+      ships only via the `dev` → `main` promotion (PR #1139) that is being held
+      because it also carries NF-WK-TD1's touchdown emission and a changelog
+      entry announcing it. Reading the two against each other: the EMISSION is
+      harmless under suppression — the only surface that renders a weekly stat
+      line is the paid panel, which is now withheld for entitled and unentitled
+      callers alike — so the box publishing touchdown columns nobody can see
+      costs nothing. The ANNOUNCEMENT is not harmless: it tells users about a
+      stat line the same release refuses to show them. ⇒ the announcement has
+      been DEFERRED into `frontend/data/changelog-held.json` (verbatim, with its
+      week, its gate and why), which unblocks the promotion, and node 4(ii)
+      restores it — which is exactly what the spec already says ("its changelog
+      entry publishes only now, when it is true"). ⚠️ THIS EDITS ANOTHER STORY'S
+      MERGED ARTIFACT and the operator should know it: the entry is not lost,
+      it is held, and the gate below makes restoring it mandatory rather than
+      remembered.
+
+      ── ② THE PROMOTION GATE IS NOW MECHANICAL, IN BOTH DIRECTIONS.
+      `betting_ml/tests/test_nf_inc_0916_promotion_gate.py`: while the flag is
+      armed no held item may appear in `changelog.json`; when the flag lifts the
+      held registry must be EMPTY. The second half is the one that matters at
+      node 4 — a reversal that flipped the constant and forgot the deferred
+      entry would silently drop an announcement users are owed, and nothing else
+      in the repo treats a missing changelog item as an error. RED-proven 11/11
+      (`betting_ml/tests/nf_inc_0916_red_proof.py`), including the two ways the
+      real restoration happens (verbatim, and lightly reworded on the way back
+      in). ⚠️ CI WIRING WAS PART OF THE GUARD, not an afterthought: the PR that
+      lifts the gate is frontend-only and would have run NO Python job at all
+      (the NCAAF-P3.9 finding), so `ci.yml` gained a `release_gate` filter — ONE
+      brace pattern, because under `predicate-quantifier: every` a multi-pattern
+      list selects nothing — and a job gated on it alone.
+
+      ── ③ THE ORDERING IS WITHHELD TOO, AND THAT IS A JUDGMENT THE OPERATOR MAY
+      REVERSE IN ONE LINE. The spec says "withholds the point and band"; the
+      table is additionally ordered by position-then-name rather than by the
+      model's point. Reasoning: within-position ordering "probably survives"
+      (TD1's own hedge), and publishing a hedged claim in the same breath as
+      withholding the firm one it is derived from is not defensible — a ranked
+      list with the numbers stripped still reads as a ranking, because it is
+      one. The notice says so plainly. `weeklyRowOrder` is the single lever if
+      the operator prefers the ordering kept.
+
+      ── ④ THE PAID STAT LINE IS WITHHELD FROM ENTITLED CALLERS TOO, and it
+      needed its own sentence rather than either existing one: the membership
+      lock asserts "the points projection and its range on this page are free",
+      which is currently false, and the absent state asserts the component head
+      produced nothing for that player, which is not what happened. Three
+      states, three sentences — the rule this surface was already built on.
+
+      ── ⑩ CI CAUGHT A DEFECT THIS SESSION SHIPPED, AND THE MECHANISM IS
+      WORTH RECORDING BECAUSE IT IS STRUCTURALLY INVISIBLE LOCALLY.
+      Node 1's ordering clauses imported `pipeline.jobs....`, and
+      `pipeline/__init__.py` READS `dbt/target/manifest.json` at import —
+      a gitignored file — so the fast gate died at COLLECTION on the CI
+      runner (the E11.23 rule, verbatim). It passed on the laptop because
+      this worktree carries a SYMLINK to the main checkout's manifest,
+      which is exactly what hides the rule from a developer machine.
+      ⭐ THE CURE IS NOT THE SANCTIONED SKIP. "Skip when the manifest is
+      absent" would make the INC-25/INC-40 ordering clause vacuous in the
+      one environment that gates the merge. The job module imports
+      NOTHING from `pipeline` at top level, so it is loaded BY FILE PATH
+      — `pipeline/__init__.py` never executes and the COMPILED graph stays
+      available in the fast gate, which is the property worth having
+      (source order is meaningless under a topological executor). A new
+      clause asserts that precondition, so a future top-level `pipeline`
+      import fails with a message naming the cause rather than as a
+      FileNotFoundError about a dbt manifest.
+      VERIFIED THE CI WAY: the manifest symlink was moved aside and the
+      whole `core` shard re-run — 6,744 passed, 41 skipped. Red proof
+      29/29.
+
+      ── ⑧ THE ZERO-CLIP RE-MEASUREMENT IS CALENDAR-BOUND, and saying so
+      keeps it from reading as an omission. TD1's component-head zero-clip
+      figures (QB passing_tds 1.40x, TE receiving_tds 3.41x, n=78/113)
+      compare the HEAD'S MEAN against REALIZED per-component outcomes,
+      which do not exist for a week until it has been played. The target
+      week (2026 wk 2) runs 09-17 → 09-21, so the cleaner read the spec
+      asks for cannot be taken before 09-22 — and `run_nf_wk_td1_coherence`
+      does not compute it (it computes coherence + TD coverage). ⇒ node 3's
+      level and zero-atom reads are available the moment a corrected
+      payload publishes; the zero-clip re-read is a SECOND, later pass. It
+      is not blocked on anything but the calendar.
+
+      ── ⑨ A CLAUSE THIS SESSION WROTE WAS VACUOUS FOR A REASON WORTH
+      RECORDING: writing a file through a shell heredoc collapsed the `\b`
+      in a regex into a literal BACKSPACE (0x08), so the "the notice
+      promises no delivery date" assertion matched a control character
+      followed by a month name — i.e. it passed on nothing. Invisible in
+      the diff, in `tsc` and in a green run; found by reading the RENDERED
+      page and then scanning the file's bytes. A scan of every file this
+      branch touched found exactly those two occurrences and no others.
+      Both repaired clauses are now RED-proven. The class: an escape that
+      is BOTH a regex escape and a Python escape (\b \n \t \r \f \v \a)
+      is silently rewritten by that write path, and the result is a guard
+      that cannot fail.
+
+      ── ⑥ NF-WK-RC1 IS A CONSUMER OF THESE TABLES, NOT AN INGEST OWNER — checked,
+      because the kickoff flagged a possible collision. Its node 1 is a DIAGNOSIS
+      ("name the realized weekly stat-line source in the lake … find its cadence"),
+      and the table it will land on is `stats_player_week`. There is therefore no
+      two-writer risk, and RC1's cadence question is answered by this node: the
+      feed is owned by `nfl_weekly_stats_ingest_op`, refreshed daily immediately
+      before the weekly build, and a completed week lands the morning after its
+      Monday-night close (measured 5-8 h). RC1 should read, not ingest.
+
+      ── ⑦ THE ROLL-FORWARD JOB DEFINES `NFL_ROLL_FORWARD_TIMEOUT_SECONDS` AND
+      NEVER USES IT. `nfl_roll_forward_ingest_op` calls `run_roll_forward(season)`
+      in-process with no bound, so the constant is a declaration with no
+      production behind it (the NF-C0e wired≠invoked class). Not touched here —
+      it is another story's op and the fix is not free (an in-process call needs
+      either a subprocess or a job-level `dagster/max_runtime`) — but it is the
+      same INC-32 exposure this story's own ingest was careful to avoid.
+
+      ── ⑤ `run_nf_c6_ph2_promotion_review.component_coherence` now NAMES its
+      sign convention (components − head) in both its docstring and the emitted
+      artifact's `interpretation`, plus a machine-readable `sign_convention`
+      key. Neither computation was flipped (PM ruling, TD1 D5 item 5). The
+      artifact-side half is the load-bearing one: a figure gets quoted from the
+      artifact, not from the module.

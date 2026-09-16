@@ -5,6 +5,13 @@ import { collectPageErrors, mockApi, type MockOptions } from "../support/api-moc
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../support/assertions"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
 import { signIn } from "../support/signed-in"
+import {
+  WEEKLY_NUMBERS_WITHHELD,
+  WEEKLY_WITHHELD_SINCE,
+  weeklyRowOrder,
+  weeklyRowView,
+} from "@/lib/weekly-suppression"
+import { WEEKLY_PAGE_STANDFIRST, WEEKLY_WITHHELD_NOTE } from "@/lib/fantasy-claim-copy"
 
 /**
  * NF-WK-FE1 — THE WEEKLY PROJECTIONS SURFACE, AT THE RENDER LEVEL.
@@ -40,6 +47,22 @@ import { signIn } from "../support/signed-in"
  *  5. THE STAT LINE COULD BECOME A SECOND TOTAL. The points head and the component head are
  *     INDEPENDENT models — scoring the line does not reproduce the point. This page therefore never
  *     sums the line, and the clause below asserts that no total appears beside it.
+ *
+ * ══ NF-INC-0916 — WHY SEVERAL CLAUSES BELOW BRANCH ON A FLAG ════════════════════════════════════
+ *
+ * The weekly model's training feeds were never ingested, so it fitted a week of fabricated zeros
+ * and its served point runs at a fraction of realized scoring. Until it is retrained, the page
+ * WITHHOLDS every number the fit produced. The reversal is one constant
+ * (`WEEKLY_NUMBERS_WITHHELD`), and these clauses read that same constant so the flip carries the
+ * suite with it — a suite that had to be rewritten alongside the reversal would make the reversal
+ * a rebuild rather than the two-line change it is designed to be.
+ *
+ * ⛔ NOT `test.skip`. A conditionally-skipped clause is a vacuous anchor with a plausible excuse
+ * attached (NF1.7 (a)); every test below is DECLARED LIVE and branches INSIDE its body, so exactly
+ * one branch runs and neither can be silently lost. The branch that is not running in this build is
+ * covered unconditionally by the pure clauses in section 0, which drive `weeklyRowView` BOTH ways —
+ * and section 0's last clause pins the RENDERED page to that same function, so the two compose into
+ * coverage of the reversal instead of each proving something about a different decision.
  */
 
 const FIXTURE_DIR = join(process.cwd(), "e2e", "fixtures", "api")
@@ -82,6 +105,167 @@ async function openWeekly(page: Page, options: MockOptions = {}) {
  *  DOM actually carries rather than in the fixture's raw precision. */
 const oneDp = (v: number) => v.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
+// ══ 0 — NF-INC-0916: THE WITHHOLDING, AND ITS REVERSAL ══════════════════════════════════════════
+//
+// ⭐ THE PURE HALF, DRIVEN BOTH WAYS UNCONDITIONALLY. `weeklyRowView` takes `withheld` as a
+// PARAMETER rather than reading the constant, precisely so both branches are reachable in one
+// build — a function whose branch is baked in can only ever be tested one way, which is how a
+// reversal ships broken.
+
+test("withheld, every model-produced cell is withheld — and nothing else is", () => {
+  expect(FREE.players.length, "no rows — these clauses would pass on nothing").toBeGreaterThan(3)
+  for (const p of FREE.players as Player[]) {
+    const v = weeklyRowView(p, true)
+    for (const [name, cell] of Object.entries(v)) {
+      if (name === "band" || name === "statLine") {
+        expect(cell, `${name} must be off while the numbers are withheld`).toBe(false)
+        continue
+      }
+      expect((cell as { kind: string }).kind, `${name} leaked a value for ${p.id}`).toBe("withheld")
+    }
+  }
+})
+
+test("un-withheld, every cell carries the payload's own number verbatim", () => {
+  // ⭐ THE REVERSAL'S ACTUAL CONTRACT: flipping the constant must restore the page EXACTLY, not
+  // approximately. Read from the FIXTURE'S values, so a re-capture moves the expectation with the
+  // payload rather than turning this red for the wrong reason.
+  for (const p of FREE.players as Player[]) {
+    const v = weeklyRowView(p, false)
+    expect(v.point).toEqual({ kind: "value", n: p.fpPpr })
+    expect(v.p10).toEqual({ kind: "value", n: p.fpP10 })
+    expect(v.p90).toEqual({ kind: "value", n: p.fpP90 })
+    expect(v.band).toBe(true)
+    expect(v.statLine).toBe(true)
+    // ⚠️ A DECLARED NULL STAYS DECLARED. The season's final week has no remaining horizon to sum,
+    // which is a different fact from a withheld number and from a zero — three states, three
+    // renderings, and collapsing any two is the error this surface is built to avoid.
+    expect(v.ros).toEqual(p.rosPpr == null ? { kind: "absent" } : { kind: "value", n: p.rosPpr })
+  }
+  expect(
+    (FREE.players as Player[]).some((p) => p.rosPpr == null),
+    "no null-ros row in the fixture — the declared-null half of this clause would pass on nothing",
+  ).toBe(true)
+})
+
+test("the ordering carries no model quantity while the numbers are withheld, and is restored by the same flag", () => {
+  const byPoints = (a: Player, b: Player) => b.fpPpr - a.fpPpr || a.id.localeCompare(b.id)
+  // Un-withheld: the flag hands back the points comparator UNCHANGED — the reversal does not have
+  // to remember the ordering separately.
+  expect(weeklyRowOrder(false, byPoints)).toBe(byPoints)
+
+  const withheldOrder = [...(FREE.players as Player[])].sort(weeklyRowOrder(true, byPoints))
+  const pointsOrder = [...(FREE.players as Player[])].sort(byPoints)
+  // Position, then name — and demonstrably NOT the model's order.
+  const positions = withheldOrder.map((p) => p.pos)
+  expect([...positions].sort()).toEqual(positions)
+  expect(
+    withheldOrder.map((p) => p.id),
+    "the withheld order is identical to the points order — the fixture cannot tell them apart, so this clause proves nothing",
+  ).not.toEqual(pointsOrder.map((p) => p.id))
+})
+
+test("the page renders exactly what the row plan says, cell by cell", async ({ page }) => {
+  // ⭐⭐ THE LINK THAT MAKES THE COMPOSITION REAL. The clauses above prove `weeklyRowView` is right
+  // in both branches; this proves the PAGE renders that function's output rather than deciding
+  // again. Without it the two halves would be about different things and the pair would prove
+  // nothing about the reversal.
+  await openWeekly(page)
+  const rows = page.locator('[data-testid="weekly-row"]')
+  await expect(rows.first()).toBeVisible()
+
+  for (const p of (FREE.players as Player[]).slice(0, 5)) {
+    const plan = weeklyRowView(p, WEEKLY_NUMBERS_WITHHELD)
+    const row = page.locator(`[data-testid="weekly-row"][data-player-id="${p.id}"]`)
+    const marker = row.locator('[data-testid="weekly-points"] [data-withheld]')
+    if (plan.point.kind === "withheld") {
+      await expect(marker, `${p.id} should render a withheld marker`).toHaveCount(1)
+      const cellText = await row.locator('[data-testid="weekly-points"]').innerText()
+      expect(cellText).not.toContain(oneDp(p.fpPpr))
+    } else {
+      await expect(marker, `${p.id} renders a withheld marker but the plan says it has a value`).toHaveCount(0)
+      expect(await row.locator('[data-testid="weekly-points"]').innerText()).toContain(oneDp(p.fpPpr))
+    }
+    // The bar is a drawing of the same distribution, so it travels with the numbers.
+    await expect(row.locator('[data-testid="weekly-band-bar"]')).toHaveCount(plan.band ? 1 : 0)
+  }
+})
+
+test("no weekly model number reaches the DOM while they are withheld", async ({ page }) => {
+  // ⭐ THE LEAK CHECK, mirroring the paid one below. A per-cell assertion cannot see a number that
+  // escaped through a title attribute, an aria label or a chart; this reads the whole rendered text.
+  // ⚠️ TOKENS, NOT SUBSTRINGS — the same correction the paid clause records: a substring form
+  // reports a leak whenever a model figure happens to sit inside an unrelated free number.
+  await openWeekly(page)
+  await expect(page.locator('[data-testid="weekly-row"]').first()).toBeVisible()
+
+  const modelValues = new Set<string>()
+  for (const p of FREE.players as Player[]) {
+    for (const v of [p.fpPpr, p.fpP10, p.fpP90, p.rosPpr, p.rosP10, p.rosP90]) {
+      // A zero is not distinctive — a bye's identity zero and a withheld cell are different facts,
+      // and a page full of legitimate small integers would make this clause fire on nothing real.
+      if (typeof v === "number" && v > 0) modelValues.add(oneDp(v))
+    }
+  }
+  expect(modelValues.size, "no model values in the fixture — this clause would pass on nothing").toBeGreaterThan(5)
+
+  const tokens = await renderedNumericTokens(page)
+  const leaked = [...modelValues].filter((v) => tokens.has(v))
+  if (WEEKLY_NUMBERS_WITHHELD) {
+    expect(leaked, `weekly model value(s) rendered while withheld: ${leaked.join(", ")}`).toEqual([])
+  } else {
+    // The other direction: with the withholding lifted these numbers MUST be on the page, or this
+    // clause would go on passing after a reversal that quietly rendered nothing.
+    expect(leaked.length, "the withholding is lifted but no model value is rendered").toBeGreaterThan(5)
+  }
+})
+
+test("the notice says what broke, carries its date, and promises no delivery date", async ({ page }) => {
+  await openWeekly(page)
+  const notice = page.locator('[data-testid="weekly-withheld-notice"]')
+
+  if (!WEEKLY_NUMBERS_WITHHELD) {
+    // ⭐ THE REVERSAL MUST TAKE THE NOTICE DOWN TOO. A page that restored the numbers and kept
+    // telling readers they were withheld is the same defect facing the other way.
+    await expect(notice).toHaveCount(0)
+    return
+  }
+
+  await expect(notice).toBeVisible()
+  const text = await notice.innerText()
+
+  // DATED — a notice a reader can tell is a month old from one that went up this morning.
+  expect(text).toContain(WEEKLY_WITHHELD_SINCE)
+
+  // IT NAMES THE CAUSE, rather than describing a schedule. The served prose is the copy module's
+  // own, read from it rather than retyped here, so a reword moves the expectation with the copy.
+  expect(text).toContain(WEEKLY_WITHHELD_NOTE.mechanism)
+  expect(text).toContain(WEEKLY_WITHHELD_NOTE.effect)
+  expect(text).toContain(WEEKLY_WITHHELD_NOTE.kept)
+
+  // ⛔ NO EUPHEMISM, and ⛔ NO ETA. Each of these describes a schedule rather than a fact, and each
+  // would leave a reader believing the numbers were fine and merely absent.
+  const lowered = text.toLowerCase()
+  for (const euphemism of [
+    "temporarily unavailable", "under maintenance", "undergoing maintenance",
+    "making improvements", "check back", "coming soon", "shortly",
+  ]) {
+    expect(lowered, `the notice uses the euphemism "${euphemism}"`).not.toContain(euphemism)
+  }
+  // A month name or a weekday would be a delivery commitment made out of an inference.
+  expect(lowered).not.toMatch(
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/,
+  )
+
+  // ⭐⭐ AND THE PAGE MUST NOT MAKE THE CLAIM IT IS WITHDRAWING, TWO LINES ABOVE THE WITHDRAWAL.
+  // The ordinary standfirst promises "the 80% range around it and what is left of his season
+  // beside it" — precisely what is withheld — and it renders directly under the title. A surface
+  // that advertises and retracts the same thing in one screenful reads as carelessness rather than
+  // as candour; this is what keeps the two in step through a reversal.
+  const body = await page.evaluate(() => document.body.innerText)
+  expect(body).not.toContain(WEEKLY_PAGE_STANDFIRST)
+})
+
 // ══ 1 — the band renders with the point, EVERYWHERE the point renders ═══════════════════════════
 
 test("every rendered row carries its 80% band beside the point", async ({ page }) => {
@@ -100,7 +284,19 @@ test("every rendered row carries its 80% band beside the point", async ({ page }
       return !!band && /\d/.test(band.textContent ?? "") && (band.textContent ?? "").includes("–")
     }).length,
   )
-  expect(withBand, `${total - withBand} of ${total} rows render a point with no band`).toBe(total)
+
+  if (WEEKLY_NUMBERS_WITHHELD) {
+    // ⭐ THE SAME INVARIANT, FACING THE OTHER WAY (NF-INC-0916). The rule is that a point and its
+    // band travel together — so with the point withheld, a band on ANY row would be the defect
+    // this clause exists to catch, published without the number that gives it meaning.
+    expect(withBand, `${withBand} of ${total} rows render a band while the point is withheld`).toBe(0)
+    const withMarker = await rows.evaluateAll(
+      (els) => els.filter((e) => !!e.querySelector('[data-testid="weekly-points"] [data-withheld]')).length,
+    )
+    expect(withMarker, `${total - withMarker} of ${total} rows do not say the point is withheld`).toBe(total)
+  } else {
+    expect(withBand, `${total - withBand} of ${total} rows render a point with no band`).toBe(total)
+  }
 
   expectApiFullyMocked(mock)
   await expectNoNaN(page)
@@ -111,6 +307,15 @@ test("the band shown is the payload's own p10–p90, not a recomputed one", asyn
   await openWeekly(page)
   const row = page.locator(`[data-testid="weekly-row"][data-player-id="${projectedRow.id}"]`)
   await expect(row).toBeVisible()
+
+  if (WEEKLY_NUMBERS_WITHHELD) {
+    // There is no band to check its provenance against. The clause that matters while the numbers
+    // are down is that neither endpoint reached the page at all, and section 0 asserts it over the
+    // whole DOM rather than over this one cell.
+    await expect(row.locator('[data-testid="weekly-band"]')).toHaveCount(0)
+    return
+  }
+
   const band = await row.locator('[data-testid="weekly-band"]').innerText()
   // Read from the FIXTURE'S values — a re-capture moves this with the payload.
   expect(band).toContain(oneDp(projectedRow.fpP10))
@@ -126,7 +331,19 @@ test("a bye renders as a stated zero, keeps its rest-of-season number, and is no
   const row = page.locator(`[data-testid="weekly-row"][data-player-id="${byeRow.id}"]`)
   await expect(row).toBeVisible()
 
+  // ⭐ THE BYE STATUS SURVIVES THE WITHHOLDING (NF-INC-0916), and it is the reason this assertion
+  // sits ABOVE the branch: who is not playing is a fact from the schedule, not from the model, so
+  // it is on the page in both states.
   await expect(row.locator('[data-testid="weekly-bye-chip"]')).toBeVisible()
+
+  if (WEEKLY_NUMBERS_WITHHELD) {
+    // The zero is the MODEL'S cell, so it goes down with the rest — and the bye NOTE goes with it,
+    // because that note exists to stop a reader misreading a zero in a column that no longer has
+    // one, and it also points at a rest-of-season figure that is itself withheld.
+    await expect(row.locator('[data-testid="weekly-points"] [data-withheld]')).toHaveCount(1)
+    await expect(page.locator('[data-testid="weekly-bye-note"]')).toHaveCount(0)
+    return
+  }
 
   // The ZERO, not a gap. ⚠️ This is the assertion that would go red if a bye fell through to the
   // "we have nothing for this player" em-dash.
@@ -149,6 +366,16 @@ test("a final-week row renders its null rest-of-season as an absence, never as a
   const row = page.locator(`[data-testid="weekly-row"][data-player-id="${finalWeekRow.id}"]`)
   await expect(row).toBeVisible()
   const ros = (await row.locator('[data-testid="weekly-ros"]').innerText()).trim()
+
+  if (WEEKLY_NUMBERS_WITHHELD) {
+    // ⭐ THREE STATES, NOT TWO. A withheld cell must not borrow the declared-null's em-dash: "we
+    // have a number and are not showing it" and "there is no number to show" are different facts,
+    // and this row is the one place they could be confused, because it is genuinely both-ish.
+    await expect(row.locator('[data-testid="weekly-ros"] [data-withheld]')).toHaveCount(1)
+    expect(ros).not.toContain("—")
+    return
+  }
+
   // ⭐ A DECLARED NULL AND A ZERO ARE DIFFERENT FACTS: "there is no remaining horizon to sum" is
   // not "he will score nothing". Rendering 0.0 here would assert the second.
   expect(ros).toContain("—")
@@ -260,7 +487,15 @@ test("a free caller's rendered page carries no paid stat value anywhere in it", 
   // rather than on a row with nothing to withhold.
   await page.locator(`[data-testid="weekly-row"][data-player-id="${projectedRow.id}"]`)
     .locator('[data-testid="weekly-detail-toggle"]').click()
-  await expect(page.locator('[data-testid="weekly-stat-line-locked"]')).toBeVisible()
+  if (WEEKLY_NUMBERS_WITHHELD) {
+    // ⭐ WITHHELD BEATS LOCKED, and the ordering is the point. The lock says "the points projection
+    // and its range on this page are free" — currently false — so showing it here would be a claim
+    // about pricing standing in for a claim about correctness.
+    await expect(page.locator('[data-testid="weekly-stat-line-withheld"]')).toBeVisible()
+    await expect(page.locator('[data-testid="weekly-stat-line-locked"]')).toHaveCount(0)
+  } else {
+    await expect(page.locator('[data-testid="weekly-stat-line-locked"]')).toBeVisible()
+  }
   await expect(page.locator('[data-testid="weekly-stat-line"]')).toHaveCount(0)
 
   const values = paidValueStrings()
@@ -282,6 +517,20 @@ test("an entitled caller sees the projected stat line, and it is never totalled"
 
   await page.locator(`[data-testid="weekly-row"][data-player-id="${projectedRow.id}"]`)
     .locator('[data-testid="weekly-detail-toggle"]').click()
+
+  if (WEEKLY_NUMBERS_WITHHELD) {
+    // ⭐ THE STAT LINE IS DOWN FOR AN ENTITLED READER TOO (NF-INC-0916) — it comes from the same
+    // fit and carries the same defect, so withholding it only from non-members would be selling a
+    // number we have measured wrong. ⛔ And it must NOT render the "no line was produced" sentence,
+    // which is a claim about the model that is untrue here.
+    await expect(page.locator('[data-testid="weekly-stat-line-withheld"]')).toBeVisible()
+    await expect(page.locator('[data-testid="weekly-stat-line"]')).toHaveCount(0)
+    await expect(page.locator('[data-testid="weekly-stat-line-absent"]')).toHaveCount(0)
+    await expect(page.locator('[data-testid="weekly-stat-line-locked"]')).toHaveCount(0)
+    expectApiFullyMocked(mock)
+    await expectNoNaN(page)
+    return
+  }
 
   const panel = page.locator('[data-testid="weekly-stat-line"]')
   await expect(panel).toBeVisible()
@@ -321,6 +570,17 @@ test("an in-flight paid read says so, and does not claim the stat line is absent
   await page.locator(`[data-testid="weekly-row"][data-player-id="${projectedRow.id}"]`)
     .locator('[data-testid="weekly-detail-toggle"]').click()
 
+  if (WEEKLY_NUMBERS_WITHHELD) {
+    // ⭐ THE SAME RULE, AND THE PANEL SHORT-CIRCUITS BEFORE THE FETCH MATTERS: an in-flight read is
+    // irrelevant when the answer is withheld either way, and rendering a spinner would promise a
+    // line that is not coming. The negative assertion is still the one that matters — neither the
+    // loading sentence nor the "nothing was produced" sentence may appear.
+    await expect(page.locator('[data-testid="weekly-stat-line-withheld"]')).toBeVisible()
+    await expect(page.locator('[data-testid="weekly-stat-line-loading"]')).toHaveCount(0)
+    await expect(page.locator('[data-testid="weekly-stat-line-absent"]')).toHaveCount(0)
+    return
+  }
+
   // ⛔ THE ASSERTION THAT MATTERS IS THE NEGATIVE ONE. "No projected stat line was produced for
   // this player" is a claim about the MODEL; rendering it while the fetch is still in flight makes
   // it FALSE for as long as the network takes. A slow render is acceptable, an untrue sentence is
@@ -347,7 +607,17 @@ test("a player with no component line gets a stated absence, not zeros and not t
 
   await page.locator(`[data-testid="weekly-row"][data-player-id="${noLine.id}"]`)
     .locator('[data-testid="weekly-detail-toggle"]').click()
-  await expect(page.locator('[data-testid="weekly-stat-line-absent"]')).toBeVisible()
+
+  if (WEEKLY_NUMBERS_WITHHELD) {
+    // ⭐ EVEN ON THE ROW THAT GENUINELY HAS NOTHING, the withheld sentence is the right one: we are
+    // declining to publish this fit's component line at all, so "the model had nothing to say about
+    // him" would be answering a question we are not currently asking. Three states, and the one on
+    // screen has to be the true one.
+    await expect(page.locator('[data-testid="weekly-stat-line-withheld"]')).toBeVisible()
+    await expect(page.locator('[data-testid="weekly-stat-line-absent"]')).toHaveCount(0)
+  } else {
+    await expect(page.locator('[data-testid="weekly-stat-line-absent"]')).toBeVisible()
+  }
   await expect(page.locator('[data-testid="weekly-stat-line-locked"]')).toHaveCount(0)
   await expect(page.locator('[data-testid="weekly-stat-line"]')).toHaveCount(0)
 })

@@ -1,0 +1,129 @@
+{
+  "label": "BEFORE",
+  "season": 2026,
+  "week": 2,
+  "generated_at": "2026-09-15T15:32:59+00:00",
+  "realized_seasons": [
+    2016,
+    2025
+  ],
+  "level": [
+    {
+      "pos": "QB",
+      "n_served": 88,
+      "mean_projection": 1.345290909090909,
+      "n_realized": 13575,
+      "mean_realized": 6.5522637200736655,
+      "ratio": 0.20531696625235718
+    },
+    {
+      "pos": "RB",
+      "n_served": 113,
+      "mean_projection": 2.5846513274336287,
+      "n_realized": 22094,
+      "mean_realized": 5.546844392142663,
+      "ratio": 0.4659678809621729
+    },
+    {
+      "pos": "WR",
+      "n_served": 179,
+      "mean_projection": 2.0569005586592177,
+      "n_realized": 31372,
+      "mean_realized": 5.74295550172128,
+      "ratio": 0.3581606296692919
+    },
+    {
+      "pos": "TE",
+      "n_served": 120,
+      "mean_projection": 1.4327366666666665,
+      "n_realized": 18230,
+      "mean_realized": 3.563331870543061,
+      "ratio": 0.4020778077143608
+    },
+    {
+      "pos": "ALL",
+      "n_served": 500,
+      "mean_projection": 1.9011296,
+      "n_realized": 85271,
+      "mean_realized": 5.3550034595583496,
+      "ratio": 0.3550193037889829
+    }
+  ],
+  "zero_atom": {
+    "top_n": 10,
+    "n_top_with_zero_p10": 10,
+    "share_top_with_zero_p10": 1.0,
+    "rows": [
+      {
+        "name": "Trey McBride",
+        "pos": "TE",
+        "fpP10": 0.0,
+        "fpPpr": 11.1646,
+        "fpP90": 24.6063
+      },
+      {
+        "name": "Christian McCaffrey",
+        "pos": "RB",
+        "fpP10": 0.0,
+        "fpPpr": 10.4548,
+        "fpP90": 27.1712
+      },
+      {
+        "name": "Bijan Robinson",
+        "pos": "RB",
+        "fpP10": 0.0,
+        "fpPpr": 10.1174,
+        "fpP90": 25.2466
+      },
+      {
+        "name": "Jahmyr Gibbs",
+        "pos": "RB",
+        "fpP10": 0.0,
+        "fpPpr": 9.3408,
+        "fpP90": 22.4972
+      },
+      {
+        "name": "Jaxon Smith-Njigba",
+        "pos": "WR",
+        "fpP10": 0.0,
+        "fpPpr": 8.7667,
+        "fpP90": 24.8804
+      },
+      {
+        "name": "Zay Flowers",
+        "pos": "WR",
+        "fpP10": 0.0,
+        "fpPpr": 8.3839,
+        "fpP90": 19.719
+      },
+      {
+        "name": "De'Von Achane",
+        "pos": "RB",
+        "fpP10": 0.0,
+        "fpPpr": 7.9581,
+        "fpP90": 21.4435
+      },
+      {
+        "name": "Derrick Henry",
+        "pos": "RB",
+        "fpP10": 0.0,
+        "fpPpr": 7.9329,
+        "fpP90": 21.7059
+      },
+      {
+        "name": "Michael Wilson",
+        "pos": "WR",
+        "fpP10": 0.0,
+        "fpPpr": 7.8036,
+        "fpP90": 18.4468
+      },
+      {
+        "name": "Amon-Ra St. Brown",
+        "pos": "WR",
+        "fpP10": 0.0,
+        "fpPpr": 7.7879,
+        "fpP90": 23.473
+      }
+    ]
+  }
+}
