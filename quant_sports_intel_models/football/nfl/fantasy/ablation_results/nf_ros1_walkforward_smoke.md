@@ -1,6 +1,6 @@
 # NF-ROS1 walk-forward — SMOKE (code-path proof, never a gate)
 
-Generated 2026-09-17T04:29:45+00:00 · commit `cfe8ffd8` · folds [2020, 2021] · registration `nf_ros1_preregistration.md` + amendments 1–2.
+Generated 2026-09-17T04:33:03+00:00 · commit `316c42e5` · folds [2020, 2021] · registration `nf_ros1_preregistration.md` + amendments 1–2.
 
 **Winner (pooled full-PPR CRPS):** `eb_rate_avail` · field PBO None (precondition < 0.2: FAIL) · flips {'eb_rate_avail': 2}
 

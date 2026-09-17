@@ -346,3 +346,95 @@ paste-ready command (spec standing rule).
 ## §13 Post-run findings
 
 *(appended after the decisive run — never edited above this line)*
+
+### §13.1 Verdict — CERTIFIED NO (`CONSTRAINT_REFUSED`, binding half = calibration). Nothing ships.
+
+Decisive run: `nf_ros1_walkforward.{json,md}`, commit `316c42e5`, folds 2020–2025, 65,916 rows,
+5,493 player-seasons. **Reproduced by a second invocation from the same commit: max absolute
+difference 0.0 over every recorded figure** (§9 `reproduction`). Runtime 2m30s — over the 2-minute
+handoff line; the session's component timing (assembly 10s, heaviest fold 2.8s) mis-predicted it
+because the per-row PIT loop dominates at full scale. Disclosed, not hidden.
+
+| pos | CRPS lift vs `prior_prorated` | folds | p (BH) | DSR | vs matched foil | cov80 / floor | PIT dev | failed |
+|---|---|---|---|---|---|---|---|---|
+| QB | **+3.37** [2.22, 4.63] | 6/6 | 0.0025 ✓ | 0.9999 | +3.41 | 0.740 / 0.773 | 0.133 | C7, C9 |
+| RB | **+3.50** [2.86, 4.12] | 6/6 | <1e-4 ✓ | 0.9957 | +3.51 | 0.802 / 0.780 | 0.096 | C9 |
+| WR | **+3.24** [2.74, 3.71] | 6/6 | 0.0003 ✓ | 0.9994 | +3.25 | 0.811 / 0.785 | 0.091 | C9 |
+| TE | **+2.43** [1.93, 2.89] | 6/6 | 0.0001 ✓ | 0.9989 | +2.36 | 0.806 / 0.779 | 0.100 | C9 |
+| K  | **+1.80** [1.03, 2.62] | 6/6 | 0.0026 ✓ | 0.9007 | +1.79 | 0.732 / 0.759 | 0.082 | C4, C7, C8a, C9 |
+
+(brackets = player-block bootstrap 95% CI of the per-row lift.) Winner `eb_rate_avail` on pooled
+CRPS; flip distribution 6/6 on it; field PBO **0.0** (precondition passes). Every degenerate loses
+at every position (e.g. RB: winner 15.49 · frozen_full 19.83 · naive_pace 18.21 · last3_pace 18.82
+· nihilist 28.60 · zero_width 21.80 · max_width 121.87, and max_width SATISFIES the coverage floor
+at 0.996 while losing — the NF1.8 shape).
+
+**What the record says, in the order a reader needs it:**
+
+1. **The POINT is real, large and attributable.** Realized production updates the preseason prior
+   at every position, every season, every week k = 1…12 (per-k lift +2.0 at k=1 rising to +3.5 at
+   k=6, +2.3 at k=12; rookies +5.7 vs veterans +2.8). The matched foil (the same machinery fed a
+   permuted realized history) loses by the full margin, so the gain is per-player content, not a
+   league-level shift. Half-PPR and standard show the same ordering (pooled CRPS 13.03 vs 15.64;
+   11.53 vs 13.68).
+2. **The ship bar refuses it on CALIBRATION, and the refusal is of the PREDICTIVE CONSTRUCTION,
+   not of the update.** C9 fails at all five positions (PIT max-decile deviation 0.08–0.13 against
+   0.05). Post-run diagnostic (2025 fold): the INCUMBENT's predictive fails by the same amount
+   (0.109 vs the winner's 0.099) — both use the §4.3 location-shift residual construction. Its
+   shape defect: on the top tercile of projections the predictive puts q05 at zero on 29.9% of rows
+   while only 5.2% of those players realize zero, and the lowest PIT decile is ~2× full. A
+   location-shift band cannot express a zero atom whose size depends on the player (injury /
+   benching / release) nor a spread that scales with the projection. An IN-SAMPLE refit of the same
+   construction reads 0.09–0.11 too (node 3), so this is form, not overfitting.
+3. **No fold, season or row trigger is published.** `classify_null` returned `POWER_LIMITED` at every
+   position (for K it names "DSR alone needs 11 folds"). That is the NF-D18 misleading direction:
+   the binding clause is C9, a calibration property measured on ~1,000–10,000 rows per position
+   where sampling noise is ~0.003 — no amount of data moves a 0.09 shape defect. The reported state
+   is `CONSTRAINT_REFUSED`; the classifier's raw text is kept in the JSON, not acted on.
+4. **The honest alternative applies.** Consumers (WVR1's value column, the trade engine, my-teams)
+   keep their stated absences; the my-teams "preseason" copy fix stands. Per §6, no position is
+   published as a number. Per §7, the waiver replacement level is **INACTIVE** (0 positions ship) —
+   its float prediction is untested on real data here (the mechanism is pinned by a unit guard only).
+5. **C8a at K** — the winner beats its own MSE-fitted oracle on CRPS on 5 of 6 folds (mean 0.20,
+   one-sided p 0.043, above 1/10 of the lift). Pre-registered as possible (§5 ⚠️) because the oracle
+   optimizes MSE and is judged on CRPS; it fails as registered and is not re-read. K is refused on C9
+   and C7 regardless.
+6. **C8b** — the oracle beats its matched-n control at every position (−0.07 to −0.55); the pair is
+   ACTIVE everywhere.
+
+### §13.2 Fitted parameters (the prior's weight, in games of evidence)
+
+`eb_rate_avail`, fold 2025 (train 2019–2024): rate `m_r` QB 3 · RB 4 · WR 4 · TE 6 · K 24; availability
+`m_a` QB 4 · RB 3 · WR 3 · TE 2 · K 2. Stable across folds (QB/RB/WR 2–4, TE 6–12, K 12–64). The
+preseason board carries roughly **three to four games** of evidence on a skill player's scoring rate;
+for kickers the rate channel is nearly inert (channel lift +0.04) and the whole value is availability.
+Channel 2×2 (pooled lifts): rate +0.97…+1.34, availability +1.27…+2.11, both +1.80…+3.50; the
+interaction is positive at QB (+1.12), RB, WR and slightly negative at TE (−0.36), K (−0.02) — the
+halves are not additive, recorded, never recombined.
+
+### §13.3 Diagnostics
+
+Board→realized join: every match was by gsis id (historical boards carry back-filled gsis ids for
+rookies); `by_name = 0` in every season, 0 ambiguous, 0 double claims. ⚠️ So the name ladder was
+**never exercised on history** — the served 2026 board's 81 synthetic rookie ids are exactly where it
+matters, and a successor must test it on that board before trusting it. 180–229 board players per
+season have no realized REG row (real zeros, kept). 2,083 rows (3.2%) used the league-median schedule
+(amendment 2); 0 unresolved. 76 player-seasons hit the pace cap. Off-board players held 1.2–3.8% of
+realized full-PPR points per season (the in-season-addition scope limit). `two_pt` resolves CAPTURED
+on both sides (no historical board carries `proj_two_pt`), so the evaluated term set excludes it — a
+served artifact must score on the SAME term set.
+
+### §13.4 A PIT "repair" that was investigated and REJECTED (recorded so nobody re-attempts it)
+
+The smoke's PIT failure first looked like an instrument defect in amendment 1 item 6 (the atom
+upper bound `L_last`). A positive control — a correctly specified censored-normal predictive with a
+27% zero atom — reads **0.0052** under the amendment-1 rule and 0.0031 under the proposed bound. Both
+pass by an order of magnitude, so the rule is not defective and was **not changed**. Pinned as a
+guard (`test_the_pit_reads_flat_on_a_correctly_specified_censored_predictive`, plus a negative
+control that a half-width predictive fails).
+
+### §13.5 Pre-decisive harness fixes (code-path, all before the decisive run)
+
+`max_width` was first built with q10 = the max (coverage 0.000) — fixed to the registered [0, max];
+the vectorized residual application and fit memoization were verified to change **zero** figures on
+every other predictor (max diff 0.0 vs the pre-refactor smoke).

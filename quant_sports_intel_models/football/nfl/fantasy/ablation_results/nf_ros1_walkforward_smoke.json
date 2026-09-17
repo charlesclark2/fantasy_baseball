@@ -140,8 +140,8 @@
   "unresolved_team_rows": 0
  },
  "meta": {
-  "commit": "cfe8ffd8",
-  "generated_at": "2026-09-17T04:29:45+00:00",
+  "commit": "316c42e5",
+  "generated_at": "2026-09-17T04:33:03+00:00",
   "prior_sha16": {
    "nf1_5_season_projections_2019.parquet": "e7640a1026b5ac9d",
    "nf1_5_season_projections_2020.parquet": "c0a7aa5d3d8277ce",
