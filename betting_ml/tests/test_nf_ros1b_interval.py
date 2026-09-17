@@ -200,25 +200,24 @@ def test_miss_streak_carries_a_missing_row():
 
 
 def test_the_foil_carries_the_donors_streak():
+    """perm_n and perm_miss_streak must come from the SAME donor. Each player's n and streak encode
+    its own code, so a mismatched pair is visible whatever the permutation draws — and at least one
+    player must actually receive someone else's history, or the check proves nothing."""
     from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1 as N
     rows = []
-    for pid, streak_base in (("A", 0), ("B", 5), ("C", 9)):
+    for code in range(1, 7):
         for k in V.EVAL_WEEKS:
-            r = {"season": 2021, "player_id": pid, "pos": "RB", "k": k, "n": k if pid == "A" else 0,
-                 "miss_streak": float(streak_base + k)}
+            r = {"season": 2021, "player_id": f"P{code}", "pos": "RB", "k": k, "n": code * k,
+                 "miss_streak": float(code * 100 + k)}
             for p in V.PRESETS:
                 r[f"xsum_{p}"] = float(k)
             rows.append(r)
     f = N.add_permuted(pd.DataFrame(rows))
-    donors = {}
-    for _, r in f.iterrows():
-        base = r["perm_miss_streak"] - r["k"]
-        donors.setdefault(r["player_id"], set()).add(base)
-    assert all(len(v) == 1 for v in donors.values())        # one donor per player, every k
-    assert sorted(b for v in donors.values() for b in v) == [0, 5, 9]
-    # and the donor's n travels with the donor's streak
-    for _, r in f.iterrows():
-        assert (r["perm_n"] > 0) == (r["perm_miss_streak"] - r["k"] == 0)
+    n_code = f["perm_n"] / f["k"]
+    s_code = (f["perm_miss_streak"] - f["k"]) / 100
+    assert np.array_equal(n_code.to_numpy(), s_code.to_numpy())
+    own = f["player_id"].str[1:].astype(float)
+    assert (n_code != own).any(), "the permutation is the identity — the check is vacuous"
 
 
 def test_pi_features_are_the_registered_set_in_order():
@@ -244,6 +243,11 @@ def test_pi_features_are_the_registered_set_in_order():
 def test_join_outcomes(rid, auth, real, want):
     from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1b as B
     assert B.classify_join(rid, auth, real) == want
+
+
+def test_a_wrong_join_is_never_correct():
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1b as B
+    assert B.classify_join("G2", "G1", {"G1", "G2"}) == "WRONG"
 
 
 def test_the_pick_key_is_refused_when_a_position_disagrees():
@@ -381,6 +385,50 @@ def test_the_foil_reads_the_permuted_hurdle(synthetic):
     real = iv.by_fold[(2021, V.GATE_PRESET, "")]
     perm = iv.by_fold[(2021, V.GATE_PRESET, "perm_")]
     assert real.shape == perm.shape and not np.allclose(real, perm)
+
+
+def _atom_levels_used(q, point):
+    """Per row, how many grid levels are exactly 0 — for a positive point that is exactly the
+    count of levels ≤ π, because every ratio quantile is > 0."""
+    m = point > 0
+    return m, (q[m] == 0).sum(axis=1)
+
+
+def test_every_predictor_reads_its_own_hurdle_probability(synthetic):
+    """The foil's predictive must use the PERMUTED π and everyone else the real π — checked on the
+    quantiles actually produced, not on what `prepare` stored (the first cut only checked the latter,
+    which stays green if the foil is handed the wrong π)."""
+    N, _, f = synthetic
+    iv = RI.HurdleInterval()
+    b = N.score_fold(f, 2021, presets=(V.GATE_PRESET,), interval=iv)
+    real = iv.by_fold[(2021, V.GATE_PRESET, "")]
+    perm = iv.by_fold[(2021, V.GATE_PRESET, "perm_")]
+    want_real = (V.LEVELS[None, :] <= real[:, None]).sum(axis=1)
+    want_perm = (V.LEVELS[None, :] <= perm[:, None]).sum(axis=1)
+    for name, (point, q) in b["pred"][V.GATE_PRESET].items():
+        if name in ("nihilist_zero",):
+            continue
+        m, got = _atom_levels_used(q, point)
+        want = (want_perm if name == V.MATCHED_FOIL else want_real)[m]
+        assert np.array_equal(got, want), name
+    assert not np.array_equal(want_real, want_perm)
+
+
+def test_the_hurdle_event_is_y_at_or_below_zero(synthetic):
+    N, _, f = synthetic
+    iv = RI.HurdleInterval()
+    train = f[f["season"] < 2021]
+    iv.prepare(train, f[f["season"] == 2021].reset_index(drop=True), V.GATE_PRESET, 2021)
+    for P in V.POSITIONS:
+        want = float((train.loc[train["pos"] == P, f"y_{V.GATE_PRESET}"] <= 0).mean())
+        assert want > 0
+        assert iv.diag[(2021, V.GATE_PRESET, "real", P)]["train_zero_rate"] == pytest.approx(want)
+
+
+def test_the_registered_constants():
+    assert len(RI.FINE_LEVELS) == 199
+    assert RI.FINE_LEVELS[0] == 0.005 and RI.FINE_LEVELS[-1] == 0.995
+    assert RI.LOGIT_C == 1.0 and RI.LOGIT_MAX_ITER == 2000
 
 
 def test_the_full_evaluate_runs_and_writes_a_labelled_report(synthetic, tmp_path, monkeypatch):
