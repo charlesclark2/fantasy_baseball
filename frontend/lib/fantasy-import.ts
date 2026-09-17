@@ -43,6 +43,9 @@ export interface ImportedPlayer {
   position: string | null
   team: string | null
   starter: boolean
+  /** NF-WVR1 — where the platform has him. Absent on a league saved before slots existed, which
+   *  every reader treats as unknown (never as IR). */
+  slot?: "starter" | "bench" | "ir" | "taxi" | null
 }
 
 export interface ImportedTeam {

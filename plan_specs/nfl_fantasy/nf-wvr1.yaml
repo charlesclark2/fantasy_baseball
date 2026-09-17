@@ -846,3 +846,42 @@ spec:
 
       ㉔ CHANGELOG HELD per the kickoff: added only once the operator's runtime gate shows the
       surface rendering a real league's live pool.
+
+      ── RUNTIME GATE + OPERATOR ASKS, 2026-09-17 (#1169 deployed; follow-up branch nf-wvr1-ir-links) ──
+
+      ㉕ ✅ RUNTIME GATE PASSED on the deployed Lambda, operator's real 10-team Sleeper league:
+      anon 401; `realized` served (weeks [1], excluded [], lineage verified); refreshed 10/10, not
+      truncated; DST `team_grain_not_covered`; QB ordered by realized points. INDEPENDENT roster read:
+      136 players + 11 D/ST rostered, rostered∩pool = [], and 828 − 681 = 147 = 136 + 11 (exact, as ⑫).
+      FRESHNESS: every week 1–2 transaction consistent, incl. add→drop (Bo Nix, Tyjae Spears, Chris
+      Bell) and drop→re-add (Kaelon Black). ⛔ The first freshness check was VACUOUS (run with the
+      literal placeholder name — the ⑫ false pass again); the transaction replay replaced it. One
+      apparent miss (Tyrone Tracy) was the CHECK's exact-name artifact (board "Tyrone Tracy Jr.").
+      Live render confirmed by the operator after a hard refresh (the tab held the pre-deploy
+      bundle; the live chunk carried the panel string, verified by fetching it).
+
+      ㉖ 🐛 IR / TAXI WERE FILED AS BENCH, ON EVERY PLATFORM — operator report (Jordyn Tyson on IR).
+      Sleeper's `players` lists every rostered id and marks IR/taxi only by REPEATING the id under
+      `reserve`/`taxi`; `_fetch_teams` read `players` + `starters` only. ESPN (lineup slot 21) and
+      Yahoo (`IR`/`IR+`/`IL`) KNEW and folded it into `starter=False`. Consequences: My Teams showed
+      IR players under Bench, and `positional_need` counted them as depth (a manager told WR is
+      covered by an injured WR). FIX: additive `ImportedPlayer.slot` in all three adapters; need
+      excludes ir/taxi from `held` and reports `reserved`; My Teams renders Injured reserve / Taxi.
+      Real-payload check: the regenerated ESPN capture now carries 12 `ir` rows.
+      ⚖️ OPERATOR RULING (2026-09-17): opening the waiver panel ALSO rewrites the caller's own saved
+      roster from the same Sleeper read (`teams_full` from `refresh_league_rosters`, bounded by
+      MAX_IMPORTED_ROSTER_PLAYERS, `roster_synced_at` re-stamped) — so a league saved before `slot`
+      existed heals on one open, and the need annotation stops using an import-time roster.
+      ⚠️ OPEN FOR THE PM: `roster-report.ts` (NF-C6P2) still splits on `starter` alone, so its
+      "best body on your bench" fragility reading can still name an IR player. Not changed here.
+
+      ㉗ OPERATOR ASK — player links on the waiver list open `/fantasy/player/<id>` in a new tab.
+
+      ㉘ DST points: operator asked why none show. Answer given = ruling item 3 / ⑮ (no validated
+      team-grain source; Sleeper scores only STARTED defences). No change; unlock stays card fXIYuvMN.
+
+      ㉙ PRE-EXISTING, NOT THIS STORY: `test_nf_infra1_sleeper_hardening.py::
+      test_the_freshness_check_runs_downstream_of_the_land_as_a_graph_edge` FAILS wherever the dbt
+      manifest exists — RC1's `nfl_realized_freshness_op` joined the injuries job and the exhaustive
+      node-set was not updated. It SKIPS in CI and in clean worktrees (no manifest), so it is
+      invisible there. Control-run on clean `origin/dev`: skipped. Owner: RC1 / NF-INFRA1.

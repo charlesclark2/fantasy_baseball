@@ -21,10 +21,14 @@ import served from "../fixtures/api/fantasy-nfl-waiver-pool.generated.json"
 
 const WAIVER_PATH = "/fantasy/nfl/waiver-pool"
 
-async function openWaivers(page: Page, waiver: MockOptions["waiver"] = "served") {
+async function openWaivers(
+  page: Page,
+  waiver: MockOptions["waiver"] = "served",
+  extra: Partial<MockOptions> = {},
+) {
   const errors = collectPageErrors(page)
   await signIn(page, { groups: ["subscriber"] })
-  const mock = await mockApi(page, { entitlement: "entitled", leagues: "one", waiver })
+  const mock = await mockApi(page, { entitlement: "entitled", leagues: "one", waiver, ...extra })
   await page.goto("/fantasy/my-teams")
   await expect(page.getByRole("heading", { name: "My Teams" })).toBeVisible()
   const panel = page.getByTestId("waiver-view").first()
@@ -32,8 +36,12 @@ async function openWaivers(page: Page, waiver: MockOptions["waiver"] = "served")
   return { errors, mock, panel }
 }
 
-async function openPanel(page: Page, waiver: MockOptions["waiver"] = "served") {
-  const ctx = await openWaivers(page, waiver)
+async function openPanel(
+  page: Page,
+  waiver: MockOptions["waiver"] = "served",
+  extra: Partial<MockOptions> = {},
+) {
+  const ctx = await openWaivers(page, waiver, extra)
   await ctx.panel.getByTestId("waiver-toggle").click()
   return ctx
 }
@@ -198,6 +206,28 @@ test.describe("waiver view", () => {
     expect(Math.max(...inner)).toBeLessThanOrEqual(0)
   })
 
+  test("each available player links to his page in a new tab", async ({ page }) => {
+    const { panel } = await openPanel(page)
+    const group = served.pool!.find((g) => g.pos === served.need.positions.find((n) => n.need === "open_starter")!.pos)!
+    const link = panel.getByTestId("waiver-player-link").first()
+    await expect(link).toHaveText(group.players[0].name)
+    await expect(link).toHaveAttribute("href", `/fantasy/player/${group.players[0].id}`)
+    await expect(link).toHaveAttribute("target", "_blank")
+    await expect(link).toHaveAttribute("rel", /noopener/)
+  })
+
+  test("an IR count is shown beside the need and not counted as held", async ({ page }) => {
+    const { panel } = await openPanel(page, "served", {
+      transform: (path, body) => {
+        if (path !== "/fantasy/nfl/waiver-pool") return body
+        const wr = body.need.positions.find((n: { pos: string }) => n.pos === "WR")
+        wr.reserved = 1
+        return body
+      },
+    })
+    await expect(panel.getByTestId("waiver-need-WR")).toContainText("1 on IR/taxi (not counted)")
+  })
+
   test("the waiver view never reaches a free account", async ({ page }) => {
     await signIn(page, { groups: [] })
     const mock = await mockApi(page, { entitlement: "free", leagues: "one" })
@@ -206,5 +236,63 @@ test.describe("waiver view", () => {
     expect(new URL(page.url()).pathname).toBe("/subscribe")
     await expect(page.getByTestId("waiver-view")).toHaveCount(0)
     expect(waiverRequests(mock.requested)).toEqual([])
+  })
+})
+
+
+test.describe("injured reserve on My Teams", () => {
+  // The `drafted` league with ONE bench row re-flagged `slot: "ir"` — the shape the waiver refresh
+  // (and a fresh import) now writes. Read from the served payload, never a hardcoded name.
+  const markIr = (path: string, body: any) => {
+    if (path !== "/fantasy/nfl/my-teams") return body
+    for (const rows of Object.values(body.rosters ?? {}) as any[]) {
+      const bench = rows.find((r: any) => !r.roster.starter)
+      if (bench) bench.roster.slot = "ir"
+    }
+    return body
+  }
+
+  test("an IR player is listed under Injured reserve, not Bench", async ({ page }) => {
+    let irName = ""
+    await signIn(page, { groups: ["subscriber"] })
+    await mockApi(page, {
+      entitlement: "entitled",
+      leagues: "drafted",
+      transform: (path, body) => {
+        const out = markIr(path, body)
+        if (path === "/fantasy/nfl/my-teams") {
+          const rows = Object.values(out.rosters ?? {})[0] as any[]
+          irName = rows.find((r: any) => r.roster.slot === "ir")?.roster.name ?? ""
+        }
+        return out
+      },
+    })
+    await page.goto("/fantasy/my-teams")
+    const ir = page.getByTestId("ir-table")
+    await expect(ir).toBeVisible()
+    expect(irName, "the fixture must carry a bench row to re-flag").not.toBe("")
+    await expect(ir).toContainText(irName)
+    await expect(page.getByTestId("bench-table")).not.toContainText(irName)
+  })
+
+  test("opening the waiver panel re-reads My Teams when it rewrote the saved roster", async ({ page }) => {
+    const { mock, panel } = await openWaivers(page, "ownRefreshed")
+    const myTeams = () => mock.requested.filter((r) => r.startsWith("/fantasy/nfl/my-teams")).length
+    await page.waitForLoadState("networkidle")
+    const before = myTeams()
+    await panel.getByTestId("waiver-toggle").click()
+    await expect(panel.getByTestId("waiver-player").first()).toBeVisible()
+    await expect.poll(myTeams).toBeGreaterThan(before)
+  })
+
+  test("a refresh that did not touch the saved roster does not re-read My Teams", async ({ page }) => {
+    const { mock, panel } = await openWaivers(page, "served")
+    const myTeams = () => mock.requested.filter((r) => r.startsWith("/fantasy/nfl/my-teams")).length
+    await page.waitForLoadState("networkidle")
+    const before = myTeams()
+    await panel.getByTestId("waiver-toggle").click()
+    await expect(panel.getByTestId("waiver-player").first()).toBeVisible()
+    await page.waitForLoadState("networkidle")
+    expect(myTeams()).toBe(before)
   })
 })

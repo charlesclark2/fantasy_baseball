@@ -36,6 +36,7 @@ from app.backend.dependencies import (
 from app.backend.models.fantasy import (
     BigBoard,
     BigBoardSave,
+    MAX_IMPORTED_ROSTER_PLAYERS,
     bound_league_rosters,
     DraftAssistantRequest,
     FantasyPreferences,
@@ -1814,6 +1815,7 @@ def nfl_waiver_pool(
 
     # ── 1. refresh the rosters, best-effort ──────────────────────────────────────────────────────
     refreshed = False
+    own_refreshed = False
     refresh_error = None
     if refresh and can_refresh and record.get("source_league_id"):
         try:
@@ -1846,6 +1848,17 @@ def nfl_waiver_pool(
                 # clearing a stale flag cannot let a short roster set through.
                 "league_rosters_truncated": bool(truncated),
             }
+            # ⭐ THE CALLER'S OWN ROSTER RIDES THE SAME READ (operator 2026-09-17). Without this the
+            # need annotation counted the IMPORT-TIME roster — no claims since, and no IR flags on
+            # any league saved before `slot` existed — and My Teams filed IR players under Bench
+            # until a re-import. Only replaced when the team is found and within the per-team
+            # bound; otherwise the stored roster stands and says its own age.
+            own_key = str(record.get("source_team_key") or "")
+            own = (fresh.get("teams_full") or {}).get(own_key) if own_key else None
+            if own is not None and len(own) <= MAX_IMPORTED_ROSTER_PLAYERS:
+                record["imported_roster"] = own
+                record["roster_synced_at"] = fresh["synced_at"]
+                own_refreshed = True
             # ⚠️ PERSISTED BEST-EFFORT, AND A FAILED WRITE DOES NOT FAIL THE READ. The pool is
             # computed from `record` in memory either way, so a DynamoDB hiccup costs the freshness
             # STAMP, never the answer. `put_fantasy_league`'s real signature is
@@ -1937,6 +1950,9 @@ def nfl_waiver_pool(
             "synced_at": record.get("league_rosters_synced_at"),
             "refreshed": refreshed,
             "refresh_error": refresh_error,
+            # Additive: THIS request also rewrote the caller's saved roster (slots included), so a
+            # client showing that roster should re-read it.
+            "own_roster_refreshed": own_refreshed,
             "can_refresh": can_refresh,
             "platform": platform,
             "truncated": bool(record.get("league_rosters_truncated")),

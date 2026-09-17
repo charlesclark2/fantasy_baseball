@@ -28,6 +28,8 @@ biggest-reach one.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import re
 
 from app.backend.services.platform_import import canonical as C
@@ -428,6 +430,17 @@ def _player_from_pick_metadata(player_id: str, meta: dict, *, starter: bool = Fa
     )
 
 
+def _sleeper_slot(pid: str, starters: set[str], reserve: set[str], taxi: set[str]) -> str:
+    """Sleeper's `players` array holds EVERY rostered id — starters, bench, IR and taxi alike — and
+    marks IR and taxi only by listing the id AGAIN under `reserve` / `taxi`. Reading `players` and
+    `starters` alone (the pre-NF-WVR1 shape) therefore files an injured-reserve player as bench."""
+    if pid in reserve:
+        return "ir"
+    if pid in taxi:
+        return "taxi"
+    return "starter" if pid in starters else "bench"
+
+
 def _build_roster_player(player_id: str, hit: "dict | None", starter: bool) -> C.ImportedPlayer:
     if hit:
         return C.ImportedPlayer(
@@ -463,18 +476,22 @@ def _fetch_teams(league_id: str) -> tuple[tuple[C.ImportedTeam, ...], list[str]]
     for raw in rosters:
         roster = _as_dict(raw)
         starters = {str(p) for p in _as_list(roster.get("starters")) if p and str(p) != "0"}
+        reserve = {str(p) for p in _as_list(roster.get("reserve")) if p and str(p) != "0"}
+        taxi = {str(p) for p in _as_list(roster.get("taxi")) if p and str(p) != "0"}
         pids = [str(pid) for pid in _as_list(roster.get("players")) if pid and str(pid) != "0"]
         all_ids.update(pids)
-        parsed.append((roster, starters, pids))
+        parsed.append((roster, starters, pids, reserve, taxi))
 
     resolved, artifact_loaded = sleeper_players.resolve(all_ids)
 
     teams: list[C.ImportedTeam] = []
-    for roster, starters, pids in parsed:
+    for roster, starters, pids, reserve, taxi in parsed:
         owner_id = str(roster.get("owner_id") or "")
         user = users.get(owner_id, {})
         players = tuple(
-            _build_roster_player(pid, resolved.get(pid), pid in starters) for pid in pids
+            replace(_build_roster_player(pid, resolved.get(pid), pid in starters),
+                    slot=_sleeper_slot(pid, starters, reserve, taxi))
+            for pid in pids
         )
         display = str(user.get("display_name") or "")
         team_name = str(_as_dict(user.get("metadata")).get("team_name") or "") or display or "Team"
@@ -701,6 +718,11 @@ def refresh_league_rosters(league_id: str) -> dict:
         # a pool computed over unnamed players is a pool that will not join to the board. The caller
         # surfaces this rather than discarding it.
         "note": list(note),
+        # ⭐ NF-WVR1 (operator 2026-09-17) — each team's FULL rows, `player_key` + `slot` included,
+        # keyed by `team_key`, so the caller can refresh ITS OWN saved `imported_roster` (starter /
+        # bench / IR / taxi) from this same read. Kept OUT of `rosters`, whose slim shape is the
+        # FA-pool subtraction's (name join only) and the league-wide item budget's.
+        "teams_full": {t.team_key: [p.to_dict() for p in t.players] for t in teams},
     }
 
 

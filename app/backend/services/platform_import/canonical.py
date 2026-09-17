@@ -52,6 +52,11 @@ IDP_ELIG = ("DL", "LB", "DB")
 PROJECTED_POSITIONS = ("QB", "RB", "WR", "TE", "K", "DST")
 
 
+#: The values `ImportedPlayer.slot` may take. Additive: a record saved before this existed has no
+#: `slot` at all, and every consumer reads that as "unknown" rather than as bench.
+ROSTER_SLOTS: tuple[str, ...] = ("starter", "bench", "ir", "taxi")
+
+
 @dataclass(frozen=True)
 class ImportedPlayer:
     """One rostered/drafted player as the PLATFORM names them.
@@ -67,6 +72,11 @@ class ImportedPlayer:
     position: str | None = None
     team: str | None = None
     starter: bool = False
+    #: NF-WVR1 — WHERE the platform has him: "starter" | "bench" | "ir" | "taxi", or None when the
+    #: adapter cannot tell. ⭐ `starter` stays the lineup decision it always was; `slot` adds the one
+    #: distinction it could not carry — an injured-reserve player is NOT bench depth, and counting
+    #: him as such tells a manager a position is covered when it is not.
+    slot: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -75,6 +85,7 @@ class ImportedPlayer:
             "position": self.position,
             "team": self.team,
             "starter": self.starter,
+            "slot": self.slot,
         }
 
 

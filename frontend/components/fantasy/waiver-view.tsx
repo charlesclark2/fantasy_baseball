@@ -25,7 +25,9 @@
 // 🔒 G100: this renderer checks `decision_support` itself, not only the page guard — the gate is
 // which component renders (#681), and a future mount on an ungated page must not leak it.
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
 import { canUse } from "@/lib/entitlements"
 import { useWaiverPool } from "@/lib/fantasy-queries"
@@ -71,7 +73,21 @@ function PlayerRow({ p }: { p: WaiverPlayer }) {
   return (
     <tr className="border-t border-white/5 align-top" data-testid="waiver-player">
       <td className="min-w-0 py-1.5 pr-2">
-        <div className="truncate text-gray-200">{p.name}</div>
+        {p.id ? (
+          // Opens in a NEW TAB (operator 2026-09-17): the pool is the working list, and leaving it
+          // loses the open tab, the scroll position and the "show all" state.
+          <Link
+            href={`/fantasy/player/${p.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="waiver-player-link"
+            className="block truncate text-gray-200 hover:text-emerald-300 hover:underline"
+          >
+            {p.name}
+          </Link>
+        ) : (
+          <div className="truncate text-gray-200">{p.name}</div>
+        )}
         <div className="text-[11px] text-gray-500">
           {p.team ?? "FA"}
           {p.bye ? ` · bye ${p.bye}` : ""}
@@ -164,6 +180,7 @@ function NeedSummary({ data }: { data: WaiverPoolPayload }) {
           >
             {n.pos}: {WAIVER_NEED_LABEL[n.need] ?? n.need} · {n.held} held / {n.starters_required}{" "}
             to start
+            {n.reserved ? ` · ${n.reserved} on IR/taxi (not counted)` : ""}
           </li>
         ))}
         {flex && flex.slots > 0 && (
@@ -246,6 +263,13 @@ export function WaiverView({ leagueId }: { leagueId: string }) {
   const entitled = canUse("decision_support", groups)
   const [open, setOpen] = useState(false)
   const { data, isLoading, error } = useWaiverPool(leagueId, open && entitled)
+  const queryClient = useQueryClient()
+  const ownRefreshed = data?.rosters?.own_roster_refreshed ?? false
+  // The same read rewrote the saved roster (IR / taxi flags included) — re-read My Teams so the
+  // roster tables above reflect it without a manual reload.
+  useEffect(() => {
+    if (ownRefreshed) void queryClient.invalidateQueries({ queryKey: ["nfl-fantasy-my-teams"] })
+  }, [ownRefreshed, queryClient])
 
   if (!entitled) return null
 

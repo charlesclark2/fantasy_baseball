@@ -274,8 +274,10 @@ export type MockOptions = {
    *   "espn"        — "served" re-labelled as an un-refreshable ESPN league (the route's
    *                   `can_refresh=false` branch sets exactly these fields).
    *   "notFound"    — 404: a league outside the caller's quota.
+   *   "ownRefreshed" — "served" with `rosters.own_roster_refreshed: true` (the route sets it when
+   *                   the same read rewrote the caller's saved roster, slots included).
    */
-  waiver?: "served" | "refused" | "unpublished" | "excluded" | "espn" | "notFound"
+  waiver?: "served" | "refused" | "unpublished" | "excluded" | "espn" | "notFound" | "ownRefreshed"
   /**
    * ⭐ G100-C1 — how many personalized leagues this caller has SAVED.
    *
@@ -799,6 +801,7 @@ function waiverPayloadFor(
   }
   const body = structuredClone(fixture<any>("fantasy-nfl-waiver-pool.generated.json"))
   if (mode === "excluded") body.realized.excluded = [{ week: 2, reason: "not_final" }]
+  if (mode === "ownRefreshed") body.rosters = { ...body.rosters, own_roster_refreshed: true }
   if (mode === "espn") {
     body.rosters = { ...body.rosters, platform: "espn", can_refresh: false, refreshed: false }
     body.caveats = ["platform_cannot_refresh"]
