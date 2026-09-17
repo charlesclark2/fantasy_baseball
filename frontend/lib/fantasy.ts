@@ -994,9 +994,10 @@ export interface RecapSeat {
   name: string
   position: string
   team: string
-  /** Null when the seat has an `absence` — never 0, which would read as "played and scored none". */
+  /** Null when the seat has an `absence`. A 0 appears only as the LEAGUE'S published figure. */
   points: number | null
-  /** Per-seat provenance. `league_published` is the D/ST seat: the league's own figure. */
+  /** Per-seat provenance. `league_published` is the league's own figure: the D/ST seat, and a
+   *  started player the league scored 0 with no stat line (the 0 is theirs, not inferred). */
   source: "our_scorer" | "league_published" | null
   sourceNote: string | null
   /** The source's own PPR total — the points-head figure of boundary (i), carried never recomputed. */

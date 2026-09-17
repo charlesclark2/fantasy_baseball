@@ -1543,7 +1543,7 @@ export const RECAP_SOURCE_DETAIL: Record<string, string> = {
   our_scorer:
     "We applied your league's scoring settings to this player's real stat line for the week.",
   league_published:
-    "This is your league's own published score for this team defence, carried through unchanged.",
+    "This is your league's own published score for this slot, carried through unchanged.",
 }
 
 export const RECAP_COMPLETENESS_LABEL: Record<string, string> = {
