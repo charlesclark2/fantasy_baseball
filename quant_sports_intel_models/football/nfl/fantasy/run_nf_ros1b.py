@@ -161,6 +161,9 @@ def hurdle_extras(result: dict, interval: RI.HurdleInterval) -> dict:
         "mechanism_check": {"hurdle": RI.mechanism_check(y, pt, qh, pos, DIAG_SEED),
                             "location_shift_reference": RI.mechanism_check(y, pt, qr, pos, DIAG_SEED)},
         "pi_reliability": RI.pi_reliability(pi, y, pos),
+        "post_smoke_companion_diagnostic": {
+            "label": RI.COMPANION_LABEL,
+            "top_tercile_atom_calibration": RI.atom_calibration_top_tercile(pi, y, pt, pos)},
         "counts": counts,
         "strata_c9": strata,
         "pi_fits": {"n": len(pi_diag),
@@ -195,6 +198,16 @@ def write_report(result: dict, diag: dict, *, smoke: bool, meta: dict, stem: str
         for P, d in tab.items():
             L.append(f"| {P} | {cons} | {d['top_tercile_q05_zero_share']:.3f} | "
                      f"{d['top_tercile_realized_zero_share']:.3f} | {d['lowest_pit_decile_mass']:.3f} |")
+    L += ["", "The registered §7 prediction (the hurdle's q05 = 0 share falls toward the realized zero "
+          "share) is kept as written. A q05 = 0 share is not a calibration reading: q05 = 0 exactly when "
+          "P(zero) ≥ 0.05 (amendment 2)."]
+    comp = h["post_smoke_companion_diagnostic"]
+    L += ["", f"### {comp['label']}", "",
+          "| pos | top-tercile rows | mean predicted P(zero) | realized zero share | difference |",
+          "|---|---|---|---|---|"]
+    for P, d in comp["top_tercile_atom_calibration"].items():
+        L.append(f"| {P} | {d['top_tercile_rows']} | {d['mean_predicted_p_zero']:.3f} | "
+                 f"{d['realized_zero_share']:.3f} | {d['difference']:+.3f} |")
     L += ["", "### π reliability (10 equal-count bins: predicted → realized)", ""]
     for P, bins in h["pi_reliability"].items():
         L.append(f"- {P}: " + " · ".join(f"{b['pred']:.2f}→{b['realized']:.2f}" for b in bins))

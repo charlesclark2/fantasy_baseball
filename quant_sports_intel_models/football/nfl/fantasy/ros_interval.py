@@ -282,6 +282,34 @@ def mechanism_check(y, point, q, pos, rng_seed: int) -> dict:
     return out
 
 
+#: amendment 2 — its label, carried verbatim into every output.
+COMPANION_LABEL = ("POST-SMOKE COMPANION DIAGNOSTIC — top-tercile atom calibration "
+                   "(gates nothing; not a clause, not in V/PBO/DSR, not in any verdict)")
+
+
+def atom_calibration_top_tercile(pi, y, point, pos) -> dict:
+    """Amendment 2: on §7's top tercile of the point, mean predicted P(zero) vs realized y ≤ 0 share.
+    This is the correctly posed version of the q05 = 0 share reading (which is not a calibration
+    reading: q05 = 0 exactly when P(zero) ≥ 0.05)."""
+    pi = np.asarray(pi, dtype=float)
+    y = np.asarray(y, dtype=float)
+    point = np.asarray(point, dtype=float)
+    pos = np.asarray(pos)
+    out = {}
+    for P in V.POSITIONS:
+        m = pos == P
+        if not m.any():
+            continue
+        edges = V.tercile_edges(point[m])
+        top = m & (point > edges[1])
+        if not top.any():
+            continue
+        mp, rz = float(pi[top].mean()), float((y[top] <= 0).mean())
+        out[P] = {"top_tercile_rows": int(top.sum()), "mean_predicted_p_zero": mp,
+                  "realized_zero_share": rz, "difference": mp - rz}
+    return out
+
+
 def pi_reliability(pi, y, pos) -> dict:
     """10 equal-count bins of π per position: mean predicted vs realized y ≤ 0 rate."""
     pi = np.asarray(pi, dtype=float)

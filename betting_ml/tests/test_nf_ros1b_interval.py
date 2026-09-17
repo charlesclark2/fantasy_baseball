@@ -431,6 +431,26 @@ def test_the_registered_constants():
     assert RI.LOGIT_C == 1.0 and RI.LOGIT_MAX_ITER == 2000
 
 
+def test_the_companion_diagnostic_reads_mean_pi_on_the_top_tercile():
+    point = np.array([1.0, 2.0, 3.0, 10.0, 11.0, 12.0])
+    pos = np.array(["RB"] * 6)
+    pi = np.array([0.9, 0.9, 0.9, 0.06, 0.10, 0.20])
+    y = np.array([0.0, 0.0, 0.0, 0.0, 5.0, 7.0])
+    d = RI.atom_calibration_top_tercile(pi, y, point, pos)["RB"]
+    top = point > np.quantile(point, 2 / 3)
+    assert d["top_tercile_rows"] == int(top.sum())
+    assert d["mean_predicted_p_zero"] == pytest.approx(pi[top].mean())
+    assert d["realized_zero_share"] == pytest.approx((y[top] <= 0).mean())
+    assert d["difference"] == pytest.approx(pi[top].mean() - (y[top] <= 0).mean())
+
+
+def test_the_companion_diagnostic_is_labelled_and_outside_every_verdict():
+    assert RI.COMPANION_LABEL.startswith("POST-SMOKE COMPANION DIAGNOSTIC")
+    assert "gates nothing" in RI.COMPANION_LABEL
+    src = (FANT / "run_nf_ros1.py").read_text()
+    assert "companion" not in src.lower(), "the diagnostic must never reach the verdict harness"
+
+
 def test_the_full_evaluate_runs_and_writes_a_labelled_report(synthetic, tmp_path, monkeypatch):
     N, B, f = synthetic
     monkeypatch.setattr(N, "RESULTS", tmp_path)
@@ -445,6 +465,8 @@ def test_the_full_evaluate_runs_and_writes_a_labelled_report(synthetic, tmp_path
     assert jp.parent == tmp_path
     text = mp.read_text()
     assert RI.REFERENCE_LABEL in text and "Mechanism check" in text
+    assert RI.COMPANION_LABEL in text and "not a calibration reading" in text
+    assert "top_tercile_atom_calibration" in h["post_smoke_companion_diagnostic"]
     payload = json.loads(jp.read_text())
     assert RI.REFERENCE_KEY in payload["result"]["hurdle"]
     assert "interval" not in payload["result"]
