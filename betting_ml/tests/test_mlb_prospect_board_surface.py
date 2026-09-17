@@ -488,7 +488,17 @@ class TestNavWiring:
         gated request at all (the NF3.2 rule), and here the predicate has to be `isAdmin` rather
         than the fantasy one or every subscriber fires a request that 403s."""
         src = (_FRONTEND / "lib/fantasy-queries.ts").read_text(encoding="utf-8")
-        mlb = src[src.index("E8.1 — MLB dynasty PROSPECT BOARD"):]
+        # ⚠️ BOUNDED AT BOTH ENDS (re-anchored 2026-09-16, NF-WK-RC1 Phase B). This slice ran to END
+        # OF FILE, so every hook appended after the E8.1 block was swept into "the MLB block" — two
+        # NFL hooks that gate on IDENTITY rather than `isAdmin`, correctly and by the same rule
+        # `useLeagueBoard` follows, failed this clause. The CLAIM was right; the PROXY had drifted.
+        # ⛔ A MISSING MARKER RAISES rather than falling back to EOF, or the drift returns silently.
+        end_marker = "END of the E8.1 MLB prospect block"
+        assert end_marker in src, (
+            "the MLB prospect block's end marker is gone from lib/fantasy-queries.ts. Without it "
+            "this clause would judge every later hook in the file as an MLB prospect hook."
+        )
+        mlb = src[src.index("E8.1 — MLB dynasty PROSPECT BOARD"):src.index(end_marker)]
         # ⚠️ COMMENTS STRIPPED, for the same reason `_mlb_nav_block` strips them: E8.2's explanatory
         # comment contains the literal `enabled: isAdmin`, which inflated this count from 2 to 5
         # while every hook was in fact correct. A source-inspection guard must match CODE, never the

@@ -973,3 +973,122 @@ export function deleteCustomBoard(token: string | null, boardKey: string): Promi
     token,
   )
 }
+
+// ── NF-WK-RC1 Phase B: the weekly recap + standings ──────────────────────────────────────────────
+//
+// ⚠️ EVERY FIELD NAME BELOW IS READ OFF `app/backend/models/nfl_recap.py`, not inferred from the
+// surface that renders it. MT1 lost two operator round-trips to probes that invented field names,
+// and the same mistake in a TYPE is worse: `undefined` renders as an empty cell rather than an
+// error, so a wrong name here becomes a blank the page reports as data.
+//
+// ⛔ `standingsTotal` AND `itemisedTotal` ARE DELIBERATELY DIFFERENT NAMES AND MUST STAY SO (PM
+// ruling (i), 2026-09-16). One is the league's published record — the STANDINGS FACT — and the other
+// is our itemisation of the seats we can itemise. There is no `total`, because a single name would
+// invite a caller to treat them as two estimates of one number, which is exactly what the ruling
+// forbids: "the total and the breakdown must NEVER be presented as two estimates of one number".
+
+/** One started lineup slot, with what it scored and WHERE THAT NUMBER CAME FROM. */
+export interface RecapSeat {
+  slot: string
+  seat: number
+  name: string
+  position: string
+  team: string
+  /** Null when the seat has an `absence` — never 0, which would read as "played and scored none". */
+  points: number | null
+  /** Per-seat provenance. `league_published` is the D/ST seat: the league's own figure. */
+  source: "our_scorer" | "league_published" | null
+  sourceNote: string | null
+  /** The source's own PPR total — the points-head figure of boundary (i), carried never recomputed. */
+  pprPts: number | null
+  absence: { reason: string; detail: string } | null
+}
+
+export interface RecapTeam {
+  teamKey: string
+  teamName: string
+  matchupId: number | null
+  seats: RecapSeat[]
+  /** THE LEAGUE'S OWN published total. Null ⇒ this team has NO standing, not an approximate one. */
+  standingsTotal: number | null
+  standingsSource: string | null
+  /** OURS — the sum of the seats we could itemise. Never a substitute for `standingsTotal`. */
+  itemisedTotal: number
+  itemisationGap: number | null
+}
+
+export interface RecapMatchup {
+  matchupId: number | null
+  teams: { teamKey: string; teamName: string; total: number | null }[]
+  winnerTeamKey: string | null
+  tied: boolean | null
+  unpaired: boolean | null
+  resultUnavailable: boolean | null
+}
+
+export interface WeeklyRecapPayload {
+  season: number
+  week: number
+  leagueId: string
+  leagueName: string | null
+  platform: string
+  completeness: "final" | "partial" | "not_started"
+  completenessNote: string
+  /** When the league's week was READ — a recap is built from a point-in-time record. */
+  capturedAt: string | null
+  startingSlots: string[]
+  teams: RecapTeam[]
+  matchups: RecapMatchup[]
+  coverage: Record<string, unknown>
+  /** Null when the league captures nothing — so no empty caveat is drawn. */
+  itemisationGapNote: string | null
+  standingsNote: string
+}
+
+export interface PowerRankingRow {
+  rank: number
+  teamKey: string
+  teamName: string
+  wins: number
+  losses: number
+  ties: number
+  pointsFor: number
+  pointsAgainst: number
+  weeksCounted: number
+}
+
+export interface PowerRankingsPayload {
+  season: number
+  leagueId: string
+  leagueName: string | null
+  platform: string
+  throughWeek: number
+  /** ⚠️ WHICH weeks were counted. A week we could not read is SKIPPED, never zeroed — a zero is a
+   *  loss a team did not necessarily suffer, and the omission has to be visible. */
+  weeksIncluded: number[]
+  rows: PowerRankingRow[]
+  /** The rank's arithmetic, served so a reader can reproduce the order by hand. */
+  rankingBasis: string
+  standingsNote: string
+}
+
+export function getWeeklyRecap(
+  token: string | null,
+  leagueId: string,
+  week: number,
+  season: number,
+): Promise<WeeklyRecapPayload> {
+  const qs = `league_id=${encodeURIComponent(leagueId)}&season=${season}&week=${week}`
+  return apiFetch(`/fantasy/nfl/weekly/recap?${qs}`, {}, token)
+}
+
+export function getPowerRankings(
+  token: string | null,
+  leagueId: string,
+  throughWeek: number,
+  season: number,
+): Promise<PowerRankingsPayload> {
+  const qs =
+    `league_id=${encodeURIComponent(leagueId)}&season=${season}&through_week=${throughWeek}`
+  return apiFetch(`/fantasy/nfl/weekly/power-rankings?${qs}`, {}, token)
+}

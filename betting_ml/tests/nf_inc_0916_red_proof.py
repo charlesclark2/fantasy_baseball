@@ -171,8 +171,13 @@ CASES: list[tuple[str, Path, str, str, str]] = [
 
     ("the freshness leg is unwired, so nothing judges whether the feed actually advanced",
      _JOB,
-     "    nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=nfl_weekly_stats_ingest_op()))",
-     "    nfl_weekly_serving_op(start=nfl_weekly_stats_ingest_op())",
+     # ⚠️ RE-ANCHORED 2026-09-16 (NF-WK-RC1 ①) — the graph body gained a second branch off the same
+     # ingest, so the single-line form this break used to target no longer exists. Re-anchored onto
+     # the new implementation rather than weakened: the break still UNWIRES the freshness leg and
+     # must still turn the same clause red. (MH2.7: a shared change re-anchors the guards that pin
+     # its output; it does not delete them.)
+     "    nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=landed))",
+     "    nfl_weekly_serving_op(start=landed)",
      f"{_FEED}::test_the_freshness_leg_is_downstream_of_the_ingest_it_judges"),
 
     ("the ingest subprocess loses its finite timeout (INC-32)",

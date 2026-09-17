@@ -1506,3 +1506,109 @@ export const WEEKLY_WITHHELD_CELL = "withheld"
  *  entitled reader he had not paid for something he had. */
 export const WEEKLY_WITHHELD_STAT_LINE =
   "The projected stat line is withheld along with the points. It comes from the same fit, so it carries the same defect — the stated statistics run low for the same reason, and showing them while the points are down would just move the problem to a different column."
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// NF-WK-RC1 Phase B — the weekly recap + standings
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+//
+// ⭐ THIS IS A FACTUAL SURFACE, which is why it may carry claims a projection may not: every number
+// on it is something that ALREADY HAPPENED. The copy is in the PAST TENSE throughout and states what
+// scored — never what the reader ought to have done.
+//
+// ⛔ NO START/SIT, NO IMPERATIVES, NO "SHOULD HAVE STARTED" (spec boundary (ii)). A recap that says
+// "you should have started X" is a decision claim wearing a fact's clothes, and it is the one thing
+// this surface must not become. ⛔ AND NO EDITORIAL MATCHUP LANGUAGE — a result is stated
+// ("Won 138.36–119.84"), never narrated.
+
+/** The two totals are DIFFERENT FACTS and are labelled as such (PM ruling (i), 2026-09-16). */
+export const RECAP_STANDINGS_TOTAL_LABEL = "League total"
+export const RECAP_ITEMISED_TOTAL_LABEL = "Our slot breakdown"
+
+/** ⛔ Rendered ADJACENT to the total (MT1 ruling ③ — not a panel, not a footnote). */
+export const RECAP_STANDINGS_TOTAL_DEFINITION =
+  "Your league's own published total for this team this week. This is the number your standings " +
+  "are built from, and it is what your league page shows."
+
+export const RECAP_ITEMISED_TOTAL_DEFINITION =
+  "The sum of the slots below, scored by us with your league's settings against the week's real " +
+  "stat line. It explains where the points came from; it is not a second estimate of the total."
+
+/** Per-seat provenance, stated plainly (PM disposition D2 = (C): "not a footnote"). */
+export const RECAP_SOURCE_LABEL: Record<string, string> = {
+  our_scorer: "Scored by us",
+  league_published: "Your league's figure",
+}
+
+export const RECAP_SOURCE_DETAIL: Record<string, string> = {
+  our_scorer:
+    "We applied your league's scoring settings to this player's real stat line for the week.",
+  league_published:
+    "This is your league's own published score for this team defence, carried through unchanged.",
+}
+
+export const RECAP_COMPLETENESS_LABEL: Record<string, string> = {
+  final: "Final",
+  partial: "Still in progress",
+  not_started: "Not started",
+}
+
+/** ⚠️ Stated, never implied: a partial week's totals are not the week's totals. */
+export const RECAP_PARTIAL_NOTE =
+  "Some of this week's games had not finished when these figures were recorded, so the totals " +
+  "below are not the week's final ones."
+
+export const RECAP_HEADING = "Weekly recap"
+export const RECAP_STANDINGS_HEADING = "Standings"
+
+export const RECAP_CAPTURED_PREFIX = "Lineups recorded"
+
+/** ⭐ WHY A RECAP DOES NOT MOVE. The point-in-time record is a product promise, so it is stated. */
+export const RECAP_POINT_IN_TIME_NOTE =
+  "A recap is built from what your league published when the week was recorded, so it stays the " +
+  "same each time you open it."
+
+/** The result line. Past tense, stated rather than narrated — no verbs of dominance. */
+export const RECAP_RESULT_WON = "Won"
+export const RECAP_RESULT_LOST = "Lost"
+export const RECAP_RESULT_TIED = "Tied"
+export const RECAP_RESULT_UNAVAILABLE = "Your league did not publish a result for this matchup."
+export const RECAP_RESULT_UNPAIRED = "This team had no opponent this week."
+
+/** ⚠️ A WEEK THAT PLAYED BUT IS NOT RECORDED YET is a distinct state from a week that did not play,
+ *  and from a platform we cannot read. Collapsing them is why an empty surface gets investigated
+ *  three times (NF-C6b). The server sends its own sentence for each; this is the FALLBACK only. */
+export const RECAP_NOT_RECORDED_FALLBACK =
+  "We have not recorded this week's player statistics yet."
+
+/** ⛔ SAYS STANDINGS SPECIFICALLY (PM ruling (i), amendment 2): a platform we cannot fetch has NO
+ *  standings, rather than approximate ones. The server's `detail` is preferred; this is the
+ *  fallback for a platform that has not been given its own sentence yet. */
+export const RECAP_PLATFORM_UNAVAILABLE_FALLBACK =
+  "We cannot show standings or a weekly recap for this league's platform."
+
+export const POWER_RANKINGS_RECORD_LABEL = "Record"
+export const POWER_RANKINGS_PF_LABEL = "Points for"
+export const POWER_RANKINGS_PA_LABEL = "Points against"
+
+/** ⚠️ WHICH WEEKS ARE IN THESE NUMBERS. A week we could not read is SKIPPED, never zeroed — and the
+ *  omission has to be visible, or a record is quietly wrong with no way for a reader to notice. */
+export function powerRankingsWeeksNote(weeksIncluded: readonly number[]): string {
+  if (!weeksIncluded.length) {
+    return "No completed weeks have been recorded yet, so there is nothing to total."
+  }
+  if (weeksIncluded.length === 1) return `Totals cover week ${weeksIncluded[0]}.`
+  const sorted = [...weeksIncluded].sort((a, b) => a - b)
+  const contiguous = sorted[sorted.length - 1] - sorted[0] + 1 === sorted.length
+  return contiguous
+    ? `Totals cover weeks ${sorted[0]}–${sorted[sorted.length - 1]}.`
+    : `Totals cover weeks ${sorted.join(", ")}. Any week not listed is one we could not read, and ` +
+      "it is left out rather than counted as a loss."
+}
+
+/** ⭐ BOUNDARY (i): where a projected-vs-actual figure appears it is the POINTS-HEAD PPR pair on
+ *  BOTH sides, with one line stating why that scale. The league-scored projection is TD-less until
+ *  NF-WK-TD1, so judging a league-scored ACTUAL against it would attribute every touchdown to
+ *  "outperformance". This sentence is what makes the scale legible when the pair is shown. */
+export const RECAP_PPR_SCALE_NOTE =
+  "Where a projection is shown beside what actually happened, both are full-PPR points. That is " +
+  "the one scale on which the two are measured the same way."
