@@ -184,31 +184,10 @@ def team_week_games(sched: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["season", "team", "k", "t", "g_rem", "g_season"])
 
 
-# ── frame assembly ────────────────────────────────────────────────────────────────────────────────
-def assemble(seasons, *, stats_version, schedules_version, d: Path) -> tuple[pd.DataFrame, dict]:
-    boards = pd.concat([load_board(d, s) for s in seasons], ignore_index=True)
-    real = load_realized(seasons, stats_version)
-    # the evaluated-position filter lives HERE (not in the loader) so the assembly guard sees it
-    real = real[real["position"].isin(REALIZED_POSITIONS)].reset_index(drop=True).copy()
-    sched = load_schedule(seasons, schedules_version).copy()
-    # amendment 2 item 1 — ONE franchise canon on all three sides, applied here (not in the
-    # loaders) so the assembly guard exercises it with raw vendor codes
-    boards["team_id"] = [normalize_team(t) or None if isinstance(t, str) else None
-                         for t in boards["team_id"]]
-    real["team"] = [normalize_team(t) for t in real["team"]]
-    for c in ("home_team", "away_team"):
-        sched[c] = [normalize_team(t) for t in sched[c]]
-    tw = team_week_games(sched)
-
-    prior_rows = prior_payload_rows(boards)
-    real_flat = [R.flatten_realized_row(r) for r in real.to_dict("records")]
-    rp, rr, term_report = resolve_presets(prior_rows, real_flat)
-
-    for p in V.PRESETS:
-        boards[f"board_{p}"] = score_rows(prior_rows, boards["position"], rp[p], STAT_FIELD)
-        real[f"pts_{p}"] = score_rows(real_flat, real["position"], rr[p], R.REALIZED_STAT_FIELD)
-
-    # ── identity join (§2.1, amendment 1 item 1) ──
+def identity_join(boards: pd.DataFrame, real: pd.DataFrame, seasons) -> tuple[pd.DataFrame, dict]:
+    """§2.1 / amendment 1 item 1: gsis id first, then normalized name + position among realized ids
+    no board row already owns; ambiguous keys and doubly-claimed ids are DROPPED and counted.
+    Extracted verbatim from `assemble` so NF-ROS1b §8 can run the SAME code on the 2026 board."""
     real["nkey"] = [f"{LS.normalize_player_name(n)}|{LS.normalize_position(p)}"
                     for n, p in zip(real["player_display_name"], real["position"])]
     boards["nkey"] = [f"{LS.normalize_player_name(n)}|{LS.normalize_position(p)}"
@@ -253,6 +232,36 @@ def assemble(seasons, *, stats_version, schedules_version, d: Path) -> tuple[pd.
     dup_ids = {k for k, v in dup_ids.items() if v > 1}
     boards = boards[boards["how"] != "ambiguous"]
     boards = boards[[(s, r) not in dup_ids for s, r in zip(boards["season"], boards["rid"])]]
+
+    return boards, diag
+
+
+# ── frame assembly ────────────────────────────────────────────────────────────────────────────────
+def assemble(seasons, *, stats_version, schedules_version, d: Path) -> tuple[pd.DataFrame, dict]:
+    boards = pd.concat([load_board(d, s) for s in seasons], ignore_index=True)
+    real = load_realized(seasons, stats_version)
+    # the evaluated-position filter lives HERE (not in the loader) so the assembly guard sees it
+    real = real[real["position"].isin(REALIZED_POSITIONS)].reset_index(drop=True).copy()
+    sched = load_schedule(seasons, schedules_version).copy()
+    # amendment 2 item 1 — ONE franchise canon on all three sides, applied here (not in the
+    # loaders) so the assembly guard exercises it with raw vendor codes
+    boards["team_id"] = [normalize_team(t) or None if isinstance(t, str) else None
+                         for t in boards["team_id"]]
+    real["team"] = [normalize_team(t) for t in real["team"]]
+    for c in ("home_team", "away_team"):
+        sched[c] = [normalize_team(t) for t in sched[c]]
+    tw = team_week_games(sched)
+
+    prior_rows = prior_payload_rows(boards)
+    real_flat = [R.flatten_realized_row(r) for r in real.to_dict("records")]
+    rp, rr, term_report = resolve_presets(prior_rows, real_flat)
+
+    for p in V.PRESETS:
+        boards[f"board_{p}"] = score_rows(prior_rows, boards["position"], rp[p], STAT_FIELD)
+        real[f"pts_{p}"] = score_rows(real_flat, real["position"], rr[p], R.REALIZED_STAT_FIELD)
+
+    # ── identity join (§2.1, amendment 1 item 1) ──
+    boards, diag = identity_join(boards, real, seasons)
 
     # ── per-player weekly realized, keyed (season, rid) ──
     real["week"] = real["week"].astype(int)
@@ -340,6 +349,10 @@ def add_permuted(frame: pd.DataFrame) -> pd.DataFrame:
     rng = np.random.default_rng(V.SEED)
     f = frame.copy()
     f["perm_n"] = f["n"]
+    # NF-ROS1b §3.2: the donor's miss_streak travels with the donor's n (absent ⇒ parent behaviour)
+    carry_streak = "miss_streak" in f.columns
+    if carry_streak:
+        f["perm_miss_streak"] = f["miss_streak"]
     for p in V.PRESETS:
         f[f"perm_xsum_{p}"] = f[f"xsum_{p}"]
     for (s, P), g in f.groupby(["season", "pos"], sort=True):
@@ -350,13 +363,17 @@ def add_permuted(frame: pd.DataFrame) -> pd.DataFrame:
         idx = g.index
         donor = [src[pid] for pid in g["player_id"]]
         f.loc[idx, "perm_n"] = look.loc[list(zip(donor, g["k"])), "n"].to_numpy()
+        if carry_streak:
+            f.loc[idx, "perm_miss_streak"] = look.loc[list(zip(donor, g["k"])),
+                                                      "miss_streak"].to_numpy()
         for p in V.PRESETS:
             f.loc[idx, f"perm_xsum_{p}"] = look.loc[list(zip(donor, g["k"])), f"xsum_{p}"].to_numpy()
     return f
 
 
 # ── walk-forward ──────────────────────────────────────────────────────────────────────────────────
-def _loso_residual_table(train: pd.DataFrame, arm: str, preset: str, prefix: str = "") -> dict:
+def _loso_residual_table(train: pd.DataFrame, arm: str, preset: str, prefix: str = "",
+                         interval=None) -> dict:
     seasons = sorted(train["season"].unique())
     preds, ys, pos, ks = [], [], [], []
     for s in seasons:
@@ -367,8 +384,8 @@ def _loso_residual_table(train: pd.DataFrame, arm: str, preset: str, prefix: str
         ys.append(sub[f"y_{preset}"].to_numpy())
         pos.append(sub["pos"].to_numpy())
         ks.append(sub["k"].to_numpy())
-    return V.fit_residual_table(np.concatenate(pos), np.concatenate(ks),
-                                np.concatenate(preds), np.concatenate(ys))
+    fitter = V.fit_residual_table if interval is None else interval.fit_table
+    return fitter(np.concatenate(pos), np.concatenate(ks), np.concatenate(preds), np.concatenate(ys))
 
 
 _FIT_CACHE: dict = {}
@@ -409,21 +426,32 @@ def ros_for(df: pd.DataFrame, arm: str, preset: str, params: dict, prefix: str =
     return out
 
 
-def _fixed_table(train: pd.DataFrame, preset: str, point_fn) -> dict:
-    return V.fit_residual_table(train["pos"].to_numpy(), train["k"].to_numpy(),
-                                point_fn(train), train[f"y_{preset}"].to_numpy())
+def _fixed_table(train: pd.DataFrame, preset: str, point_fn, interval=None) -> dict:
+    fitter = V.fit_residual_table if interval is None else interval.fit_table
+    return fitter(train["pos"].to_numpy(), train["k"].to_numpy(),
+                  point_fn(train), train[f"y_{preset}"].to_numpy())
 
 
-def score_fold(frame: pd.DataFrame, Y: int, presets=V.PRESETS) -> dict:
+def score_fold(frame: pd.DataFrame, Y: int, presets=V.PRESETS, interval=None) -> dict:
+    """`interval=None` is NF-ROS1's location-shift construction, byte for byte. NF-ROS1b passes a
+    construction object (`ros_interval.HurdleInterval`) that replaces the residual table for EVERY
+    predictor, so arms still differ only through their point."""
     train = frame[frame["season"] < Y]
     test = frame[frame["season"] == Y].reset_index(drop=True)
     recent = frame[frame["season"] == Y - 1]
     out: dict = {"season": Y, "n_test": len(test), "params": {}, "fallbacks": {}, "pred": {}}
+    if interval is not None:
+        out["reference"] = {}
     for preset in presets:
         preds = {}
+        if interval is not None:
+            interval.prepare(train, test, preset, Y)
 
-        def add(name, point, table):
-            q, fb = V.apply_residual_table(table, test["pos"], test["k"], point)
+        def add(name, point, table, prefix=""):
+            if interval is None:
+                q, fb = V.apply_residual_table(table, test["pos"], test["k"], point)
+            else:
+                q, fb = interval.apply_table(table, test, point, preset, prefix)
             preds[name] = (point, q)
             out["fallbacks"][f"{preset}:{name}"] = fb
 
@@ -434,19 +462,27 @@ def score_fold(frame: pd.DataFrame, Y: int, presets=V.PRESETS) -> dict:
                 out["params"][arm] = {P: {"m_r": _j(p.m_r), "m_a": _j(p.m_a), **{
                     kk: (_j(vv) if isinstance(vv, float) else vv) for kk, vv in d[P].items()
                     if kk not in ("m_r", "m_a")}} for P, p in params.items()}
-            table = _loso_residual_table(train, arm, preset)
-            add(arm, ros_for(test, arm, preset, params), table)
+            table = _loso_residual_table(train, arm, preset, interval=interval)
+            point = ros_for(test, arm, preset, params)
+            add(arm, point, table)
+            if interval is not None and preset == V.GATE_PRESET and arm in V.ARMS:
+                # the reference-only location-shift predictive on the same point (amendment 1 item 2)
+                ref_q, _ = V.apply_residual_table(_loso_residual_table(train, arm, preset),
+                                                  test["pos"], test["k"], point)
+                out["reference"][arm] = (point, ref_q)
         # matched foil — permuted history on BOTH train and test
         pparams, pd_ = fit_for(train, V.MATCHED_FOIL, prefix="perm_")
         if preset == V.GATE_PRESET:
             out["params"][V.MATCHED_FOIL] = {P: {"m_r": _j(p.m_r), "m_a": _j(p.m_a)}
                                             for P, p in pparams.items()}
-        ptable = _loso_residual_table(train, V.MATCHED_FOIL, preset, prefix="perm_")
-        add(V.MATCHED_FOIL, ros_for(test, V.MATCHED_FOIL, preset, pparams, prefix="perm_"), ptable)
+        ptable = _loso_residual_table(train, V.MATCHED_FOIL, preset, prefix="perm_",
+                                      interval=interval)
+        add(V.MATCHED_FOIL, ros_for(test, V.MATCHED_FOIL, preset, pparams, prefix="perm_"), ptable,
+            prefix="perm_")
         # point degenerates
         for dname in ("frozen_full", "naive_pace", "last3_pace", "nihilist_zero"):
             fn = (lambda df, dn=dname: V.degenerate_point(df, preset, dn))
-            add(dname, fn(test), _fixed_table(train, preset, fn))
+            add(dname, fn(test), _fixed_table(train, preset, fn, interval))
         # per-form oracle + matched-n (fixed params; amendment 1 item 3)
         for arm in V.ARMS:
             op, _ = fit_for(test, arm)
@@ -458,7 +494,7 @@ def score_fold(frame: pd.DataFrame, Y: int, presets=V.PRESETS) -> dict:
                                                     for P, p in mp.items()}
             for nm, pr in ((f"oracle_{arm}", op), (f"matched_n_{arm}", mp)):
                 fn = (lambda df, a=arm, pp=pr: ros_for(df, a, preset, pp))
-                add(nm, fn(test), _fixed_table(train, preset, fn))
+                add(nm, fn(test), _fixed_table(train, preset, fn, interval))
         out["pred"][preset] = preds
     out["test"] = test
     return out
@@ -522,11 +558,11 @@ def block_bootstrap_ci(crps_a: np.ndarray, crps_b: np.ndarray, groups: np.ndarra
     return [float(np.quantile(stats, 0.025)), float(np.quantile(stats, 0.975))]
 
 
-def evaluate(frame: pd.DataFrame, seasons=V.EVAL_SEASONS) -> dict:
+def evaluate(frame: pd.DataFrame, seasons=V.EVAL_SEASONS, interval=None) -> dict:
     from betting_ml.utils import cv_power as CP
     from betting_ml.utils.coverage_power_floor import power_floor
 
-    folds = [score_fold(frame, Y) for Y in seasons]
+    folds = [score_fold(frame, Y, interval=interval) for Y in seasons]
     nF = len(folds)
     G = V.GATE_PRESET
 
@@ -816,15 +852,19 @@ def _clean(o):
     return o
 
 
-def write_report(result: dict, diag: dict, *, smoke: bool, meta: dict) -> tuple[Path, Path]:
+def write_report(result: dict, diag: dict, *, smoke: bool, meta: dict,
+                 stem: str = "nf_ros1_walkforward", title: str = "NF-ROS1 walk-forward",
+                 registration: str = "`nf_ros1_preregistration.md` + amendments 1–2"
+                 ) -> tuple[Path, Path]:
+    """`stem` keeps a successor from overwriting this story's record (fixed paths clobber)."""
     tag = "_smoke" if smoke else ""
-    jp = RESULTS / f"nf_ros1_walkforward{tag}.json"
-    mp = RESULTS / f"nf_ros1_walkforward{tag}.md"
+    jp = RESULTS / f"{stem}{tag}.json"
+    mp = RESULTS / f"{stem}{tag}.md"
     payload = _clean({"meta": meta, "diagnostics": diag, "result": result})
     jp.write_text(json.dumps(payload, indent=1, sort_keys=True))
-    L = [f"# NF-ROS1 walk-forward{' — SMOKE (code-path proof, never a gate)' if smoke else ''}",
+    L = [f"# {title}{' — SMOKE (code-path proof, never a gate)' if smoke else ''}",
          "", f"Generated {meta['generated_at']} · commit `{meta['commit']}` · folds "
-         f"{result['folds']} · registration `nf_ros1_preregistration.md` + amendments 1–2.", "",
+         f"{result['folds']} · registration {registration}.", "",
          f"**Winner (pooled full-PPR CRPS):** `{result['winner']}` · field PBO "
          f"{result['field_pbo']} (precondition < {V.PBO_MAX}: "
          f"{'PASS' if result['field_pbo_ok'] else 'FAIL'}) · flips {result['flip_distribution']}", "",
