@@ -1,0 +1,96 @@
+{
+ "season": 2026,
+ "league_id": "e2e-league-1",
+ "pool": null,
+ "need": {
+  "positions": [
+   {
+    "pos": "DST",
+    "starters_required": 1,
+    "flex_eligible": false,
+    "held": 1,
+    "short_by": 0,
+    "need": "thin"
+   },
+   {
+    "pos": "K",
+    "starters_required": 1,
+    "flex_eligible": false,
+    "held": 1,
+    "short_by": 0,
+    "need": "thin"
+   },
+   {
+    "pos": "QB",
+    "starters_required": 1,
+    "flex_eligible": true,
+    "held": 3,
+    "short_by": 0,
+    "need": "covered"
+   },
+   {
+    "pos": "RB",
+    "starters_required": 2,
+    "flex_eligible": true,
+    "held": 5,
+    "short_by": 0,
+    "need": "covered"
+   },
+   {
+    "pos": "TE",
+    "starters_required": 2,
+    "flex_eligible": true,
+    "held": 0,
+    "short_by": 2,
+    "need": "open_starter"
+   },
+   {
+    "pos": "WR",
+    "starters_required": 2,
+    "flex_eligible": true,
+    "held": 5,
+    "short_by": 0,
+    "need": "covered"
+   }
+  ],
+  "flex": {
+   "slots": 1,
+   "eligible": [
+    "QB",
+    "RB",
+    "TE",
+    "WR"
+   ],
+   "surplus_available": 8,
+   "short_by": 0
+  }
+ },
+ "refusals": [
+  "rosters_truncated"
+ ],
+ "caveats": [],
+ "rosters": {
+  "synced_at": "2026-09-01T12:00:00+00:00",
+  "refreshed": false,
+  "refresh_error": null,
+  "can_refresh": true,
+  "platform": "sleeper",
+  "truncated": true,
+  "teams_held": 10,
+  "teams_declared": 10
+ },
+ "ordering": "realized_to_date",
+ "ordering_note": "Within each position, available players are listed by the points they have scored in your league's scoring over week 1 of 2026 \u2014 what they have done so far, not a forecast. Players with no stat line in those weeks follow, in the board's own order. Team defences are not ordered: we do not yet have their season-to-date results.",
+ "realized": {
+  "absence": null,
+  "through_week": 1,
+  "weeks": [
+   1
+  ],
+  "excluded": [],
+  "generated_at": "2026-09-17T04:26:11+00:00",
+  "captured_terms": [
+   "fum_lost"
+  ]
+ }
+}

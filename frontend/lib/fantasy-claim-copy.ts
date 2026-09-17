@@ -1612,3 +1612,104 @@ export function powerRankingsWeeksNote(weeksIncluded: readonly number[]): string
 export const RECAP_PPR_SCALE_NOTE =
   "Where a projection is shown beside what actually happened, both are full-PPR points. That is " +
   "the one scale on which the two are measured the same way."
+
+// ══ NF-WVR1 Phase B — THE WAIVER VIEW ═══════════════════════════════════════════════════════════
+//
+// ⛔ WHAT THIS SURFACE MAY SAY: who is on nobody's roster in the league, where YOUR roster is thin,
+// and what available players HAVE DONE this season in your league's scoring. ⛔ WHAT IT MAY NOT:
+// who you should add, who will score, who is a pickup, anything about a matchup or a week ahead.
+// The numbers are FACTS (realized production), and the ordering is WITHIN a position only.
+
+export const WAIVER_HEADING = "Available players"
+export const WAIVER_OPEN_LABEL = "Show available players"
+export const WAIVER_CLOSE_LABEL = "Hide available players"
+export const WAIVER_INTRO =
+  "Players on nobody's roster in this league, by position, with what each has scored so far this season in your league's scoring. These are facts about games already played, not a forecast, and not a recommendation of who to add."
+export const WAIVER_POINTS_LABEL = "Points so far"
+export const WAIVER_POINTS_DEFINITION =
+  "Points this player has scored in the completed weeks shown above, using your league's scoring settings on the real stat lines. It says what happened, not what will."
+export const WAIVER_GAMES_LABEL = "Games"
+export const WAIVER_NEED_HEADING = "Where your roster is thin"
+export const WAIVER_NEED_NOTE =
+  "Counted from your roster against your league's starting slots. It points at positions, not players."
+export const WAIVER_NEED_LABEL: Record<string, string> = {
+  open_starter: "Open starting slot",
+  thin: "No backup",
+  covered: "Covered",
+}
+export const WAIVER_LOADING = "Reading your league's rosters…"
+export const WAIVER_ERROR_FALLBACK = "We could not load the available players for this league."
+export const WAIVER_SHOW_ALL = "Show all"
+export const WAIVER_SHOW_FEWER = "Show fewer"
+
+/** Why the WHOLE pool is withheld. Each names a different cause, because each calls for a different
+ *  action (the NF-C6b rule: one empty state must not stand in for several). */
+export const WAIVER_REFUSAL_TEXT: Record<string, string> = {
+  rosters_truncated:
+    "This league has more rostered players than we store, so some teams' rosters are missing. We won't list available players, because the list would include players who are already taken.",
+  no_league_rosters:
+    "We don't have the other teams' rosters for this league. Re-import it and we can show who is available.",
+  rosters_incomplete:
+    "We are missing at least one team's roster in this league, so a list of available players would include some who are already taken. Re-import the league to fix it.",
+  pool_over_cap:
+    "This league's available-player list is larger than we can show in one view, so we are not showing a partial one.",
+}
+export const WAIVER_REFUSAL_FALLBACK =
+  "We can't list available players for this league right now, because the list could include players who are already taken."
+
+/** Why the season-to-date points are missing for EVERY player in this view. */
+export const WAIVER_FACTS_ABSENCE_TEXT: Record<string, string> = {
+  realized_not_published:
+    "We haven't recorded any completed weeks' stat lines yet, so players are listed in no particular order.",
+  realized_lineage_unverified:
+    "This season's stat lines didn't pass our consistency check just now, so we are not showing them. Players are listed in no particular order.",
+}
+
+/** Why ONE player's points are blank. Never a zero: a blank is a different fact. */
+export const WAIVER_PLAYER_ABSENCE_TEXT: Record<string, string> = {
+  team_grain_not_covered:
+    "We don't have team-defence results for this season yet, so defences have no points shown and are not ordered.",
+  no_realized_line:
+    "No stat line in the completed weeks — he may not have played, or we could not match his name.",
+}
+
+/** A served week that is NOT included in the totals, named rather than silently left out. */
+export const WAIVER_EXCLUDED_TEXT: Record<string, string> = {
+  not_final: "still in progress",
+}
+export const WAIVER_EXCLUDED_FALLBACK = "held back while we check its data"
+
+export function waiverExcludedNote(excluded: readonly { week: number; reason: string }[]): string | null {
+  if (!excluded.length) return null
+  const parts = excluded.map(
+    (e) => `week ${e.week} (${WAIVER_EXCLUDED_TEXT[e.reason] ?? WAIVER_EXCLUDED_FALLBACK})`,
+  )
+  return `Not included in these totals yet: ${parts.join(", ")}.`
+}
+
+export function waiverCoverageNote(weeks: readonly number[]): string | null {
+  if (!weeks.length) return null
+  const span = weeks.length === 1 ? `week ${weeks[0]}` : `weeks ${weeks[0]}–${weeks[weeks.length - 1]}`
+  return `Points cover ${span} of this season.`
+}
+
+export const WAIVER_CAPTURED_NOTE =
+  "Your league also scores some things these totals don't include yet, so a player's figure here can differ from your league's page."
+
+/** Roster freshness — stated every time, because a waiver claim is exactly what makes a list stale. */
+export function waiverFreshnessNote(r: {
+  synced_at: string | null
+  refreshed: boolean
+  refresh_error: string | null
+  can_refresh: boolean
+  platform: string
+}): string {
+  const when = r.synced_at ? new Date(r.synced_at).toLocaleString() : null
+  if (r.refreshed && when) return `Rosters read from your league at ${when}.`
+  if (!r.can_refresh) {
+    return r.platform === "yahoo"
+      ? `We can't re-read Yahoo rosters yet, so this uses the rosters from your import${when ? ` (${when})` : ""}. Anyone added since then will still be listed.`
+      : `We can't re-read this platform's rosters, so this uses the rosters from your import${when ? ` (${when})` : ""}. Re-import the league to pick up recent adds and drops.`
+  }
+  return `We couldn't re-read your league just now, so this uses rosters from ${when ?? "an earlier read"}. Anyone added since then will still be listed.`
+}

@@ -67,6 +67,27 @@ metadata:
   #      ⇒ DEPENDENCY: card fXIYuvMN closing (our construction validated). When it closes, DST
   #      flips from stated absence to covered, WITH OUR OWN PROVENANCE. No new owner today.
   #   Phase B still queues behind RC1's frontend. Nothing else owed.
+  # 🟢 PHASE B + FACT COLUMNS — STARTED 2026-09-17 (branch `nf-wvr1-phaseb`, worktree). Both gates
+  #   RE-VERIFIED against the running system at start, not assumed (spec-premise rule; ⑫ timestamp rule):
+  #   (a) ONE-FRONTEND-SLOT: RC1's Phase B (`components/fantasy/weekly-recap.tsx`, #1156) and its
+  #       follow-up #1164 are on `origin/main` (merge 10554e2c); RC1's node-5 live render passed
+  #       09-17 per RC1's record. Open PRs touching `frontend/` at 2026-09-17T05:1xZ: NONE (the only
+  #       open PR, #1167 dev→main, carries no frontend path). ⇒ WVR1 holds the slot.
+  #   (b) SEASON-TO-DATE ARTIFACT (ruling ⑯ = b) — read + lineage-verified 2026-09-17T05:14:25Z:
+  #       `fantasy/nfl/realized/2026/season/{players,manifest}.json` present (LastModified
+  #       04:26:12Z, true UTC via boto3), listed two-sided against the `fantasy/nfl/2026/` control.
+  #       manifest: encoding columnar-v1 · through_week 1 · weeks [1] · excluded [] · 47 columns ·
+  #       n_rows 1118 · one source (week 1). Recomputed from the served bytes: content_sha256 ✓,
+  #       source_fingerprint ✓, n_rows = Σ sources.n_players ✓, row week-set = manifest weeks ✓, and
+  #       sources[week 1].content_sha256 == the served WEEKLY manifest's content_sha256 ✓
+  #       (completeness final). ⭐ ONE ROW PER PLAYER-GAME, not per-player totals — WVR1 sums.
+  #       ⚠️ ZERO DST rows (confirms ⑮) ⇒ DST ships as the stated absence `team_grain_not_covered`.
+  #   PLAN: server-side fact columns (one GET, lineage self-check, sum only `weeks`, score through
+  #   `league_scoring.score_row` under `REALIZED_STAT_FIELD`, `excluded` surfaced as a stated gap),
+  #   `ordering` flipped to a stated realized basis; then the my-teams waiver view. No value column
+  #   (NF-ROS1 = certified NO; never substitute `fpPpr`).
+  #   ✅ BUILT 2026-09-17 (#PR below): fact columns + waiver view, CI pending; runtime gate +
+  #   changelog + full E2E red proof are OPERATOR steps post-merge (followUps ⑰–㉔).
 spec:
   description: >
     For each imported league (Sleeper first), rank the league's
@@ -767,3 +788,61 @@ spec:
         seam split, so neither session duplicates the work.
       ⚠️ WVR1 does not decide this — RC1 owns the artifact. If (b) is declined, (a) is the
         requirement and the cap refusal is a first-class payload state, not a log line.
+
+      ── PHASE B + FACT COLUMNS, 2026-09-17 (branch nf-wvr1-phaseb) ──
+
+      ⑰ 📌 THE FACT JOIN HAS AN ID RUNG; THE SUBTRACTION DOES NOT — and the alias case that
+      motivated the rung is a QUESTION about the subtraction. Measured on the live board vs the
+      published week 1: 392 realized QB/RB/WR/TE/K keys, 0 name+position collisions, 380 on the
+      board; one of the 12 misses scored ≥5 PPR — board `Joshua Palmer` vs realized `Josh Palmer`,
+      SAME gsis id 00-0036988. The fact cell now tries an exact gsis id first (real `00-\d{7}` ids
+      only, same position group) and falls through to `_join_key`; synthetic-id rookies keep the
+      name rung, so ruling ⑥'s concern (never DROP a rookie) does not apply — a fact miss leaves a
+      stated absence, it removes nobody. ⚠️ THE OPEN HALF: the pool SUBTRACTION stays name-only per
+      ⑥, so a player whose platform name is an ALIAS of the board's would fail to subtract and be
+      OFFERED WHILE ROSTERED. The ⑫ runtime gate reconciled 147/147 on one real league, so this is
+      league-dependent, not observed. A gsis-id-first rung on the subtraction (name fallback kept)
+      would close it without touching rookies — but it needs the platform's player id crosswalked
+      to gsis, which the stored roster shape deliberately drops (`player_key` removed at ⑥). PM call.
+
+      ⑱ LINEAGE IS CHECKED ON THE ARTIFACT ITSELF, NOT PER SOURCE WEEK. `waiver_facts.verify_season`
+      recomputes the rows hash, the source fingerprint and the concatenation identities from the
+      served bytes (a twin of `realized_week.build_season`, pinned by a builder-parity guard over
+      RC1's stored week-1 fixture + six single-property mutations). It does NOT re-read each week's
+      weekly manifest — that is one GET per week, the fan-out ⑯ removed — relying on RC1's
+      publisher refusing a week whose rows fail its served hash (measured holding for week 1,
+      05:14:25Z). A failed verification withholds every fact (`realized_lineage_unverified`) and is
+      NEVER memoized: RC1 writes rows-then-manifest, so a request between the two can read a
+      non-verifying pair, and caching it would switch the facts off for the TTL.
+
+      ⑲ SCORED PER PLAYER-GAME, THEN SUMMED. Linear today so identical to sum-then-score, but it is
+      the order that stays right if a per-game threshold term is ever taught to the scorer — the
+      reason RC1 publishes per-game rows. Independent anchor: under plain full-PPR, 0 of 380
+      non-kicker season totals differ from nflverse's own `fantasy_points_ppr` sum (live, week 1).
+
+      ⑳ OBSERVED, NOT A DEFECT: the E2E league fixture (`e2e-league-1`) scores NO kicking terms, so
+      every kicker in its generated pool reads 0.0 — true in that league's scoring. A real league
+      that declares a K slot but no kicking weights would show the same, correctly.
+
+      ㉑ PHASE A's "contract Pydantic-declared" NEVER LANDED — `/nfl/waiver-pool` returns a dict,
+      guarded by `WAIVER_PAYLOAD_KEYS` + tests, with the shape declared in TypeScript
+      (`WaiverPoolPayload`). I did NOT add a response model now: E9.41 (an undeclared field is
+      silently stripped) makes retrofitting one onto a live route its own small risk. Flagged
+      rather than silently resolved. Also cosmetic: a REFUSED league still computes facts and
+      reports `ordering: realized_to_date` beside `pool: null`; the surface never reads it there.
+
+      ㉒ FRONTEND TOOLCHAIN: `npm run lint` is BROKEN (ESLint 10 finds no `eslint.config.*`) — a
+      pre-existing gap beside the carded "build doesn't type-check" one. `tsc --noEmit` is clean
+      at every Phase B commit.
+
+      ㉓ E2E RED PROOF — 8 NEW CASES, ONE RUN IN-SESSION (waiver-blank-becomes-zero → RED). The
+      full harness rebuilds per case (>2 min total) ⇒ operator run; RECORDED_BOARD moved to
+      224 / 217 RED / 7 NOT-OBSERVABLE in the same commit and is UNVERIFIED until that run. The
+      declared NOT-OBSERVABLE case is `waiver-renderer-ungated`: My Teams' FantasyGuard redirects a
+      free account before the panel mounts, so the component-level gate is invisible there; the
+      case exists so a future mount on an ungated page flips it. Backend red proof: 19/19 RED
+      (one vacuous fixture caught and fixed — an injected uncovered-week row was a safety, which
+      the POSITION filter dropped before the week filter was ever tested).
+
+      ㉔ CHANGELOG HELD per the kickoff: added only once the operator's runtime gate shows the
+      surface rendering a real league's live pool.
