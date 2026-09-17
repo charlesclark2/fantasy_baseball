@@ -384,3 +384,252 @@ then fails with `400 InvalidToken`. Every operator command below is prefixed `en
 ## §13 Post-run findings
 
 *(appended after the decisive run — never edited above this line)*
+
+### §13.1 Verdict: **RB CERTIFIED** on every clause. QB, WR, TE and K are refused (`CONSTRAINT_REFUSED`).
+
+**The decisive run.**
+
+* Records: `nf_ros1b_walkforward.{json,md}`, generated from commit `b8d98343` on a clean tree.
+* Folds 2020–2025; 65,916 rows; 5,493 player-seasons.
+* Operator run on the laptop (184.5s, over the 2-minute line as predicted in §11).
+
+**Reproduction pins (§6), both exact.**
+
+* `decisive_reproduction`: `nf_ros1b_repro_check.json` matches the decisive record with max absolute
+  difference **0.0** and 0 structural mismatches.
+* `parent_reproduction` (full run): the extended harness with `--interval location_shift` reproduces
+  `nf_ros1_walkforward.json` at **0.0** with 0 structural mismatches. This also closes NF-ROS1
+  §13.6's open item: ROS1's decisive record (generated at `316c42e5`, before its filter move)
+  reproduces exactly on its final code.
+
+**Field and winner.**
+
+* The winner is `eb_rate_avail` on pooled CRPS (14.371, against `eb_rate` 14.582 and `eb_avail`
+  14.478).
+* Field PBO is **0.0**, so the precondition passes.
+* The flip distribution is **3 / 3** between `eb_rate_avail` and `eb_rate`. That is a tie between
+  two arms (the NF1.8 reading): mass sits on two nested arms, not spread thinly. The winner was
+  selected on pooled CRPS as registered.
+
+**Results by position.** Lift and CRPS are full-PPR. The bracketed interval is the player-block
+bootstrap 95% CI of the per-row lift.
+
+| pos | lift vs incumbent | folds | p (BH) | DSR | vs foil | cov80 / floor | **PIT dev** | refused on |
+|---|---|---|---|---|---|---|---|---|
+| QB | +1.58 [0.73, 2.47] | 6/6 | 0.0062 ✓ | 0.994 | +3.78 | 0.799 / 0.773 | **0.034** | C8a |
+| **RB** | **+1.53 [1.08, 1.96]** | **6/6** | **0.0012 ✓** | **0.995** | **+3.27** | **0.859 / 0.780** | **0.005** | — **SHIPS** |
+| WR | +1.04 [0.71, 1.37] | 6/6 | 0.0002 ✓ | 0.938 | +2.79 | 0.869 / 0.785 | **0.009** | C4, C8a |
+| TE | +0.62 [0.28, 0.95] | 6/6 | 0.0041 ✓ | 0.451 | +2.13 | 0.875 / 0.779 | **0.008** | C4, C8a |
+| K | +0.36 [−0.13, 0.89] | 4/6 | 0.157 ✗ | 0.696 | +1.52 | 0.772 / 0.759 | 0.057 | C2, C3, C4, C9 |
+
+* Every degenerate loses at every position.
+* `max_width` satisfies every coverage floor (0.956–0.999) and still loses, which is the NF1.8 shape.
+* The §7 waiver section is **INACTIVE**: only one position ships, and it needs at least two.
+
+### §13.2 The fresh target, C9 and C7: the hurdle fixes the shape ROS1 named at QB, RB, WR and TE
+
+**C9 on the same point, hurdle against ROS1's construction** (the construction is the only
+difference; the reference arm is reference only):
+
+| pos | hurdle | ROS1's construction |
+|---|---|---|
+| QB | **0.034** | 0.133 |
+| RB | **0.005** | 0.096 |
+| WR | **0.009** | 0.091 |
+| TE | **0.008** | 0.100 |
+| K | 0.057 | 0.082 |
+
+**C7** passes at all five positions. The hurdle's 80% coverage is 0.77–0.88, against ROS1's
+construction at 0.73–0.81.
+
+**Lowest PIT decile.** It falls from 0.18–0.23 to 0.09–0.13.
+
+**Per-k C9.** It reads 0.005–0.013 at every k.
+
+⚠️ **Rookie stratum: C9 reads 0.082, against 0.007 for veterans.** This is informative only, since
+C9 gates pooled per position, and the stratum pools all positions. It is carried as a caveat on any
+certified artifact (see §13.9).
+
+**K.** C9 improves (0.082 → 0.057) but still fails, while kickers realize zero on only 0.9% of
+top-tercile rows. Following the PM's mechanism note, recorded as a smoke observation before the
+decisive run: *not the zero atom; likely the conditional spread's shape for a low-variance
+position.* K ran under the locked family with no adjustment.
+
+### §13.3 C1–C6 under the hurdle: the sign is confirmed, the size is not, and two failures are NEW
+
+**The point beats the prorated prior on 6/6 folds at QB–TE and 4/6 at K**, confirming ROS1's sign.
+That is not a fresh finding (§5 honesty clause).
+
+**The size is new.** Every CRPS lift is roughly **halved** against ROS1's:
+
+| pos | ROS1 lift | ROS1b lift |
+|---|---|---|
+| QB | +3.37 | +1.58 |
+| RB | +3.50 | +1.53 |
+| WR | +3.24 | +1.04 |
+| TE | +2.43 | +0.62 |
+| K | +1.80 | +0.36 |
+
+Both predictives now carry a calibrated interval, so part of ROS1's measured CRPS gain came from how
+a better point interacted with a miscalibrated band. **The update's CRPS value depends on the
+interval it is scored with.** Half-PPR (12.84 vs 13.78) and standard (11.35 vs 12.13) keep the same
+ordering.
+
+**C4 fails at WR (0.938) and TE (0.451).** These are **new failures under the hurdle**, reported as
+such. The classifier's raw state at TE is `DSR_UNREACHABLE` (the winner's per-fold Sharpe 1.732 is
+below SR0 1.828). Per NF-W8-0d, no variance or data trigger is published.
+
+### §13.4 C8a refuses QB, WR and TE: the pre-registered MSE/CRPS divergence, now material
+
+**The per-fold numbers.** Each row is the oracle's CRPS minus the winner's; negative means the
+winner beats its peeking oracle.
+
+| pos | per fold | mean | 1/10 of C1 lift | one-sided p |
+|---|---|---|---|---|
+| QB | 0.12, −0.08, −0.75, −0.47, −0.59, 0.02 | −0.294 | 0.158 | 0.050 |
+| WR | −0.31, −0.00, −0.11, −0.20, −0.26, −0.05 | −0.156 | 0.104 | 0.014 |
+| TE | −0.22, −0.20, −0.36, 0.05, −0.06, −0.28 | −0.179 | 0.062 | 0.016 |
+| RB (passes) | | +0.006 | | |
+| K (passes) | | +0.009 | | |
+
+**C8b is ACTIVE and passes at all five positions.** The oracle beats its matched-n control by
+0.05–0.33, so this is not the NF-INJ4 capacity reading.
+
+**The mechanism.** It was registered forward in ROS1 §5 ⚠️: the oracle's `m` minimizes MSE on the
+test season, and it is judged on CRPS. Under a multiplicative predictive, the MSE-optimal prior
+strength is not CRPS-optimal, and the in-fold fit can legitimately beat it on CRPS. Two further
+facts, neither re-read into the gate:
+
+* C8a's materiality bar is relative to the C1 lift, which the hurdle halved. At QB, the bar ROS1
+  scored against (0.337) would not have been crossed.
+* ROS1 hit the same clause at K alone.
+
+**It fails as registered, and the bar is not moved.** Whether a CRPS-fitted oracle should be the
+floor for a CRPS-judged arm (the NCAAF-P2.5 (b) lesson) is a registration question for a successor.
+It goes to followUps.
+
+**`classify_null` raw text** is kept in the JSON and not acted on: QB, WR and K read
+`POWER_LIMITED`, and TE reads `DSR_UNREACHABLE`. The QB text says "DSR alone needs 8 folds" even
+though the registered DSR (0.994) passes. The classifier computes its own Sharpe/V, which is a
+platform observation for followUps. Every non-shipping position is reported `CONSTRAINT_REFUSED`
+with the binding half = anchor, and no fold, season or row trigger.
+
+### §13.5 The registered §7 prediction FAILED, and why that prediction was misconceived (amendment 2)
+
+**Top-tercile q05 = 0 share, hurdle against ROS1's construction, and the realized zero share:**
+
+| pos | hurdle | ROS1's construction | realized zero share |
+|---|---|---|---|
+| QB | 0.352 | 0.275 | 0.064 |
+| RB | 0.162 | 0.370 | 0.042 |
+| WR | 0.378 | 0.394 | 0.044 |
+| TE | 0.395 | 0.529 | 0.030 |
+| K | 0.021 | 0.004 | 0.009 |
+
+The share did **not** fall toward the realized zero share. It rose at QB and K, and stayed far above
+realized everywhere, **while C9 passed**.
+
+**A q05 = 0 share is not a calibration reading.** A correct predictive puts q05 at 0 exactly when
+P(zero) ≥ 0.05. If everyone sits at 6%, the share is 100% beside a 6% zero rate. **NF-ROS1's
+headline share figure ("29.9% vs 5.2%") was not, by itself, evidence of miscalibration. Its PIT and
+lowest-decile readings were.**
+
+**POST-SMOKE COMPANION DIAGNOSTIC (amendment 2; gates nothing).** Top-tercile mean predicted P(zero)
+against the realized zero share:
+
+| pos | predicted | realized | difference |
+|---|---|---|---|
+| QB | 0.075 | 0.064 | +0.012 |
+| RB | 0.043 | 0.042 | +0.001 |
+| WR | 0.064 | 0.044 | +0.020 |
+| TE | 0.073 | 0.030 | +0.042 |
+| K | 0.023 | 0.009 | +0.014 |
+
+The atom is close to calibrated at RB and over-predicted at TE.
+
+**π reliability.** It is close to the diagonal at RB, WR and TE, and **over-predicts the top bins at
+QB (0.85 → 0.71) and K (0.89 → 0.76)**.
+
+### §13.6 Diagnostics
+
+* **π fits:** 180 in total, none single-class.
+* **Dropped features:** 36 fits dropped a zero-variance feature. Every one is **K's rookie flag**,
+  because the kicker boards carry no rookies (6 folds × 3 presets × 2 feature sets).
+* **Ratio-cell fallbacks** for the winner, full-PPR, by fold:
+
+  | fold | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 |
+  |---|---|---|---|---|---|---|
+  | rows | 1,100 | 385 | 51 | 2 | 16 | 0 |
+
+  Fold 2020 has a single training season.
+* **Negative realized totals (`y < 0`):** QB 329, RB 47, WR 20.
+* **Zero-point rows (ŷ = 0):** **0** at every position, so the point-mass edge rule never fired on
+  this data.
+* **Fitted `m` (fold 2025):** unchanged from ROS1 (QB 3/4, RB 4/3, WR 4/3, TE 6/2, K 24/2), as the
+  inheritance requires.
+* **Channel 2×2 interaction:** QB +0.74, RB +0.33, WR +0.19, TE −0.14, K +0.01. Recorded, never
+  recombined.
+
+### §13.7 §8 name-join rung (`nf_ros1b_name_join_2026.{json,md}`, commit `7b758841`)
+
+**Inputs.** Board `generated_at 2026-09-15T14:21:50Z`; stats v28 (REG week 1); draft picks v35;
+rosters v78.
+
+**The authority key held.** The pick key verified on **all 81** rows: every pick unique and found,
+every position agreeing.
+
+**Outcomes:** CORRECT 36 · **WRONG 0** · **MISSED 1** · CORRECT_ABSENT 44 · UNVERIFIABLE 0.
+
+**The one miss is a position-vocabulary disagreement.** **Riley Nowakowski** (pick 169) is TE on the
+board and FB on the realized line, and FB normalizes to RB. His name normalizes identically on both
+sides.
+
+**PM rulings.** The join is trusted. Nowakowski proceeds under `join_unresolved`, and the vocabulary
+is not repaired in-story. His board position is TE, which is uncertified, so in the current artifact
+he would carry `not_certified`. `join_unresolved` is declared in the contract either way.
+
+### §13.8 Guards (RED-proven)
+
+**Suites.** `betting_ml/tests/test_nf_ros1b_interval.py` (37 clauses) and ROS1's
+`test_nf_ros1_value.py` both pass: **63/63**.
+
+**RED proof.** `betting_ml/tests/nf_ros1b_red_proof.py` reuses ROS1's harness through its module
+globals and turns **25/25 deliberate breaks red** (about 1 minute).
+
+**§6 synthetic controls.** The correct hurdle reads **0.0092** (bar ≤ 0.02). With the chance of zero
+forced to 0 it reads **0.279**, and ROS1's construction reads **0.124** (both must be > 0.05).
+
+**What the first RED-proof run caught** (recorded per the PM ruling):
+
+1. **A real vacuous guard.** The foil-carry fixture's fixed seed mapped the only player who plays to
+   himself. Each player's history now encodes its own identity, and the test fails if the
+   permutation is the identity.
+2. **A badly designed break, replaced rather than excused.** The "next-row n" break never created a
+   future dependence. It is replaced by one that reads the season's last row.
+
+**Two new guards from the vacuity hunt:**
+
+3. The foil must be handed the permuted π. This is checked on the quantiles it actually produced,
+   because the first cut checked only what `prepare` stored.
+4. The hurdle event must be `y ≤ 0`.
+
+### §13.9 What certification sets in motion (node 4, per §9 and amendment 1)
+
+**Scope of the artifact.** RB is the only certified position: `rosPts`/`rosP10`/`rosP90` from the
+hurdle.
+
+**Absences carried by every other row:**
+
+* QB, WR, TE and K carry `not_certified`.
+* D/ST carries `position_not_evaluated`.
+* In-season additions carry `no_preseason_prior`.
+* Any certified-position player the name join misses would carry `join_unresolved` (none today).
+
+**`waiverValue`.** It is `null` with `waiver_value_not_certified`, because §7 is inactive.
+
+⚠️ **Caveats for the PM before node 4 is built:**
+
+* The rookie stratum's pooled C9 is 0.082. It is not a gate, but certified RB rookies would be
+  served.
+* A one-position artifact carries a cross-position consumer hazard (the NF-W7c §4 class). It is not
+  a ranking input.
