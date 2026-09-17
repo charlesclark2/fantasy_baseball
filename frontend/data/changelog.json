@@ -3,6 +3,10 @@
     "week": "2026-09-14",
     "items": [
       {
+        "tag": "improved",
+        "text": "In the weekly recap, a player you started who didn't play now shows his name and a score of 0, labelled as your league's own figure, instead of a sentence in place of his name. If your league scored a player but we couldn't match him to his stat line, his name still shows, with the score left blank and a note saying why — a zero there would be a number we can't stand behind."
+      },
+      {
         "tag": "added",
         "text": "Your league page now carries a recap of the week that just finished, and the standings that follow from it. For each team it lists what every starting slot actually scored, under your league's own settings, against the real stat line for the week — so the points are explained slot by slot rather than given to you as one number. Two things about how it is presented are deliberate. The team total shown is your league's own published figure, because that is what your standings are built from and what your league page shows; our slot breakdown sits beside it as the explanation, labelled separately, and the two are never offered as competing estimates of the same thing. Where your league scores something we cannot yet itemize — a fumble, a 40+ yard touchdown bonus — and it actually moved points that week, we say so next to the total and name the terms; when it did not move anything, there is nothing to say and we do not say it. The team defence score is your league's own figure rather than ours, and each slot states which it is. A player who was started but did not appear is described that way instead of being shown as a zero, because those are different things. The standings are ordered by record and then points for, both your league's own published numbers, and the page says so, so you can reproduce the order by hand; a week we could not read is left out and named rather than counted as a loss. This reads played weeks from Sleeper. ESPN and Yahoo leagues say plainly that we cannot show standings or a recap for them, and why. None of this is a projection and none of it is advice about who to start."
       },

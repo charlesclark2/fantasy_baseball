@@ -577,3 +577,35 @@ spec:
       ⑭ ⚠️ SEAM WITH WVR1's OPEN BRANCH (`nf-wvr1-pm-0917`): it edits this
       spec's `adjacent:` WVR1 line. This PR deliberately leaves that line
       untouched, so the two merge cleanly in either order.
+      ⑮ ✅ OPERATOR REQUEST 2026-09-17 — A STARTED PLAYER WHO DID NOT PLAY RENDERS
+      HIS NAME AND A 0. Found on the live-render check (TreVeyon Henderson,
+      started while out): the page replaced his name with "no stat line was
+      recorded … he did not appear". The operator asked for his name and a 0.
+      ⭐ THE 0 IS THE LEAGUE'S, never inferred. "We found no stat line" alone
+      cannot tell "did not play" from "we failed to match him", and a zero there
+      would be a wrong number that looks real (NF-C6b). Sleeper publishes a
+      per-starter score (`platformPts`), so the server now serves:
+        • league scored 0, no line → points 0.0, `league_published`, a note;
+        • league scored > 0, no line → a NULL score and a new reason
+          `league_scored_unmatched` (he played — the miss is ours; the old
+          sentence "he did not appear" would have been FALSE here);
+        • no league score published → the old absence, reworded so it no longer
+          claims "did not appear".
+      `compare_to_platform` skips a league-published PLAYER seat (it would compare
+      the league against itself — the NF1.7(a) vacuity the D/ST branch already
+      guards). The D/ST note no longer says "every other slot is scored by us".
+      ⚠️ This supersedes the Phase B design line "an absent player renders his
+      reason, never a zero" for the league-scored-zero case only — by operator
+      request, and without giving up the distinction, which now rides the
+      provenance label rather than a sentence.
+      ⑯ ⚠️ `frontend/next.config` SETS `typescript.ignoreBuildErrors: true`, so a
+      type error never fails a build or CI. It hid my own #1156 slip:
+      `fantasy-queries.ts` never imported `WeeklyRecapPayload` /
+      `PowerRankingsPayload`, leaving the recap hooks effectively untyped (fixed
+      here; `tsc --noEmit` is now clean). Whether to turn the setting off is a
+      repo decision, not this story's — recorded so the next session runs `tsc`
+      itself rather than trusting a green build.
+      ⑰ `itemisedTotal` is served unrounded (`138.35999999999999`) beside the
+      league's two-decimal `standingsTotal`. The page renders both with
+      `toFixed(2)` and the gap check snaps float noise, so nothing user-visible
+      is wrong; rounding at the server is a one-line tidy for a later touch.

@@ -84,12 +84,31 @@ const CASES = [
   },
   {
     id: "recap-absence-becomes-a-dash",
-    shipped: "the absence-reason class (NF-C6b) — 'was not in the game' vs 'played and scored none'",
+    shipped: "the absence-reason class (NF-C6b) — 'we could not match him' vs 'scored nothing'",
     detail: "the stated reason collapses to a dash, which reads as a player who simply scored nothing.",
     file: "components/fantasy/weekly-recap.tsx",
-    from: '          <span className="text-gray-500 italic">{seat.absence?.detail}</span>',
-    to: '          <span className="text-gray-500 italic">{"\u2014"}</span>',
-    grep: "renders a sentence, never a zero",
+    from: "            {seat.absence?.detail}\n",
+    to: '            {"\u2014"}\n',
+    grep: "keeps a BLANK score and says why",
+  },
+  {
+    id: "recap-unmatched-absence-becomes-a-zero",
+    shipped: "operator request 2026-09-17 — only the LEAGUE'S 0 may print as a 0",
+    detail:
+      "a player the league scored but we could not match prints 0.00, a wrong number that looks real.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: '        {absent ? "—" : pts(seat.points)}',
+    to: '        {pts(seat.points ?? 0)}',
+    grep: "keeps a BLANK score and says why",
+  },
+  {
+    id: "recap-started-player-name-hidden",
+    shipped: "operator request 2026-09-17 — a started player's NAME always renders",
+    detail: "the league-scored-zero seat renders without the player's name.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: "        {seat.name ? (",
+    to: "        {seat.name && seat.points !== 0 ? (",
+    grep: "shows his name and the league's 0",
   },
   {
     id: "recap-platform-absence-goes-generic",
@@ -3841,7 +3860,11 @@ const CASES = [
 // nobody has accounted for. ⚠️ Because drift sets `process.exitCode = 1`, the scheduled run has
 // been failing on this for some time, which is the muted-monitor pattern arriving on the very
 // instrument that polices vacuity elsewhere — reported to the PM rather than silently absorbed.
-const RECORDED_BOARD = { total: 214, red: 208, notObservable: 6 }
+// NF-WK-RC1 absent-seat follow-up (operator request 2026-09-17) adds TWO cases (an unmatched
+// player printed as 0.00; a started player's name hidden) and RE-ANCHORS one
+// (`recap-absence-becomes-a-dash`). RED-proven individually (`node e2e/red-proof.mjs recap-`). By
+// this change's own delta only: 214/208/6 -> 216/210/6.
+const RECORDED_BOARD = { total: 216, red: 210, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

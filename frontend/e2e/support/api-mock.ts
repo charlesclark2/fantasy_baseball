@@ -650,6 +650,14 @@ function ncaafPayloadFor(
  * (PM ruling (i)). A fixture where they happened to be equal would let a surface that presents
  * them as two estimates of one number pass every assertion.
  */
+/** Verbatim from `weekly_recap.DID_NOT_PLAY_NOTE` and `_ABSENCE_DETAIL`. */
+export const E2E_RECAP_DID_NOT_PLAY_NOTE =
+  "Your league scored this player 0 and we found no stat line for him this week, so there was " +
+  "nothing to itemize. The 0 is your league's own figure."
+export const E2E_RECAP_UNMATCHED_DETAIL =
+  "Your league scored this player, but we couldn't match him to a stat line to itemize it, so " +
+  "his points are in the league total but not in our breakdown."
+
 const RECAP_SEATS = (dstPts: number) => [
   {
     slot: "QB", seat: 0, name: "Recap Quarterback", position: "QB", team: "PHI",
@@ -660,22 +668,26 @@ const RECAP_SEATS = (dstPts: number) => [
     points: 11.2, source: "our_scorer", sourceNote: null, pprPts: 11.2, absence: null,
   },
   {
-    // ⭐ THE ABSENCE SEAT. `points` is NULL, never 0 — "was not in the game" and "played and scored
-    // nothing" are different facts, and a 0.00 in this cell states the wrong one.
+    // ⭐ STARTED WHILE OUT (operator request 2026-09-17). The league scored him 0 and there is no
+    // stat line, so the server serves the LEAGUE'S 0 with `league_published` provenance — his name
+    // and a 0, never an inferred zero.
     slot: "WR", seat: 2, name: "Recap Receiver", position: "WR", team: "DAL",
+    points: 0.0, source: "league_published", sourceNote: E2E_RECAP_DID_NOT_PLAY_NOTE, pprPts: null,
+    absence: null,
+  },
+  {
+    // ⭐ THE REMAINING ABSENCE. The league DID score him, but we could not match a stat line — so
+    // the score stays NULL: a 0.00 here would be a wrong number that looks real.
+    slot: "TE", seat: 4, name: "Recap Tightend", position: "TE", team: "KC",
     points: null, source: null, sourceNote: null, pprPts: null,
-    absence: {
-      reason: "no_realized_line",
-      detail: "This player was started but no stat line was recorded for him this week — he did " +
-        "not appear in the game.",
-    },
+    absence: { reason: "league_scored_unmatched", detail: E2E_RECAP_UNMATCHED_DETAIL },
   },
   {
     // ⭐ THE D/ST SEAT — the league's OWN published figure (PM disposition D2 = (C)).
     slot: "DEF", seat: 3, name: "Lions D/ST", position: "DST", team: "DET",
     points: dstPts, source: "league_published",
     sourceNote: "This score is your league's own published figure for the team defence, not ours. " +
-      "Every other slot is your league's scoring applied to the week's real stat line by us.",
+      "Slots marked as scored by us are your league's scoring applied to the week's real stat line.",
     pprPts: null, absence: null,
   },
 ]
