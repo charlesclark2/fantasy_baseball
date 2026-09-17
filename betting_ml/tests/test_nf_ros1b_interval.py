@@ -470,3 +470,22 @@ def test_the_full_evaluate_runs_and_writes_a_labelled_report(synthetic, tmp_path
     payload = json.loads(jp.read_text())
     assert RI.REFERENCE_KEY in payload["result"]["hurdle"]
     assert "interval" not in payload["result"]
+
+
+def test_the_rb_rookie_read_uses_only_rb_rookies_and_the_registered_bar(synthetic):
+    N, B, f = synthetic
+    result = B.run(f, (2020, 2021), RI.INTERVAL_NAME)
+    res = B.rb_rookie_read(result)
+    tests = pd.concat([x["test"] for x in result["_folds_obj"]])
+    assert res["rb_rookie"]["rows"] == int(((tests["pos"] == "RB") & tests["rookie"]).sum())
+    assert res["rb_veteran_context_only"]["rows"] == int(((tests["pos"] == "RB") & ~tests["rookie"]).sum())
+    assert res["bar"] == V.PIT_MAX_DECILE_DEV == 0.05
+    dev = res["rb_rookie"]["pit_max_decile_dev"]
+    assert res["decision"] == ("STRATUM_CHECK_PASSES" if dev <= 0.05 else "STOP_TO_PM")
+
+
+def test_the_rb_rookie_decision_rule_has_both_branches():
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1b as B
+    assert B.rb_rookie_decision(0.05) == "STRATUM_CHECK_PASSES"
+    assert B.rb_rookie_decision(0.0501) == "STOP_TO_PM"
+    assert B.rb_rookie_decision(None) == "UNEVALUABLE"

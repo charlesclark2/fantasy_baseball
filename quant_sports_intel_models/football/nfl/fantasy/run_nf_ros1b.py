@@ -48,6 +48,10 @@ STEM = "nf_ros1b_walkforward"
 PARENT_STEM = "nf_ros1_walkforward"
 REPRO_STEM = "nf_ros1b_parent_repro"
 NAME_JOIN_STEM = "nf_ros1b_name_join_2026"
+RB_ROOKIE_STEM = "nf_ros1b_rb_rookie_c9"
+#: amendment 3 — the RB-rookie read's own PIT stream (never the gate's per-position seed).
+RB_ROOKIE_SEED = V.SEED + 300
+RB_VETERAN_SEED = V.SEED + 301
 TITLE = "NF-ROS1b walk-forward (hurdle interval)"
 REGISTRATION = ("`nf_ros1b_preregistration.md` + amendment 1, inheriting "
                 "`nf_ros1_preregistration.md` + amendments 1–2")
@@ -217,6 +221,61 @@ def write_report(result: dict, diag: dict, *, smoke: bool, meta: dict, stem: str
           " · ".join(f"{k} {v['pit_max_decile_dev']:.3f}" for k, v in h["strata_c9"].items())]
     with mp.open("a") as fh:
         fh.write("\n".join(L) + "\n")
+    return jp, mp
+
+
+# ── amendment 3: the RB-rookie C9 read ────────────────────────────────────────────────────────────
+def rb_rookie_read(result: dict) -> dict:
+    """C9's statistic on the certified position's rookie stratum, with the PM's pre-declared rule."""
+    folds = result["_folds_obj"]
+    w = result["winner"]
+    y, _, q, pos, _, rk = _pooled(folds, lambda f: f["pred"][V.GATE_PRESET][w])
+    ps = np.concatenate([(f["test"]["season"].astype(str) + "|" + f["test"]["player_id"]).to_numpy()
+                         for f in folds])
+    out = {"winner": w, "bar": V.PIT_MAX_DECILE_DEV}
+    for label, mask, seed in (("rb_rookie", (pos == "RB") & rk, RB_ROOKIE_SEED),
+                              ("rb_veteran_context_only", (pos == "RB") & ~rk, RB_VETERAN_SEED)):
+        if not mask.any():
+            out[label] = {"rows": 0}
+            continue
+        u = V.randomized_pit(y[mask], q[mask], np.random.default_rng(seed))
+        out[label] = {"rows": int(mask.sum()), "player_seasons": int(len(np.unique(ps[mask]))),
+                      "pit_max_decile_dev": V.max_decile_dev(u),
+                      "coverage80": float(V.coverage80(y[mask], q[mask]).mean()),
+                      "decile_shares": (np.histogram(np.clip(u, 0, 1 - 1e-12), bins=10,
+                                                     range=(0, 1))[0] / len(u)).tolist()}
+    out["decision"] = rb_rookie_decision(out["rb_rookie"].get("pit_max_decile_dev"))
+    return out
+
+
+def rb_rookie_decision(dev) -> str:
+    """Amendment 3 / PM R2, verbatim: ≤ the registered C9 bar passes; above it goes to the PM."""
+    if dev is None:
+        return "UNEVALUABLE"
+    if dev <= V.PIT_MAX_DECILE_DEV:
+        return "STRATUM_CHECK_PASSES"
+    return "STOP_TO_PM"
+
+
+def write_rb_rookie(res: dict, meta: dict) -> tuple[Path, Path]:
+    jp = RESULTS / f"{RB_ROOKIE_STEM}.json"
+    mp = RESULTS / f"{RB_ROOKIE_STEM}.md"
+    jp.write_text(json.dumps(N._clean({"meta": meta, "result": res}), indent=1, sort_keys=True))
+    r, v = res["rb_rookie"], res["rb_veteran_context_only"]
+    L = ["# NF-ROS1b amendment 3 — the RB-rookie C9 read", "",
+         f"Generated {meta['generated_at']} · commit `{meta['commit']}` · winner `{res['winner']}` · "
+         f"rule declared in `nf_ros1b_preregistration_amendment_3.md` before this number existed.", "",
+         f"**Decision: `{res['decision']}`** (bar ≤ {res['bar']}).", "",
+         "| stratum | rows | player-seasons | PIT max-decile dev | cov80 |", "|---|---|---|---|---|",
+         f"| RB rookie | {r['rows']} | {r.get('player_seasons')} | {r.get('pit_max_decile_dev')} | "
+         f"{r.get('coverage80')} |",
+         f"| RB veteran (context only) | {v['rows']} | {v.get('player_seasons')} | "
+         f"{v.get('pit_max_decile_dev')} | {v.get('coverage80')} |", "",
+         "Design quantity (amendment 3, computed before this read): under a perfectly calibrated "
+         "predictive the statistic exceeds 0.05 with probability ≈ 0.000 if rows were independent "
+         "and ≈ 0.51 if a player-season's 12 rows shared one PIT value.", "",
+         f"RB-rookie decile shares: {[round(x, 3) for x in r.get('decile_shares', [])]}"]
+    mp.write_text("\n".join(L) + "\n")
     return jp, mp
 
 
@@ -441,6 +500,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--compare-to", default=None,
                     help="an ablation_results JSON to compare the fresh output against at 0.0")
     ap.add_argument("--name-join-2026", action="store_true")
+    ap.add_argument("--rb-rookie-read", action="store_true",
+                    help="amendment 3: the RB-rookie C9 read (full walk-forward, ~3 min)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     meta = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -461,6 +522,15 @@ def main(argv: list[str] | None = None) -> int:
         frame, diag = N.load_frame(seasons, d)
     frame = prepare_frame(frame)
     result = run(frame, evals, args.interval)
+    if args.rb_rookie_read:
+        if args.smoke or args.interval != RI.INTERVAL_NAME:
+            raise V.RosError("the RB-rookie read is the full hurdle walk-forward only")
+        meta.update({"prior_sha16": hashes, "rows": int(len(frame))})
+        res = rb_rookie_read(result)
+        jp, mp = write_rb_rookie(res, meta)
+        log.info("RB-rookie C9 %s → %s (%s)", res["rb_rookie"].get("pit_max_decile_dev"),
+                 res["decision"], mp)
+        return 0
     meta.update({"smoke": args.smoke, "interval": args.interval, "prior_sha16": hashes,
                  "stats_player_week_version": N.STATS_VERSION,
                  "schedules_version": N.SCHEDULES_VERSION, "rows": int(len(frame))})
