@@ -110,7 +110,62 @@ spec:
     nodes: []   # MINI incident — three-fork diagnosis (flag -> op -> silent-advance) -> fix at cause + class closure -> operator rebuild -> content-verified restore + unattended re-advance -> closeout
   closeout:
     verdict: null
-    followUps: >
+    # verdict stays null until the unattended re-advance is observed (the next 12:00Z fire AFTER the
+    # retry is deployed) — then SHIPPED. Record: docs/mlb_inc_0917_w3_transient_skipped_daily.md
+    followUps: |
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) DIAGNOSIS — NONE OF THE THREE FORKS, and the spec's framing understated the incident.
+          Fork (1) REFUTED: W11_W3PRE_DAILY=1 in the box .env (mtime 09-14 04:10Z) and in both
+          dagster-codeloc and dagster-daemon; all 7 neighbouring gate flags also 1. The cause is an
+          UPSTREAM transient: daily run 2b460fb5 (09-16 12:00Z) FAILED at lakehouse_w3_marts_op
+          (12:26:21Z, 998s vs 249-251s on 09-13/14/15) with S3 403 RequestTimeTooSkewed while binding
+          CREATE VIEW stg_batter_pitches, so W3pre was never executed. LAKE2's lever-② premise ("the
+          daily build runs") was re-verified TRUE for 09-13/14/15 (W3pre SUCCESS, verdict OK
+          0.172-0.175, one OVER at 1.100 on 09-13 before compaction) and FALSE on 09-16 for this reason.
+      (2) THE REAL IMPACT, for the PM: every HALT op after W3 was skipped — W6/W7b/spine/W8a/W8b, the
+          W11 tail, dbt_daily_build, generators, predict_today_morning, the serving writes. The 09-16
+          MORNING TIER NEVER SERVED (no ~13:xx feature_store batch; 22 intraday_assembly rows until the
+          20:41Z lineup rebuild). best_alpha=0, so no bet rode on it. NOBODY RE-EXECUTED the failed run.
+          OPEN: whether run_failure_alert_sensor's CRITICAL page actually arrived at ~12:26Z (the daemon
+          log grep came back mangled). If it did not → a pager defect; if it did → there is no runbook
+          step "a failed daily_ingestion_job gets re-executed from failure" → merge into the leaf-run /
+          orphaned-run detector cards (ZPmBj8PF / OA5e6TT8).
+      (3) FIX SHIPPED (operator-approved in-session): ONE bounded, loud RetryPolicy (max_retries=1,
+          delay=60) on the 9 HALT-capable lakehouse ops; exhaustive registry with stated exclusions;
+          WARN page + [METRIC] lakehouse_op_retry= per retried attempt; per-op bound vs the 14,400s run
+          cap. A MITIGATION of the consequence, NOT a cure of the stall. ⚠️ It reaches the box only on
+          the dev→main merge (orchestration CD) — the 09-17 12:00Z fire runs WITHOUT it unless that
+          merge happens first.
+      (4) INC-42 HYPOTHESIS H — a THIRD consistent observation (1044.7s, 1056.1s, now ~998s; all past the
+          900s SigV4 tolerance), still UNTESTED; do not carry it as established. NEW contradiction to
+          INC-42's glob-size lead: this glob is 366 files / 1.09 GB and W2 bound it normally minutes
+          earlier. What stalled a ~90s bind for 15 min is unknown. The retry's [METRIC]/WARN now COUNTS
+          recurrences — the cheap evidence H needs. → merge into the INC-42 record, not a new spec,
+          unless the count climbs.
+      (5) DOCUMENTED, NOT CAUSAL — W11_W3PRE_DAILY is still default-OFF and NOT in env.required, and a
+          flag-OFF op is NOT absent from the plan: it logs a warning and returns SUCCESS, so a step list
+          alone CANNOT show a flag skip (only the step's log text can). The spec's "close the class at
+          the instrument" was conditional on fork (1) and was not done. Recommend: the flag joins
+          env.required (box .env already has it, so the deploy gate passes) — a one-line PM call.
+          Same observation feeds the leaf-run detector scope (a SUCCESS step that did no work).
+      (6) CADENCE-FAMILY NOTE (extend yOhLHprC; do not fork): this is NOT a fourth calendar defect. It is
+          a TOPOLOGY amplifier: while the 30-min tick also rebuilt these tables, one failed build self-
+          healed within 30 minutes; since LAKE2 made the daily op the sole writer, one transient =
+          a 24h+ freeze (paged at 30h). "Narrowing a table to one writer multiplies the cost of that
+          writer's transients by its cadence" — the retry is the matching compensation.
+      (7) UNEXPLAINED WRITES: starter_ip_signals (15:15Z) and prediction_log (15:10Z) were written on
+          09-16 while the daily run had already ended at 12:26Z, and the run list shows no re-execution
+          and no other job that runs generate_starter_ip_signals_op. Identify the writer (a laptop/manual
+          run?) — an unknown writer of a serving-adjacent signal store is its own finding.
+      (8) The mirror-tier ops (w7b/spine/w8a/w8b) call _run_script with NO wall-clock cap (INC-32
+          adjacent): a stall there runs to the 4h run cap. ingest_statcast_to_s3_op (HALT, S3) got no
+          retry — out of the approved scope; a candidate for the same policy.
+      (9) Overlapping builders: odds_clv_rebuild_job (08:00Z) runs run_w1_lakehouse --w6, a full
+          W1+W3+W6 rebuild, four hours before the daily builds the same tables. Harmless today; worth
+          knowing when reading any W1/W3/W6 write timestamp.
+      (10) CONFIRMATIONS: INC-43 error salvage (#770) worked in prod (full DuckDB diagnostic preserved).
+          SLA NOT widened. Restore: --w3pre-only 04:20Z 09-17, verdict OK at 0.197 (LAKE2 comparator
+          0.172); content ts stg_oddsapi_odds → 2026-09-17 04:00:04Z (9,829,486 rows).
