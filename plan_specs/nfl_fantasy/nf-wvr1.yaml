@@ -37,6 +37,36 @@ metadata:
   #      forecast language; `ordering` states its basis. ⛔ The VALUE column still waits for
   #      NF-ROS1 — realized facts and projected value stay different columns with different
   #      provenance when both exist.
+  # ⚖️ PM DISPOSITIONS ON #1157's THREE ITEMS (2026-09-17):
+  #   ⑬ ACCEPTED, and named in the ledger: A CLAIM'S TIMESTAMP IS PART OF THE CLAIM. Reporting a
+  #      05:57Z absence at ~07:49Z without re-checking is the stale-read form of the
+  #      vacuous-measurement class. STANDING RULE: an absence claim handed to the PM carries the
+  #      time it was measured, and one more than an hour old at reporting is re-run first. Both
+  #      census records corrected by the PM (06:43:50Z publish; E9.49 window partly closed).
+  #   ITEM 1 RATIFIED VERBATIM — RC1 receives ⑭'s scope. RC1's contract work narrows to: (1) a
+  #      publish-time check that each listed column carries non-null values on some rows; (2)
+  #      floors on n_players / n_teams; (3) validation against the STORED week-1 artifact (the
+  #      anchor, since the window is partly closed). ⛔ No blanket schema validator (the 0917B
+  #      regression lesson). The five all-zero columns are a TRUE zero and stay unfixed.
+  #   ITEM 2 = (b), RULED — RC1 publishes a CUMULATIVE SEASON-TO-DATE artifact beside the weekly
+  #      one; WVR1's read becomes ONE GET. The note in RC1's `adjacent:` list is the seam record.
+  #      If RC1's implementation finds a reason to decline, it returns to the PM — it does NOT
+  #      default to (a). If (a) ever ships, the cap is a visible payload state, never a silent
+  #      partial sum presented as a season total.
+  #   ITEM 3 = (i), RULED — THE FACT COLUMNS SHIP WITH DST AS A STATED ABSENCE, never readable as
+  #      "this defence did nothing" (NF-C6b/NF-K1). Use the existing reason fields with a
+  #      SPECIFIC reason (`team_grain_not_covered` or equivalent), not a generic "absent". Five
+  #      positions' facts are not held for the sixth.
+  #      📌 THE UNLOCK PATH, recorded as ruled (PM's account, not re-verified by WVR1 — verify
+  #      before building on it, per the spec-premise rule): the team-level source already exists
+  #      in the lake (`stats_team_week` + `schedules`, which RC1's D/ST construction reads); what
+  #      is missing is VALIDATION — that construction reproduces Sleeper on only 35/48 team-weeks
+  #      and sits record-only.
+  #      ⚠️ SLEEPER CANNOT FILL THIS GAP FOR WVR1 the way it did for RC1: Sleeper only scores
+  #      STARTED defences, so an FA-pool defence has no league-published number BY CONSTRUCTION.
+  #      ⇒ DEPENDENCY: card fXIYuvMN closing (our construction validated). When it closes, DST
+  #      flips from stated absence to covered, WITH OUR OWN PROVENANCE. No new owner today.
+  #   Phase B still queues behind RC1's frontend. Nothing else owed.
 spec:
   description: >
     For each imported league (Sleeper first), rank the league's

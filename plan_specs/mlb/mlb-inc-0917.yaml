@@ -1,0 +1,116 @@
+# Plan spec — MLB-INC-0917 (MINI, incident: stg_oddsapi_odds STALE — the daily-only writer
+# LAKE2 created has stopped advancing it; CLV/line-history accumulation frozen)
+# Authored by PM 2026-09-17 from the INC-41 freshness page. Diagnose-first: three candidate
+# causes with a strict cheapest-first order; only the third is a novel defect.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: mlb-inc-0917
+  vertical: mlb
+  card: https://trello.com/c/GK5mPD2G
+  status: ACCEPTED
+spec:
+  description: >
+    The INC-41 freshness monitor pages stg_oddsapi_odds STALE (1801
+    active-min vs the 1800 SLA; content timestamp stuck at the
+    2026-09-15 12:00 build). Context that frames everything:
+    MLB-LAKE2 moved the three daily-cadence odds staging models off
+    the intraday tick, making lakehouse_w3pre_flatten_op in the
+    12:00 UTC daily_ingestion_job their ONLY writer — and added this
+    exact SLA so a stopped writer pages instead of freezing
+    silently. The monitor is therefore WORKING; the question is why
+    the writer stopped. Downstream: mart_odds_outcomes' _history
+    bucket + mart_odds_line_movement stop accumulating (CLV/line
+    history); the intraday serving path is UNAFFECTED by design
+    (recent-scoped flatten off lakehouse_raw). best_alpha=0; no
+    model or serving change; no SLA is widened to quiet the page
+    (E2.1-r — the page being annoying is it working).
+  acceptanceCriteria:
+    - description: >
+        DIAGNOSE in strict cheapest-first order, operator paste-ready
+        for every box read: (1) W11_W3PRE_DAILY in the box's LIVE env
+        (three-state: '1' / other / UNDECLARED — the silent-freeze
+        class LAKE2 warned about; a deploy-recreated container can
+        drop an env var, the E9.8-P2 wipe class); (2) did
+        lakehouse_w3pre_flatten_op RUN in the 09-16 and 09-17 daily
+        jobs — read the STEP list, never the job-level status (a
+        SUCCESS job with a skipped op is the exact hole); check
+        whether the op is gated on the flag such that OFF = silently
+        absent from the plan rather than failed; (3) only if the flag
+        is '1' AND the op ran SUCCESS while the content timestamp
+        did not advance: the true INC-41 silent-non-advance class —
+        stop and report the op logs + the parquet's content
+        timestamp before writing any fix. Also rule in/out the
+        09-16 deploy activity (the NCAAF-INC-0914 drain era) as the
+        moment the state changed — the census method (S3 write
+        timestamps) dates the last advance without box access.
+    - description: >
+        FIX AT THE CAUSE + RESTORE: flag regressed -> restore it in
+        the box .env AND close the class — W11_W3PRE_DAILY must join
+        env.required or gain an UNDECLARED-pages check (the
+        MLB-INC-0904 record already flagged it as default-OFF and
+        not in env.required; a flag whose absence silently skips the
+        only writer of three tables is a documented landmine, so fix
+        the instrument, not just the value). Op missing/failed ->
+        the specific defect, minimally. Either way the backlog
+        rebuild is the alert's own line (run_w1_lakehouse.py
+        --w3pre-only, operator, >2-min) and the restore is verified
+        by CONTENT timestamp advancing + the next daily fire
+        advancing it again unattended + the w3pre_tier_verdict still
+        reading OK (the rebuild lands on the compacted store — quote
+        the fraction; LAKE2's 0.172 daily is the comparator).
+    - description: >
+        CLASS NOTE for the closeout, not new machinery: this is the
+        season's FOURTH weekly-calendar/cadence defect (roll-forward
+        Monday-stale, realized-tier no-writer, schedules pre-MNF,
+        now the daily-only odds writer stopping) — add the finding
+        to the census thread's picture (card yOhLHprC carries the
+        family note; extend, never fork). Standing: worktree; PR ->
+        dev; box ops operator-run; no Trello; roadmap frozen;
+        findings to closeout.followUps. MLB context: season ends
+        early Oct — the CLV/history accumulation this protects is
+        the season's remaining scientific value; a multi-day gap in
+        it is real loss even though nothing user-facing moved.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: mlb-inc-0917
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "stg_oddsapi" / "W3pre" / "STALE" (board Credence Sports, 2026-09-17)'
+    duplicates: []
+    adjacent:
+      - "MLB-LAKE2 (Done, hzgIe6OP) — created the daily-only-writer topology AND this SLA; its lever-② verification said the daily build runs — re-verify that premise against the 09-16/09-17 runs, don't trust it (spec-premise rule)."
+      - "MLB-INC-0904 record — documented W11_W3PRE_DAILY as default-OFF and not in env.required; the landmine this may be."
+      - "NCAAF-INC-0914 (Done) — the deploy/drain era overlaps the window; its census method (S3 write timestamps) dates the last advance."
+      - "Cadence-defect family note (yOhLHprC) — this is the fourth member; extend the picture there."
+      - "Leaf-run detector (ZPmBj8PF) / orphaned-run detector (OA5e6TT8) — a skipped-op-inside-SUCCESS-job finding feeds their scope."
+  triedLedger:
+    files:
+      - "The freshness page (content ts 2026-09-15 12:00; 1801/1800 active-min; the FIX line)"
+      - "docs/mlb_inc_0904_* §7 follow-up 2 (the W11_W3PRE_DAILY blocked-on-a-fact warning, verbatim)"
+      - "run_w1_lakehouse.py --w3pre-only + daily_ingestion_ops (the writer + its gate)"
+  recordedNulls:
+    - "Widening the 1800-min SLA — refused ex ante; the SLA fired one minute past its bound on a genuinely stopped writer, which is calibration, not noise."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "CLV/line-history accumulation resuming for the season's final weeks; the flag class closed at the instrument; the cadence-defect family picture"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: mlb-inc-0917-plan
+spec:
+  goalRef: { name: mlb-inc-0917 }
+  graph:
+    nodes: []   # MINI incident — three-fork diagnosis (flag -> op -> silent-advance) -> fix at cause + class closure -> operator rebuild -> content-verified restore + unattended re-advance -> closeout
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

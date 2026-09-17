@@ -27,6 +27,10 @@ SUITE = "betting_ml/tests/test_nf_wk_rc1_weekly_recap.py"
 #: NF-WK-RC1 ① — the cadence clauses live in their own file. A break names a test in EITHER
 #: suite: the last field is a bare test name (⇒ `SUITE`) or a full `path::test` nodeid.
 CADENCE = "betting_ml/tests/test_nf_wk_rc1_cadence.py"
+#: The PM addendum of 2026-09-17 — the publish-time contract and the season-to-date artifact.
+CONTRACT = "betting_ml/tests/test_nf_wk_rc1_contract.py"
+_RW = "quant_sports_intel_models/football/nfl/fantasy/realized_week.py"
+_RUN = "quant_sports_intel_models/football/nfl/fantasy/run_realized_week.py"
 
 # (label, file, old, new, the test that MUST go red)
 BREAKS = [
@@ -200,6 +204,100 @@ BREAKS = [
      '                if abs(rec["delta"]) > tolerance and not rec["scheduleResultPending"]:\n'
      "                    dst_div.append(rec)",
      f"{CADENCE}::test_a_defence_whose_game_result_has_not_published_is_tagged_not_dropped"),
+
+    # ── CONTRACT (PM addendum 2026-09-17). Each break REPRODUCES a defect, not merely edits a line.
+    ("NaN counts as a value — the pandas read's unpopulated numeric column passes",
+     _RW, "    return v is not None and not (isinstance(v, float) and math.isnan(v))",
+     "    return v is not None",
+     f"{CONTRACT}::test_a_nan_filled_column_is_not_a_populated_one"),
+
+    ("the non-null check counts ROWS, not rows carrying a value (the NF-K1 shape)",
+     _RW, "    carrying = {c: sum(1 for r in players if carries_value(r.get(c))) for c in cols}",
+     "    carrying = {c: len(players) for c in cols}",
+     f"{CONTRACT}::test_a_listed_column_with_no_value_on_any_row_is_refused"),
+
+    ("the team floor is one-per-game, so a game missing a side passes",
+     _RW, "        if rows_teams < TEAMS_PER_GAME * rows_games:",
+     "        if rows_teams < rows_games:",
+     f"{CONTRACT}::test_a_game_missing_one_side_breaks_the_two_teams_per_game_identity"),
+
+    ("the row floor is one-per-game, so a gross row loss passes",
+     _RW, "        if len(players) < MIN_PLAYERS_PER_GAME * rows_games:",
+     "        if len(players) < rows_games:",
+     f"{CONTRACT}::test_a_gross_row_loss_breaks_the_players_per_game_floor"),
+
+    ("the floor is set from week 1 alone (69.9/game) and would false-fire on 2023 wk17",
+     _RW, "MIN_PLAYERS_PER_GAME = 50", "MIN_PLAYERS_PER_GAME = 70",
+     f"{CONTRACT}::test_the_floors_are_derived_from_the_measured_population"),
+
+    ("the recount TRUSTS the manifest instead of counting the rows",
+     _RW, '    for field, recount in (("n_players", len(players)), ("n_teams", rows_teams),',
+     '    for field, recount in (("n_players", int(manifest.get("n_players") or 0)), '
+     '("n_teams", rows_teams),',
+     f"{CONTRACT}::test_a_manifest_that_disagrees_with_its_rows_is_refused"),
+
+    ("publish() is unguarded — only the CLI would have checked",
+     _RW, '    assert_contract(man, built["players"], label=f"{season} wk{week}")\n'
+          "    prior = published_manifest(",
+     "    prior = published_manifest(",
+     f"{CONTRACT}::test_publish_refuses_a_violating_build_before_touching_s3"),
+
+    ("a gap is summed across — week 3 enters a total that never saw week 2",
+     _RW, "        elif week != expected:\n"
+          '            reason, detail = "after_gap", f"week {expected} has no served artifact"\n',
+     "",
+     f"{CONTRACT}::test_a_gap_ends_the_season_artifact_and_names_itself"),
+
+    ("a PARTIAL week is summed into the season total",
+     _RW, '        elif man.get("completeness") != "final":',
+     '        elif man.get("completeness") == "not_started":',
+     f"{CONTRACT}::test_a_partial_week_is_a_routine_exclusion_but_what_follows_it_is_a_defect"),
+
+    ("the served rows are trusted without checking them against their manifest's hash",
+     _RW, '        elif content_hash(players) != man["content_sha256"]:',
+     '        elif not isinstance(man["content_sha256"], str):',
+     f"{CONTRACT}::test_an_unusable_served_week_is_excluded_with_its_reason"),
+
+    ("a season total is allowed to SHRINK",
+     _RW, "    if through < was:", "    if through < 0:",
+     f"{CONTRACT}::test_the_season_decision_table"),
+
+    ("an empty season artifact is published",
+     _RW, "    if through is None:\n", "    if through is None and published is not None:\n",
+     f"{CONTRACT}::test_no_qualifying_week_publishes_nothing"),
+
+    ("a gap is filed as routine, so the cadence never pages on a stuck season total",
+     _RW, '_ROUTINE_EXCLUSIONS: frozenset[str] = frozenset({"not_final"})',
+     '_ROUTINE_EXCLUSIONS: frozenset[str] = frozenset({"not_final", "after_gap"})',
+     f"{CONTRACT}::test_the_runner_pages_when_a_served_week_cannot_enter_the_season_total"),
+
+    ("a dry run pages on exclusions it never had the chance to heal",
+     _RUN, "    if defects and not dry:", "    if defects:",
+     f"{CONTRACT}::test_a_dry_run_reports_exclusions_without_paging"),
+
+    ("the season contract trusts the manifest's n_rows",
+     _RW, '    if man.get("n_rows") != len(rows):', '    if man.get("n_rows") != man.get("n_rows"):',
+     f"{CONTRACT}::test_the_season_contract_catches_a_tampered_concatenation"),
+
+    ("the season contract compares week COUNTS, so rows from an unlisted week pass",
+     _RW, "        if carried != weeks:", "        if len(carried) != len(weeks):",
+     f"{CONTRACT}::test_the_season_contract_catches_rows_from_a_week_the_manifest_does_not_list"),
+
+    ("the season directory is numeric, so it reads as a published week",
+     "app/backend/models/nfl_recap.py", 'REALIZED_SEASON_DIR = "season"',
+     'REALIZED_SEASON_DIR = "0"',
+     f"{CONTRACT}::test_the_season_key_can_never_read_as_a_published_week"),
+
+    ("the op renders a season failure as 'wkseason'",
+     "pipeline/jobs/sports_nfl_weekly_serving_job.py",
+     """              + "\\n".join(f"- {_realized_label(e)}: {e['error']}" for e in errors),""",
+     """              + "\\n".join(f"- wk{e['week']}: {e['error']}" for e in errors),""",
+     f"{CONTRACT}::test_the_op_labels_season_entries_rather_than_rendering_wkseason"),
+
+    ("the season step runs its week read un-caught, so one bad listing crashes the whole fire",
+     _RUN, '        return {"action": "error", "error": f"{type(exc).__name__}: {exc}"}',
+     "        raise",
+     f"{CONTRACT}::test_a_season_failure_is_recorded_rather_than_raised"),
 ]
 
 
@@ -220,7 +318,7 @@ def main() -> int:
         bak.unlink()
         print(f"  restored stale backup for {target.relative_to(ROOT)}")
 
-    for _suite in (SUITE, CADENCE):
+    for _suite in (SUITE, CADENCE, CONTRACT):
         if not _run(_suite):
             print(f"BASELINE FAILED ({_suite}) — a suite must be green before any break means anything")
             return 1

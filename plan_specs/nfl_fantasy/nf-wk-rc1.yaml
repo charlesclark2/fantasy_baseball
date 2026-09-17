@@ -325,6 +325,52 @@ spec:
     # the only available assertion is "the note renders", which the #1155 defect satisfies exactly.
     # 📌 CHANGELOG: written, because a real completed week renders. It ships only with this PR,
     # whose merge is gated on the operator confirming the live render AND on ①'s cadence.
+    # ✅ PM ADDENDUM 2026-09-17 (via NF-WVR1 ⑭/⑯) — DELIVERED on branch `nf-wk-rc1-contract`.
+    #   (1) The week-1 publish IS on S3 (06:43:50Z); WVR1's "unpublished" read was stale.
+    #   (2) CONTRACT, scoped to ⑭ and nothing wider (⛔ no blanket schema validator):
+    #       • every column in `manifest.columns` must carry a value on ≥1 row. Counts rows CARRYING
+    #         A VALUE, and ⛔ NaN IS NOT A VALUE — the lake read goes through pandas, so an
+    #         unpopulated numeric column arrives as NaN; an `is not None` test would have been
+    #         vacuous on exactly the numeric columns. The five all-zero week-1 columns are TRUE
+    #         zeros and pass, as ⑭ ruled.
+    #       • `n_teams ≥ 2 × realized_games` — an IDENTITY, measured exact on all 142 REG weeks in
+    #         the lake (2018 → 2026 wk1), bye weeks included.
+    #       • `n_players ≥ 50 × realized_games` — measured 63.25–69.88 per game over the same 142
+    #         weeks; week 1 (69.88) is the HIGH end, so a floor taken from week 1 alone would have
+    #         false-fired on 2023 wk17. 50 = 0.8 × the lowest. ⚠️ Catches a gross row loss, NOT a
+    #         single missing position (QB ≈ 2.3 rows/game) — stated so a pass is not over-read.
+    #       • the manifest's counts are RECOUNTED from the rows, never trusted.
+    #       Enforced inside `publish()` before any S3 call, on every path (serving write and parked
+    #       revision alike). Not gated, reported: every REG week carries exactly ONE all-zero row
+    #       with no `player_id` (all 142 weeks) — a vendor artifact.
+    #   (3) STORED-ARTIFACT ANCHOR: `--check-published` (read-only) runs the contract against what
+    #       is serving. Run 2026-09-17 03:49Z: week 1 passes (47/47 carrying, 32 = 2×16 teams,
+    #       1,118 ≥ 800 rows). The served file is also a committed fixture, re-encoded columnar and
+    #       proven to re-expand to the served bytes' sha256 — every negative test mutates THAT week.
+    #   (4) SEASON-TO-DATE ARTIFACT (PM ruled ⑯ = b): `realized/<season>/season/{players,manifest}
+    #       .json`, rebuilt every cadence fire FROM THE SERVED WEEKLY FILES (never a second lake
+    #       read, so it cannot disagree with them and inherits the restatement discipline — a
+    #       parked revision is not served and never enters it). One row per player-GAME, columnar
+    #       (measured 179 KB/week vs 1.10 MB as objects → ~3.2 MB for 18 weeks, no gzip needed).
+    #       ⭐ Per-game rather than season totals: the scorer IS linear today, so totals would score
+    #       the same — but that is a property of today's scorer, and per-game rows make the artifact
+    #       a checkable concatenation (row-count and week-set identities).
+    #       ⛔ A GAP ENDS IT AND NAMES ITSELF: it covers the longest run 1..K of served, FINAL,
+    #       hash-verified, contract-passing weeks; anything later is listed in `excluded` with a
+    #       reason and NOT summed in. Every exclusion except `not_final` PAGES CRITICAL. ⛔ It never
+    #       shrinks (`refuse_regress`, a WARN event) and never publishes empty (`skip_empty`).
+    #       Same contract discipline from birth (`season_contract_report`), read-back verified.
+    #       Week directory is the literal `season`; both week-listers require an all-digit parent,
+    #       so it can never read as a published week (pinned).
+    #   ⭐ MEASURED BEFORE SHIPPING: a fresh week-1 build's hash survives the publish→S3-JSON→load
+    #     round trip (else every week would read `hash_mismatch` and page daily).
+    #   ⚠️ AND A REAL RESTATEMENT IS SITTING IN WEEK 1: the served file differs from today's lake in
+    #     exactly ONE cell — player 00-0036335 (2026_01_NO_DET) `position` LB → DE. Because the
+    #     served week-1 manifest predates the hash, the first fire classifies it `backfill_hash`
+    #     and overwrites it, as designed; it is the one vendor restatement that will be logged as a
+    #     backfill rather than as a `restate` event. Recorded here so nobody goes looking for it.
+    #   VERIFICATION: 35 new clauses (`test_nf_wk_rc1_contract.py`), one isolating mutation of the
+    #   real week per clause; 19 new red-proof breaks, each reproducing a defect (43/43 RED overall).
     - description: >
         TIMING + GUARDS: the first fully-scoreable week is week 2
         (completes Tue 09-16 night; realized lines land per node 1's
@@ -362,7 +408,7 @@ spec:
       - "NF-WK-FE1 (Done) — public weekly page untouched; Phase B here is the next frontend occupant (verify none other open)."
       - "Entrypoint sibling sweep (GyD9hoeD) — if this story adds a publish/serving entrypoint, it ships WITH an executing smoke from day one (never joins the zero-callers list)."
       - "NF-WVR1 (IN FLIGHT) — ⚠️ SEAM SPLIT, PM-ratified 2026-09-16, recorded so neither session duplicates the other's fetch: RC1 owns the WEEKLY MATCHUP fetch (`sleeper_matchups.fetch_week`, `/matchups/{week}`, STARTERS-ONLY and deliberately FROZEN point-in-time — a recap must be stable after it renders). WVR1 owns the ROSTER REFRESH (a method on `platform_import/sleeper.py` beside `_fetch_teams`, `/league/{id}/rosters`, the FULL rostered set and deliberately CURRENT — a stale FA pool recommends rostered players). Two different objects on one host with correctly OPPOSITE freshness semantics; neither supersedes the other. WVR1 node 1 (`docs/nf_wvr1_fa_pool_diagnosis.md` §3) is the analysis of record."
-      - "NF-WVR1 (IN FLIGHT) — 📌 ONE ASK, RAISED PER PM Q4 DISPOSITION 2026-09-16, recorded here because RC1 owns the artifact and WVR1 must not fork a second publisher: WVR1 consumes `fantasy/nfl/realized/<season>/<week>/players.json` to build season-to-date FACT columns, so its read fans out to ONE S3 GET PER COMPLETED WEEK — 1 today, ~17 by week 18. WOULD RC1 PUBLISH A CUMULATIVE SEASON-TO-DATE ARTIFACT BESIDE THE WEEKLY ONE? It turns WVR1's read into one GET forever, removes the fan-out failure mode rather than bounding it, and is cheapest to add WHILE the recurring cadence (PM Q2) is being wired — that write already has every week in hand. If declined, WVR1 ships a bounded batched read with a loud refusal over the cap (a silent truncation would present a partial-week sum as a complete season total). ⚠️ Also FYI for RC1's contract work: WVR1 measured the published week 1 and its declared-column contract holds (47/47 present, 0 all-NULL) — WVR1's earlier \"uncontracted writer\" framing was wrong and is corrected at NF-WVR1 followUp ⑭."
+      - "NF-WVR1 (IN FLIGHT) — 📌 ONE ASK, RAISED PER PM Q4 DISPOSITION 2026-09-16, recorded here because RC1 owns the artifact and WVR1 must not fork a second publisher: WVR1 consumes `fantasy/nfl/realized/<season>/<week>/players.json` to build season-to-date FACT columns, so its read fans out to ONE S3 GET PER COMPLETED WEEK — 1 today, ~17 by week 18. WOULD RC1 PUBLISH A CUMULATIVE SEASON-TO-DATE ARTIFACT BESIDE THE WEEKLY ONE? It turns WVR1's read into one GET forever, removes the fan-out failure mode rather than bounding it, and is cheapest to add WHILE the recurring cadence (PM Q2) is being wired — that write already has every week in hand. If declined, WVR1 ships a bounded batched read with a loud refusal over the cap (a silent truncation would present a partial-week sum as a complete season total). ⚠️ Also FYI for RC1's contract work: WVR1 measured the published week 1 and its declared-column contract holds (47/47 present, 0 all-NULL) — WVR1's earlier \"uncontracted writer\" framing was wrong and is corrected at NF-WVR1 followUp ⑭. ⚖️ RULED BY PM 2026-09-17: option (b) — RC1 publishes the cumulative season-to-date artifact beside the weekly one; a reason to decline goes back to the PM, never a silent default to the batched read. RC1's contract scope is ⑭'s three items only (non-null check on listed columns, n_players/n_teams floors, validation against the stored week-1 artifact) — no blanket schema validator."
   triedLedger:
     files:
       - "NF-WK-MT1 closeout (the endpoint + gate pattern this story mirrors; the probe and fixture lessons)"
@@ -513,3 +559,21 @@ spec:
       measured closure, so a SEVENTH module becomes a loud decision rather than a
       silent one, plus its two-sided partner that retires the section if the
       exclusion is ever lifted.
+
+      ⑫ 📌 THE CONTRACT CANNOT SEE A STALE BOX IMAGE, AND THE SEASON ARTIFACT
+      PARTLY CAN (PM addendum 2026-09-17; relates to ⑪). The publish-time
+      contract checks the rows against `manifest.columns`, and both come from
+      the SAME `required_columns()` — so a box on a stale image publishes a
+      self-consistent week that passes. What does notice is the season builder:
+      it excludes a served week whose `columns` lack a column the CURRENT image
+      requires (`columns_behind`) and pages CRITICAL. That catches the drift
+      one fire after the image catches up, not before. ⑪'s decision is still the
+      PM's; this narrows its blast radius, it does not close it.
+      ⑬ 📌 NO FRESHNESS SLA ON THE SEASON ARTIFACT, deliberately. It is rebuilt
+      on every fire of the job that `nfl_realized_freshness_op` already
+      backstops, and any served week it cannot include pages CRITICAL in that
+      same fire. A second SLA would watch the same failure through a second
+      instrument (the "second owner of one logical check" the PM declined at ③).
+      ⑭ ⚠️ SEAM WITH WVR1's OPEN BRANCH (`nf-wvr1-pm-0917`): it edits this
+      spec's `adjacent:` WVR1 line. This PR deliberately leaves that line
+      untouched, so the two merge cleanly in either order.

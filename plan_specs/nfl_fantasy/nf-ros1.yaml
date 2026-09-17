@@ -1,0 +1,162 @@
+# Plan spec — NF-ROS1 (FULL tier, MODELING: an honest in-season rest-of-season value —
+# preseason prior + 2026 realized production, games-remaining aware)
+# Authored by PM 2026-09-17. Commissioned from NF-WVR1's measured gap: NO season-ROS quantity
+# exists (the board is deliberately preseason-frozen; the weekly model's ROS is its own
+# story). §0.5 discipline binds in full: this is new modeling, registered forward.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-ros1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/PMVQXY99
+  status: ACCEPTED
+spec:
+  description: >
+    Produce a rest-of-season fantasy value per player that honestly
+    reflects both the preseason prior AND 2026 realized production,
+    decremented by games played — the quantity WVR1's value column
+    and the trade engine (EPIC NF-SEASON member 4) both need, and
+    which the codebase measurably lacks: fantasy/nfl/<season>/
+    projections.json is preseason-frozen (max g=17 with week 1
+    complete; in-season channels are role/health/market only, by
+    leakage-safe design — correct for drafting, structurally wrong
+    for "what changed since the draft"; Fernando Mendoza topped an
+    FA pool at 268.3 having taken zero snaps). best_alpha=0: this is
+    a calibration/honesty product — the deliverable includes its own
+    registered evaluation and ships only what clears it; the gates
+    saying NO is an acceptable outcome and is reported as such.
+    ⛔ SUBSTRATE: the preseason board's machinery + realized
+    stats_player_week/snap_counts (facts). The WEEKLY model's
+    outputs stay out of bounds unless the NF-INC-0916 lift has
+    occurred AND this spec's registration explicitly declares which
+    output it uses and why — silence means none. ⛔ No fourth
+    scorer; fantasy-point translation of any projected stat line
+    goes through the existing scoring machinery.
+  acceptanceCriteria:
+    - description: >
+        §0.5 FORWARD REGISTRATION, committed before any fitting:
+        (a) the FORM family, declared with mechanism — the natural
+        candidate is a shrinkage blend (preseason prior updated by
+        realized per-game production with games-remaining weighting)
+        but the registration declares the actual family, its
+        parameters, and the DEGENERATE ANCHORS it must beat
+        (preseason-frozen carried forward; naive realized-per-game ×
+        games-remaining; last-N-weeks extrapolation) plus a matched
+        foil; (b) the EVALUATION, registered forward: walk-forward
+        on historical seasons — predict ROS value at week k from
+        data through week k, score against realized rest-of-season
+        (the 24-season lake supports this... for NFL use the
+        realized weekly history the lake carries; state the seasons
+        and weeks used and WHY, before fitting — a window chosen
+        after seeing fits is the E2.1-r inversion); (c) the SHIP
+        BAR, declared before results: what calibration/accuracy
+        margin over the anchors licenses serving, with the honest
+        alternative stated (if the blend cannot beat carrying the
+        preseason prior forward, THAT is the finding and the
+        consumers keep their stated absences); (d) classify_null
+        with declared field size; reproduction pins at 1e-9.
+    - description: >
+        THE WAIVER-SPECIFIC REPLACEMENT LEVEL, same registration
+        discipline: the NF-C7/C5/WVR1-measured lesson (draft-VOR
+        over a below-replacement pool floats kickers: 14 K / 8 DST
+        in a top-25) means cross-position waiver value needs its own
+        replacement definition — declare it forward (candidate: the
+        best AVAILABLE player per position in a league of the given
+        size, i.e. pool-relative), evaluate it on the same
+        walk-forward, and ship it only for the surfaces that need
+        cross-position comparison; within-position ordering needs no
+        replacement arithmetic and ships on the value alone.
+    - description: >
+        DATA DEPENDENCIES, verified not assumed (the spec-premise
+        rule): stats_player_week's recurring ingest is INC-0916's
+        (nfl_weekly_stats_ingest_op — confirm its serving state and
+        that the #1139-era promote landed; the operator backfill
+        covers history either way); games-remaining from the
+        schedule with bye-awareness; the preseason prior from the
+        board's published projections with its vintage stamped. A
+        player with no prior (in-season addition) and a rookie with
+        no realized history get DECLARED handling, not NaN
+        arithmetic. The NF1.5 contrib-vintage item parked on this
+        card (nf1_v1 stamps over an nf1_5_v1 payload, 702/870 rows)
+        is confirmed-or-dismissed in passing while the board's
+        artifacts are open — one paragraph in the closeout, owner's
+        answer, no scope growth.
+    - description: >
+        DELIVERABLE + BOUNDARIES: a PUBLISHED artifact (per-player
+        ROS value + interval + vintage + games-remaining basis) with
+        a contract FROM BIRTH (the census discipline: validated
+        dump + write-gate + served-bytes assertion — never
+        validate-and-discard; the 0917B pattern verbatim) and an
+        executing entrypoint smoke from day one. NO serving-page
+        code, NO waiver/trade surface changes (WVR1 and the trade
+        engine consume the artifact in their own stories); the
+        my-teams "preseason" copy fix stands until this artifact
+        certifiably replaces the figure it describes. Guards
+        RED-proven (unique anchors + baseline-pass + NOT-SELECTED +
+        resolve-every-node); per-row fold series for any pooled
+        stat; renderers exercised on real producer output. Standing:
+        worktree; PR -> dev; >2-min operator paste-ready; no
+        Trello; roadmap frozen; findings to closeout.followUps; a
+        refused ship bar is closed out as a certified NO, not
+        retried with a softer bar (E2.1-r).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-ros1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "ROS" / "rest-of-season" / "value" (board Credence Sports, 2026-09-17)'
+    duplicates: []
+    adjacent:
+      - "NF-WVR1 (Phase A live) — first consumer: the value column, separate from the realized fact columns, separate provenance; consumes the published artifact, never the internals."
+      - "Trade engine (EPIC NF-SEASON member 4, unfunded) — second consumer; the two-sided ROS deltas are this artifact's arithmetic."
+      - "NF-INC-0916 — owns stats_player_week's recurring ingest; the weekly MODEL stays out of bounds absent an explicit registered declaration post-lift."
+      - "The season board / run_nf1 (live) — the preseason prior's source; its leakage-safe design is CORRECT for drafting and untouched; this story never modifies it."
+      - "Serving-writer contract census (cg5FRtch) — the new artifact is born contracted, never joins the uncontracted list."
+      - "NF-WK-RC1 / realized artifacts — REALIZED_STAT_FIELD and the realized lake tables are the facts substrate; one owner per table stands."
+  triedLedger:
+    files:
+      - "docs/nf_wvr1_fa_pool_diagnosis.md (the measured gap: max g=17, no production channel, the VOR kicker-float table)"
+      - "run_nf1.assemble_features (the leakage-safe contract that makes the board the PRIOR, not the answer)"
+      - "quant_sports_intel_models NFL weekly training inputs (the realized history the walk-forward evaluates on)"
+      - "plan_specs/plan_spec_process.md (§0.5, E2.1-r, the spec-premise and timestamped-claim conventions)"
+  recordedNulls:
+    - "Ranking waiver pools by draft-VOR or raw preseason points — measured out (WVR1 F2); the mechanism is structural."
+    - "Using the weekly model's ROS — out of bounds under INC-0916 unless explicitly re-registered post-lift."
+  supersedes: []
+  dependsOn:
+    - "stats_player_week recurring ingest live (INC-0916; backfill covers history); the preseason artifact's vintage; no frontend dependency"
+  feedsInto:
+    - "WVR1's value column (ordering flips from unranked); the trade engine's core arithmetic; the season board's in-season honesty question (a successor may serve this figure on my-teams)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-ros1-plan
+spec:
+  goalRef: { name: nf-ros1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-registration
+        desc: "§0.5 forward registration: form family + anchors + foil + walk-forward evaluation + ship bar, committed BEFORE fitting."
+      - id: 2-data
+        desc: "Dependencies verified (ingest state, prior vintage, no-history handling declared); contrib-vintage item answered in passing."
+      - id: 3-fit-evaluate
+        desc: "Walk-forward per registration; anchors and foil scored; no post-hoc trims (MH2.2)."
+      - id: 4-artifact
+        desc: "Published artifact + contract from birth (0917B pattern) + entrypoint smoke; replacement-level table where the bar clears."
+      - id: 5-verify
+        desc: "RED proofs; reproduction pins; served-bytes assertion; refused bars closed as certified NO."
+      - id: 6-closeout
+        desc: "Verdict + evaluation tables + the consumer contract statement for WVR1/trade into closeout.followUps."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
