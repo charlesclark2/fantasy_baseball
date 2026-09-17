@@ -29,6 +29,79 @@ import { fileURLToPath } from "node:url"
 const FRONTEND = join(dirname(fileURLToPath(import.meta.url)), "..")
 
 const CASES = [
+  // ══ NF-WK-RC1 Phase B — the weekly recap surface ═══════════════════════════════════════════
+  //
+  // ⭐ THE FIRST CASE IS THE ONE THIS SUITE EXISTS FOR. #1155 shipped a disclosure keyed on the
+  // league CAPTURING a term rather than on a MEASURED gap, so it printed "the slot points don't add
+  // up" beside two identical numbers. The PM has since made that distinction binding on every
+  // disclosure the program ships, and a suite that only asserts "the note renders" is satisfied by
+  // the defect itself.
+  {
+    id: "recap-disclosure-without-a-measured-gap",
+    shipped: "#1155 — the itemisation note contradicted two identical numbers printed beside it",
+    detail:
+      "keying the note on the league's captured TERMS rather than on a measured GAP: 'the league " +
+      "captures X' and 'X moved anything this week' are different facts.",
+    // ⚠️ THE FIRST VERSION OF THIS BREAK WAS ITSELF VACUOUS, and it is worth knowing why. It only
+    // removed the render GUARD (`itemisationGapNote &&` → `true &&`), which renders an EMPTY
+    // paragraph when the note is null — no text, so nothing to assert on. #1155 was not a missing
+    // guard; it was the note's TEXT being SYNTHESISED from the league's captured terms. A break
+    // must reproduce the DEFECT, not merely edit the line the defect would live on.
+    file: "components/fantasy/weekly-recap.tsx",
+    from: "      {recap.itemisationGapNote && (\n        <p className=\"mt-2 border-l-2 border-amber-500/40 pl-2 text-xs text-amber-200/80\">\n          {recap.itemisationGapNote}\n        </p>\n      )}",
+    to: "      {((recap.coverage as any)?.captured ?? []).length > 0 && (\n        <p className=\"mt-2 border-l-2 border-amber-500/40 pl-2 text-xs text-amber-200/80\">\n          {\"This league also scores fumbles and 40+ yard touchdown bonuses, which the breakdown below doesn't itemize yet — so the slot points don't add up to the total above.\"}\n        </p>\n      )}",
+    grep: "disclosure is ABSENT",
+  },
+  {
+    id: "recap-disclosure-becomes-a-footnote",
+    shipped: "the MT1 ruling-\u2462 adjacency rule — 'not a panel, not a footnote'",
+    detail:
+      "the gap disclosure drifts out of the card holding the total it is about, to the page edge.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: '        <p className="mt-2 border-l-2 border-amber-500/40 pl-2 text-xs text-amber-200/80">',
+    to: '        <p className="fixed bottom-0 left-0 text-xs text-amber-200/80">',
+    grep: "ADJACENT to the total",
+  },
+  {
+    id: "recap-two-totals-collapse-into-one",
+    shipped: "PM ruling (i) — the standings fact and our itemisation are DIFFERENT FACTS",
+    detail:
+      "serving our slot sum under the league-total label is exactly 'presented as two estimates " +
+      "of one number', and a reader cannot tell which they are looking at.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: "              {pts(team.standingsTotal)}\n            </div>",
+    to: "              {pts(team.itemisedTotal)}\n            </div>",
+    grep: "DIFFERENT FACTS",
+  },
+  {
+    id: "recap-dst-provenance-disappears",
+    shipped: "PM disposition D2 = (C) — the league's own figure, stated plainly, 'not a footnote'",
+    detail: "the per-seat provenance label is dropped, so whose number a seat carries is unanswerable.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: "            {RECAP_SOURCE_LABEL[seat.source] ?? seat.source}",
+    to: "            {null}",
+    grep: "states WHOSE number it is",
+  },
+  {
+    id: "recap-absence-becomes-a-dash",
+    shipped: "the absence-reason class (NF-C6b) — 'was not in the game' vs 'played and scored none'",
+    detail: "the stated reason collapses to a dash, which reads as a player who simply scored nothing.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: '          <span className="text-gray-500 italic">{seat.absence?.detail}</span>',
+    to: '          <span className="text-gray-500 italic">{"\u2014"}</span>',
+    grep: "renders a sentence, never a zero",
+  },
+  {
+    id: "recap-platform-absence-goes-generic",
+    shipped: "PM ruling (i) amendment 2 — a platform we cannot fetch has NO standings",
+    detail:
+      "discarding the server's own sentence loses the word STANDINGS, leaving a reader expecting " +
+      "standings to turn up somewhere else on the page.",
+    file: "components/fantasy/weekly-recap.tsx",
+    from: "          {(error as Error)?.message ||\n            (status === 404 ? RECAP_NOT_RECORDED_FALLBACK : RECAP_PLATFORM_UNAVAILABLE_FALLBACK)}",
+    to: '          {"We could not load this week."}',
+    grep: "STANDINGS specifically",
+  },
   {
     id: "blank-locked-board",
     shipped: "E9.56b — Rankings rendered BLANK for every logged-out visitor",
@@ -3750,7 +3823,25 @@ const CASES = [
 // 201/195/6 -> 207/201/6, and the next full run CONFIRMS it. ⛔ A projection is not a measurement.
 // NF-INC-0917 adds ONE case (`weekly-framing-unguarded`), RED-proven individually for the reason
 // every entry above records — a full board run is 208 production builds. So 207/201/6 -> 208/202/6.
-const RECORDED_BOARD = { total: 208, red: 202, notObservable: 6 }
+// ⚠️ ADVANCED BY *THIS STORY'S OWN DELTA ONLY* (NF-WK-RC1 Phase B, 2026-09-16): +6 cases, all 6
+// RED. 208 → 214 / 202 → 208.
+//
+// ⛔ DELIBERATELY *NOT* SET TO THE OBSERVED TOTALS, which are 253 / 233 / 5. The accounting,
+// measured rather than assumed: the board held 247 cases immediately BEFORE this story's commit
+// and 253 after, so 6 of the gap is mine and **39 of it predates me** — this constant was
+// introduced at E9.64b and has never been advanced since, while other stories added cases. Two of
+// the three cases currently coming back GREEN are likewise not mine
+// (`full-season-rate-divides-by-zero`, `weekly-statline-note-dropped`, the latter's surface being
+// suppressed at present). Adopting the observed numbers would assert "all of this behaves as
+// declared" over two cases that demonstrably do not — which is exactly the laundering the message
+// below forbids.
+//
+// ⇒ THE DRIFT WARNING WILL STILL FIRE, AND THAT IS THE CORRECT OUTCOME: there IS undeclared drift
+// in this board. It is simply not this story's, and the remaining gap is now exactly the part
+// nobody has accounted for. ⚠️ Because drift sets `process.exitCode = 1`, the scheduled run has
+// been failing on this for some time, which is the muted-monitor pattern arriving on the very
+// instrument that polices vacuity elsewhere — reported to the PM rather than silently absorbed.
+const RECORDED_BOARD = { total: 214, red: 208, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

@@ -11,7 +11,9 @@ metadata:
   name: nf-inc-0917b
   vertical: nfl_fantasy
   card: https://trello.com/c/iG6gCYw5
-  status: IN_PROGRESS
+  status: SHIPPED  # PM flip 2026-09-16 — closeout verdict SHIPPED accepted; PR #1152 on main
+  # (dev..main=0 per session verification); the Goal status field had lagged the closeout
+  # verdict in the tree — flipped by PM to match, same one-line class as NF-INJ2c's flip.
 spec:
   description: >
     The root defect measured by NF-INC-0917: the weekly manifest

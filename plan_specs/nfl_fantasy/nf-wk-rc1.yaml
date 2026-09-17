@@ -218,6 +218,74 @@ spec:
         anon cannot distinguish deploy-missing from healthy) and
         every probe field name read from the actual payload first
         (the MT1 probe lesson: uniform absence ⇒ suspect the probe).
+    # ══════════════════════════════════════════════════════════════════════════════════════════
+    # ✅ PHASE A ACCEPTED + FOUR DISPOSITIONS (PM, 2026-09-16) — and ① IS WORK, NOT A NOTE
+    # ══════════════════════════════════════════════════════════════════════════════════════════
+    # PHASE A ACCEPTED on the live gate: `standingsTotal` 138.36 matching the league, nine named
+    # seats, provenance labelled. ⭐ AND THE #1155 CATCH IS RECORDED AS A BINDING PROGRAM RULE, in
+    # the PM's words: "a disclosure keyed on SETTINGS rather than on a MEASURED GAP contradicted two
+    # identical numbers printed beside it — 'the league captures X' and 'X moved anything this week'
+    # are different facts, and only the second licenses the disclosure. That distinction is now
+    # binding on every disclosure this program ships."
+    #
+    # ① THE REALIZED ARTIFACT'S CADENCE — RC1 OWNS IT, AND IT LANDS BEFORE PHASE B SHIPS.
+    #   Quoted: "an artifact with no recurring writer becomes user-visible staleness the moment a
+    #   surface renders from it, and 'an operator runs a CLI every Tuesday' is the silent-freeze
+    #   class with a human as the cron." ✅ DELIVERED: `nfl_realized_week_publish_op`, an INDEPENDENT
+    #   branch off `nfl_weekly_stats_ingest_op` inside `sports_nfl_weekly_serving_job` (INC-25 — the
+    #   consumer refreshed downstream of its own feed IN THE SAME RUN, not on a bare clock), gated on
+    #   the FINAL count-rule so a pre-MNF fire publishes nothing rather than a partial week, with the
+    #   count rule delegated to `realized_week.completeness` so there is ONE owner of "FINAL".
+    #   ⭐ THE default_status POSTURE, RECORDED AS ASKED: this story adds NO schedule. It rides
+    #   `sports_nfl_weekly_serving_schedule`, which already ships `default_status=RUNNING` and is in
+    #   `check_monitors_healthy_op`'s required-RUNNING set — so the cadence INHERITS a heartbeat
+    #   instead of adding one more instigator that can itself be silently STOPPED (NF-INFRA1/E11.23).
+    #   ⭐ THE FRESHNESS CONTRACT IS A COUNT COMPARISON, NOT AN AGE SLA, with ACTIVE-SEASON
+    #   semantics: a published week is CORRECT never to change again, so an mtime bar would page
+    #   daily on a healthy file (INC-45) and stay blind to a producer that succeeds writing nothing
+    #   (NF-FRESH1). `nfl_realized_freshness_op` asks "does every week the LAKE calls FINAL have a
+    #   PUBLISHED manifest?", both sides sourced from outside the artifact; out of season no week is
+    #   final ⇒ INACTIVE, a distinct state from OK because "nothing to check" is not "checked and
+    #   healthy" (NF1.7(a)). It is INVOKED from `sports_nfl_sleeper_injuries_job`, never its own
+    #   subject — the failure it exists for is this job NOT RUNNING, which a monitor inside that job
+    #   cannot see.
+    #   ⭐ A QUESTION THE CADENCE FORCED AND THE RULING ALREADY ANSWERED: publishing the same week
+    #   twice makes "what does a DIFFERENCE mean?" real. `weekly_recap_store` holds the identical
+    #   question for the matchup capture, and its ruling is that the stored record KEEPS SERVING and
+    #   a restatement is a NAMED EVENT — "never a number that changes underneath a reader with no
+    #   explanation". The artifact now classifies rather than PUTs (create / unchanged / upgrade /
+    #   refuse_downgrade / restate / backfill_hash) and a restatement pages WARN, not CRITICAL: the
+    #   vendor restating a played week is working as designed, and paging CRITICAL on that is how a
+    #   monitor gets muted before it catches anything. ⚠️ SEE followUp ⑦ — whether a restatement
+    #   should AUTO-APPLY is a product call the PM may want to take rather than inherit.
+    #
+    # ② THE INGEST OWNERSHIP SPLIT — CONFIRMED AS STATED, recorded in BOTH closeouts and named at
+    #   the definition: NF-INC-0916 owns `stats_player_week` + `snap_counts`; RC1 owns
+    #   `stats_team_week` (the one table in its set INC-0916 does not cover), under the same
+    #   verify-the-source-advances + freshness discipline, wired in ①'s change. One owner per table.
+    #
+    # ③ followUp 2 (the `stats_as_of` vintage) — CLOSED BY VERIFICATION, NO CARD, as directed.
+    #   INC-0916 node 2 owns the going-forward class at the instrument
+    #   (`weekly_serving.assert_stat_vintage_reaches_training`), and the PM's instruction was to
+    #   verify the refusal reaches a human and stop. ✅ VERIFIED EMPIRICALLY, all four hops, by
+    #   DRIVING them rather than reading them: (1) the guard REFUSES the exact historical pair
+    #   (`stats_as_of 2025-W18` vs `train_through 2026 wk 2`) and PASSES a healthy pair, so it is not
+    #   a constant; (2) `run_weekly_serving.main` catches ONLY `WeeklyRostersNotPublished` (AST-
+    #   checked), so the refusal propagates to exit 1; (3) driving the REAL `nfl_weekly_serving_op`
+    #   with that exit emits exactly one page at severity CRITICAL, dedup `nfl_weekly_serving:build`,
+    #   with the refusal text IN THE BODY so the operator sees WHICH defect fired; (4) `send_alert`
+    #   publishes to SNS. A refused publish does NOT die silently — no finding.
+    #
+    # ④ followUp 3 (the Monday 06:15 PT `schedules` refresh, pre-MNF) — PM-CARDED AS yOhLHprC, not
+    #   this story's. The consequence that IS this story's is handled: the D/ST divergence recorder
+    #   would log phantom divergence for the two MNF defences every week (points allowed is read
+    #   from `schedules`; yards and the team counters are not), polluting fXIYuvMN's residual.
+    #   ⛔ TAGGED, NEVER DROPPED — dropping them would make "we could not compute this" and "this
+    #   agreed" the same number, the exact vacuity `compare_to_platform` already refuses elsewhere.
+    #   `divergingUnexplained` is what fXIYuvMN reads; `divergingScheduleResultPending` is the known
+    #   artifact; `resultPendingSupplied` says whether the caller supplied the set at all, so a
+    #   silent omission cannot read as "all clean". The predicate has ONE owner at the construction
+    #   site (`realized_dst.result_pending`) so the tag and its cause cannot drift.
     - description: >
         PHASE B — THE SURFACE (this becomes the one-frontend-story-
         at-a-time occupant; verify no other frontend story is open
@@ -232,6 +300,31 @@ spec:
         entitlement gates untouched; renderers gated per G100. This
         story carries the NF-SEASON suite's first changelog entry —
         written only when the surface renders a real completed week.
+    # ✅ PHASE B DELIVERED 2026-09-16 (PM green-lit; one-frontend-story occupant confirmed by the
+    # PM — WVR1's Phase B queues behind this). `components/fantasy/weekly-recap.tsx`, mounted on the
+    # league view directly under the activation delta and ABOVE the draft-shape sections: in season
+    # this is the question a manager has every Tuesday, and those answer one they asked once.
+    #   • THE TWO TOTALS carry different labels, different visual weight, and their own definitions.
+    #     There is no merged figure on the page and no `total` on the wire.
+    #   • THE DISCLOSURE renders ONLY when the server returns `itemisationGapNote`, adjacent to the
+    #     total inside the same team card, in the SERVER'S words. ⛔ The page never synthesises a
+    #     replacement from the coverage report — that is how #1155 happened, and the adjacency is
+    #     asserted by MEASURING BOUNDING BOXES rather than by grepping a className.
+    #   • EVERY EMPTY STATE IS A DIFFERENT FACT and says which (no week finished / played but not
+    #     recorded / platform unreadable / no opponent), and for the two the server answers, ITS
+    #     sentence is preferred because it knows which platform and which week.
+    #   • PER-SEAT PROVENANCE is visible beside the seat, not behind a tooltip; an absent player
+    #     renders his reason, never a zero.
+    #   • THE COMPLETED WEEK is derived from the projection's own target week, never a clock — the
+    #     same reason the artifact's completeness gate is a COUNT.
+    # VERIFICATION: 10 E2E clauses on RENDERED OUTPUT and COMPUTED LAYOUT (NF-C4: a source-grep
+    # frontend guard tests that someone typed a string), 6 new red-proof cases, and 74 pre-existing
+    # E2E specs that render this page still pass — the panel adds two calls to it, so the harness
+    # models both rather than letting them 501.
+    # ⚠️ THE `finalNoGap` HARNESS MODE IS LOAD-BEARING, not a nicety: without a null-note fixture
+    # the only available assertion is "the note renders", which the #1155 defect satisfies exactly.
+    # 📌 CHANGELOG: written, because a real completed week renders. It ships only with this PR,
+    # whose merge is gated on the operator confirming the live render AND on ①'s cadence.
     - description: >
         TIMING + GUARDS: the first fully-scoreable week is week 2
         (completes Tue 09-16 night; realized lines land per node 1's
@@ -269,6 +362,7 @@ spec:
       - "NF-WK-FE1 (Done) — public weekly page untouched; Phase B here is the next frontend occupant (verify none other open)."
       - "Entrypoint sibling sweep (GyD9hoeD) — if this story adds a publish/serving entrypoint, it ships WITH an executing smoke from day one (never joins the zero-callers list)."
       - "NF-WVR1 (IN FLIGHT) — ⚠️ SEAM SPLIT, PM-ratified 2026-09-16, recorded so neither session duplicates the other's fetch: RC1 owns the WEEKLY MATCHUP fetch (`sleeper_matchups.fetch_week`, `/matchups/{week}`, STARTERS-ONLY and deliberately FROZEN point-in-time — a recap must be stable after it renders). WVR1 owns the ROSTER REFRESH (a method on `platform_import/sleeper.py` beside `_fetch_teams`, `/league/{id}/rosters`, the FULL rostered set and deliberately CURRENT — a stale FA pool recommends rostered players). Two different objects on one host with correctly OPPOSITE freshness semantics; neither supersedes the other. WVR1 node 1 (`docs/nf_wvr1_fa_pool_diagnosis.md` §3) is the analysis of record."
+      - "NF-WVR1 (IN FLIGHT) — 📌 ONE ASK, RAISED PER PM Q4 DISPOSITION 2026-09-16, recorded here because RC1 owns the artifact and WVR1 must not fork a second publisher: WVR1 consumes `fantasy/nfl/realized/<season>/<week>/players.json` to build season-to-date FACT columns, so its read fans out to ONE S3 GET PER COMPLETED WEEK — 1 today, ~17 by week 18. WOULD RC1 PUBLISH A CUMULATIVE SEASON-TO-DATE ARTIFACT BESIDE THE WEEKLY ONE? It turns WVR1's read into one GET forever, removes the fan-out failure mode rather than bounding it, and is cheapest to add WHILE the recurring cadence (PM Q2) is being wired — that write already has every week in hand. If declined, WVR1 ships a bounded batched read with a loud refusal over the cap (a silent truncation would present a partial-week sum as a complete season total). ⚠️ Also FYI for RC1's contract work: WVR1 measured the published week 1 and its declared-column contract holds (47/47 present, 0 all-NULL) — WVR1's earlier \"uncontracted writer\" framing was wrong and is corrected at NF-WVR1 followUp ⑭."
   triedLedger:
     files:
       - "NF-WK-MT1 closeout (the endpoint + gate pattern this story mirrors; the probe and fixture lessons)"
@@ -312,3 +406,110 @@ spec:
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+
+      ── ⑥ ⛔⛔ A CORRECTION I OWE: THE D/ST DIVERGENCE RECORDER IS NOT WIRED, AND
+      I REPORTED PHASE A AS THOUGH IT WERE. The D2 disposition (C) requires that
+      "the construction still runs, silently, as a divergence recorder … Log the
+      per-week divergence set (which teams, ours vs theirs, delta) to an artifact
+      (B) consumes". `compare_to_platform` and `realized_dst.dst_row` are built,
+      proven and guarded — and NOTHING IN PRODUCTION CALLS EITHER. Measured: the
+      only callers of both are tests; the recap route does not invoke the
+      comparison. So the 35-of-48 figure in the Phase A record came from a
+      one-off probe I ran in-session, and no recurring recorder exists. This is
+      the NF-C0e wired-≠-invoked class landing inside the story that cites it,
+      and my Phase A recap sentence "all seats record divergence" was wrong: the
+      CODE records, the SYSTEM does not. ⚠️ PM ④'s tagging is therefore correct
+      and now implemented, but it currently tags a stream nobody produces.
+      WHY IT IS NOT FIXED HERE, with the blocker measured rather than assumed:
+      the API Lambda cannot read the NFL lake (that is the whole reason the
+      realized week is published as an artifact), and the published artifact is
+      PLAYER-GRAIN ONLY. ⭐ The gap is SMALLER than it looks — the team
+      defensive counters and the opponent's passing/rushing/sack yards are all
+      summable from the player rows the artifact already carries; what is
+      genuinely absent is the OPPONENT'S SCORE and its non-offensive
+      touchdowns, which live in `schedules`. And the E8.5 write-grant objection
+      does NOT apply: the Lambda already writes this bucket (`weekly_recap_store`
+      persists every fetched week), so no new IAM grant is needed. ⇒ the decision
+      is a SHAPE one (add a small per-game block to the realized artifact and
+      record request-side, or run the recorder box-side where the lake is
+      readable), and it is the PM's, not mine — it is either a rider on
+      fXIYuvMN (whose residual the recorder feeds) or a small carded piece.
+
+
+      ── ⑦ SHOULD A VENDOR RESTATEMENT AUTO-APPLY? A DECISION, NOT A DEFAULT.
+      ① had to answer "what does a second publish of the same week mean", and I
+      took the conservative reading already ruled for the matchup capture
+      (`weekly_recap_store`): the published week KEEPS SERVING and the
+      restatement is parked at a revision key with a WARN page. That is
+      consistent and safe, and it has a cost worth stating plainly: a genuine
+      nflverse stat correction then never reaches a reader without a human
+      acting. The alternative — auto-apply and announce — is defensible on a
+      FACTUAL surface, where the corrected number is the better fact. Both are
+      coherent; they differ in who absorbs the surprise. Flagged rather than
+      silently settled because it changes what a user sees.
+
+
+      ── ⑧ THE REALIZED TIER'S IN-SEASON WRITER (was finding 1). `stats_team_week`
+      is now RC1's to own per ② and is read by the D/ST construction; it is NOT
+      in `ROLL_FORWARD_SOURCES` and is not ingested by ①'s change either, which
+      ingests nothing — ① PUBLISHES from what INC-0916's ingest lands. ⚠️ So the
+      D/ST construction's yards-allowed input has no scheduled writer, which is
+      invisible today ONLY because the construction is unwired (⑥). Whoever takes
+      ⑥ inherits this; it is the same shape as the incident that started RC1.
+
+
+      ── ⑨ CARRIED FORWARD UNCHANGED from `docs/nf_wk_rc1_realized_source_diagnosis.md` §8:
+      `pat_missed` / `fumble_rec_td` / `st_player_td` are scoreable from the
+      realized line but have no `STAT_FIELD` key — adding them is a three-mirror
+      change with a paid-set consequence (`PAID_PLAYER_FIELDS` derives from
+      `STAT_FIELD`), i.e. a deliberate entitlement decision, not a tidy-up.
+      Closure work for `fum` + the 40+ yard bonuses is already PM-carded (1KQeqWC0).
+
+
+      ── ⑩ RESOLVED, RECORDED SO IT IS NOT RE-OPENED: followUp 2 (the
+      `stats_as_of` vintage) is CLOSED by verification per PM ③ — the
+      going-forward class is owned at INC-0916's instrument,
+      `weekly_serving.assert_stat_vintage_reaches_training`, and the refusal→page
+      chain was driven end-to-end (see the ③ block above for the four hops).
+      followUp 3 is PM-carded as yOhLHprC; its consequence for this story is
+      handled per ④.
+
+      ── ⑪ ⚠️ THE BOX EXECUTES `app/backend` CODE, AND THE BOX DEPLOY IS NOT
+      TRIGGERED BY IT — A DECISION FOR THE PM, BECAUSE THE FIX AMENDS ANOTHER
+      STORY'S RATIFIED CLAUSE. `orchestration_cd.yml` deliberately excludes
+      `app/backend/**`, pinned by
+      `test_orchestration_cd_paths.py::test_the_lambda_and_frontend_are_not_wired_to_the_box_deploy`,
+      on the reasoning that the API ships via `deploy.sh` and wiring it to the box
+      would read as though merging deployed the API (the NF-C0 skew
+      misconception, which has cost real outages). ⛔ That clause's premise —
+      "a change the box does not run" — IS NO LONGER TRUE, and THIS STORY is what
+      made it untrue. MEASURED by transitive import closure, not read: before
+      RC1 the box reached TWO `app/backend` modules (`models/nfl_weekly.py`,
+      `services/projection_fields.py`, via `run_weekly_serving`, so the gap
+      itself dates to NF-C6-PH2); RC1's `realized_week.py` widened that to SIX
+      by importing the scorer and the recap adapter.
+      ⭐ THE LIVE EXPOSURE IS NARROWER THAN IT SOUNDS, and the honest version is
+      the useful one: a ONE-SCORER change necessarily also touches
+      `quant_sports_intel_models/fantasy_engine/`, which IS a trigger path, so
+      the box rebuilds anyway and the scorer is largely self-protecting. What is
+      genuinely unprotected is a change touching ONLY
+      `app/backend/{services,models}` — and there is a concrete one:
+      `EXPLANATION_COLUMNS` derives from `EXPLAINABLE_CAPTURED_TERMS` in
+      `weekly_recap.py`, and `realized_week.required_columns()` reads it to
+      decide which lake columns the published artifact CARRIES. A box on a stale
+      image would publish an artifact missing a column, silently — which
+      `realized_week`'s own header records as "how the split shipped as a no-op
+      once".
+      ⇒ THE OPTIONS, neither of which is safe as stated: (a) add
+      `app/backend/{services,models}/**` to the trigger set and AMEND the NF-K1
+      clause to forbid the ROUTER/API-only paths rather than all of
+      `app/backend` — keeps the NF-C0 intent (merging still does not deploy the
+      API, because the routers are not there) while closing the staleness, at the
+      cost of API-only service edits rebuilding the box; (b) leave it and accept
+      that those six modules can go stale on the box while CI is green.
+      ⛔ I DID NOT TAKE IT. What ships instead is a TRIPWIRE
+      (`test_the_box_reached_app_backend_surface_has_not_widened`) pinning the
+      measured closure, so a SEVENTH module becomes a loud decision rather than a
+      silent one, plus its two-sided partner that retires the section if the
+      exclusion is ever lifted.

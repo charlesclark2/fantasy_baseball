@@ -28,6 +28,8 @@ import {
   listSavedLeagues,
   saveCustomBoard,
   updateSavedLeague,
+  getPowerRankings,
+  getWeeklyRecap,
 } from "@/lib/fantasy"
 import type {
   FantasyPreferences,
@@ -860,4 +862,80 @@ export function useActiveMlbLeague(): [string | null, (v: string | null) => void
       }
     },
   ]
+}
+
+// ── END of the E8.1 MLB prospect block ───────────────────────────────────────────────────────
+//
+// ⛔ THIS LINE IS LOAD-BEARING FOR A GUARD IN ANOTHER STORY.
+// `test_mlb_prospect_board_surface.py::test_the_prospect_hooks_refuse_to_issue_the_request_for_a_non_admin`
+// slices this file from the E8.1 header to HERE and asserts every `useQuery` inside gates on
+// `isAdmin`. It used to slice to END OF FILE, so every hook appended below E8.1 was swept into
+// "the MLB block" regardless of what it was — and NF-WK-RC1's two NFL hooks, which gate on
+// IDENTITY (`accessToken` + `leagueId`) exactly as `useLeagueBoard` does and must, failed it.
+//
+// ⭐ The guard's CLAIM was always right; its PROXY (a slice with no end) had drifted from it. So
+// the boundary is now a property of this FILE rather than of whatever happens to be appended next,
+// and the guard RAISES if this marker goes missing rather than silently reverting to EOF.
+//
+// ⇒ A new MLB PROSPECT hook goes ABOVE this line. Anything else goes below.
+
+// ── NF-WK-RC1 Phase B — the weekly recap + standings ─────────────────────────────────────────────
+//
+// ⚠️ IDENTITY, NOT ENTITLEMENT, in `enabled` — the same reasoning `useLeagueBoard` documents. The
+// SERVER enforces ownership and the quota; gating the query on `canAccess` here would additionally
+// hide a free account's own league from the surface built to show it.
+//
+// ⛔ `retry: false` IS LOAD-BEARING ON THIS PAIR. Both endpoints answer a 404 ("this week is not
+// recorded yet") and a 422 ("this platform cannot be read") as ROUTINE, EXPECTED states that the
+// surface renders as stated absences. Retrying them would turn a correct, immediate answer into
+// three silent round trips and a slow spinner.
+
+/**
+ * The most recently COMPLETED week, derived from the projection's own target.
+ *
+ * ⭐ DERIVED FROM A SERVED ARTIFACT, NEVER FROM A CLOCK. The weekly builder resolves its target as
+ * the next UNPLAYED week from the published schedule, so the week before it is the newest one that
+ * has finished. A date-arithmetic version of this would be wrong in exactly the cases that matter —
+ * a flexed game, a postponement, the Thursday/Monday boundary — which is the same reason the
+ * realized artifact's own completeness gate is a COUNT and not a clock.
+ *
+ * Returns null before the season's first week completes, which is a real state and not an error.
+ */
+export function completedWeekFrom(manifestWeek: number | null | undefined): number | null {
+  if (typeof manifestWeek !== "number" || !Number.isFinite(manifestWeek)) return null
+  const completed = Math.floor(manifestWeek) - 1
+  return completed >= 1 ? completed : null
+}
+
+export function useWeeklyRecap(
+  leagueId: string | null,
+  week: number | null,
+  season: number = FANTASY_SEASON,
+) {
+  const { accessToken } = useAuth()
+  return useQuery<WeeklyRecapPayload>({
+    queryKey: ["nfl-fantasy-weekly-recap", leagueId, season, week],
+    queryFn: () => getWeeklyRecap(accessToken, leagueId as string, week as number, season),
+    enabled: !!accessToken && !!leagueId && typeof week === "number" && week >= 1,
+    // A recap is a POINT-IN-TIME record of a finished week — it does not move, so re-fetching it is
+    // pure cost. (The server holds the same position: the stored capture is what keeps serving.)
+    staleTime: 10 * 60_000,
+    retry: false,
+  })
+}
+
+export function usePowerRankings(
+  leagueId: string | null,
+  throughWeek: number | null,
+  season: number = FANTASY_SEASON,
+) {
+  const { accessToken } = useAuth()
+  return useQuery<PowerRankingsPayload>({
+    queryKey: ["nfl-fantasy-power-rankings", leagueId, season, throughWeek],
+    queryFn: () =>
+      getPowerRankings(accessToken, leagueId as string, throughWeek as number, season),
+    enabled: !!accessToken && !!leagueId && typeof throughWeek === "number" && throughWeek >= 1,
+    staleTime: 10 * 60_000,
+    retry: false,
+  })
 }

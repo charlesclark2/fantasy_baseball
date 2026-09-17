@@ -164,6 +164,24 @@ def points_allowed(opponent_score: float | None, opponent_non_offensive_tds: flo
     return max(0.0, float(opponent_score) - NON_OFFENSIVE_TD_POINTS * tds)
 
 
+def result_pending(opponent_score: float | None) -> bool:
+    """Is this defence's game result simply NOT IN `schedules` YET?
+
+    ⚠️ THIS IS A KNOWN, DATED CADENCE DEFECT, NOT A DATA ERROR — PM card yOhLHprC (2026-09-16).
+    `schedules` refreshes Monday 06:15 PT, BEFORE Monday Night Football, so for up to seven days the
+    MNF game carries no score while `stats_player_week` already holds every player's line. Points
+    allowed is read from `schedules`; yards and the team counters are not. So for exactly the two
+    MNF defences the construction is missing its largest term and will disagree with the league's
+    figure EVERY WEEK, for a reason that has nothing to do with the residual fXIYuvMN is chasing.
+
+    ⛔ SO IT IS TAGGED, NEVER DROPPED. Silently excluding these rows would make "we could not
+    compute this one" and "this one agreed" the same number — the vacuity `compare_to_platform`
+    already refuses elsewhere. The row is recorded, marked, and reported in its own bucket so the
+    residual signal can be read clean without anything being hidden.
+    """
+    return opponent_score is None
+
+
 def net_yards_allowed(passing: float | None, rushing: float | None, sack_yards: float | None) -> float | None:
     """The opponent's NET offensive yards. `sack_yards_lost` is stored NEGATIVE — see the header."""
     if passing is None and rushing is None:

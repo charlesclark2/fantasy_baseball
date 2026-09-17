@@ -404,6 +404,7 @@ def compare_to_platform(
     scored: dict,
     *,
     dst_constructed: dict[str, float] | None = None,
+    dst_result_pending: set[str] | None = None,
     captured_weights: dict[str, float] | None = None,
     realized_by_seat: dict[tuple, dict] | None = None,
     tolerance: float = 1e-9,
@@ -420,11 +421,19 @@ def compare_to_platform(
     (`EXPLAINABLE_CAPTURED_TERMS`), its arithmetic contribution is recorded as `explained` and the
     remainder as `unexplained`. The residual is the future alert's clean signal; the explained part
     is arithmetic and must never be mistaken for evidence.
+
+    ⚠️ `dst_result_pending` NAMES THE DEFENCES WHOSE GAME RESULT `schedules` HAS NOT PUBLISHED YET
+    (PM card yOhLHprC — the Monday 06:15 PT refresh lands BEFORE Monday Night Football). Those two
+    defences every week are missing their points-allowed term through a KNOWN cadence defect, so
+    their divergence is an artifact of someone else's schedule. They are TAGGED and counted in their
+    own bucket rather than dropped: the fXIYuvMN residual reads `divergingUnexplained`, and nothing
+    is hidden from a reader who wants the raw count.
     """
     player_div: list[dict] = []
     dst_div: list[dict] = []
     player_n = dst_n = 0
     dst_unavailable: list[dict] = []
+    dst_pending: list[dict] = []
     player_unexplained: list[dict] = []
     for team in scored.get("teams") or []:
         for seat in team.get("seats") or []:
@@ -455,8 +464,11 @@ def compare_to_platform(
                 dst_n += 1
                 rec["ours"] = float(dst_constructed[key])
                 rec["delta"] = rec["ours"] - float(theirs)
+                rec["scheduleResultPending"] = key in (dst_result_pending or set())
                 if abs(rec["delta"]) > tolerance:
                     dst_div.append(rec)
+                    if rec["scheduleResultPending"]:
+                        dst_pending.append(rec)
             else:
                 player_n += 1
                 # ⭐ SPLIT THE DELTA. `explained` is what a captured term arithmetically accounts
@@ -488,6 +500,13 @@ def compare_to_platform(
         },
         "dstSeats": {
             "compared": dst_n, "diverging": len(dst_div), "rows": dst_div,
+            # ⚠️ THE KNOWN-CAUSE SPLIT (PM card yOhLHprC). `divergingUnexplained` is what
+            # fXIYuvMN's residual should be read from; `divergingScheduleResultPending` is the
+            # MNF artifact, reported rather than removed so the raw count stays visible.
+            "divergingScheduleResultPending": len(dst_pending),
+            "scheduleResultPendingRows": dst_pending,
+            "divergingUnexplained": len(dst_div) - len(dst_pending),
+            "resultPendingSupplied": dst_result_pending is not None,
             # ⛔ NOT SILENCE. A seat whose construction could not be computed is reported, never
             # counted as agreement — otherwise "we could not check" and "it matched" are the same
             # number, which is how a vacuous comparison looks healthy.

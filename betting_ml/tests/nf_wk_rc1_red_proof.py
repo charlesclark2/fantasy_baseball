@@ -24,6 +24,9 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SUITE = "betting_ml/tests/test_nf_wk_rc1_weekly_recap.py"
+#: NF-WK-RC1 ① — the cadence clauses live in their own file. A break names a test in EITHER
+#: suite: the last field is a bare test name (⇒ `SUITE`) or a full `path::test` nodeid.
+CADENCE = "betting_ml/tests/test_nf_wk_rc1_cadence.py"
 
 # (label, file, old, new, the test that MUST go red)
 BREAKS = [
@@ -99,7 +102,106 @@ BREAKS = [
      '''        | set(W.EXPLANATION_COLUMNS)''',
      '''        | set()''',
      "test_the_explanation_columns_are_actually_carried_by_the_published_artifact"),
+
+    # ══ NF-WK-RC1 ① — the recurring writer, and its refusals ═══════════════════════════════════
+    ("the realized publish is unwired from the job, so nothing publishes a week ever again",
+     "pipeline/jobs/sports_nfl_weekly_serving_job.py",
+     "    nfl_realized_week_publish_op(start=landed)",
+     "    pass  # unwired",
+     f"{CADENCE}::test_the_realized_publish_runs_downstream_of_the_stats_ingest_it_reads"),
+
+    # ⚠️ THE FIRST CUT OF THIS BREAK WAS ITSELF VACUOUS, and it is kept in the record because the
+    # failure mode is the interesting part: it wrote
+    # `nfl_realized_week_publish_op(start=nfl_weekly_serving_op(start=landed))`, which invokes the
+    # build op a SECOND time — Dagster then ALIASES it to `nfl_weekly_serving_op_2`, so the
+    # reachability clause looked for a node name that no longer existed and passed on broken source.
+    # A break must reproduce the DEFECT, not merely edit the line the defect would live on.
+    ("the realized publish is chained BEHIND the projection build, so a refused build withholds it",
+     "pipeline/jobs/sports_nfl_weekly_serving_job.py",
+     "    landed = nfl_weekly_stats_ingest_op()\n    nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=landed))\n    # NF-WK-RC1 ① — an INDEPENDENT branch off the same ingest: it must not be withheld by a\n    # refused projection build, and must not withhold one. See the op's own docstring.\n    nfl_realized_week_publish_op(start=landed)",
+     "    landed = nfl_weekly_stats_ingest_op()\n    built = nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=landed))\n    # NF-WK-RC1 ① — an INDEPENDENT branch off the same ingest: it must not be withheld by a\n    # refused projection build, and must not withhold one. See the op's own docstring.\n    nfl_realized_week_publish_op(start=built)",
+     f"{CADENCE}::test_the_realized_publish_is_not_downstream_of_the_projection_build"),
+
+    ("the publish subprocess loses its finite timeout (INC-32)",
+     "pipeline/jobs/sports_nfl_weekly_serving_job.py",
+     "        proc = run_bounded(cmd, cwd=str(_APP_DIR), env=env,\n"
+     "                           timeout=NFL_REALIZED_PUBLISH_TIMEOUT_SECONDS)",
+     "        proc = subprocess.run(cmd, cwd=str(_APP_DIR), env=env,\n"
+     "                              capture_output=True, text=True)",
+     f"{CADENCE}::test_the_realized_publish_subprocess_is_bounded"),
+
+    ("the backstop moves INSIDE the job it judges, so it can never see that job stop",
+     "pipeline/jobs/sports_nfl_sleeper_injuries_job.py",
+     "    nfl_realized_freshness_op()",
+     "    pass  # moved",
+     f"{CADENCE}::test_the_realized_freshness_backstop_runs_on_a_different_job_than_its_subject"),
+
+    ("the cadence starts publishing PARTIAL weeks (the pre-MNF fire the PM gate refuses)",
+     "quant_sports_intel_models/football/nfl/fantasy/realized_week.py",
+     '    final_weeks = sorted(w for w, s in states.items() if s == "final")',
+     '    final_weeks = sorted(w for w, s in states.items() if s != "not_started")',
+     f"{CADENCE}::test_a_partial_week_is_never_planned_by_the_cadence"),
+
+    ("a restatement silently OVERWRITES the week a reader is already looking at",
+     "quant_sports_intel_models/football/nfl/fantasy/realized_week.py",
+     '    return {"action": "restate",',
+     '    return {"action": "create",',
+     f"{CADENCE}::test_a_restatement_keeps_the_published_week_serving"),
+
+    ("a FINAL week can be clobbered by a later PARTIAL build",
+     "quant_sports_intel_models/football/nfl/fantasy/realized_week.py",
+     '    if was == "final" and state != "final":',
+     "    if False:",
+     f"{CADENCE}::test_a_final_week_is_never_replaced_by_a_partial_one"),
+
+    ("an uncomparable published week is reported as 'unchanged' (the NF1.7(a) vacuous pass)",
+     "quant_sports_intel_models/football/nfl/fantasy/realized_week.py",
+     '    prior = published.get("content_sha256")\n    if not prior:',
+     '    prior = published.get("content_sha256")\n    if False:',
+     f"{CADENCE}::test_an_uncomparable_published_week_is_not_reported_as_unchanged"),
+
+    ("the content hash stops being order-invariant, so every rebuild reads as a restatement",
+     "quant_sports_intel_models/football/nfl/fantasy/realized_week.py",
+     "        json.dumps(canonical_rows(players), sort_keys=True, default=str).encode()",
+     "        json.dumps(players, sort_keys=True, default=str).encode()",
+     f"{CADENCE}::test_the_content_hash_ignores_row_order_but_not_row_content"),
+
+    ("the backstop pages out of season, on an artifact that is correctly static (INC-45)",
+     "betting_ml/monitoring/nfl_realized_freshness.py",
+     '        return {"verdict": "INACTIVE", "severity": None, "missing": [],',
+     '        return {"verdict": "INACTIVE", "severity": "WARN", "missing": [],',
+     f"{CADENCE}::test_no_final_week_is_inactive_and_never_pages"),
+
+    ("an unevaluable backstop reading is scored HEALTHY instead of WARN (NF1.7(a))",
+     "betting_ml/monitoring/nfl_realized_freshness.py",
+     '        return {"verdict": "UNEVALUABLE", "severity": "WARN", "missing": [],',
+     '        return {"verdict": "UNEVALUABLE", "severity": None, "missing": [],',
+     f"{CADENCE}::test_an_unevaluable_reading_is_warn_and_never_healthy"),
+
+    ("the grace window is tightened below the vendor's own measured publication lag",
+     "betting_ml/monitoring/nfl_realized_freshness.py",
+     "GRACE_HOURS = VENDOR_LAG_HOURS + CADENCE_HOURS + SLACK_HOURS",
+     "GRACE_HOURS = 6",
+     f"{CADENCE}::test_the_grace_window_exceeds_the_measured_vendor_lag"),
+
+    ("a parked revision counts as a published week, hiding a real gap behind it",
+     "quant_sports_intel_models/football/nfl/fantasy/run_realized_week.py",
+     '            if parts[-1] == "manifest.json" and len(parts) >= 2 and parts[-2].isdigit():',
+     '            if parts[-1].startswith("manifest") and len(parts) >= 2 and parts[-2].isdigit():',
+     f"{CADENCE}::test_a_parked_revision_does_not_read_as_a_published_week"),
+
+    ("the MNF-pending D/ST rows are DROPPED rather than tagged, so 'could not compute' reads as "
+     "'agreed' (PM item 4 / card yOhLHprC)",
+     "app/backend/services/weekly_recap.py",
+     '                if abs(rec["delta"]) > tolerance:\n'
+     "                    dst_div.append(rec)\n"
+     '                    if rec["scheduleResultPending"]:\n'
+     "                        dst_pending.append(rec)",
+     '                if abs(rec["delta"]) > tolerance and not rec["scheduleResultPending"]:\n'
+     "                    dst_div.append(rec)",
+     f"{CADENCE}::test_a_defence_whose_game_result_has_not_published_is_tagged_not_dropped"),
 ]
+
 
 
 def _run(selector: str) -> bool:
@@ -118,13 +220,20 @@ def main() -> int:
         bak.unlink()
         print(f"  restored stale backup for {target.relative_to(ROOT)}")
 
-    if not _run(SUITE):
-        print("BASELINE FAILED — the suite must be green before any break is meaningful")
-        return 1
-    print(f"baseline: {SUITE} green\n")
+    for _suite in (SUITE, CADENCE):
+        if not _run(_suite):
+            print(f"BASELINE FAILED ({_suite}) — a suite must be green before any break means anything")
+            return 1
+        print(f"baseline: {_suite} green")
+    print()
 
     failures = []
     for label, rel, old, new, must_fail in BREAKS:
+        # ⭐ A bare test name means the default suite; a `path::test` nodeid names its own. The
+        # SUITE-level re-run below must use the SAME file, or a break in one suite would be
+        # judged against the other's green run — a harness that cannot fail for the right reason.
+        nodeid = must_fail if "::" in must_fail else f"{SUITE}::{must_fail}"
+        suite = nodeid.split("::", 1)[0]
         path = ROOT / rel
         src = path.read_text()
 
@@ -146,15 +255,15 @@ def main() -> int:
             if old in on_disk:
                 failures.append(f"{label}: the old token survives — the break may not bite")
                 continue
-            named_red = not _run(f"{SUITE}::{must_fail}")
-            suite_red = not _run(SUITE)
+            named_red = not _run(nodeid)
+            suite_red = not _run(suite)
             if not named_red:
-                failures.append(f"{label}: {must_fail} stayed GREEN on broken source (VACUOUS)")
+                failures.append(f"{label}: {nodeid} stayed GREEN on broken source (VACUOUS)")
             elif not suite_red:
                 failures.append(f"{label}: the named test went red but the suite did not — "
                                 "it is not selected by a plain run")
             else:
-                print(f"  ✅ RED  {label}  →  {must_fail}")
+                print(f"  ✅ RED  {label}  →  {nodeid}")
         except BaseException as exc:   # noqa: BLE001 — pytest's Failed is a BaseException (NF-W6c)
             failures.append(f"{label}: harness error {type(exc).__name__}: {exc}")
         finally:
