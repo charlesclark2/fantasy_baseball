@@ -3,6 +3,7 @@ import {
   E2E_RANKING_BASIS,
   E2E_RECAP_ESPN_DETAIL,
   E2E_RECAP_GAP_NOTE,
+  E2E_RECAP_UNMATCHED_DETAIL,
   collectPageErrors,
   mockApi,
 } from "../support/api-mock"
@@ -80,18 +81,35 @@ test.describe("weekly recap", () => {
     await expect(page.getByText("Scored by us").first()).toBeVisible()
   })
 
-  test("an absent player renders a sentence, never a zero", async ({ page }) => {
+  test("a started player the league scored 0 shows his name and the league's 0", async ({
+    page,
+  }) => {
     await mockApi(page, { entitlement: "free", leagues: "one", recap: "final" })
     await signIn(page)
     await page.goto(LEAGUE)
 
-    // ⚠️ "was not in the game" and "played and scored nothing" are different facts. A 0.00 in this
-    // cell states the wrong one, and the reader has no way to tell.
-    await expect(
-      page.getByText("no stat line was recorded for him this week", { exact: false }).first(),
-    ).toBeVisible()
-    const receiverRow = page.locator("tr", { hasText: "Recap Receiver" })
-    await expect(receiverRow).toHaveCount(0)
+    // ⭐ Operator request 2026-09-17: a player started while out reads as his NAME and a 0 — and the
+    // 0 says whose it is, because it is the league's figure rather than one we scored.
+    const row = page.getByTestId("recap-team-1").locator("tr", { hasText: "Recap Receiver" })
+    await expect(row).toHaveCount(1)
+    const cells = row.locator("td")
+    await expect(cells.nth(2)).toHaveText("0.00")
+    await expect(cells.nth(3)).toHaveText(/your league's figure/i)
+    await expect(row).not.toContainText("stat line")
+  })
+
+  test("a player the league scored but we could not match keeps a BLANK score and says why", async ({
+    page,
+  }) => {
+    await mockApi(page, { entitlement: "free", leagues: "one", recap: "final" })
+    await signIn(page)
+    await page.goto(LEAGUE)
+
+    // ⚠️ He played — the league scored him — so a 0.00 here would be a wrong number that looks real.
+    const row = page.getByTestId("recap-team-1").locator("tr", { hasText: "Recap Tightend" })
+    await expect(row).toHaveCount(1)
+    await expect(row).toContainText(E2E_RECAP_UNMATCHED_DETAIL)
+    await expect(row.locator("td").nth(2)).toHaveText("—")
   })
 
   test("the itemisation disclosure renders ADJACENT to the total it is about", async ({ page }) => {

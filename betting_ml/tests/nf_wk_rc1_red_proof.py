@@ -205,6 +205,29 @@ BREAKS = [
      "                    dst_div.append(rec)",
      f"{CADENCE}::test_a_defence_whose_game_result_has_not_published_is_tagged_not_dropped"),
 
+    # ── ABSENT SEATS (operator request 2026-09-17) ──────────────────────────────────────────────
+    ("a player the league DID score but we could not match is printed as a 0",
+     "app/backend/services/weekly_recap.py",
+     "                if league is not None and float(league) == 0.0:",
+     "                if league is not None:",
+     "test_a_player_the_league_scored_but_we_could_not_match_is_never_a_zero"),
+
+    ("a missing stat line is INFERRED as a 0 even when the league published no score",
+     "app/backend/services/weekly_recap.py",
+     "                else:\n"
+     '                    row.update({"points": None, "source": None,\n'
+     '                                "absence": _absence("no_realized_line")})',
+     "                else:\n"
+     '                    row.update({"points": 0.0, "source": SOURCE_LEAGUE_PUBLISHED,\n'
+     '                                "sourceNote": DID_NOT_PLAY_NOTE, "absence": None})',
+     "test_with_no_league_score_published_the_seat_stays_an_absence"),
+
+    ("a league-scored-zero seat is counted as agreement with the league (compared to itself)",
+     "app/backend/services/weekly_recap.py",
+     '            elif seat.get("source") == SOURCE_LEAGUE_PUBLISHED:',
+     '            elif seat.get("source") == "never":',
+     "test_a_league_scored_zero_seat_is_not_counted_as_agreement"),
+
     # ── CONTRACT (PM addendum 2026-09-17). Each break REPRODUCES a defect, not merely edits a line.
     ("NaN counts as a value — the pandas read's unpopulated numeric column passes",
      _RW, "    return v is not None and not (isinstance(v, float) and math.isnan(v))",

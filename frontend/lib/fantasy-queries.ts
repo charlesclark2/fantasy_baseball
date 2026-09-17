@@ -37,8 +37,10 @@ import type {
   LeagueBoardPayload,
   LeagueSaveInput,
   MyTeamsPayload,
+  PowerRankingsPayload,
   ProjectionPayload,
   SavedLeague,
+  WeeklyRecapPayload,
 } from "@/lib/fantasy"
 import type { LeagueConfig } from "@/lib/league-config"
 import type { BuiltBoard, RosterMatch } from "@/lib/league-scoring"

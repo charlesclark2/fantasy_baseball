@@ -87,8 +87,18 @@ SOURCE_LEAGUE_PUBLISHED = "league_published"
 
 #: The sentence a surface may render as-is beside a league-published seat.
 LEAGUE_PUBLISHED_NOTE = (
-    "This score is your league's own published figure for the team defence, not ours. Every other "
-    "slot is your league's scoring applied to the week's real stat line by us."
+    "This score is your league's own published figure for the team defence, not ours. Slots "
+    "marked as scored by us are your league's scoring applied to the week's real stat line."
+)
+
+#: The note beside a started player the LEAGUE scored 0 and for whom no stat line exists (operator
+#: request 2026-09-17: a player started while out should read as his name and a 0, not a sentence).
+#: ⭐ The 0 is the LEAGUE'S OWN per-starter figure (`platformPts`), not an inference from a missing
+#: line — which is what makes it safe to print: "we found no line" alone cannot tell "did not play"
+#: from "we failed to match him", and a zero there would be a wrong number that looks real.
+DID_NOT_PLAY_NOTE = (
+    "Your league scored this player 0 and we found no stat line for him this week, so there was "
+    "nothing to itemize. The 0 is your league's own figure."
 )
 
 #: Why a started player has no realized line. ADDITIVE to `nfl_weekly.ROSTER_ABSENCE_REASONS` —
@@ -101,9 +111,17 @@ RECAP_ABSENCE_REASONS: tuple[str, ...] = (
 
 _ABSENCE_DETAIL: dict[str, str] = {
     "seat_left_empty": "This lineup slot was left empty, so it scored nothing.",
+    # ⚠️ WORDED FOR WHAT WE KNOW. This reason is reached when the platform published no per-seat
+    # score, so "he did not appear" would be a claim we cannot check.
     "no_realized_line": (
-        "This player was started but no stat line was recorded for him this week — he did not "
-        "appear in the game."
+        "We found no stat line for this player this week and your league did not publish a score "
+        "for this slot, so there is nothing to itemize."
+    ),
+    # ⭐ The league scored him above zero, so he DID play — the miss is ours (a name we could not
+    # match). Saying "did not appear" here would be false.
+    "league_scored_unmatched": (
+        "Your league scored this player, but we couldn't match him to a stat line to itemize it, "
+        "so his points are in the league total but not in our breakdown."
     ),
     "name_unresolved": (
         "Your league gave us an id for this slot that we could not resolve to a player, so we "
@@ -198,7 +216,16 @@ def score_week(
             elif not seat.get("name"):
                 row.update({"points": None, "source": None, "absence": _absence("name_unresolved")})
             elif hit is None:
-                row.update({"points": None, "source": None, "absence": _absence("no_realized_line")})
+                league = seat.get("platformPts")
+                if league is not None and float(league) == 0.0:
+                    row.update({"points": 0.0, "source": SOURCE_LEAGUE_PUBLISHED,
+                                "sourceNote": DID_NOT_PLAY_NOTE, "absence": None})
+                elif league is not None:
+                    row.update({"points": None, "source": None,
+                                "absence": _absence("league_scored_unmatched")})
+                else:
+                    row.update({"points": None, "source": None,
+                                "absence": _absence("no_realized_line")})
             else:
                 row.update({
                     "points": hit["leaguePts"], "source": SOURCE_OUR_SCORER,
@@ -469,6 +496,11 @@ def compare_to_platform(
                     dst_div.append(rec)
                     if rec["scheduleResultPending"]:
                         dst_pending.append(rec)
+            elif seat.get("source") == SOURCE_LEAGUE_PUBLISHED:
+                # ⛔ A player seat carrying the league's OWN figure (a started player the league
+                # scored 0) compares the league against itself — 0 by construction. Counting it would
+                # report agreement we never measured (the NF1.7(a) vacuity the D/ST branch guards).
+                continue
             else:
                 player_n += 1
                 # ⭐ SPLIT THE DELTA. `explained` is what a captured term arithmetically accounts

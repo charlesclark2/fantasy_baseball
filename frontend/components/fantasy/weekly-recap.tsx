@@ -70,8 +70,12 @@ function pts(n: number | null | undefined): string {
   return typeof n === "number" && Number.isFinite(n) ? n.toFixed(2) : "—"
 }
 
-/** One started slot. An ABSENCE renders its own sentence rather than a zero — a zero says "played
- *  and scored nothing", which is a different fact from "was not in the game". */
+/** One started slot. ⭐ THE PLAYER'S NAME ALWAYS RENDERS (operator request 2026-09-17 — a player
+ *  started while out reads as his name and a 0). The 0 arrives from the SERVER only as the league's
+ *  own published figure, labelled as such; this component never turns a missing number into one.
+ *  A remaining ABSENCE (we could not match a player the league did score, or the league published
+ *  no per-slot score) keeps a blank score and states its reason under the name — a 0 there would be
+ *  a wrong number that looks real. */
 function SeatRow({ seat }: { seat: RecapSeat }) {
   const absent = !!seat.absence
   return (
@@ -80,17 +84,22 @@ function SeatRow({ seat }: { seat: RecapSeat }) {
         {seat.slot}
       </td>
       <td className="py-1.5 pr-3 text-sm text-gray-200">
-        {absent ? (
-          <span className="text-gray-500 italic">{seat.absence?.detail}</span>
-        ) : (
+        {seat.name ? (
           <>
-            <span>{seat.name || "—"}</span>
+            <span>{seat.name}</span>
             {(seat.position || seat.team) && (
               <span className="ml-1.5 text-xs text-gray-500">
                 {[seat.position, seat.team].filter(Boolean).join(" · ")}
               </span>
             )}
           </>
+        ) : (
+          !absent && <span>—</span>
+        )}
+        {absent && (
+          <span className={`${seat.name ? "block " : ""}text-xs text-gray-500 italic`}>
+            {seat.absence?.detail}
+          </span>
         )}
       </td>
       <td className="py-1.5 pr-3 text-right text-sm tabular-nums text-gray-100">

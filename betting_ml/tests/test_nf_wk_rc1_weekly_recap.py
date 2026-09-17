@@ -55,6 +55,62 @@ def test_the_dst_seat_carries_the_leagues_own_figure_not_ours(monkeypatch):
     assert seat["sourceNote"]
 
 
+# ── a started player with no stat line (operator request 2026-09-17) ─────────────────────────────
+
+def _unmatched_seat(platform_pts):
+    """A named starter with NO realized line — the only thing that varies is what the league scored."""
+    fetched = {
+        "season": 2026, "week": 1, "platform": "sleeper", "leagueId": "L",
+        "startingSlots": ["RB"],
+        "teams": [{"teamKey": "1", "teamName": "A", "matchupId": 1, "platformTotal": 0.0,
+                   "lineup": [{"slot": "RB", "seat": 0, "playerKey": "9", "empty": False,
+                               "name": "TreVeyon Henderson", "position": "RB", "team": "NE",
+                               "platformPts": platform_pts}]}],
+    }
+    return weekly_recap.score_week(fetched=fetched, realized_rows=[], cfg={"scoring": {}}
+                                   )["teams"][0]["seats"][0]
+
+
+def test_a_started_player_the_league_scored_zero_serves_the_leagues_zero_with_his_name():
+    """⭐ The 0 is the LEAGUE'S figure and says so — never an inference from a missing line."""
+    seat = _unmatched_seat(0.0)
+    assert seat["name"] == "TreVeyon Henderson"
+    assert seat["points"] == 0.0
+    assert seat["source"] == weekly_recap.SOURCE_LEAGUE_PUBLISHED
+    assert seat["sourceNote"] == weekly_recap.DID_NOT_PLAY_NOTE
+    assert seat["absence"] is None
+
+
+def test_a_player_the_league_scored_but_we_could_not_match_is_never_a_zero():
+    """⛔ He PLAYED. A 0.00 here is a wrong number that looks real, and "did not appear" is false."""
+    seat = _unmatched_seat(12.4)
+    assert seat["points"] is None
+    assert seat["source"] is None
+    assert seat["absence"]["reason"] == "league_scored_unmatched"
+    assert "did not appear" not in seat["absence"]["detail"]
+
+
+def test_with_no_league_score_published_the_seat_stays_an_absence():
+    seat = _unmatched_seat(None)
+    assert seat["points"] is None
+    assert seat["absence"]["reason"] == "no_realized_line"
+    # ⚠️ Nothing here can tell "did not play" from "we missed him", so neither is claimed.
+    assert "did not appear" not in seat["absence"]["detail"]
+
+
+def test_a_league_scored_zero_seat_is_not_counted_as_agreement():
+    """⛔ It compares the league against itself — 0 by construction (the NF1.7(a) vacuity)."""
+    seat = {**_unmatched_seat(0.0), "platformPts": 0.0}
+    out = weekly_recap.compare_to_platform({"teams": [{"teamKey": "1", "teamName": "A",
+                                                       "seats": [seat]}]})
+    assert out["playerSeats"]["compared"] == 0
+
+
+def test_the_served_seat_model_accepts_the_league_scored_zero():
+    nfl_recap.RecapSeat(**{k: v for k, v in _unmatched_seat(0.0).items()
+                           if k in nfl_recap.RecapSeat.model_fields})
+
+
 # ── the standings fact (PM ruling (i)) ───────────────────────────────────────────────────────────
 
 def _two_team_week(a_total, b_total, *, custom=None):
