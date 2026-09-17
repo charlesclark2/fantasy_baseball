@@ -11,7 +11,7 @@ metadata:
   name: nf-ros1b
   vertical: nfl_fantasy
   card: https://trello.com/c/PMVQXY99   # ROS1's record; ROS1b card linked at kickoff by PM
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Certify an ROS value by fixing what NF-ROS1's refusal named: the
