@@ -10,7 +10,7 @@ metadata:
   name: nf-wk-acc1
   vertical: nfl_fantasy
   card: https://trello.com/c/1KQeqWC0   # + fXIYuvMN; both pulled into this story
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The recap surface (NF-WK-RC1) serves the league's platformTotal
