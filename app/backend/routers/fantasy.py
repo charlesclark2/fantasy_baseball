@@ -1570,6 +1570,30 @@ def _recap_platform(record: dict) -> str:
     return str(record.get("source_platform") or "").strip().lower()
 
 
+def _refuse_a_different_season(fetched: dict, season: int) -> None:
+    """A played week is scored ONLY against the realized stats of the season it was played in.
+
+    ⛔ The saved league record carries no season, and `season` is a query parameter defaulting to
+    the current one — so a league imported from an earlier season (Sleeper gives each season its own
+    league id) had its lineups scored against THIS season's stat lines: a per-player breakdown built
+    from different games, served beside the league's correct standings total (measured 2026-09-17:
+    a 2025 league, 85 of 85 seats and 12 of 12 defences diverging). The platform's own record of
+    which season the week belongs to is the authority; a week it cannot place is refused too, since
+    "we could not tell" must not be scored as if it matched.
+    """
+    got = str(fetched.get("season") or "").strip()
+    if got == str(int(season)):
+        return
+    if not got:
+        detail = ("We could not confirm which season this league's week belongs to, so we cannot "
+                  "score it against a season's player statistics.")
+    else:
+        detail = (f"This league is from the {got} season, so its week cannot be scored against "
+                  f"{int(season)} player statistics. Each season has its own league on the "
+                  "platform — import this season's league to see its recap.")
+    raise HTTPException(status_code=422, detail=detail)
+
+
 def _recap_week(record: dict, season: int, week: int, *, record_divergence: bool = False) -> dict:
     """One league-week, scored — from the POINT-IN-TIME record, fetching it once if absent.
 
@@ -1591,7 +1615,11 @@ def _recap_week(record: dict, season: int, week: int, *, record_divergence: bool
             # 422, not 502: the platform answered and what it returned cannot carry a recap. That
             # is a different fact from "the platform is unreachable" and points at a different fix.
             raise HTTPException(status_code=422, detail=str(e)) from e
+        # Before the store: a refused week is not a capture this route should keep writing.
+        _refuse_a_different_season(fetched, season)
         weekly_recap_store.store(fetched)
+    else:
+        _refuse_a_different_season(fetched, season)
 
     realized = _load_json(nfl_recap.realized_players_key(season, week))
     manifest = _load_json(nfl_recap.realized_manifest_key(season, week))

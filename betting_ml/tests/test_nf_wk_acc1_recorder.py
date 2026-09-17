@@ -237,6 +237,85 @@ def test_recap_week_invokes_the_recorder_and_survives_its_failure(monkeypatch):
     assert calls == [], "power rankings (the default) must not multiply the recorder's round-trips"
 
 
+# ── a week is scored only against its own season's stats (found by the live recorder) ─────────────
+
+def _season_harness(monkeypatch, *, stored=None, fetched=None):
+    """The real `_recap_week`; every side effect it could take is recorded, not performed."""
+    from app.backend.routers import fantasy
+
+    seen = {"stored": [], "reads": [], "recorded": []}
+    monkeypatch.setattr(fantasy.weekly_recap_store, "load", lambda *a: stored)
+    monkeypatch.setattr(fantasy.weekly_recap_store, "store", lambda blob: seen["stored"].append(blob))
+    monkeypatch.setattr(fantasy.sleeper_matchups, "fetch_week", lambda lid, wk: fetched)
+    blobs = {f"realized/{s}/1/{n}": b for s in (2025, 2026)
+             for n, b in (("players.json", {"players": _REALIZED}),
+                          ("manifest.json", {"completeness": "final"}),
+                          ("dst_inputs.json", {"teams": {}}))}
+
+    def read(key, *a, **k):
+        seen["reads"].append(key)
+        return blobs.get(key)
+
+    monkeypatch.setattr(fantasy, "_load_json", read)
+    monkeypatch.setattr(fantasy.weekly_recap_divergence, "record",
+                        lambda **kw: seen["recorded"].append(kw))
+    record = {"source_platform": "sleeper", "source_league_id": "P1", "league_id": "L1", **_CFG}
+    return fantasy, record, seen
+
+
+def test_an_earlier_seasons_league_is_refused_not_scored_against_this_seasons_stats(monkeypatch):
+    """The 2026-09-17 defect: a 2025 Sleeper league, requested at the 2026 default, had its 2025
+    lineups scored against 2026 stat lines. Refused before it is stored, scored, or recorded."""
+    from fastapi import HTTPException
+
+    fantasy, record, seen = _season_harness(monkeypatch, fetched=_fetched())  # season 2025
+    with pytest.raises(HTTPException) as exc:
+        fantasy._recap_week(record, 2026, 1, record_divergence=True)
+    assert exc.value.status_code == 422
+    assert "2025" in exc.value.detail and "2026" in exc.value.detail
+    assert seen == {"stored": [], "reads": [], "recorded": []}, seen
+
+    # The same league at its OWN season is scored exactly as before — the refusal is about the
+    # mismatch, not about old leagues.
+    out = fantasy._recap_week(record, 2025, 1, record_divergence=True)
+    assert out["teams"][0]["standingsTotal"] == 13.0
+    assert len(seen["stored"]) == 1 and len(seen["recorded"]) == 1
+    assert all(k.startswith("realized/2025/") for k in seen["reads"]), seen["reads"]
+
+
+def test_a_stored_week_from_another_season_is_refused_too(monkeypatch):
+    """The store is keyed by season so a hit normally matches — but the check does not rely on it."""
+    from fastapi import HTTPException
+
+    fantasy, record, seen = _season_harness(monkeypatch, stored=_fetched())
+    with pytest.raises(HTTPException) as exc:
+        fantasy._recap_week(record, 2026, 1)
+    assert exc.value.status_code == 422
+    assert seen["reads"] == []
+
+
+@pytest.mark.parametrize("season", ["", None])
+def test_a_week_whose_season_cannot_be_placed_is_refused(monkeypatch, season):
+    """"We could not tell" must never be scored as if it matched (NF1.7(a))."""
+    from fastapi import HTTPException
+
+    blob = _fetched()
+    blob["season"] = season
+    fantasy, record, seen = _season_harness(monkeypatch, fetched=blob)
+    with pytest.raises(HTTPException) as exc:
+        fantasy._recap_week(record, 2025, 1)
+    assert exc.value.status_code == 422 and "could not confirm" in exc.value.detail
+    assert seen == {"stored": [], "reads": [], "recorded": []}
+
+
+def test_a_string_season_from_the_platform_matches_an_int_request(monkeypatch):
+    """Sleeper serves the season as a STRING ("2025"); the route's is an int. Equal, not refused."""
+    blob = _fetched()
+    blob["season"] = "2025"
+    fantasy, record, _ = _season_harness(monkeypatch, fetched=blob)
+    assert fantasy._recap_week(record, 2025, 1)["teams"][0]["standingsTotal"] == 13.0
+
+
 # ── the box-side publish ─────────────────────────────────────────────────────────────────────────
 
 def _built():
