@@ -84,14 +84,20 @@ def prior_payload_rows(board: pd.DataFrame) -> list[dict]:
     return out
 
 
-def resolve_presets(prior_rows: list[dict], realized_flat: list[dict]) -> tuple[dict, dict, dict]:
+def resolve_presets(prior_rows: list[dict], realized_flat: list[dict],
+                    allowed_keys=None) -> tuple[dict, dict, dict]:
     """(resolved_for_prior, resolved_for_realized, report) per preset, on the INTERSECTION of the
-    terms both sides can express — so the two sides score the same quantity."""
+    terms both sides can express — so the two sides score the same quantity.
+
+    `allowed_keys` (NF-ROS1b §4) further restricts that intersection to the term set a decisive run
+    evaluated, so a served artifact can never apply a term history could not express."""
     f_prior = LS.available_fields(prior_rows)
     f_real = LS.available_fields(realized_flat)
     keys_prior = {k for k, f in STAT_FIELD.items() if f in f_prior}
     keys_real = {k for k, f in R.REALIZED_STAT_FIELD.items() if f in f_real}
     both = keys_prior & keys_real
+    if allowed_keys is not None:
+        both &= set(allowed_keys)
     rp, rr, rep = {}, {}, {}
     for p in V.PRESETS:
         cfg = preset_config(p)
@@ -107,6 +113,8 @@ def resolve_presets(prior_rows: list[dict], realized_flat: list[dict]) -> tuple[
                              f"{applied_p} vs {applied_r}")
         rep[p] = {"applied": applied_p,
                   "captured": sorted(t["key"] for t in rep_p["terms"] if t["verdict"] == "captured")}
+    # private (stripped by _clean, so the recorded diagnostics are unchanged): the stat vector keys
+    rep["_stat_keys"] = sorted(both)
     return rp, rr, rep
 
 
@@ -237,12 +245,19 @@ def identity_join(boards: pd.DataFrame, real: pd.DataFrame, seasons) -> tuple[pd
 
 
 # ── frame assembly ────────────────────────────────────────────────────────────────────────────────
-def assemble(seasons, *, stats_version, schedules_version, d: Path) -> tuple[pd.DataFrame, dict]:
-    boards = pd.concat([load_board(d, s) for s in seasons], ignore_index=True)
-    real = load_realized(seasons, stats_version)
+def assemble(seasons, *, stats_version, schedules_version, d: Path, boards_override=None,
+             real_override=None, sched_override=None, allowed_keys=None
+             ) -> tuple[pd.DataFrame, dict]:
+    """The overrides (NF-ROS1b node 4) let the serving build hand in the PUBLISHED board and the
+    live lake reads; every one defaults to the loader, so the walk-forward path is unchanged."""
+    boards = (pd.concat([load_board(d, s) for s in seasons], ignore_index=True)
+              if boards_override is None else boards_override.copy())
+    real = (load_realized(seasons, stats_version) if real_override is None
+            else real_override.copy())
     # the evaluated-position filter lives HERE (not in the loader) so the assembly guard sees it
     real = real[real["position"].isin(REALIZED_POSITIONS)].reset_index(drop=True).copy()
-    sched = load_schedule(seasons, schedules_version).copy()
+    sched = (load_schedule(seasons, schedules_version) if sched_override is None
+             else sched_override).copy()
     # amendment 2 item 1 — ONE franchise canon on all three sides, applied here (not in the
     # loaders) so the assembly guard exercises it with raw vendor codes
     boards["team_id"] = [normalize_team(t) or None if isinstance(t, str) else None
@@ -254,7 +269,17 @@ def assemble(seasons, *, stats_version, schedules_version, d: Path) -> tuple[pd.
 
     prior_rows = prior_payload_rows(boards)
     real_flat = [R.flatten_realized_row(r) for r in real.to_dict("records")]
-    rp, rr, term_report = resolve_presets(prior_rows, real_flat)
+    if allowed_keys is not None:
+        # NF-ROS1b §4: `score_row` scores ANY field a row carries, whatever the term's resolution
+        # verdict — so a term outside the evaluated set must be STRIPPED from the rows, not merely
+        # marked captured. (Found live: the served 2026 board carries `twoPt`, which no history
+        # board did; unstripped, the prior rate silently applied two-point conversions.)
+        keep_p = {STAT_FIELD[k] for k in allowed_keys}
+        keep_r = {R.REALIZED_STAT_FIELD[k] for k in allowed_keys}
+        prior_rows = [{f: v for f, v in r.items() if f in keep_p} for r in prior_rows]
+        real_flat = [{f: v for f, v in r.items() if f in keep_r or f not in
+                      set(R.REALIZED_STAT_FIELD.values())} for r in real_flat]
+    rp, rr, term_report = resolve_presets(prior_rows, real_flat, allowed_keys)
 
     for p in V.PRESETS:
         boards[f"board_{p}"] = score_rows(prior_rows, boards["position"], rp[p], STAT_FIELD)
@@ -340,7 +365,9 @@ def assemble(seasons, *, stats_version, schedules_version, d: Path) -> tuple[pd.
                                                              ["season", "player_id"]]
                                                    .drop_duplicates().shape[0]) if len(frame) else 0,
                  "off_board_realized_share_full_ppr": off_board_share,
-                 "scoring_terms": term_report})
+                 "scoring_terms": term_report,
+                 # private (stripped by _clean): the serving build scores stat lines with these
+                 "_resolved_prior": rp, "_real": real})
     return frame, diag
 
 

@@ -202,3 +202,6 @@ quant_sports_intel_models/football/nfl/fantasy/ablation_results/*_latest.md
 # decided artifact (NF-INJ3b-M D4). The smoke output is scratch and is not a record.
 quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj2c_decisive_smoke.json
 quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj2c_decisive_smoke.md
+
+# NF-ROS1b node 4 — local STAGING of the ROS artifact (the served copy lives in the api-cache)
+quant_sports_intel_models/football/nfl/fantasy/artifacts/ros_serving/

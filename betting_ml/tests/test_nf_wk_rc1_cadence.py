@@ -612,6 +612,11 @@ _BOX_ENTRYPOINTS = (
 #: the entrypoints above.
 _BOX_REACHED_APP_BACKEND = {
     "app/backend/models/nfl_recap.py",
+    # NF-ROS1b node 4 (2026-09-17) — WIDENED DELIBERATELY: the ROS publish op (a branch of the weekly
+    # serving job) runs `run_nf_ros1_publish`, which writes the `nfl_ros` contract. Registration §8
+    # puts that contract in `app/backend/models/` beside `nfl_weekly`, so it carries the same hazard:
+    # an app-only edit to it does not rebuild the box. Reported to the PM with the node-4 handoff.
+    "app/backend/models/nfl_ros.py",
     "app/backend/models/nfl_weekly.py",
     "app/backend/services/league_scoring.py",
     "app/backend/services/projection_fields.py",

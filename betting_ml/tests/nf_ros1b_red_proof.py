@@ -169,14 +169,104 @@ def _batched_collects_one(nodes):
     return {n: got.count(n) == 1 for n in nodes} if r.returncode == 0 else {n: False for n in nodes}
 
 
-def main() -> int:
-    P.TESTS = "betting_ml/tests/test_nf_ros1b_interval.py"
-    nodes = sorted({t for b in BREAKS for t in b.tests})
+PUB = FANT / "run_nf_ros1_publish.py"
+CON = ROOT / "app/backend/models/nfl_ros.py"
+FRESH = ROOT / "betting_ml/monitoring/nfl_ros_freshness.py"
+JOB = ROOT / "pipeline/jobs/sports_nfl_weekly_serving_job.py"
+
+#: node 4 — the served artifact's guards (`test_nf_ros1b_node4.py`).
+NODE4_BREAKS: tuple[Break, ...] = (
+    Break("an uncertified position is served numbers", PUB,
+          '        elif r["pos"] not in certified_positions or not certified_week:',
+          '        elif not certified_week:',
+          gone='r["pos"] not in certified_positions or not certified_week',
+          tests=("test_the_build_serves_certified_rows_and_states_every_absence",)),
+    Break("an unevaluated board term is no longer stripped", RUN,
+          "    if allowed_keys is not None:\n        # NF-ROS1b §4",
+          "    if False:\n        # NF-ROS1b §4",
+          gone="if allowed_keys is not None:\n        # NF-ROS1b §4",
+          tests=("test_an_unevaluated_board_term_is_stripped_before_scoring",)),
+    Break("a WRONG identity join no longer stops the build", PUB,
+          '            if outcome == "WRONG":', '            if False:',
+          gone='if outcome == "WRONG":',
+          tests=("test_a_wrong_identity_join_stops_the_build",)),
+    Break("a MISSED join is served as a number", PUB,
+          '            if outcome == "MISSED":\n                unresolved.add(pid)',
+          '            if outcome == "MISSED":\n                pass',
+          gone="unresolved.add(pid)",
+          tests=("test_the_build_serves_certified_rows_and_states_every_absence",)),
+    Break("the stat-line coherence gate is off", PUB,
+          "                if abs(got - point[p][i]) > COHERENCE_TOL * max(1.0, abs(point[p][i])):",
+          "                if False:",
+          gone="if abs(got - point[p][i]) > COHERENCE_TOL",
+          tests=("test_an_incoherent_stat_line_refuses",)),
+    Break("the write-gate is skipped on a dry run", PUB,
+          "    assert_contract_shaped(built)            # before the dry-run return (NF-INJ3B reading)\n",
+          "",
+          gone="# before the dry-run return (NF-INJ3B reading)",
+          tests=("test_the_write_gate_refuses_a_players_hash_mismatch",)),
+    Break("the served-bytes check is off", PUB,
+          "        if want != got:", "        if False:",
+          gone="if want != got:",
+          tests=("test_publish_reads_back_and_compares_the_served_bytes",)),
+    Break("a partial week counts as final", PUB,
+          '        if states[wk] != "final":\n            break',
+          '        if False:\n            break',
+          gone='if states[wk] != "final":',
+          tests=("test_no_final_week_builds_nothing",
+                 "test_final_week_needs_every_game_and_contiguity")),
+    Break("the certified set is typed rather than derived", PUB,
+          '        if d["ships"]:\n            certified.append(P)',
+          '        if True:\n            certified.append(P)',
+          gone='if d["ships"]:',
+          tests=("test_the_committed_params_certify_what_the_decisive_record_certified",)),
+    Break("a rank field joins the contract", CON,
+          "    waiverValue: Optional[float] = None\n",
+          "    waiverValue: Optional[float] = None\n    globalRank: Optional[int] = None\n",
+          gone="    waiverValue: Optional[float] = None\n    waiverAbsence",
+          tests=("test_no_field_invites_a_cross_position_comparison",)),
+    Break("the deploy-held state pages CRITICAL", FRESH,
+          '        return v("ARMED_NOT_FIRING", "WARN",',
+          '        return v("ARMED_NOT_FIRING", "CRITICAL",',
+          gone='"ARMED_NOT_FIRING", "WARN"',
+          tests=("test_the_deploy_held_state_is_warn_not_critical_and_names_the_action",)),
+    Break("a just-final week pages BEHIND immediately", FRESH,
+          "BEHIND_GRACE_HOURS = 2.0", "BEHIND_GRACE_HOURS = 0.0",
+          gone="BEHIND_GRACE_HOURS = 2.0",
+          tests=("test_a_just_final_week_is_not_behind_yet",)),
+    Break("the flag accepts any truthy value", FRESH,
+          '    return (source.get(PUBLISH_ENABLED_FLAG) or "").strip() == "1"',
+          '    return bool((source.get(PUBLISH_ENABLED_FLAG) or "").strip())',
+          gone='.strip() == "1"',
+          tests=("test_the_flag_reads_only_exactly_one",)),
+    Break("the publish op no longer checks the flag", JOB,
+          "    if not RF.publish_enabled():\n        context.log.warning(\n            \"[nfl ros]",
+          "    if False:\n        context.log.warning(\n            \"[nfl ros]",
+          gone="if not RF.publish_enabled():\n        context.log.warning(\n            \"[nfl ros]",
+          tests=("test_the_publish_op_checks_the_flag_before_doing_anything",)),
+    Break("the ROS publish hangs off the build instead of the ingest", JOB,
+          "    nfl_ros_value_publish_op(start=landed)",
+          "    nfl_ros_value_publish_op(start=nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=landed)))",
+          gone="    nfl_ros_value_publish_op(start=landed)",
+          tests=("test_the_publish_is_an_independent_branch_off_the_ingest",)),
+)
+
+
+def _run(tests: str, breaks, paths) -> int:
+    P.TESTS = tests
+    nodes = sorted({t for b in breaks for t in b.tests})
     resolved = _batched_collects_one(nodes)
     P._collects_one = lambda node: resolved.get(node, False)
-    P.PATHS = (RI, RUN, B)
-    P.BREAKS = BREAKS
+    P.PATHS = paths
+    P.BREAKS = breaks
     return P.main()
+
+
+def main() -> int:
+    a = _run("betting_ml/tests/test_nf_ros1b_interval.py", BREAKS, (RI, RUN, B))
+    print("\n── node 4 ──")
+    b = _run("betting_ml/tests/test_nf_ros1b_node4.py", NODE4_BREAKS, (PUB, RUN, CON, FRESH, JOB))
+    return a or b
 
 
 if __name__ == "__main__":

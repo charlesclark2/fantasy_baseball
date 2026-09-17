@@ -206,6 +206,7 @@ def nfl_sleeper_injuries_freshness_op(context):
 # policy that must agree (the "one logical rule, many owners" class this repo keeps being bitten by).
 from pipeline.jobs.sports_nfl_weekly_serving_job import (
     nfl_realized_freshness_op,
+    nfl_ros_freshness_op,
     nfl_weekly_freshness_op,
 )
 
@@ -271,3 +272,5 @@ def sports_nfl_sleeper_injuries_job():
     nfl_published_board_freshness_op()
     nfl_weekly_freshness_op()
     nfl_realized_freshness_op()
+    # NF-ROS1b node 4 — the ROS value's freshness (and its deploy-held flag), from outside its job.
+    nfl_ros_freshness_op()
