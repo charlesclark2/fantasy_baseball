@@ -5,8 +5,9 @@ import threading
 import time
 from datetime import date, timedelta
 
-from dagster import HookContext, In, MetadataValue, Nothing, Out, failure_hook, op
+from dagster import HookContext, In, MetadataValue, Nothing, Out, RetryPolicy, failure_hook, op
 
+from betting_ml.monitoring import lakehouse_retry
 from betting_ml.utils.game_day import current_game_date, current_game_date_iso  # INC-22 — canonical US baseball-day
 from pipeline.ops._dbt_exec import _run_dbt, capture_dbt_results, load_dbt_results
 
@@ -630,6 +631,16 @@ def ingest_statcast_to_s3_op(context):
 # ═════════════════════════════════════════════════════════════════════════════════════
 
 
+# MLB-INC-0917 (2026-09-16) — ONE bounded retry for the HALT-tier lakehouse ops. A transient S3 403
+# (RequestTimeTooSkewed, the INC-42 class) in lakehouse_w3_marts_op skipped the entire rest of the
+# daily job: the only writer of stg_oddsapi_odds, the W8a/W8b feature build and predict_today_morning.
+# The policy, its bound, and which lakehouse ops are deliberately NOT retried (and why) live in
+# betting_ml/monitoring/lakehouse_retry.py; each retried op calls note_retry_attempt first so a
+# recovered transient is still counted and paged (WARN) rather than hidden inside a green run.
+_LAKEHOUSE_RETRY = RetryPolicy(
+    max_retries=lakehouse_retry.MAX_RETRIES, delay=lakehouse_retry.DELAY_SECONDS,
+)
+
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lakehouse_schedule_export_op(context):
     # ⛔ THE monthly_schedule EXPORT BRIDGE IS RETIRED (E11.20 phase-2b, 2026-07-27).
@@ -667,8 +678,9 @@ def lakehouse_schedule_export_op(context):
     )
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_LAKEHOUSE_RETRY)
 def lakehouse_w1_pitch_marts_op(context):
+    lakehouse_retry.note_retry_attempt(context, "lakehouse_w1_pitch_marts_op")
     # HALT — the 7 mart_pitch_* pitch-level marts (E11.1-W1d: served via external tables /
     # the feature build; on the critical path). E11.20: Delta-mode-aware —
     # LAKEHOUSE_DELTA_W1=off → legacy full-history parquet COPY; mirror → parquet +
@@ -680,23 +692,26 @@ def lakehouse_w1_pitch_marts_op(context):
     _run_script(context, "run_w1_lakehouse.py", ["--w1-only"], timeout=1800)
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_LAKEHOUSE_RETRY)
 def lakehouse_w2_marts_op(context):
+    lakehouse_retry.note_retry_attempt(context, "lakehouse_w2_marts_op")
     # HALT — the 8 W2 pitch-derived batch marts (rolling stats / game logs; feed the
     # feature build). Reads the W1 output just written (parquet, or delta_scan under
     # cutover — run_w1_lakehouse._register_mart_views is Delta-aware).
     _run_script(context, "run_w1_lakehouse.py", ["--w2-only"], timeout=1800)
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_LAKEHOUSE_RETRY)
 def lakehouse_w3_marts_op(context):
+    lakehouse_retry.note_retry_attempt(context, "lakehouse_w3_marts_op")
     # HALT — the 11 W3 handedness/archetype/tto splits + bullpen/reliever marts (feed
     # feature_pregame_* + write_serving_store).
     _run_script(context, "run_w1_lakehouse.py", ["--w3-only"], timeout=1800)
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_LAKEHOUSE_RETRY)
 def lakehouse_w3pre_flatten_op(context):
+    lakehouse_retry.note_retry_attempt(context, "lakehouse_w3pre_flatten_op")
     # Gated (W11_W3PRE_DAILY, INC-23): rebuild the W3pre odds/staging flatten so
     # stg_derivative_odds is fresh before the W6 build registers it. HALT when ON (same as the
     # old monolith, where --w3pre rode the HALT call; _build_w3pre defensively SKIPs any source
@@ -724,8 +739,9 @@ def lakehouse_w3pre_flatten_op(context):
     _run_script(context, "run_w1_lakehouse.py", ["--w3pre-only"], timeout=1800)
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_LAKEHOUSE_RETRY)
 def lakehouse_w6_odds_marts_op(context):
+    lakehouse_retry.note_retry_attempt(context, "lakehouse_w6_odds_marts_op")
     # HALT — the 13 W6 odds/CLV + odds-serving marts + the 2 Group-C staging flattens
     # (mart_odds_outcomes serves from S3 — live since W6; the _history/_current date
     # buckets are BOTH rewritten here daily, while the intraday odds cycle rewrites only
@@ -734,8 +750,9 @@ def lakehouse_w6_odds_marts_op(context):
     _run_script(context, "run_w1_lakehouse.py", ["--w6-only"], timeout=2700)
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_LAKEHOUSE_RETRY)
 def lakehouse_w7b_serving_op(context):
+    lakehouse_retry.note_retry_attempt(context, "lakehouse_w7b_serving_op")
     # Mirror-tier (HALT once W7B_LAKEHOUSE_S3=1, ALERT-continue in the parallel window) —
     # the W7b prediction/serving mini-wave (mart_player_profile_identity injury chain +
     # probable_pitchers/lineups_wide serving backlog). ALERT-loud skip when gated off.
@@ -810,8 +827,9 @@ def _alert_on_stale_spine(context, stdout: str) -> None:
         context.log.warning(f"[spine-staleness] send_alert failed (non-fatal): {e}")
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_LAKEHOUSE_RETRY)
 def lakehouse_spine_odds_bridge_op(context):
+    lakehouse_retry.note_retry_attempt(context, "lakehouse_spine_odds_bridge_op")
     # W8a-mirror tier — the 2026-07-02 spine-freeze + odds-bridge-freeze cures, verbatim
     # from the monolith: rebuild mart_game_spine (W5 Group A — the scheduled-game universe
     # the --w8a/--w8b feature build reads; a frozen spine silently degrades predict_today
@@ -847,8 +865,9 @@ def lakehouse_spine_odds_bridge_op(context):
     _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w6-clv"])
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_LAKEHOUSE_RETRY)
 def lakehouse_w8a_feature_layer_op(context):
+    lakehouse_retry.note_retry_attempt(context, "lakehouse_w8a_feature_layer_op")
     # W8a-mirror tier (HALT once W8A_LAKEHOUSE_S3=1) — the W8a Python-table/seed
     # precursor mirrors + the upstream feature layer + EB posteriors DuckDB build + the
     # W8a ext-table refresh. The W9 signal stores it reads are mirrored by
@@ -864,8 +883,9 @@ def lakehouse_w8a_feature_layer_op(context):
     _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w8a"])
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_LAKEHOUSE_RETRY)
 def lakehouse_w8b_aggregator_op(context):
+    lakehouse_retry.note_retry_attempt(context, "lakehouse_w8b_aggregator_op")
     # W8b-mirror tier (HALT once W8B_LAKEHOUSE_S3=1) — the SERVING-AGGREGATOR wave, AFTER
     # W8a (the aggregator reads the W8a feature layer): W5b Group-B marts first (they read
     # the eb_bullpen_team_posteriors parquet W8a just wrote; the aggregator reads W5b —
