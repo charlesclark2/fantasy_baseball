@@ -143,8 +143,40 @@ spec:
       - id: 5-closeout
         desc: "Verdict + tables + the consumer unlock state (WVR1/trade) into closeout.followUps."
   closeout:
+    # verdict pending the PM's two acks (RB-rookie read + paid-set diff) before merge.
+    # Proposed: SHIPPED (RB certified) · QB/WR/TE/K certified NO (CONSTRAINT_REFUSED).
     verdict: null
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+    results: |
+      Record: ablation_results/nf_ros1b_preregistration.md §13 (+ amendments 1-3).
+      Decisive run b8d98343 (operator), reproduced at 0.0; ROS1's full record
+      reproduced at 0.0 on its final code (closes ROS1 §13.6's open item).
+      RB CERTIFIED on C1-C9 (lift +1.53, 6/6, DSR 0.995, cov80 0.859/0.780,
+      PIT 0.005 vs 0.096 under ROS1's construction on the same point).
+      C9 passes QB/RB/WR/TE (0.034/0.005/0.009/0.008). Refused: QB C8a;
+      WR C4+C8a; TE C4+C8a; K C2+C3+C4+C9. Field PBO 0.0.
+      Consumer unlock state: RB ROS values exist in the node-4 artifact
+      (fantasy/nfl/ros/<season>/<week>/) once published post-merge and the
+      flag is enabled; every other position is a stated absence, so WVR1's
+      value column and the trade engine unlock for RB only, and never as a
+      cross-position ranking input (R4). waiverValue stays null
+      (waiver_value_not_certified: §7 needs >= 2 certified positions).
+    followUpItems:
+      - "① (PM: platform, with binding_clause) C8a refuses QB/WR/TE because an MSE-fitted peeking oracle is judged on CRPS (the pre-registered ROS1 §5 divergence, made material by the hurdle halving the C1 lift the materiality bar scales with). Should a CRPS-judged arm be floored by a CRPS-fitted oracle (NCAAF-P2.5 (b))? A registration question for any successor."
+      - "② (PM: platform, with binding_clause) cv_power.classify_null self-computes Sharpe/V: at QB its text says 'DSR alone needs 8 folds' beside a PASSING registered DSR 0.994."
+      - "③ (story card; fund only if a consumer needs K) K refused again under the hurdle (PIT 0.082 -> 0.057, 4/6 folds). Mechanism note: not the zero atom (kickers realize zero on 0.9% of top-tercile rows) — likely the conditional-spread shape at a low-variance position."
+      - "④ (followUp) Nowakowski: the name-join rung misses a TE-on-the-board / FB-on-the-realized-line player (FB normalizes to RB). Position-vocabulary disagreement, not a name failure. Served as join_unresolved only if TE ever certifies."
+      - "⑤ (PM-owned) bare TOKEN env var is swallowed by delta-rs as the S3 session token (CLAUDE.md landmine added; s3io.storage_options fix carded by PM)."
+      - "⑥ (PM-owned) status-at-week-k successor: its as-of substrate (nfl_pit_injuries forward capture) is accruing; unlock is calendar time, not machinery."
+      - "⑦ (ledger, verbatim) ROS1's headline share figure ('29.9% vs 5.2%') was not, by itself, evidence of miscalibration — its PIT and lowest-decile readings were. A q05 = 0 share is not a calibration reading: a correct predictive puts q05 at 0 exactly when P(zero) >= 0.05."
+      - "⑧ (ledger, verbatim) The CRPS value of an update depends on the interval it is scored with: every position's lift roughly halved once both predictives were calibrated (RB 3.50 -> 1.53)."
+      - "⑨ (ledger) Controls + RED proof: positive 0.0092 vs pi=0 0.279 / location-shift 0.124; RED proof 27/27 (interval) + 15/15 (node 4). Catches: a vacuous foil-carry fixture (seed mapped the only playing player to himself), a mis-designed leak break (replaced, not excused), two new guards (the foil reads the PERMUTED pi on the quantiles it produced; the atom event is y <= 0), and the contract's own `ranking_note` field tripping the no-rank guard (renamed comparison_note)."
+      - "⑩ (node 4, live finding) score_row applies ANY field a row carries regardless of the term's resolution verdict — the served 2026 board carries twoPt (no history board did), so the prior rate silently applied two-point conversions until the stat-line coherence gate caught it. Fixed in assemble (strip unevaluated fields). Sibling risk: any other surface that restricts a term set by verdict alone."
+      - "⑪ (node 4) 9 of 197 certified RB rows (the top backs) carry a P90 above REALIZED_MAX_SEASON_PACE scaled to games remaining (e.g. Gibbs 664 vs 482); no point does. The registered ratio table's top cell spreads upward (RB over-covers, 0.859). Not a gate; a display consumer should know."
+      - "⑫ (node 4) app/backend/models/nfl_ros.py is box-reached (widened deliberately in test_nf_wk_rc1_cadence). An app-only edit to it will not rebuild the box — the nfl_weekly hazard, one contract over."
+      - "⑬ (pre-existing, repaired) test_nf_infra1_sleeper_hardening's exhaustive node set was already RED on dev (NF-WK-RC1 added nfl_realized_freshness_op without moving it; skipped on CI for lack of a manifest, so unseen). Re-anchored with no-dependency assertions for both new leaves."
+      - "⑭ (node 4 design, flagged against R3) the cadence rides sports_nfl_weekly_serving_job as an independent branch off its stats ingest (INC-25 by construction, the schedule is already RUNNING + heartbeat-checked) and is deploy-held by NF_ROS_PUBLISH_ENABLED, instead of a separate 09:30 default_status=STOPPED schedule (a STOPPED default cannot be heartbeat-checked — NCAAF-P1.2W/NF-CAP1)."
+      - "⑮ (amendment 3) RB-rookie C9 design quantity: 1,464 rows / 122 player-seasons; P(>0.05 | calibrated) ~0.00 if rows independent, ~0.51 fully clustered — a reading above the bar is not by itself evidence of rookie miscalibration."
