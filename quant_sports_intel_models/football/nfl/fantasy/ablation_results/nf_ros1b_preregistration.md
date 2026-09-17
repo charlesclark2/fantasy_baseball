@@ -405,7 +405,7 @@ then fails with `400 InvalidToken`. Every operator command below is prefixed `en
 **Field and winner.**
 
 * The winner is `eb_rate_avail` on pooled CRPS (14.371, against `eb_rate` 14.582 and `eb_avail`
-  14.478).
+  15.478).
 * Field PBO is **0.0**, so the precondition passes.
 * The flip distribution is **3 / 3** between `eb_rate_avail` and `eb_rate`. That is a tie between
   two arms (the NF1.8 reading): mass sits on two nested arms, not spread thinly. The winner was
