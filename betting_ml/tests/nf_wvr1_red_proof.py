@@ -100,6 +100,14 @@ BREAKS = [
     ),
     # ── Phase B fact columns (2026-09-17) ────────────────────────────────────────────────────
     (
+        "the refresh is fetched but the STALE stored rosters are still used for the pool",
+        ROUTER,
+        '                "league_rosters": kept,',
+        '                "league_rosters": record.get("league_rosters"),',
+        F("test_a_refreshed_roster_removes_a_player_the_stale_snapshot_still_listed"),
+        None,
+    ),
+    (
         "a missing fact is filled from the preseason projection (the absolute rule)",
         FACTS,
         '        return {"points": None, "games": 0, "absence": "no_realized_line"}',

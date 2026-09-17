@@ -359,3 +359,36 @@ def test_a_tampered_artifact_withholds_the_facts_and_is_not_cached(endpoint):
 def test_the_payload_key_registry_names_the_new_block():
     from app.backend.routers import fantasy
     assert "realized" in fantasy.WAIVER_PAYLOAD_KEYS
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 6 — FRESHNESS: a waiver claim made after the stored snapshot must change the pool
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+def test_a_refreshed_roster_removes_a_player_the_stale_snapshot_still_listed(endpoint, monkeypatch):
+    """THE DEFECT the whole refresh exists for: an FA pool from a stale snapshot offers a player who
+    was claimed since — "the worst output this feature can produce". The stored rosters are empty
+    (every board player available); the platform now reports one of them on a team."""
+    call, _, fantasy = endpoint
+    stale = call()
+    qb = next(g for g in stale["pool"] if g["pos"] == "QB")
+    claimed = next(p for p in qb["players"] if p["realized"]["points"] is not None)
+
+    from app.backend.services.platform_import import sleeper
+
+    fresh = [{"team_key": "1", "team_name": "A",
+              "players": [{"name": claimed["name"], "position": "QB", "team": claimed["team"]}]},
+             {"team_key": "2", "team_name": "B", "players": []}]
+    monkeypatch.setattr(sleeper, "refresh_league_rosters",
+                        lambda lid: {"rosters": fresh, "synced_at": "2026-09-17T12:00:00+00:00"})
+    monkeypatch.setattr(fantasy.dynamo, "put_fantasy_league", lambda *a, **k: None)
+    rec = {**_record(), "source_league_id": "999"}
+    monkeypatch.setattr(fantasy.dynamo, "list_fantasy_leagues", lambda uid: [rec])
+
+    from starlette.requests import Request
+    req = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b""})
+    out = fantasy.nfl_waiver_pool(request=req, league_id="L1", season=2026, refresh=True, user_id="u1")
+    assert out["rosters"]["refreshed"] is True
+    names = {p["name"] for g in out["pool"] for p in g["players"]}
+    assert claimed["name"] not in names, "a player claimed since the snapshot is still offered"
+    assert len(names) == sum(len(g["players"]) for g in stale["pool"]) - 1
