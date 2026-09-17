@@ -9,7 +9,7 @@ metadata:
   name: mlb-inc-0917
   vertical: mlb
   card: https://trello.com/c/GK5mPD2G
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     The INC-41 freshness monitor pages stg_oddsapi_odds STALE (1801
