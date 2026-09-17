@@ -67,6 +67,25 @@ metadata:
   #      ⇒ DEPENDENCY: card fXIYuvMN closing (our construction validated). When it closes, DST
   #      flips from stated absence to covered, WITH OUR OWN PROVENANCE. No new owner today.
   #   Phase B still queues behind RC1's frontend. Nothing else owed.
+  # 🟢 PHASE B + FACT COLUMNS — STARTED 2026-09-17 (branch `nf-wvr1-phaseb`, worktree). Both gates
+  #   RE-VERIFIED against the running system at start, not assumed (spec-premise rule; ⑫ timestamp rule):
+  #   (a) ONE-FRONTEND-SLOT: RC1's Phase B (`components/fantasy/weekly-recap.tsx`, #1156) and its
+  #       follow-up #1164 are on `origin/main` (merge 10554e2c); RC1's node-5 live render passed
+  #       09-17 per RC1's record. Open PRs touching `frontend/` at 2026-09-17T05:1xZ: NONE (the only
+  #       open PR, #1167 dev→main, carries no frontend path). ⇒ WVR1 holds the slot.
+  #   (b) SEASON-TO-DATE ARTIFACT (ruling ⑯ = b) — read + lineage-verified 2026-09-17T05:14:25Z:
+  #       `fantasy/nfl/realized/2026/season/{players,manifest}.json` present (LastModified
+  #       04:26:12Z, true UTC via boto3), listed two-sided against the `fantasy/nfl/2026/` control.
+  #       manifest: encoding columnar-v1 · through_week 1 · weeks [1] · excluded [] · 47 columns ·
+  #       n_rows 1118 · one source (week 1). Recomputed from the served bytes: content_sha256 ✓,
+  #       source_fingerprint ✓, n_rows = Σ sources.n_players ✓, row week-set = manifest weeks ✓, and
+  #       sources[week 1].content_sha256 == the served WEEKLY manifest's content_sha256 ✓
+  #       (completeness final). ⭐ ONE ROW PER PLAYER-GAME, not per-player totals — WVR1 sums.
+  #       ⚠️ ZERO DST rows (confirms ⑮) ⇒ DST ships as the stated absence `team_grain_not_covered`.
+  #   PLAN: server-side fact columns (one GET, lineage self-check, sum only `weeks`, score through
+  #   `league_scoring.score_row` under `REALIZED_STAT_FIELD`, `excluded` surfaced as a stated gap),
+  #   `ordering` flipped to a stated realized basis; then the my-teams waiver view. No value column
+  #   (NF-ROS1 = certified NO; never substitute `fpPpr`).
 spec:
   description: >
     For each imported league (Sleeper first), rank the league's
