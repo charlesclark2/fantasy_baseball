@@ -29,6 +29,80 @@ import { fileURLToPath } from "node:url"
 const FRONTEND = join(dirname(fileURLToPath(import.meta.url)), "..")
 
 const CASES = [
+  // ══ NF-WVR1 Phase B — the waiver view on My Teams ══════════════════════════════════════════
+  {
+    id: "waiver-client-resorts",
+    shipped: "NF-WVR1 ruling 2 — the ordering is the SERVER's stated basis, never the client's",
+    detail: "the client re-sorts the list alphabetically, so the visible order no longer follows the stated basis.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "  const rows = all ? group.players : group.players.slice(0, WAIVER_ROWS_COLLAPSED)",
+    to: "  const sorted = [...group.players].sort((a, b) => a.name.localeCompare(b.name))\n  const rows = all ? sorted : sorted.slice(0, WAIVER_ROWS_COLLAPSED)",
+    grep: "ordered by points so far",
+  },
+  {
+    id: "waiver-blank-becomes-zero",
+    shipped: "NF-C6b / NF-K1 — 'no facts' must never read as 'did nothing'",
+    detail: "a missing figure renders as 0.0, so a defence or a no-line player reads as having scored nothing.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "  return typeof n === \"number\" && Number.isFinite(n) ? n.toFixed(1) : \"\u2014\"",
+    to: "  return typeof n === \"number\" && Number.isFinite(n) ? n.toFixed(1) : \"0.0\"",
+    grep: "never a zero|not a zero",
+  },
+  {
+    id: "waiver-projection-column",
+    shipped: "NF-WVR1 ruling 1 — no value column; the preseason projection cannot see 2026",
+    detail: "a projection column is added beside the realized facts.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "              <th className=\"w-14 py-1 text-right font-normal\">",
+    to: "              <th className=\"w-14 py-1 text-right font-normal\">Projected</th>\n              <th className=\"w-14 py-1 text-right font-normal\">",
+    grep: "no projection or value column",
+  },
+  {
+    id: "waiver-fetch-on-load",
+    shipped: "NF-WVR1 Phase B — every open re-reads the platform; never once per league per page view",
+    detail: "the pool is fetched on page load for every league card.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "  const { data, isLoading, error } = useWaiverPool(leagueId, open && entitled)",
+    to: "  const { data, isLoading, error } = useWaiverPool(leagueId, entitled)",
+    grep: "nothing is re-read until",
+  },
+  {
+    id: "waiver-renderer-ungated",
+    shipped: "G100 (#681) — the renderer is the gate",
+    detail: "the component-level entitlement check is removed. DECLARED NOT-OBSERVABLE on My Teams: the page's FantasyGuard redirects a free account before this component mounts, so the spec cannot see the renderer gate there. The case exists so that a future mount on an ungated page flips it and makes the boundary visible.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "  if (!entitled) return null\n",
+    to: "",
+    grep: "never reaches a free account",
+    expect: "GREEN",
+  },
+  {
+    id: "waiver-excluded-week-dropped",
+    shipped: "NF-WVR1 ⑯ — RC1's excluded weeks are a stated gap, never a silently short season",
+    detail: "the excluded-week note is dropped, so a partial season total reads as complete.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "  const excluded = waiverExcludedNote(realized?.excluded ?? [])",
+    to: "  const excluded = waiverExcludedNote([])",
+    grep: "left out of the totals",
+  },
+  {
+    id: "waiver-refusal-goes-generic",
+    shipped: "NF-C6b — each withheld state names its own cause",
+    detail: "every refusal renders the generic sentence, so a truncated league and a never-imported one read the same.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "                      {WAIVER_REFUSAL_TEXT[r] ?? WAIVER_REFUSAL_FALLBACK}",
+    to: "                      {WAIVER_REFUSAL_FALLBACK}",
+    grep: "withholds the list and says why",
+  },
+  {
+    id: "waiver-freshness-hidden",
+    shipped: "NF-WVR1 node 1 — a stale roster set recommends players already taken; its age must be stated",
+    detail: "the roster-freshness line is removed, so the list's age is invisible.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "                {waiverFreshnessNote(data.rosters)}",
+    to: "                {null}",
+    grep: "covered weeks are stated|un-refreshable platform",
+  },
   // ══ NF-WK-RC1 Phase B — the weekly recap surface ═══════════════════════════════════════════
   //
   // ⭐ THE FIRST CASE IS THE ONE THIS SUITE EXISTS FOR. #1155 shipped a disclosure keyed on the
@@ -3864,7 +3938,7 @@ const CASES = [
 // player printed as 0.00; a started player's name hidden) and RE-ANCHORS one
 // (`recap-absence-becomes-a-dash`). RED-proven individually (`node e2e/red-proof.mjs recap-`). By
 // this change's own delta only: 214/208/6 -> 216/210/6.
-const RECORDED_BOARD = { total: 216, red: 210, notObservable: 6 }
+const RECORDED_BOARD = { total: 224, red: 217, notObservable: 7 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

@@ -156,6 +156,9 @@ def realized_board(realized_rows: list[dict], resolved: dict, stat_field: dict[s
             # recomputed — a second computation of a number the source publishes is a drift
             # surface for no gain.
             "pprPts": row.get(realized_stat_fields.REALIZED_PPR_COLUMN),
+            # NF-WK-ACC1 ⑥: the columns the divergence split needs. Internal to the join — a seat
+            # copies named fields only, so this never reaches the served payload.
+            "explain": {c: row.get(c) for c in EXPLANATION_COLUMNS},
         })
     return out
 
@@ -166,11 +169,17 @@ def score_week(
     realized_rows: list[dict],
     cfg: dict,
     stat_field: dict[str, str] | None = None,
+    realized_by_seat: dict | None = None,
 ) -> dict:
     """One league-week: every team's actual lineup, scored per slot, plus the matchup results.
 
     `fetched` is the POINT-IN-TIME record (`weekly_recap_store`), never a live re-read — a rendered
     recap must be stable, which is the whole reason that store exists.
+
+    `realized_by_seat` is an OPTIONAL OUT-PARAMETER (NF-WK-ACC1 ⑥): when a dict is passed, it is
+    filled with `(teamKey, seat) → {explanation column: value}` for every seat we scored, which is
+    what `compare_to_platform` needs to split a divergence. An out-parameter rather than a return
+    key because its tuple keys are not JSON, and `score_week`'s output is serialised downstream.
     """
     field_map = stat_field or realized_stat_fields.REALIZED_STAT_FIELD
     flat_rows = [realized_stat_fields.flatten_realized_row(r) for r in realized_rows
@@ -227,6 +236,9 @@ def score_week(
                     row.update({"points": None, "source": None,
                                 "absence": _absence("no_realized_line")})
             else:
+                if realized_by_seat is not None:
+                    realized_by_seat[(team.get("teamKey"), seat.get("seat"))] = dict(
+                        hit.get("explain") or {})
                 row.update({
                     "points": hit["leaguePts"], "source": SOURCE_OUR_SCORER,
                     "pprPts": hit.get("pprPts"), "opp": hit.get("opp"), "absence": None,

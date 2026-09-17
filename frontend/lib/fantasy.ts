@@ -1093,3 +1093,91 @@ export function getPowerRankings(
     `league_id=${encodeURIComponent(leagueId)}&season=${season}&through_week=${throughWeek}`
   return apiFetch(`/fantasy/nfl/weekly/power-rankings?${qs}`, {}, token)
 }
+
+// ── NF-WVR1 — the waiver view: who is available in a league, and where your roster is thin ──────
+//
+// ⛔ NO VALUE COLUMN AND NO CROSS-POSITION RANKING (PM rulings 1 + 2, 2026-09-16). The only numbers
+// here are REALIZED 2026 facts — what a player has done, in the league's own scoring — and they
+// order players only WITHIN a position. The preseason projection never appears in this payload.
+// Every key below is additive on the server; the client reads each with a default (NF-C0/E8.6).
+
+export type WaiverOrdering = "realized_to_date" | "unranked"
+
+export interface WaiverFact {
+  /** League-scored points over the covered weeks; null whenever `absence` is set — never a 0. */
+  points: number | null
+  games: number | null
+  absence: "team_grain_not_covered" | "no_realized_line" | null
+}
+
+export interface WaiverPlayer {
+  id: string | null
+  name: string
+  team: string | null
+  pos: string
+  bye: number | null
+  rookie?: boolean | null
+  /** null when the season's facts are withheld for this whole request (`realized.absence`). */
+  realized: WaiverFact | null
+}
+
+export interface WaiverGroup {
+  pos: string
+  available: number
+  ordering?: WaiverOrdering
+  facts_absence?: string | null
+  players: WaiverPlayer[]
+}
+
+export interface WaiverNeedPosition {
+  pos: string
+  starters_required: number
+  flex_eligible: boolean
+  held: number
+  short_by: number
+  need: "open_starter" | "thin" | "covered"
+}
+
+export interface WaiverPoolPayload {
+  season: number
+  league_id: string
+  /** null when any refusal applies — the pool would be WRONG, so it is withheld. */
+  pool: WaiverGroup[] | null
+  need: {
+    positions: WaiverNeedPosition[]
+    flex: { slots: number; eligible: string[]; surplus_available: number; short_by: number }
+  }
+  refusals: string[]
+  caveats: string[]
+  rosters: {
+    synced_at: string | null
+    refreshed: boolean
+    refresh_error: string | null
+    can_refresh: boolean
+    platform: string
+    truncated: boolean
+    teams_held: number
+    teams_declared: number
+  }
+  ordering: WaiverOrdering
+  ordering_note: string
+  realized?: {
+    absence: "realized_not_published" | "realized_lineage_unverified" | null
+    through_week: number | null
+    weeks: number[]
+    excluded: { week: number; reason: string }[]
+    generated_at: string | null
+    captured_terms: string[]
+  }
+}
+
+/** One league's waiver view. `refresh` re-reads the league's rosters server-side (Sleeper only). */
+export function getWaiverPool(
+  token: string | null,
+  leagueId: string,
+  season: number,
+  refresh = true,
+): Promise<WaiverPoolPayload> {
+  const qs = `league_id=${encodeURIComponent(leagueId)}&season=${season}&refresh=${refresh}`
+  return apiFetch(`/fantasy/nfl/waiver-pool?${qs}`, {}, token)
+}

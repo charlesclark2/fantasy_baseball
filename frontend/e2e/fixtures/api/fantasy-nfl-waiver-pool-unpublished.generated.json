@@ -1,0 +1,6619 @@
+{
+ "season": 2026,
+ "league_id": "e2e-league-1",
+ "pool": [
+  {
+   "pos": "QB",
+   "available": 88,
+   "ordering": "unranked",
+   "facts_absence": "realized_not_published",
+   "players": [
+    {
+     "id": "MEN516487",
+     "name": "Fernando Mendoza",
+     "team": "LV",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036264",
+     "name": "Jordan Love",
+     "team": "GB",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040743",
+     "name": "Tyler Shough",
+     "team": "NO",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038128",
+     "name": "Malik Willis",
+     "team": "MIA",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034869",
+     "name": "Sam Darnold",
+     "team": "SEA",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039163",
+     "name": "C.J. Stroud",
+     "team": "HOU",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035710",
+     "name": "Daniel Jones",
+     "team": "IND",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040676",
+     "name": "Cam Ward",
+     "team": "TEN",
+     "pos": "QB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039150",
+     "name": "Bryce Young",
+     "team": "CAR",
+     "pos": "QB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033119",
+     "name": "Jacoby Brissett",
+     "team": "ARI",
+     "pos": "QB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0023459",
+     "name": "Aaron Rodgers",
+     "team": "PIT",
+     "pos": "QB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0030565",
+     "name": "Geno Smith",
+     "team": "NYJ",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0029604",
+     "name": "Kirk Cousins",
+     "team": "LV",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039917",
+     "name": "Michael Penix Jr.",
+     "team": "ATL",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036212",
+     "name": "Tua Tagovailoa",
+     "team": "ATL",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033537",
+     "name": "Deshaun Watson",
+     "team": "CLE",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039152",
+     "name": "Will Levis",
+     "team": "TEN",
+     "pos": "QB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040668",
+     "name": "Shedeur Sanders",
+     "team": "CLE",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035282",
+     "name": "Easton Stick",
+     "team": "IND",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033869",
+     "name": "Mitchell Trubisky",
+     "team": "TEN",
+     "pos": "QB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035993",
+     "name": "Tyler Huntley",
+     "team": "BAL",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035704",
+     "name": "Drew Lock",
+     "team": "SEA",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "SIM639376",
+     "name": "Ty Simpson",
+     "team": "LAR",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0031345",
+     "name": "Jimmy Garoppolo",
+     "team": "LAR",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038579",
+     "name": "Aidan O'Connell",
+     "team": "LV",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038102",
+     "name": "Kenny Pickett",
+     "team": "CAR",
+     "pos": "QB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035264",
+     "name": "Jarrett Stidham",
+     "team": "DEN",
+     "pos": "QB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039923",
+     "name": "J.J. McCarthy",
+     "team": "MIN",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033949",
+     "name": "Joshua Dobbs",
+     "team": "DET",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040234",
+     "name": "Quinn Ewers",
+     "team": "JAX",
+     "pos": "QB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036972",
+     "name": "Mac Jones",
+     "team": "SF",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0029263",
+     "name": "Russell Wilson",
+     "team": "NYG",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040398",
+     "name": "Brady Cook",
+     "team": "MIA",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0026158",
+     "name": "Joe Flacco",
+     "team": "CIN",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0026300",
+     "name": "Josh Johnson",
+     "team": "CIN",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033319",
+     "name": "Nick Mullens",
+     "team": "JAX",
+     "pos": "QB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036945",
+     "name": "Justin Fields",
+     "team": "KC",
+     "pos": "QB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "BEC122142",
+     "name": "Carson Beck",
+     "team": "ARI",
+     "pos": "QB",
+     "bye": 14,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036679",
+     "name": "Shane Buechele",
+     "team": "BUF",
+     "pos": "QB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032434",
+     "name": "Brandon Allen",
+     "team": "NYG",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038582",
+     "name": "Clayton Tune",
+     "team": "GB",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038122",
+     "name": "Desmond Ridder",
+     "team": "GB",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034955",
+     "name": "Brett Rypien",
+     "team": "HOU",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "KLU066027",
+     "name": "Cade Klubnik",
+     "team": "NYJ",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039164",
+     "name": "Anthony Richardson Sr.",
+     "team": "IND",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0028986",
+     "name": "Case Keenum",
+     "team": "CHI",
+     "pos": "QB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "ALL015451",
+     "name": "Drew Allar",
+     "team": "PIT",
+     "pos": "QB",
+     "bye": 9,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "PAY546690",
+     "name": "Cole Payton",
+     "team": "PHI",
+     "pos": "QB",
+     "bye": 10,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "GRE361852",
+     "name": "Taylen Green",
+     "team": "CLE",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0031503",
+     "name": "Jameis Winston",
+     "team": "NYG",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038108",
+     "name": "Bailey Zappe",
+     "team": "NYJ",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038998",
+     "name": "Jake Haener",
+     "team": "NYG",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032268",
+     "name": "Marcus Mariota",
+     "team": "WAS",
+     "pos": "QB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033662",
+     "name": "Cooper Rush",
+     "team": "ATL",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032950",
+     "name": "Carson Wentz",
+     "team": "MIN",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0027973",
+     "name": "Andy Dalton",
+     "team": "PHI",
+     "pos": "QB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039577",
+     "name": "Kedon Slovis",
+     "team": "ARI",
+     "pos": "QB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037013",
+     "name": "Zach Wilson",
+     "team": "NO",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0022942",
+     "name": "Philip Rivers",
+     "team": "IND",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "NUS440041",
+     "name": "Garrett Nussmeier",
+     "team": "KC",
+     "pos": "QB",
+     "bye": 5,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036879",
+     "name": "Sam Ehlinger",
+     "team": "DEN",
+     "pos": "QB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031237",
+     "name": "Teddy Bridgewater",
+     "team": "DET",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038550",
+     "name": "Hendon Hooker",
+     "team": "TEN",
+     "pos": "QB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "MOR767384",
+     "name": "Behren Morton",
+     "team": "NE",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "KAL252591",
+     "name": "Athan Kaliakmanis",
+     "team": "WAS",
+     "pos": "QB",
+     "bye": 7,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0037324",
+     "name": "Chris Oladokun",
+     "team": "KC",
+     "pos": "QB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036928",
+     "name": "Kyle Trask",
+     "team": "CAR",
+     "pos": "QB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038476",
+     "name": "Tommy DeVito",
+     "team": "NE",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038658",
+     "name": "Adrian Martinez",
+     "team": "SF",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039376",
+     "name": "Spencer Rattler",
+     "team": "NO",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037327",
+     "name": "Skylar Thompson",
+     "team": "BAL",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034577",
+     "name": "Kyle Allen",
+     "team": "BUF",
+     "pos": "QB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038391",
+     "name": "Sean Clifford",
+     "team": "CIN",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032156",
+     "name": "Trevor Siemian",
+     "team": "ATL",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038400",
+     "name": "Tanner McKee",
+     "team": "PHI",
+     "pos": "QB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040494",
+     "name": "Max Brosmer",
+     "team": "MIN",
+     "pos": "QB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039398",
+     "name": "Joe Milton III",
+     "team": "DAL",
+     "pos": "QB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034771",
+     "name": "Mason Rudolph",
+     "team": "PIT",
+     "pos": "QB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037077",
+     "name": "Sam Howell",
+     "team": "DAL",
+     "pos": "QB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0028118",
+     "name": "Tyrod Taylor",
+     "team": "GB",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035289",
+     "name": "Gardner Minshew",
+     "team": "ARI",
+     "pos": "QB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035100",
+     "name": "Jake Browning",
+     "team": "TB",
+     "pos": "QB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036898",
+     "name": "Davis Mills",
+     "team": "HOU",
+     "pos": "QB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038416",
+     "name": "Tyson Bagent",
+     "team": "CHI",
+     "pos": "QB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037012",
+     "name": "Trey Lance",
+     "team": "LAC",
+     "pos": "QB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040673",
+     "name": "Jalen Milroe",
+     "team": "SEA",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040206",
+     "name": "Riley Leonard",
+     "team": "IND",
+     "pos": "QB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040704",
+     "name": "Dillon Gabriel",
+     "team": "CLE",
+     "pos": "QB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    }
+   ]
+  },
+  {
+   "pos": "TE",
+   "available": 158,
+   "ordering": "unranked",
+   "facts_absence": "realized_not_published",
+   "players": [
+    {
+     "id": "SAD482340",
+     "name": "Kenyon Sadiq",
+     "team": "NYJ",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0038041",
+     "name": "Jake Ferguson",
+     "team": "DAL",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036040",
+     "name": "Juwan Johnson",
+     "team": "NO",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034383",
+     "name": "Dalton Schultz",
+     "team": "HOU",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037809",
+     "name": "Chig Okonkwo",
+     "team": "WAS",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037838",
+     "name": "Isaiah Likely",
+     "team": "NYG",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035229",
+     "name": "T.J. Hockenson",
+     "team": "MIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038935",
+     "name": "Brenton Strange",
+     "team": "JAX",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040189",
+     "name": "Oronde Gadsden",
+     "team": "LAC",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038129",
+     "name": "Cade Otton",
+     "team": "TB",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039793",
+     "name": "AJ Barner",
+     "team": "SEA",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040584",
+     "name": "Gunnar Helm",
+     "team": "TEN",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033881",
+     "name": "Evan Engram",
+     "team": "DEN",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040736",
+     "name": "Mason Taylor",
+     "team": "NYJ",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036894",
+     "name": "Pat Freiermuth",
+     "team": "PIT",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039847",
+     "name": "Theo Johnson",
+     "team": "NYG",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033885",
+     "name": "David Njoku",
+     "team": "LAC",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040737",
+     "name": "Terrance Ferguson",
+     "team": "LAR",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036244",
+     "name": "Colby Parkinson",
+     "team": "LAR",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037252",
+     "name": "Greg Dulcich",
+     "team": "MIA",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034829",
+     "name": "Mike Gesicki",
+     "team": "CIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031610",
+     "name": "Darren Waller",
+     "team": "CAR",
+     "pos": "TE",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039066",
+     "name": "Michael Mayer",
+     "team": "LV",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036290",
+     "name": "Cole Kmet",
+     "team": "CHI",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037112",
+     "name": "Jake Tonges",
+     "team": "SF",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "STO806346",
+     "name": "Eli Stowers",
+     "team": "PHI",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0038558",
+     "name": "Darnell Washington",
+     "team": "PIT",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038046",
+     "name": "Charlie Kolar",
+     "team": "LAC",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035689",
+     "name": "Dawson Knox",
+     "team": "BUF",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033110",
+     "name": "Tyler Higbee",
+     "team": "LAR",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040739",
+     "name": "Elijah Arroyo",
+     "team": "SEA",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036637",
+     "name": "Noah Gray",
+     "team": "KC",
+     "pos": "TE",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "KLA269938",
+     "name": "Max Klare",
+     "team": "LAR",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0035644",
+     "name": "Noah Fant",
+     "team": "NO",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037005",
+     "name": "Tommy Tremble",
+     "team": "CAR",
+     "pos": "TE",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039814",
+     "name": "Erick All Jr.",
+     "team": "CIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0030061",
+     "name": "Zach Ertz",
+     "team": "WAS",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "BOE586077",
+     "name": "Nate Boerkircher",
+     "team": "JAX",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0033858",
+     "name": "Jonnu Smith",
+     "team": "GB",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "ROU550040",
+     "name": "Sam Roush",
+     "team": "CHI",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "KLE258860",
+     "name": "Marlin Klein",
+     "team": "HOU",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039356",
+     "name": "Ja'Tavion Sanders",
+     "team": "CAR",
+     "pos": "TE",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039530",
+     "name": "Brevyn Spann-Ford",
+     "team": "DAL",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038589",
+     "name": "Josh Whyle",
+     "team": "GB",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034159",
+     "name": "Will Dissly",
+     "team": "LAC",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DEL659316",
+     "name": "Oscar Delp",
+     "team": "NO",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0040187",
+     "name": "Mitchell Evans",
+     "team": "CAR",
+     "pos": "TE",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038115",
+     "name": "Daniel Bellinger",
+     "team": "TEN",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039041",
+     "name": "Elijah Higgins",
+     "team": "ARI",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036423",
+     "name": "Albert Okwuegbunam Jr.",
+     "team": "LV",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033217",
+     "name": "Mo Alie-Cox",
+     "team": "IND",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037306",
+     "name": "John FitzPatrick",
+     "team": "GB",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039074",
+     "name": "Davis Allen",
+     "team": "LAR",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032392",
+     "name": "Austin Hooper",
+     "team": "ATL",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "RAR148318",
+     "name": "Eli Raridon",
+     "team": "NE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0037004",
+     "name": "Hunter Long",
+     "team": "ARI",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "KAC282861",
+     "name": "Will Kacmarek",
+     "team": "MIA",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039050",
+     "name": "Payne Durham",
+     "team": "TB",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039912",
+     "name": "Ben Sinnott",
+     "team": "WAS",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "KOZ404039",
+     "name": "Tanner Koziol",
+     "team": "JAX",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "HIB564972",
+     "name": "Matthew Hibner",
+     "team": "BAL",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0033455",
+     "name": "Anthony Firkser",
+     "team": "DET",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037475",
+     "name": "Stone Smartt",
+     "team": "PHI",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "JOL735174",
+     "name": "Justin Joly",
+     "team": "DEN",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036876",
+     "name": "Kylen Granson",
+     "team": "TEN",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036640",
+     "name": "Zach Davidson",
+     "team": "NYG",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037539",
+     "name": "Lucas Krull",
+     "team": "DEN",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037015",
+     "name": "Sal Cannella",
+     "team": "CLE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "ROY606086",
+     "name": "Joe Royer",
+     "team": "CLE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "TRA291459",
+     "name": "Seydou Traore",
+     "team": "MIA",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036145",
+     "name": "Lawrence Cager",
+     "team": "WAS",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "CUE040912",
+     "name": "Josh Cuevas",
+     "team": "BAL",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036032",
+     "name": "Sean McKeon",
+     "team": "IND",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038498",
+     "name": "E.J. Jenkins",
+     "team": "PHI",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "NOW373761",
+     "name": "Riley Nowakowski",
+     "team": "PIT",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039754",
+     "name": "Devin Culp",
+     "team": "TB",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "END438361",
+     "name": "Jack Endries",
+     "team": "CIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BEN687044",
+     "name": "Dallen Bentley",
+     "team": "DEN",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0037086",
+     "name": "Grant Calcaterra",
+     "team": "PHI",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036887",
+     "name": "Luke Farrell",
+     "team": "SF",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038720",
+     "name": "Julian Hill",
+     "team": "NE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "SHA375359",
+     "name": "Bauer Sharp",
+     "team": "TB",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0037654",
+     "name": "Tucker Fisk",
+     "team": "LAC",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038783",
+     "name": "Nate Adkins",
+     "team": "DEN",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033357",
+     "name": "Taysom Hill",
+     "team": "NO",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "RYA022232",
+     "name": "Carsen Ryan",
+     "team": "CLE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BRE060106",
+     "name": "Max Bredeson",
+     "team": "MIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039631",
+     "name": "Cam Grandy",
+     "team": "CIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036590",
+     "name": "Quintin Morris",
+     "team": "JAX",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038564",
+     "name": "Cameron Latu",
+     "team": "NE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "KAN023071",
+     "name": "Jaren Kanak",
+     "team": "TEN",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036232",
+     "name": "Harrison Bryant",
+     "team": "SEA",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040363",
+     "name": "Keleki Latu",
+     "team": "BUF",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038394",
+     "name": "Will Mallory",
+     "team": "IND",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038710",
+     "name": "Blake Whiteheart",
+     "team": "CLE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036534",
+     "name": "Shane Zylstra",
+     "team": "BUF",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032394",
+     "name": "Nick Vannett",
+     "team": "SEA",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034270",
+     "name": "Tyler Conklin",
+     "team": "DET",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036429",
+     "name": "Charlie Woerner",
+     "team": "ATL",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033439",
+     "name": "Pharaoh Brown",
+     "team": "IND",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035249",
+     "name": "Josh Oliver",
+     "team": "MIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036556",
+     "name": "Brevin Jordan",
+     "team": "HOU",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035039",
+     "name": "Stephen Carlson",
+     "team": "CHI",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037292",
+     "name": "Drew Ogletree",
+     "team": "IND",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034073",
+     "name": "Ross Dwelley",
+     "team": "DET",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039316",
+     "name": "Baylor Cupp",
+     "team": "ARI",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039737",
+     "name": "Tip Reiman",
+     "team": "ARI",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037348",
+     "name": "Tanner Conner",
+     "team": "NYG",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036741",
+     "name": "Jack Stoll",
+     "team": "CLE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034613",
+     "name": "Tanner Hudson",
+     "team": "CIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034981",
+     "name": "Foster Moreau",
+     "team": "HOU",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033576",
+     "name": "Eric Saubert",
+     "team": "SEA",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036332",
+     "name": "Josiah Deguara",
+     "team": "NYG",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0024243",
+     "name": "Marcedes Lewis",
+     "team": "DEN",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035956",
+     "name": "Giovanni Ricci",
+     "team": "DET",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036422",
+     "name": "Adam Trautman",
+     "team": "DEN",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039399",
+     "name": "Tanner McLachlan",
+     "team": "SF",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036510",
+     "name": "Kenny Yeboah",
+     "team": "ARI",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039458",
+     "name": "Brenden Bates",
+     "team": "CLE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037311",
+     "name": "Ko Kieft",
+     "team": "TB",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040058",
+     "name": "Nick Kallerup",
+     "team": "SEA",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039144",
+     "name": "Luke Musgrave",
+     "team": "GB",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040194",
+     "name": "Jackson Hawes",
+     "team": "BUF",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037317",
+     "name": "Nick Muse",
+     "team": "ATL",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038735",
+     "name": "Princeton Fant",
+     "team": "DAL",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039420",
+     "name": "Jaheim Bell",
+     "team": "PIT",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033757",
+     "name": "Robert Tonyan",
+     "team": "PIT",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037282",
+     "name": "James Mitchell",
+     "team": "CAR",
+     "pos": "TE",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038456",
+     "name": "Travis Vokolek",
+     "team": "ARI",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040566",
+     "name": "CJ Dippre",
+     "team": "NE",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035631",
+     "name": "Drew Sample",
+     "team": "CIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037805",
+     "name": "Jeremy Ruckert",
+     "team": "NYJ",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039489",
+     "name": "Hayden Rucci",
+     "team": "SF",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036754",
+     "name": "Brock Wright",
+     "team": "DET",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036628",
+     "name": "John Bates",
+     "team": "WAS",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037078",
+     "name": "Cole Turner",
+     "team": "MIA",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038547",
+     "name": "Luke Schoonmaker",
+     "team": "DAL",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039824",
+     "name": "Jared Wiley",
+     "team": "KC",
+     "pos": "TE",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033246",
+     "name": "Johnny Mundt",
+     "team": "PHI",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031484",
+     "name": "Chris Manhertz",
+     "team": "NYG",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040244",
+     "name": "Moliki Matavao",
+     "team": "NO",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037340",
+     "name": "Zaire Mitchell-Paden",
+     "team": "NO",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037277",
+     "name": "Teagan Quitoriano",
+     "team": "ARI",
+     "pos": "TE",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036825",
+     "name": "Feleipe Franks",
+     "team": "CAR",
+     "pos": "TE",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040509",
+     "name": "Ben Yurosek",
+     "team": "MIN",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038809",
+     "name": "Ben Sims",
+     "team": "MIA",
+     "pos": "TE",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037011",
+     "name": "Tre' McKitty",
+     "team": "WAS",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039648",
+     "name": "David Martin-Robinson",
+     "team": "TEN",
+     "pos": "TE",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034365",
+     "name": "Ian Thomas",
+     "team": "LV",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040225",
+     "name": "Thomas Fidone II",
+     "team": "NYG",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034798",
+     "name": "Durham Smythe",
+     "team": "BAL",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039359",
+     "name": "Cade Stover",
+     "team": "HOU",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039686",
+     "name": "Colson Yankoff",
+     "team": "WAS",
+     "pos": "TE",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037031",
+     "name": "Nikola Kalinic",
+     "team": "CHI",
+     "pos": "TE",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040488",
+     "name": "Carter Runyon",
+     "team": "LV",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038643",
+     "name": "Brayden Willis",
+     "team": "SF",
+     "pos": "TE",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040628",
+     "name": "Drake Dabney",
+     "team": "GB",
+     "pos": "TE",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037755",
+     "name": "Jelani Woods",
+     "team": "NYJ",
+     "pos": "TE",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    }
+   ]
+  },
+  {
+   "pos": "WR",
+   "available": 263,
+   "ordering": "unranked",
+   "facts_absence": "realized_not_published",
+   "players": [
+    {
+     "id": "TYS405541",
+     "name": "Jordyn Tyson",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0038608",
+     "name": "Kayshon Boutte",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039855",
+     "name": "Jalen McMillan",
+     "team": "TB",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036259",
+     "name": "Jauan Jennings",
+     "team": "MIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037291",
+     "name": "Jalen Nailor",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039890",
+     "name": "Adonai Mitchell",
+     "team": "NYJ",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038393",
+     "name": "Dontayvion Wicks",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039410",
+     "name": "Ryan Flournoy",
+     "team": "DAL",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0030279",
+     "name": "Keenan Allen",
+     "team": "IND",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034837",
+     "name": "Calvin Ridley",
+     "team": "TEN",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040669",
+     "name": "Isaac TeSlaa",
+     "team": "DET",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040134",
+     "name": "Pat Bryant",
+     "team": "DEN",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040727",
+     "name": "Tre' Harris",
+     "team": "LAC",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039880",
+     "name": "Malik Washington",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036550",
+     "name": "Rashod Bateman",
+     "team": "BAL",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040138",
+     "name": "Jaylin Noel",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039868",
+     "name": "Troy Franklin",
+     "team": "DEN",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033908",
+     "name": "Cooper Kupp",
+     "team": "SEA",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036309",
+     "name": "Darnell Mooney",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039901",
+     "name": "Keon Coleman",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038977",
+     "name": "Tank Dell",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039424",
+     "name": "Devaughn Vele",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040170",
+     "name": "Elic Ayomanor",
+     "team": "TEN",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "COO816508",
+     "name": "Omar Cooper Jr.",
+     "team": "NYJ",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BOS677861",
+     "name": "Denzel Boston",
+     "team": "CLE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0040705",
+     "name": "Chimere Dike",
+     "team": "TEN",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040648",
+     "name": "Tory Horton",
+     "team": "SEA",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039342",
+     "name": "Xavier Legette",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038104",
+     "name": "Tyquan Thornton",
+     "team": "KC",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038976",
+     "name": "Marvin Mims Jr.",
+     "team": "DEN",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040130",
+     "name": "Jayden Higgins",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040131",
+     "name": "Kyle Williams",
+     "team": "NE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "BER218265",
+     "name": "Germie Bernard",
+     "team": "PIT",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0040729",
+     "name": "Jack Bech",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040718",
+     "name": "Travis Hunter",
+     "team": "JAX",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038621",
+     "name": "DeMario Douglas",
+     "team": "NE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035662",
+     "name": "Hollywood Brown",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038619",
+     "name": "Andrei Iosivas",
+     "team": "CIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035535",
+     "name": "Darius Slayton",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040782",
+     "name": "Isaiah Bond",
+     "team": "CLE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038612",
+     "name": "A.T. Perry",
+     "team": "PIT",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036261",
+     "name": "Brandon Aiyuk",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033555",
+     "name": "Mack Hollins",
+     "team": "NE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "WIL143106",
+     "name": "Antonio Williams",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0033040",
+     "name": "Tyreek Hill",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040237",
+     "name": "Tez Johnson",
+     "team": "TB",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "HUR541377",
+     "name": "Ted Hurst",
+     "team": "TB",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039916",
+     "name": "Ricky Pearsall",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034775",
+     "name": "Christian Kirk",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038618",
+     "name": "Xavier Hutchinson",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037741",
+     "name": "Jahan Dotson",
+     "team": "ATL",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037666",
+     "name": "Jalen Tolbert",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DOU210628",
+     "name": "Caleb Douglas",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036988",
+     "name": "Joshua Palmer",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033307",
+     "name": "Kendrick Bourne",
+     "team": "ARI",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039739",
+     "name": "Roman Wilson",
+     "team": "PIT",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "FIE775129",
+     "name": "Malachi Fields",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0035208",
+     "name": "Olamide Zaccheaus",
+     "team": "ATL",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "BEL267684",
+     "name": "Chris Bell",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039052",
+     "name": "Trey Palmer",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "LAN311008",
+     "name": "Ja'Kobi Lane",
+     "team": "BAL",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BEL597603",
+     "name": "Skyler Bell",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BRA531428",
+     "name": "Zachariah Branch",
+     "team": "ATL",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BRA836631",
+     "name": "Chris Brazzell II",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "SAR527100",
+     "name": "Elijah Sarratt",
+     "team": "BAL",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0037801",
+     "name": "KaVontae Turpin",
+     "team": "DAL",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "THO495568",
+     "name": "Brenen Thompson",
+     "team": "LAC",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0038979",
+     "name": "Cedric Tillman",
+     "team": "CLE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "LAN016345",
+     "name": "Bryce Lance",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0037742",
+     "name": "Treylon Burks",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039907",
+     "name": "Ja'Lynn Polk",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039355",
+     "name": "Luke McCaffrey",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040590",
+     "name": "Konata Mumpfield",
+     "team": "LAR",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037837",
+     "name": "Calvin Austin III",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032464",
+     "name": "Kalif Raymond",
+     "team": "CHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "THO417520",
+     "name": "Zavion Thomas",
+     "team": "CHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "VIR271235",
+     "name": "Reggie Virgil",
+     "team": "ARI",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036849",
+     "name": "Tutu Atwell",
+     "team": "LAR",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040646",
+     "name": "Jalen Royals",
+     "team": "KC",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "CAM108646",
+     "name": "Josh Cameron",
+     "team": "JAX",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039589",
+     "name": "Kameron Johnson",
+     "team": "TB",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "SMI038569",
+     "name": "Anthony Smith",
+     "team": "DAL",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "COL362413",
+     "name": "Kevin Coleman Jr.",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039920",
+     "name": "Malachi Corley",
+     "team": "CLE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032775",
+     "name": "Demarcus Robinson",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039386",
+     "name": "Bub Means",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031235",
+     "name": "Odell Beckham",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0030035",
+     "name": "Adam Thielen",
+     "team": "PIT",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038090",
+     "name": "Skyy Moore",
+     "team": "GB",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040317",
+     "name": "Jacoby Jones",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034521",
+     "name": "Allen Lazard",
+     "team": "NYJ",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037614",
+     "name": "John Metchie III",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040164",
+     "name": "Jaylin Lane",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "ALL092954",
+     "name": "Cyrus Allen",
+     "team": "KC",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "YOU154529",
+     "name": "Colbie Young",
+     "team": "CIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BON235618",
+     "name": "Lewis Bond",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0033857",
+     "name": "JuJu Smith-Schuster",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "WET055619",
+     "name": "Kaden Wetjen",
+     "team": "PIT",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0040009",
+     "name": "Savion Williams",
+     "team": "GB",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "WIL189259",
+     "name": "CJ Williams",
+     "team": "JAX",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036271",
+     "name": "Quez Watkins",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040259",
+     "name": "Gage Larvadain",
+     "team": "CLE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "LAW090280",
+     "name": "Kendrick Law",
+     "team": "DET",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0038840",
+     "name": "Brycen Tremayne",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039792",
+     "name": "Devontez Walker",
+     "team": "BAL",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DAN490797",
+     "name": "CJ Daniels",
+     "team": "LAR",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0036427",
+     "name": "Tyler Johnson",
+     "team": "DAL",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "HEN199637",
+     "name": "Emmanuel Henderson Jr.",
+     "team": "SEA",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BRO268113",
+     "name": "Barion Brown",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BEN601117",
+     "name": "Malik Benson",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039751",
+     "name": "Jordan Whittington",
+     "team": "LAR",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "BUR271406",
+     "name": "Deion Burks",
+     "team": "IND",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0040241",
+     "name": "Dominic Lovett",
+     "team": "DET",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033591",
+     "name": "Noah Brown",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039747",
+     "name": "Ainias Smith",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039062",
+     "name": "Jonathan Mingo",
+     "team": "DAL",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039451",
+     "name": "Isaiah Williams",
+     "team": "NYJ",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033282",
+     "name": "Curtis Samuel",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034983",
+     "name": "Hunter Renfrow",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040581",
+     "name": "Dont'e Thornton Jr.",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038891",
+     "name": "Shedrick Jackson",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0030564",
+     "name": "DeAndre Hopkins",
+     "team": "BAL",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038824",
+     "name": "Ryan Miller",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040277",
+     "name": "Jahdae Walker",
+     "team": "CHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036626",
+     "name": "Dyami Brown",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040582",
+     "name": "Arian Smith",
+     "team": "NYJ",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040506",
+     "name": "Myles Price",
+     "team": "MIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040075",
+     "name": "LaJohntay Wester",
+     "team": "BAL",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035021",
+     "name": "Ashton Dulin",
+     "team": "IND",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038728",
+     "name": "Jared Wayne",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038573",
+     "name": "Derius Davis",
+     "team": "LAC",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038640",
+     "name": "Jalen Brooks",
+     "team": "ARI",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036959",
+     "name": "Michael Bandy",
+     "team": "DEN",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036630",
+     "name": "Tylan Wallace",
+     "team": "CLE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036182",
+     "name": "Nick Westbrook-Ikhine",
+     "team": "IND",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033943",
+     "name": "Josh Reynolds",
+     "team": "NYJ",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038938",
+     "name": "Jalin Hyatt",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036345",
+     "name": "K.J. Osborn",
+     "team": "TEN",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032211",
+     "name": "Tyler Lockett",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036415",
+     "name": "Van Jefferson",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038679",
+     "name": "Tyrell Shavers",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036165",
+     "name": "Isaiah Hodgins",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040534",
+     "name": "Ke'Shawn Williams",
+     "team": "CIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035891",
+     "name": "Cody White",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040390",
+     "name": "Jackson Meeks",
+     "team": "DET",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031236",
+     "name": "Brandin Cooks",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038941",
+     "name": "Tyler Scott",
+     "team": "LAR",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038465",
+     "name": "Malik Heath",
+     "team": "ATL",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040154",
+     "name": "Tai Felton",
+     "team": "MIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038496",
+     "name": "Xavier Gipson",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040432",
+     "name": "Beaux Collins",
+     "team": "ATL",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039379",
+     "name": "Jamari Thrash",
+     "team": "CLE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038519",
+     "name": "Nikko Remigio",
+     "team": "KC",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040218",
+     "name": "Jimmy Horn Jr.",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039394",
+     "name": "Casey Washington",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038647",
+     "name": "Ronnie Bell",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036955",
+     "name": "Terrace Marshall Jr.",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038953",
+     "name": "Dylan Drummond",
+     "team": "ATL",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040388",
+     "name": "Jakobie Keeney-James",
+     "team": "PIT",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036635",
+     "name": "Ihmir Smith-Marsette",
+     "team": "ARI",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039365",
+     "name": "Jacob Cowing",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037382",
+     "name": "Brandon Johnson",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040431",
+     "name": "Dalen Cambre",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039884",
+     "name": "Tahj Washington",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039650",
+     "name": "Bryce Oliver",
+     "team": "TEN",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036331",
+     "name": "Devin Duvernay",
+     "team": "ARI",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040597",
+     "name": "Brennan Presley",
+     "team": "LAR",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036980",
+     "name": "Elijah Moore",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039816",
+     "name": "Anthony Gould",
+     "team": "IND",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037093",
+     "name": "Dareke Young",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032385",
+     "name": "Sterling Shepard",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040558",
+     "name": "Isaiah Neyor",
+     "team": "GB",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037487",
+     "name": "Deven Thompkins",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040311",
+     "name": "Theo Wease Jr.",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040406",
+     "name": "Quentin Skinner",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038576",
+     "name": "Charlie Jones",
+     "team": "CIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039521",
+     "name": "Xavier Weaver",
+     "team": "ARI",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036620",
+     "name": "Dee Eskridge",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034272",
+     "name": "Marquez Valdes-Scantling",
+     "team": "DAL",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035500",
+     "name": "Greg Dortch",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036196",
+     "name": "Gabe Davis",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035140",
+     "name": "Mecole Hardman Jr.",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034386",
+     "name": "Justin Watson",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040184",
+     "name": "KeAndre Lambert-Smith",
+     "team": "LAC",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040024",
+     "name": "Darius Cooper",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039623",
+     "name": "Mason Tipton",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040522",
+     "name": "Xavier Restrepo",
+     "team": "TEN",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035639",
+     "name": "Parris Campbell",
+     "team": "DAL",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034407",
+     "name": "Ray-Ray McCloud III",
+     "team": "CHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040629",
+     "name": "Dalevon Campbell",
+     "team": "LAC",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039710",
+     "name": "Jeshaun Jones",
+     "team": "MIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039236",
+     "name": "Johnny Wilson",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038092",
+     "name": "Erik Ezukanma",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032398",
+     "name": "Chris Moore",
+     "team": "BAL",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039397",
+     "name": "Tejhaun Palmer",
+     "team": "NE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037422",
+     "name": "Kendric Pryor",
+     "team": "CIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032208",
+     "name": "Phillip Dorsett II",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033589",
+     "name": "David Moore",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032688",
+     "name": "Robbie Chosen",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031763",
+     "name": "DeAndre Carter",
+     "team": "CLE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032951",
+     "name": "Laquon Treadwell",
+     "team": "IND",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033572",
+     "name": "Jamal Agnew",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034418",
+     "name": "Cedrick Wilson Jr.",
+     "team": "DET",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034054",
+     "name": "River Cracraft",
+     "team": "WAS",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033891",
+     "name": "Zay Jones",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034854",
+     "name": "KhaDarel Hodge",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034860",
+     "name": "Dante Pettis",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034487",
+     "name": "Trent Sherfield Sr.",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034411",
+     "name": "Russell Gage Jr.",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035045",
+     "name": "D.J. Montgomery",
+     "team": "IND",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034419",
+     "name": "Braxton Berrios",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040352",
+     "name": "Coleman Owen",
+     "team": "IND",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034928",
+     "name": "Steven Sims",
+     "team": "ARI",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034867",
+     "name": "Malik Turner",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035645",
+     "name": "Gunner Olszewski",
+     "team": "NYG",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035359",
+     "name": "David Sills V",
+     "team": "TB",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035593",
+     "name": "Juwann Winfree",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036183",
+     "name": "Kristian Wilkerson",
+     "team": "ATL",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036497",
+     "name": "Tim Jones",
+     "team": "JAX",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035976",
+     "name": "Dan Chisena",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035876",
+     "name": "Andre Baccellia",
+     "team": "ARI",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035341",
+     "name": "Trenton Irwin",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035544",
+     "name": "Tom Kennedy",
+     "team": "DET",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036646",
+     "name": "Simi Fehoko",
+     "team": "ARI",
+     "pos": "WR",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036527",
+     "name": "DJ Turner",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036176",
+     "name": "Mason Kinsey",
+     "team": "TEN",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035602",
+     "name": "Alex Bachman",
+     "team": "LAR",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036133",
+     "name": "James Proche II",
+     "team": "TEN",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036775",
+     "name": "Brandon Smith",
+     "team": "PIT",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037098",
+     "name": "Samori Toure",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036950",
+     "name": "Avery Williams",
+     "team": "NYJ",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037156",
+     "name": "Irvin Charles",
+     "team": "SEA",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037272",
+     "name": "Montrell Washington",
+     "team": "HOU",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036841",
+     "name": "Austin Trammell",
+     "team": "JAX",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035406",
+     "name": "Lil'Jordan Humphrey",
+     "team": "DEN",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037231",
+     "name": "Kevin Austin Jr.",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037380",
+     "name": "Kaden Davis",
+     "team": "CHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037132",
+     "name": "Britain Covey",
+     "team": "PHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037387",
+     "name": "Jalen Virgil",
+     "team": "BUF",
+     "pos": "WR",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037300",
+     "name": "Mike Woods",
+     "team": "DEN",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038492",
+     "name": "Jason Brownlee",
+     "team": "KC",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037708",
+     "name": "Maurice Alexander",
+     "team": "CHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038667",
+     "name": "Elijah Cooks",
+     "team": "CAR",
+     "pos": "WR",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038181",
+     "name": "Lucky Jackson",
+     "team": "DET",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038590",
+     "name": "Justin Shorter",
+     "team": "LV",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038632",
+     "name": "Colton Dowell",
+     "team": "PIT",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038740",
+     "name": "Jalen Cropper",
+     "team": "NO",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038911",
+     "name": "Malik Cunningham",
+     "team": "DET",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038752",
+     "name": "Jake Bobo",
+     "team": "SEA",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039392",
+     "name": "Jha'Quan Jackson",
+     "team": "TB",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039415",
+     "name": "Brenden Rice",
+     "team": "GB",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040653",
+     "name": "Ricky White III",
+     "team": "SEA",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038839",
+     "name": "Mitchell Tinsley",
+     "team": "CIN",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038359",
+     "name": "Xavier Smith",
+     "team": "LAR",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036387",
+     "name": "Jalen Reagor",
+     "team": "MIA",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036463",
+     "name": "Chris Blair",
+     "team": "ATL",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033375",
+     "name": "Tim Patrick",
+     "team": "NYJ",
+     "pos": "WR",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037524",
+     "name": "Tay Martin",
+     "team": "DET",
+     "pos": "WR",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036862",
+     "name": "Ben Skowronek",
+     "team": "PIT",
+     "pos": "WR",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035298",
+     "name": "Scotty Miller",
+     "team": "CHI",
+     "pos": "WR",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040563",
+     "name": "Efton Chism III",
+     "team": "NE",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040172",
+     "name": "Jordan Watkins",
+     "team": "SF",
+     "pos": "WR",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037091",
+     "name": "Bo Melton",
+     "team": "GB",
+     "pos": "WR",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    }
+   ]
+  },
+  {
+   "pos": "K",
+   "available": 36,
+   "ordering": "unranked",
+   "facts_absence": "realized_not_published",
+   "players": [
+    {
+     "id": "00-0036854",
+     "name": "Evan McPherson",
+     "team": "CIN",
+     "pos": "K",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040074",
+     "name": "Tyler Loop",
+     "team": "BAL",
+     "pos": "K",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033787",
+     "name": "Jake Elliott",
+     "team": "PHI",
+     "pos": "K",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035358",
+     "name": "Chase McLaughlin",
+     "team": "TB",
+     "pos": "K",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039409",
+     "name": "Cam Little",
+     "team": "JAX",
+     "pos": "K",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036162",
+     "name": "Tyler Bass",
+     "team": "BUF",
+     "pos": "K",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031203",
+     "name": "Cairo Santos",
+     "team": "CHI",
+     "pos": "K",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034173",
+     "name": "Eddy Pi\u00f1eiro",
+     "team": "SF",
+     "pos": "K",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031136",
+     "name": "Chris Boswell",
+     "team": "PIT",
+     "pos": "K",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038905",
+     "name": "Blake Grupe",
+     "team": "IND",
+     "pos": "K",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038152",
+     "name": "Lucas Havrisik",
+     "team": "GB",
+     "pos": "K",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039404",
+     "name": "Will Reichard",
+     "team": "MIN",
+     "pos": "K",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033303",
+     "name": "Harrison Butker",
+     "team": "KC",
+     "pos": "K",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038562",
+     "name": "Jake Moody",
+     "team": "WAS",
+     "pos": "K",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032569",
+     "name": "Wil Lutz",
+     "team": "DEN",
+     "pos": "K",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0025565",
+     "name": "Nick Folk",
+     "team": "ATL",
+     "pos": "K",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040530",
+     "name": "Ben Sauls",
+     "team": "NYG",
+     "pos": "K",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040200",
+     "name": "Andy Borregales",
+     "team": "NE",
+     "pos": "K",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035269",
+     "name": "Matt Gay",
+     "team": "LV",
+     "pos": "K",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035192",
+     "name": "Joey Slye",
+     "team": "TEN",
+     "pos": "K",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040279",
+     "name": "Ryan Fitzgerald",
+     "team": "CAR",
+     "pos": "K",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036816",
+     "name": "Riley Patterson",
+     "team": "MIA",
+     "pos": "K",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034794",
+     "name": "Jason Sanders",
+     "team": "NYJ",
+     "pos": "K",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038567",
+     "name": "Chad Ryland",
+     "team": "ARI",
+     "pos": "K",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038428",
+     "name": "Andre Szmyt",
+     "team": "CLE",
+     "pos": "K",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038748",
+     "name": "B.T. Potter",
+     "team": "TB",
+     "pos": "K",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040899",
+     "name": "Trey Smack",
+     "team": "GB",
+     "pos": "K",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039576",
+     "name": "Spencer Shrader",
+     "team": "IND",
+     "pos": "K",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0041174",
+     "name": "Gabriel Plascencia",
+     "team": "CHI",
+     "pos": "K",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0041262",
+     "name": "Laith Marjan",
+     "team": "PIT",
+     "pos": "K",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0041182",
+     "name": "Drew Stevens",
+     "team": "WAS",
+     "pos": "K",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0041145",
+     "name": "Dominic Zvada",
+     "team": "NYG",
+     "pos": "K",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033862",
+     "name": "Zane Gonzalez",
+     "team": "MIA",
+     "pos": "K",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0041333",
+     "name": "Mason Shipley",
+     "team": "NO",
+     "pos": "K",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038097",
+     "name": "Cade York",
+     "team": "NYJ",
+     "pos": "K",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039229",
+     "name": "Charlie Smyth",
+     "team": "NO",
+     "pos": "K",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    }
+   ]
+  },
+  {
+   "pos": "DST",
+   "available": 23,
+   "ordering": "unranked",
+   "facts_absence": "realized_not_published",
+   "players": [
+    {
+     "id": "DST-PIT",
+     "name": "PIT D/ST",
+     "team": "PIT",
+     "pos": "DST",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-BUF",
+     "name": "BUF D/ST",
+     "team": "BUF",
+     "pos": "DST",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-BAL",
+     "name": "BAL D/ST",
+     "team": "BAL",
+     "pos": "DST",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-JAX",
+     "name": "JAX D/ST",
+     "team": "JAX",
+     "pos": "DST",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-CHI",
+     "name": "CHI D/ST",
+     "team": "CHI",
+     "pos": "DST",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-NO",
+     "name": "NO D/ST",
+     "team": "NO",
+     "pos": "DST",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-CLE",
+     "name": "CLE D/ST",
+     "team": "CLE",
+     "pos": "DST",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-TB",
+     "name": "TB D/ST",
+     "team": "TB",
+     "pos": "DST",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-KC",
+     "name": "KC D/ST",
+     "team": "KC",
+     "pos": "DST",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-ATL",
+     "name": "ATL D/ST",
+     "team": "ATL",
+     "pos": "DST",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-GB",
+     "name": "GB D/ST",
+     "team": "GB",
+     "pos": "DST",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-IND",
+     "name": "IND D/ST",
+     "team": "IND",
+     "pos": "DST",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-MIA",
+     "name": "MIA D/ST",
+     "team": "MIA",
+     "pos": "DST",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-CIN",
+     "name": "CIN D/ST",
+     "team": "CIN",
+     "pos": "DST",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-SF",
+     "name": "SF D/ST",
+     "team": "SF",
+     "pos": "DST",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-NYG",
+     "name": "NYG D/ST",
+     "team": "NYG",
+     "pos": "DST",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-LV",
+     "name": "LV D/ST",
+     "team": "LV",
+     "pos": "DST",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-DAL",
+     "name": "DAL D/ST",
+     "team": "DAL",
+     "pos": "DST",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-NYJ",
+     "name": "NYJ D/ST",
+     "team": "NYJ",
+     "pos": "DST",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-WAS",
+     "name": "WAS D/ST",
+     "team": "WAS",
+     "pos": "DST",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-TEN",
+     "name": "TEN D/ST",
+     "team": "TEN",
+     "pos": "DST",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-CAR",
+     "name": "CAR D/ST",
+     "team": "CAR",
+     "pos": "DST",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "DST-ARI",
+     "name": "ARI D/ST",
+     "team": "ARI",
+     "pos": "DST",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    }
+   ]
+  },
+  {
+   "pos": "RB",
+   "available": 152,
+   "ordering": "unranked",
+   "facts_absence": "realized_not_published",
+   "players": [
+    {
+     "id": "00-0037263",
+     "name": "Tyler Allgeier",
+     "team": "ARI",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038611",
+     "name": "Chris Rodriguez Jr.",
+     "team": "JAX",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038555",
+     "name": "Tank Bigsby",
+     "team": "PHI",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038454",
+     "name": "Keaton Mitchell",
+     "team": "LAC",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033906",
+     "name": "Alvin Kamara",
+     "team": "NO",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037746",
+     "name": "Brian Robinson Jr.",
+     "team": "ATL",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040162",
+     "name": "Dylan Sampson",
+     "team": "CLE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039384",
+     "name": "Tyrone Tracy Jr.",
+     "team": "NYG",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039794",
+     "name": "Braelon Allen",
+     "team": "NYJ",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039875",
+     "name": "Ray Davis",
+     "team": "BUF",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038951",
+     "name": "Sean Tucker",
+     "team": "TB",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039391",
+     "name": "Kimani Vidal",
+     "team": "LAC",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037563",
+     "name": "Malik Davis",
+     "team": "DAL",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036893",
+     "name": "Najee Harris",
+     "team": "NYG",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039299",
+     "name": "George Holani",
+     "team": "SEA",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034975",
+     "name": "Justice Hill",
+     "team": "BAL",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039874",
+     "name": "Jaylen Wright",
+     "team": "MIA",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037197",
+     "name": "Isiah Pacheco",
+     "team": "DET",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033553",
+     "name": "James Conner",
+     "team": "ARI",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033526",
+     "name": "Samaje Perine",
+     "team": "CIN",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "COL293648",
+     "name": "Jonah Coleman",
+     "team": "DEN",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0034791",
+     "name": "Nick Chubb",
+     "team": "HOU",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040142",
+     "name": "Kaleb Johnson",
+     "team": "GB",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038797",
+     "name": "Emanuel Wilson",
+     "team": "SEA",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040198",
+     "name": "Ollie Gordon II",
+     "team": "MIA",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "WAS797326",
+     "name": "Mike Washington Jr.",
+     "team": "LV",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "BLA097235",
+     "name": "Kaelon Black",
+     "team": "SF",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0038685",
+     "name": "Chris Brooks",
+     "team": "GB",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "JOH224817",
+     "name": "Emmett Johnson",
+     "team": "KC",
+     "pos": "RB",
+     "bye": 5,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0038551",
+     "name": "Kendre Miller",
+     "team": "NO",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035537",
+     "name": "Ty Johnson",
+     "team": "BUF",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035250",
+     "name": "Devin Singletary",
+     "team": "NYG",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039798",
+     "name": "Isaiah Davis",
+     "team": "NYJ",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040177",
+     "name": "Jordan James",
+     "team": "SF",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040179",
+     "name": "DJ Giddens",
+     "team": "IND",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040238",
+     "name": "LeQuint Allen Jr.",
+     "team": "JAX",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040586",
+     "name": "Jaydon Blue",
+     "team": "DAL",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038705",
+     "name": "Emari Demercado",
+     "team": "DAL",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040078",
+     "name": "Brashard Smith",
+     "team": "KC",
+     "pos": "RB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033923",
+     "name": "Kareem Hunt",
+     "team": "KC",
+     "pos": "RB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040208",
+     "name": "Tahj Brooks",
+     "team": "CIN",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039373",
+     "name": "Audric Estime",
+     "team": "NO",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "SIN454221",
+     "name": "Nicholas Singleton",
+     "team": "TEN",
+     "pos": "RB",
+     "bye": 9,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039746",
+     "name": "Will Shipley",
+     "team": "PHI",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "ALL532376",
+     "name": "Kaytron Allen",
+     "team": "WAS",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0040202",
+     "name": "Devin Neal",
+     "team": "NO",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "CLA041524",
+     "name": "Demond Claiborne",
+     "team": "MIN",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "RAN022436",
+     "name": "Adam Randall",
+     "team": "BAL",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "HEI114391",
+     "name": "Eli Heidenreich",
+     "team": "PIT",
+     "pos": "RB",
+     "bye": 9,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0038794",
+     "name": "Jaleel McLaughlin",
+     "team": "DEN",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038896",
+     "name": "Jacob Saylors",
+     "team": "DET",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "MCG547540",
+     "name": "Seth McGowan",
+     "team": "IND",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0029892",
+     "name": "Kyle Juszczyk",
+     "team": "SF",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039363",
+     "name": "Isaac Guerendo",
+     "team": "SF",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039921",
+     "name": "Trey Benson",
+     "team": "ARI",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040692",
+     "name": "Jarquez Hunter",
+     "team": "MIA",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037157",
+     "name": "Bam Knight",
+     "team": "ARI",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039021",
+     "name": "Roschon Johnson",
+     "team": "CHI",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036755",
+     "name": "Jaret Patterson",
+     "team": "LAC",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036414",
+     "name": "Cam Akers",
+     "team": "SEA",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037267",
+     "name": "Jerome Ford",
+     "team": "WAS",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035973",
+     "name": "Patrick Taylor Jr.",
+     "team": "SF",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "MIL303300",
+     "name": "Jam Miller",
+     "team": "NE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": true,
+     "realized": null
+    },
+    {
+     "id": "00-0039325",
+     "name": "Carson Steele",
+     "team": "PHI",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038389",
+     "name": "Israel Abanikanda",
+     "team": "DAL",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036020",
+     "name": "Salvon Ahmed",
+     "team": "CHI",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033854",
+     "name": "Dare Ogunbowale",
+     "team": "LV",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036360",
+     "name": "Clyde Edwards-Helaire",
+     "team": "KC",
+     "pos": "RB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037410",
+     "name": "Jashaun Corbin",
+     "team": "DAL",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035628",
+     "name": "D'Ernest Johnson",
+     "team": "TEN",
+     "pos": "RB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031687",
+     "name": "Raheem Mostert",
+     "team": "LV",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039364",
+     "name": "Sione Vaki",
+     "team": "DET",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040466",
+     "name": "Raheim Sanders",
+     "team": "CLE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037617",
+     "name": "Hassan Haskins",
+     "team": "NE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039796",
+     "name": "Rasheen Ali",
+     "team": "BAL",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040644",
+     "name": "Trevor Etienne",
+     "team": "CAR",
+     "pos": "RB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035806",
+     "name": "JaMycal Hasty",
+     "team": "NE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038636",
+     "name": "Kenny McIntosh",
+     "team": "SEA",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037429",
+     "name": "Raheem Blackshear",
+     "team": "DET",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037276",
+     "name": "Ty Chandler",
+     "team": "NO",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034115",
+     "name": "Jeff Wilson Jr.",
+     "team": "MIA",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038622",
+     "name": "Deuce Vaughn",
+     "team": "HOU",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040067",
+     "name": "Jacardia Wright",
+     "team": "SEA",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036569",
+     "name": "Gary Brightwell",
+     "team": "CIN",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038397",
+     "name": "Evan Hull",
+     "team": "ARI",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034681",
+     "name": "Chase Edmonds",
+     "team": "WAS",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039573",
+     "name": "Blake Watson",
+     "team": "TEN",
+     "pos": "RB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038678",
+     "name": "Jordan Mims",
+     "team": "PHI",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033699",
+     "name": "Austin Ekeler",
+     "team": "WAS",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040547",
+     "name": "Nathan Carter",
+     "team": "ATL",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035567",
+     "name": "Craig Reynolds",
+     "team": "WAS",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035291",
+     "name": "Trayveon Williams",
+     "team": "DET",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039266",
+     "name": "Kendall Milton",
+     "team": "CIN",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038396",
+     "name": "Eric Gray",
+     "team": "NYG",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036425",
+     "name": "DeeJay Dallas",
+     "team": "MIN",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040039",
+     "name": "Amar Johnson",
+     "team": "LAC",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035311",
+     "name": "Myles Gaskin",
+     "team": "SEA",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039703",
+     "name": "Cody Schrader",
+     "team": "DEN",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038458",
+     "name": "Owen Wright",
+     "team": "HOU",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036984",
+     "name": "Trey Sermon",
+     "team": "ATL",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040476",
+     "name": "Ulysses Bentley IV",
+     "team": "IND",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037745",
+     "name": "Velus Jones Jr.",
+     "team": "SEA",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035924",
+     "name": "Jonathan Ward",
+     "team": "BAL",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039230",
+     "name": "Dante Miller",
+     "team": "NYG",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036670",
+     "name": "Jermar Jefferson",
+     "team": "MIN",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034367",
+     "name": "Nyheim Hines",
+     "team": "NO",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039407",
+     "name": "Dylan Laube",
+     "team": "LV",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036924",
+     "name": "Michael Carter",
+     "team": "TEN",
+     "pos": "RB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040556",
+     "name": "Corey Kiner",
+     "team": "NE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039244",
+     "name": "Chris Collier",
+     "team": "LV",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038930",
+     "name": "Carlos Washington Jr.",
+     "team": "MIA",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036265",
+     "name": "AJ Dillon",
+     "team": "CAR",
+     "pos": "RB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040021",
+     "name": "Phil Mafah",
+     "team": "DAL",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039405",
+     "name": "Jawhar Jordan",
+     "team": "HOU",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032104",
+     "name": "Ameer Abdullah",
+     "team": "JAX",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038738",
+     "name": "Hunter Luepke",
+     "team": "DAL",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037258",
+     "name": "Dameon Pierce",
+     "team": "PHI",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036906",
+     "name": "Khalil Herbert",
+     "team": "SF",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033955",
+     "name": "Jeremy McNichols",
+     "team": "WAS",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037120",
+     "name": "Tyler Goodson",
+     "team": "ATL",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037557",
+     "name": "Ronnie Rivers",
+     "team": "LAR",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036328",
+     "name": "Antonio Gibson",
+     "team": "NE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035243",
+     "name": "Miles Sanders",
+     "team": "DAL",
+     "pos": "RB",
+     "bye": 14,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037594",
+     "name": "Julius Chestnut",
+     "team": "TEN",
+     "pos": "RB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038098",
+     "name": "Pierre Strong Jr.",
+     "team": "GB",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037304",
+     "name": "Connor Heyward",
+     "team": "LV",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037085",
+     "name": "Tyler Badie",
+     "team": "DEN",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0034959",
+     "name": "Andrew Beck",
+     "team": "NYJ",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040429",
+     "name": "Josh Williams",
+     "team": "TB",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038440",
+     "name": "Zavier Scott",
+     "team": "MIN",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040205",
+     "name": "Kalel Mullings",
+     "team": "TEN",
+     "pos": "RB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039757",
+     "name": "Terrell Jennings",
+     "team": "NE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035125",
+     "name": "Alec Ingold",
+     "team": "LAC",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038040",
+     "name": "Zamir White",
+     "team": "NO",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036842",
+     "name": "Kene Nwangwu",
+     "team": "NYJ",
+     "pos": "RB",
+     "bye": 13,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039603",
+     "name": "British Brooks",
+     "team": "HOU",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0032918",
+     "name": "C.J. Ham",
+     "team": "MIN",
+     "pos": "RB",
+     "bye": 6,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037509",
+     "name": "Sincere McCormick",
+     "team": "SF",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0037329",
+     "name": "Brittain Brown",
+     "team": "CHI",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038409",
+     "name": "Lew Nichols",
+     "team": "PIT",
+     "pos": "RB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036567",
+     "name": "Elijah Mitchell",
+     "team": "PHI",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035594",
+     "name": "Travis Homer",
+     "team": "PIT",
+     "pos": "RB",
+     "bye": 9,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0031595",
+     "name": "Michael Burton",
+     "team": "CLE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036727",
+     "name": "Adam Prentice",
+     "team": "DEN",
+     "pos": "RB",
+     "bye": 10,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0033376",
+     "name": "Patrick Ricard",
+     "team": "NYG",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0036187",
+     "name": "Reggie Gilliam",
+     "team": "NE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038489",
+     "name": "Ben VanSumeren",
+     "team": "KC",
+     "pos": "RB",
+     "bye": 5,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0035726",
+     "name": "Jakob Johnson",
+     "team": "HOU",
+     "pos": "RB",
+     "bye": 8,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0039305",
+     "name": "Jack Westover",
+     "team": "NE",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038488",
+     "name": "Brady Russell",
+     "team": "SEA",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0040649",
+     "name": "Robbie Ouzts",
+     "team": "SEA",
+     "pos": "RB",
+     "bye": 11,
+     "rookie": false,
+     "realized": null
+    },
+    {
+     "id": "00-0038614",
+     "name": "Scott Matlock",
+     "team": "LAC",
+     "pos": "RB",
+     "bye": 7,
+     "rookie": false,
+     "realized": null
+    }
+   ]
+  }
+ ],
+ "need": {
+  "positions": [
+   {
+    "pos": "DST",
+    "starters_required": 1,
+    "flex_eligible": false,
+    "held": 1,
+    "short_by": 0,
+    "need": "thin"
+   },
+   {
+    "pos": "K",
+    "starters_required": 1,
+    "flex_eligible": false,
+    "held": 1,
+    "short_by": 0,
+    "need": "thin"
+   },
+   {
+    "pos": "QB",
+    "starters_required": 1,
+    "flex_eligible": true,
+    "held": 3,
+    "short_by": 0,
+    "need": "covered"
+   },
+   {
+    "pos": "RB",
+    "starters_required": 2,
+    "flex_eligible": true,
+    "held": 5,
+    "short_by": 0,
+    "need": "covered"
+   },
+   {
+    "pos": "TE",
+    "starters_required": 2,
+    "flex_eligible": true,
+    "held": 0,
+    "short_by": 2,
+    "need": "open_starter"
+   },
+   {
+    "pos": "WR",
+    "starters_required": 2,
+    "flex_eligible": true,
+    "held": 5,
+    "short_by": 0,
+    "need": "covered"
+   }
+  ],
+  "flex": {
+   "slots": 1,
+   "eligible": [
+    "QB",
+    "RB",
+    "TE",
+    "WR"
+   ],
+   "surplus_available": 8,
+   "short_by": 0
+  }
+ },
+ "refusals": [],
+ "caveats": [],
+ "rosters": {
+  "synced_at": "2026-09-17T12:00:00+00:00",
+  "refreshed": true,
+  "refresh_error": null,
+  "can_refresh": true,
+  "platform": "sleeper",
+  "truncated": false,
+  "teams_held": 10,
+  "teams_declared": 10
+ },
+ "ordering": "unranked",
+ "ordering_note": "Available players are listed by position in the board's own order and are NOT ranked. Our season projection is a preseason full-season figure that does not reflect 2026 on-field production, so it cannot honestly order who to add.",
+ "realized": {
+  "absence": "realized_not_published",
+  "through_week": null,
+  "weeks": [],
+  "excluded": [],
+  "generated_at": null,
+  "captured_terms": []
+ }
+}

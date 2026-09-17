@@ -71,6 +71,8 @@ import logging
 import math
 from datetime import datetime, timezone
 
+from app.backend.services import league_scoring
+from app.backend.services import realized_dst as D
 from app.backend.services import realized_stat_fields as R
 from app.backend.services import weekly_recap as W
 
@@ -81,6 +83,7 @@ log = logging.getLogger(__name__)
 #: pandas nor `quant_sports_intel_models`. Two copies of a key scheme is the "one logical thing,
 #: many owners" shape that goes wrong the first time one side is edited.
 from app.backend.models.nfl_recap import (  # noqa: E402
+    realized_dst_inputs_key,
     realized_manifest_key,
     realized_players_key,
     realized_season_manifest_key,
@@ -681,3 +684,149 @@ def publish_season(built: dict, *, s3, bucket: str, prefix: str = "fantasy/nfl")
 def season_defects(built: dict) -> list[dict]:
     """The exclusions a cadence must PAGE on — every one except a deliberately partial week."""
     return [e for e in built["manifest"]["excluded"] if e["reason"] not in _ROUTINE_EXCLUSIONS]
+
+
+# ── NF-WK-ACC1 ⑥ — the D/ST recorder's team-grain inputs ───────────────────────────────────────────
+#
+# ⭐ A SIBLING OBJECT, REWRITTEN WHEN IT CHANGES — deliberately NOT under the players artifact's
+# restatement discipline. It is recorder input, never served to a reader, and it is EXPECTED to
+# change after a week is final: the Monday-night result lands in `schedules` up to a week late (PM
+# card yOhLHprC), and until it does the two MNF defences carry `resultPending`. Parking that update
+# at a revision key would freeze the recorder on the incomplete line.
+#
+# ⚠️ Team counters are SUMMED FROM `stats_player_week` — RC1's construction, reproduced exactly so the
+# recorder's baseline is the measured 35/48. `stats_team_week` (now ingested, ⑧) differs from the sum
+# only on SAFETIES; switching to it is a measured part-2 closure, not part of the wiring.
+
+
+def _num(stats: dict, col: str) -> float:
+    v = stats.get(col)
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    return 0.0 if math.isnan(f) else f
+
+
+def team_week_inputs(team_stats: dict[str, dict], games: list[dict]) -> dict[str, dict]:
+    """BOX-SIDE half: `{defence: {line, opponent, gameId, resultPending}}` for one week.
+
+    `team_stats` maps a lake team code to that team's summed `DST_TEAM_COLUMNS`; `games` are the
+    week's schedule rows (`game_id`, `home_team`, `away_team`, `home_score`, `away_score`).
+
+    ⚠️ THIS IS RC1's CONSTRUCTION EXACTLY — the one that reproduced 35 of 48 — and it is wired as-is
+    on purpose: the recorder must reproduce the known baseline before any mechanism is changed, or
+    the starting point of the residual work is unreproducible. Closures land as separate, measured
+    edits to this function.
+
+    A team with no stats row is OMITTED rather than zero-filled: `compare_to_platform` reports an
+    omitted defence as `notConstructed`, never as agreement.
+    """
+    out: dict[str, dict] = {}
+    for g in games:
+        home, away = g.get("home_team"), g.get("away_team")
+        for me, opp, opp_score in ((home, away, g.get("away_score")),
+                                   (away, home, g.get("home_score"))):
+            if me not in team_stats or opp not in team_stats:
+                continue
+            m, o = team_stats[me], team_stats[opp]
+            score = None if opp_score is None or (isinstance(opp_score, float) and math.isnan(opp_score)) \
+                else float(opp_score)
+            non_offensive = (_num(o, "def_tds") + _num(o, "special_teams_tds")
+                             + _num(o, "fumble_recovery_tds"))
+            counters = {
+                "def_sacks": _num(m, "def_sacks"),
+                "def_int": _num(m, "def_interceptions"),
+                "def_fumble_rec": _num(m, "fumble_recovery_opp"),
+                "def_td": _num(m, "def_tds") + _num(m, "fumble_recovery_tds"),
+                "def_safety": _num(m, "def_safeties"),
+                "def_forced_fumble": _num(m, "def_fumbles_forced"),
+                "st_td": _num(m, "special_teams_tds"),
+            }
+            line = D.dst_row(
+                opponent_score=score,
+                opponent_non_offensive_tds=non_offensive,
+                opponent_passing_yards=_num(o, "passing_yards"),
+                opponent_rushing_yards=_num(o, "rushing_yards"),
+                opponent_sack_yards_lost=_num(o, "sack_yards_lost"),
+                team_defensive_stats=counters,
+            )
+            # Keyed by the SCORER'S team vocabulary so the lake's `LA` and Sleeper's `LAR` meet.
+            key = _team_key(me)
+            if not key:
+                continue
+            out[key] = {
+                "line": line,
+                "opponent": _team_key(opp) or str(opp),
+                "gameId": g.get("game_id"),
+                "resultPending": D.result_pending(score),
+            }
+    return out
+
+
+def _team_key(team) -> str:
+    return league_scoring.normalize_team(team)
+
+
+
+def build_dst_inputs(season: int, week: int, *, q, delta) -> dict:
+    """Read one week's team-grain D/ST inputs from the lake. `q`/`delta` injected, as in `build`."""
+    sums = ", ".join(f"sum({c}) as {c}" for c in D.DST_TEAM_COLUMNS)
+    stats = q(f"""
+        select team, {sums}
+        from {delta('stats_player_week')}
+        where season = {int(season)} and week = {int(week)} and season_type = 'REG'
+        group by team
+    """).to_dict("records")
+    games = q(f"""
+        select game_id, home_team, away_team, home_score, away_score
+        from {delta('schedules')}
+        where season = {int(season)} and week = {int(week)} and game_type = 'REG'
+    """).to_dict("records")
+    team_stats = {str(r["team"]): r for r in stats if r.get("team")}
+    teams = team_week_inputs(team_stats, [_clean(g) for g in games])
+    return {
+        "season": int(season),
+        "week": int(week),
+        "source": "stats_player_week (summed by team) + schedules",
+        "pointsAllowedAssumption": D.POINTS_ALLOWED_ASSUMPTION,
+        "teams": teams,
+        "resultPendingTeams": sorted(t for t, e in teams.items() if e["resultPending"]),
+    }
+
+
+def _clean(row: dict) -> dict:
+    """NaN → None, so a missing score reads as pending rather than as a float that is not a number."""
+    return {k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in row.items()}
+
+
+def dst_inputs_hash(built: dict) -> str:
+    return hashlib.sha256(json.dumps(
+        {k: v for k, v in built.items() if k != "generated_at"}, sort_keys=True, default=str,
+    ).encode()).hexdigest()
+
+
+def publish_dst_inputs(built: dict, *, s3, bucket: str, prefix: str = "fantasy/nfl",
+                       dry: bool = False) -> dict:
+    """Write the week's D/ST inputs if their CONTENT changed. RAISES on a failed read or write."""
+    key = f"{prefix}/{realized_dst_inputs_key(built['season'], built['week'])}"
+    want = dst_inputs_hash(built)
+    try:
+        prior = json.loads(s3.get_object(Bucket=bucket, Key=key)["Body"].read())
+    except Exception as exc:  # noqa: BLE001
+        code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+        if code not in ("NoSuchKey", "404"):
+            raise
+        prior = None
+    if prior is not None and prior.get("content_sha256") == want:
+        action = "unchanged"
+    else:
+        action = "create" if prior is None else "update"
+        if not dry:
+            body = {**built, "content_sha256": want,
+                    "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+            s3.put_object(Bucket=bucket, Key=key, Body=json.dumps(body, default=str),
+                          ContentType="application/json")
+    return {"week": built["week"], "action": action, "teams": len(built["teams"]),
+            "resultPending": built["resultPendingTeams"], "dryRun": dry}
+

@@ -620,6 +620,11 @@ _BOX_REACHED_APP_BACKEND = {
     "app/backend/models/nfl_weekly.py",
     "app/backend/services/league_scoring.py",
     "app/backend/services/projection_fields.py",
+    # ⚠️ WIDENED 2026-09-17 by NF-WK-ACC1 (PM rider ⑥ — the divergence recorder's box-side inputs,
+    # `realized_week.build_dst_inputs`, need `dst_row`). Taken deliberately: the part-2-mutable
+    # construction (`team_week_inputs`) was placed in `realized_week.py`, a box-trigger path, so only
+    # stable primitives sit in this module. The ⑪ filter decision stays routed to the hygiene bundle.
+    "app/backend/services/realized_dst.py",
     "app/backend/services/realized_stat_fields.py",
     "app/backend/services/weekly_recap.py",
 }

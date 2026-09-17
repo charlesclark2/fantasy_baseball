@@ -322,6 +322,21 @@ def nfl_realized_week_publish_op(context):
     context.log.info("[METRIC] nfl_realized_season_through_week=%s action=%s",
                      season_to_date.get("through_week"), season_to_date.get("action"))
 
+    # NF-WK-ACC1 ⑥ — the D/ST recorder's inputs. RECORD-ONLY (D2 disposition (C)): a failure is a
+    # WARN under its own dedup key and never fails the run — the recap does not render from these.
+    dst_results = summary.get("dst_inputs") or []
+    dst_errors = summary.get("dst_inputs_errors") or []
+    context.log.info("[METRIC] nfl_realized_dst_inputs_written=%d",
+                     sum(1 for r in dst_results if r.get("action") in ("create", "update")))
+    context.log.info("[METRIC] nfl_realized_dst_inputs_errors=%d", len(dst_errors))
+    if dst_errors:
+        _page(context, "NFL realized: D/ST recorder inputs were not published",
+              "The divergence recorder's team-grain inputs did not publish for these weeks. The "
+              "recap is unaffected (its D/ST seat is the league's own figure); the recorder will "
+              "report those weeks as `constructionSupplied: False` until this heals.\n\n"
+              + "\n".join(f"- {_realized_label(e)}: {e['error']}" for e in dst_errors),
+              severity="WARN", dedup_key="nfl_realized_publish:dst_inputs")
+
     if errors:
         _page(context, "NFL realized week publish FAILED",
               "The realized stat lines Phase B's recap renders from did not advance this cycle.\n\n"
