@@ -78,7 +78,18 @@ log = logging.getLogger(__name__)
 #: The weekly model's two training feeds. ⛔ Not a general "in-season stack" — these are exactly
 #: the feeds `run_weekly_serving` learns from, and widening this set widens what a daily build
 #: pulls before every publish.
-WEEKLY_STAT_SOURCES: list[str] = ["stats_player_week", "snap_counts"]
+#:
+#: ⭐ `stats_team_week` JOINED 2026-09-17 (NF-WK-ACC1, PM rider ⑧ on NF-WK-RC1's closeout). It is
+#: NOT a training feed — it is the realized D/ST construction's team-grain input, and the one
+#: column it carries that summed player rows do not is SAFETIES (measured: 6 of 544 team-weeks in
+#: 2025 differ, because a team-credited safety has no player row). Before this it had NO recurring
+#: writer: its only 2026 Delta commit is a one-off overwrite at 2026-09-15T21:43Z. It rides THIS
+#: op rather than a second schedule because it is the same vendor run — nflverse republished
+#: `stats_team_week_2026.parquet` at 2026-09-16T14:14:15Z, three seconds after the player file —
+#: so the INC-25 ordering and the one-owner rule both hold, and `nfl_weekly_stats_freshness_op`
+#: judges its CONTENT (max week vs the schedule) with no new wiring. Ownership: NF-WK-ACC1
+#: (successor to RC1's paper ownership), recorded in nf-inc-0916 + nf-wk-acc1.
+WEEKLY_STAT_SOURCES: list[str] = ["stats_player_week", "snap_counts", "stats_team_week"]
 
 # ── registry integrity, mirroring the ROLL_FORWARD_SOURCES assertions ────────────────────────
 assert all(n in SOURCES for n in WEEKLY_STAT_SOURCES), "WEEKLY_STAT_SOURCES has an unknown source"

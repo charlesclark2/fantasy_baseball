@@ -50,6 +50,16 @@ def realized_manifest_key(season: int, week: int) -> str:
     return f"realized/{int(season)}/{int(week)}/manifest.json"
 
 
+def realized_dst_inputs_key(season: int, week: int) -> str:
+    """Relative key (under `fantasy/nfl/`) of one week's team-grain D/ST inputs (NF-WK-ACC1 ⑥).
+
+    ⭐ A SIBLING FILE, NOT A COLUMN ON THE PLAYERS ARTIFACT. Adding columns there would move every
+    served week's `content_sha256` and turn the next fire into a restatement event for every week.
+    The divergence recorder reads this; nothing user-facing does.
+    """
+    return f"realized/{int(season)}/{int(week)}/dst_inputs.json"
+
+
 #: The cumulative season-to-date artifact (PM ruling, NF-WVR1 ⑯ = option b, 2026-09-17). ⭐ The
 #: directory is the literal word `season`, NOT a number, and that is load-bearing: both week-listers
 #: (`run_realized_week._published_weeks` and the freshness op) count a served week only when the

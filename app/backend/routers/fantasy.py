@@ -58,7 +58,12 @@ from app.backend.services import (
 from app.backend.models import nfl_recap, nfl_weekly
 from app.backend.services import depth_targets as depth_targets_service
 from app.backend.services import waiver_pool
-from app.backend.services import weekly_league_board, weekly_recap, weekly_recap_store
+from app.backend.services import (
+    weekly_league_board,
+    weekly_recap,
+    weekly_recap_divergence,
+    weekly_recap_store,
+)
 from app.backend.services.platform_import import sleeper_matchups
 
 logger = logging.getLogger(__name__)
@@ -1565,7 +1570,7 @@ def _recap_platform(record: dict) -> str:
     return str(record.get("source_platform") or "").strip().lower()
 
 
-def _recap_week(record: dict, season: int, week: int) -> dict:
+def _recap_week(record: dict, season: int, week: int, *, record_divergence: bool = False) -> dict:
     """One league-week, scored — from the POINT-IN-TIME record, fetching it once if absent.
 
     ⭐ THE STORE IS READ FIRST, ALWAYS. A recap must be stable after it renders (the D1 ruling), so
@@ -1595,16 +1600,47 @@ def _recap_week(record: dict, season: int, week: int) -> dict:
             status_code=404,
             detail=f"We have not recorded week {week}'s player statistics yet.")
 
+    realized_by_seat: dict = {}
     scored = weekly_recap.score_week(
         fetched=fetched,
         realized_rows=realized.get("players") or [],
         cfg=record,
+        realized_by_seat=realized_by_seat,
     )
+    # ⭐ ONLY on the single-week recap route: power rankings re-scores every week on every view,
+    # and recording there would multiply the recorder's S3 round-trips by the week count for a
+    # record the recap view already writes.
+    if record_divergence:
+        _record_recap_divergence(record, season, week, scored, realized_by_seat)
     state = str((manifest or {}).get("completeness") or "final")
     scored["completeness"] = state
     scored["completenessNote"] = nfl_recap.COMPLETENESS_NOTE.get(
         state, nfl_recap.COMPLETENESS_NOTE["partial"])
     return scored
+
+
+def _record_recap_divergence(record: dict, season: int, week: int, scored: dict,
+                             realized_by_seat: dict) -> None:
+    """NF-WK-ACC1 ⑥ — the divergence recorder's production caller. RECORD-ONLY.
+
+    ⛔ NEVER FAILS THE RECAP AND NEVER PAGES (D2 disposition (C)). Any failure — the D/ST input not
+    published yet is NOT a failure, it is recorded as `constructionSupplied: False` — is logged as a
+    warning and the recap is served unchanged. Nothing here reaches the response.
+    """
+    try:
+        dst_inputs = _load_json(nfl_recap.realized_dst_inputs_key(season, week))
+        out = weekly_recap_divergence.record(
+            scored=scored,
+            scoring=record.get("scoring") or {},
+            dst_inputs=dst_inputs if isinstance(dst_inputs, dict) else None,
+            realized_by_seat=realized_by_seat,
+            league_id=str(record.get("league_id") or ""),
+            bucket=_CACHE_BUCKET,
+        )
+        logger.info("[recap-divergence] %s", out)
+    except Exception as exc:  # noqa: BLE001 — record-only; see the docstring
+        logger.warning("[recap-divergence] not recorded for %s wk%s: %s: %s",
+                       season, week, type(exc).__name__, exc)
 
 
 @router.get("/nfl/weekly/recap")
@@ -1622,7 +1658,7 @@ def nfl_weekly_recap(
     15/16 week final the moment a game is postponed, silently.
     """
     record = _recap_league(request, user_id, league_id)
-    scored = _recap_week(record, season, week)
+    scored = _recap_week(record, season, week, record_divergence=True)
     return nfl_recap.WeeklyRecap(
         season=season, week=week, leagueId=league_id, leagueName=record.get("name"),
         platform=_recap_platform(record),

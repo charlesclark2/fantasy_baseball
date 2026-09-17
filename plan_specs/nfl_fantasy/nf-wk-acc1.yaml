@@ -136,3 +136,68 @@ spec:
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+
+      ── ① (2026-09-17) THE HARNESS IS NOW COMMITTED, AND BOTH BASELINES REPRODUCE
+      THROUGH THE WIRED PRODUCTION PATH. RC1's 14/48 and 35/48 came from an
+      uncommitted in-session probe. `run_nf_wk_acc1_crosscheck.py` drives the
+      same functions the recap route + recorder call (`realized_week.build` /
+      `build_dst_inputs`, `score_week`, `weekly_recap_divergence.build_record`).
+      Week set: Sleeper league 1268257036043292672 (season 2025), weeks 1-4.
+      Reading: team totals 14/48 · player seats diverging 61/375 (24
+      unexplained — `fum` explains the other 37) · D/ST agreeing 35/48 (13
+      unexplained, 0 MNF-pending on 2025 data).
+
+      ── ② ⑥ DONE (PM rider): THE DIVERGENCE RECORDER HAS A PRODUCTION CALLER.
+      Box: `nfl_realized_week_publish_op` now also writes
+      `realized/<season>/<week>/dst_inputs.json` for every FINAL week, rewritten
+      only when its content changes (the MNF result lands late — 2026 wk1 carries
+      DEN + KC as `resultPending`, the yOhLHprC tag). A failure pages WARN under
+      its own dedup key and never fails the run. API: the single-week recap route
+      scores those lines under the league's settings, runs
+      `compare_to_platform` (the skip-league-published-seats fix kept), and
+      writes `fantasy/nfl/recap-divergence/<season>/wk<week>/<platform>/<league>.json`
+      only when it changed. Record-only: no page, no response change, a recorder
+      failure is a log warning. ⚠️ Coverage = leagues someone VIEWS (the ruled
+      placement); power rankings does not record (it would multiply the S3
+      round-trips by the week count). ⚠️ The box-reached `app/backend` closure
+      widened by `realized_dst.py` (pinned in RC1's tripwire, with the reason);
+      the part-2-mutable construction was placed in `realized_week.py`, a
+      box-trigger path, to keep ⑪'s hazard narrow. ⑫ noted, not duplicated.
+
+      ── ③ ⑧ DONE (PM rider): `stats_team_week` HAS A RECURRING WRITER. It joined
+      `WEEKLY_STAT_SOURCES` → `nfl_weekly_stats_ingest_op` is its one ingest
+      owner, `nfl_weekly_stats_freshness_op` judges its content vs the schedule.
+      Verify-advance: nflverse republished `stats_team_week_2026` at
+      2026-09-16T14:14:15Z, 3s after the player file; before this its only 2026
+      Delta commit was a one-off at 2026-09-15T21:43Z. Ownership: NF-WK-ACC1,
+      recorded here and in nf-inc-0916's ledger. Why part 2 reads it: it differs
+      from summed player rows ONLY on safeties (6 of 544 2025 team-weeks).
+
+      ── ④ ⛔ PART 1 AWAITS A PM RULING (reported 2026-09-17). Measured via a
+      harness-local map override, not yet in code: team totals 14/48 → 27/48,
+      player seats diverging 61 → 24. Paid-set diff under the specced design:
+      PAID_PLAYER_FIELDS +{fumAny}, −∅; weekly paid set unchanged. CONFLICT: the
+      three-mirror design forces `fum` into `NFL_PROFILE.stat_columns`, which
+      NF-C0e's `test_a_term_that_failed_its_heldout_gate_STAYS_CAPTURED`
+      forbids. Options: A (as specced + amend that guard) or D (a declared
+      realized-only key; no paid-set change). Also: `fum` is not a catalog key —
+      it closes the term for Sleeper only.
+
+      ── ⑤ PART 2 PRE-READ (not yet code; held-out validation on weeks 5-17
+      first). All 13 D/ST residuals have a play-level cause: blocked kicks ×8
+      team-weeks (9 blocks; SEA wk1 = J. Love's FG block — `blk_kick` = 2 IS in
+      the 56-key settings, so RC1's "no term could supply the 2" was wrong: the
+      data was missing, not the term); opponent SPECIAL-TEAMS TDs are charged to
+      points allowed ×4 (only defensive TDs excluded); SF wk3 +1 fits an
+      opponent safety excluded from PA (one instance). `def_*_blocks` exist only
+      in the 2026 lake file (NaN ≤2025), so 2025 validation needs pbp.
+
+      ── ⑥ PLAYER-SIDE MECHANISMS BEYOND fum + 40+yd (not in scope to fix without
+      a ruling): Travis Hunter fails the name join every week (4 team-weeks);
+      DJ Moore wk1 lateral fumble — Sleeper uses `fumbles_lost_total`, our map
+      deliberately uses per-phase columns for nflverse-PPR parity (two
+      authorities disagree); Trey Benson wk4 — our scorer credits an RB with
+      `def_fumble_rec` (an IDP counter applied at player grain). With fum + 40+yd
+      team totals would reach 42/48; the remaining 6 are exactly these.
+

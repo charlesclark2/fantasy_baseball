@@ -525,3 +525,18 @@ spec:
 
       NODE 4 (un-suppress → TD announcement restore → TD1 spec DONE → MT1 lens
       lift) proceeds only on the operator's verdict-table read.
+
+
+      ── 📌 OWNERSHIP LEDGER ENTRY (NF-WK-ACC1, 2026-09-17, PM rider ⑧ on RC1's
+      closeout). `stats_team_week` now HAS its recurring writer, and it is this
+      story's op: it joined `WEEKLY_STAT_SOURCES`, so `nfl_weekly_stats_ingest_op`
+      is its ONE ingest owner and `nfl_weekly_stats_freshness_op` judges its
+      content (max week vs the schedule) with no new wiring. Table ownership
+      (consumer + discipline) is NF-WK-ACC1's, taking over RC1's paper ownership.
+      Why this op and not a second schedule: it is the SAME vendor run
+      (`stats_team_week_2026.parquet` republished 2026-09-16T14:14:15Z, 3s after
+      the player file), so the INC-25 ordering holds for free. Before this, its
+      only 2026 commit was a one-off overwrite at 2026-09-15T21:43Z. It is not a
+      training feed — the D/ST construction reads it for team-credited safeties
+      (6 of 544 2025 team-weeks differ from summed player rows).
+

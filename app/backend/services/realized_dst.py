@@ -81,6 +81,7 @@ from __future__ import annotations
 import math
 import re
 
+from app.backend.services import league_scoring
 from app.backend.services.projection_fields import STAT_FIELD
 from app.backend.services.realized_stat_fields import REALIZED_STAT_FIELD
 
@@ -247,3 +248,48 @@ def dst_row(
         row[DST_YARDS_KEY] = ya
         row.update(_bucket_indicators(ya, YA_BUCKETS))
     return row
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════════════════
+# NF-WK-ACC1 (PM rider ⑥ on RC1's closeout, 2026-09-17) — THE RECORDER'S PRODUCTION INPUTS
+# ═══════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⭐ WHY THE CONSTRUCTION IS SPLIT INTO TWO HALVES. The API Lambda cannot read the NFL lake, so the
+# team-grain half (which defence allowed what, and what it did) is built BOX-SIDE once per week and
+# published beside the realized player artifact — `realized_week.team_week_inputs`. The league-grain
+# half (what that line is WORTH under one league's settings) can only be computed at request time,
+# because it depends on the league — `score_dst_lines`, here. The cross-check harness drives exactly
+# these two functions, so the recorded stream and the harness can never measure two constructions.
+#
+# ⚠️ THE BOX HALF LIVES IN `realized_week.py` ON PURPOSE (RC1 closeout ⑪): `orchestration_cd.yml`
+# does not rebuild the box on an `app/backend` edit, so construction logic that part 2 will keep
+# changing belongs on a path that DOES trigger the box deploy. Only stable primitives stay here.
+#
+# ⛔ THIS IS STILL NOT THE SERVED SEAT. It feeds `weekly_recap.compare_to_platform` as a recorder —
+# data, never a page, never a number a user sees (D2 disposition (C)).
+
+#: The lake columns (`stats_player_week` / `stats_team_week` names) a team-week line is built from.
+#: Declared once so the box-side read can SELECT exactly these and a missing one fails loudly.
+DST_TEAM_COLUMNS: tuple[str, ...] = (
+    "def_sacks", "def_interceptions", "fumble_recovery_opp", "def_tds", "fumble_recovery_tds",
+    "def_safeties", "def_fumbles_forced", "special_teams_tds",
+    "passing_yards", "rushing_yards", "sack_yards_lost",
+)
+
+
+def score_dst_lines(entries: dict[str, dict], scoring: dict) -> tuple[dict[str, float], set[str]]:
+    """REQUEST-SIDE half: the published lines scored under ONE league's settings.
+
+    Returns `(points_by_defence, result_pending_defences)` — exactly the two arguments
+    `weekly_recap.compare_to_platform` takes for its D/ST leg.
+    """
+    field_map = dst_stat_field()
+    lines = [e["line"] for e in entries.values() if isinstance(e, dict) and "line" in e]
+    resolved, _ = league_scoring.resolve_scoring(
+        scoring or {}, stat_field=field_map, fields=league_scoring.available_fields(lines))
+    points = {
+        team: league_scoring.score_row(e["line"], "DST", resolved, field_map)["pts"]
+        for team, e in entries.items() if isinstance(e, dict) and "line" in e
+    }
+    pending = {team for team, e in entries.items() if isinstance(e, dict) and e.get("resultPending")}
+    return points, pending
