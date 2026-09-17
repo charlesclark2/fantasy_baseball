@@ -1,0 +1,138 @@
+# Plan spec — NF-WK-ACC1 (MINI-to-MEDIUM: recap accuracy closure — close the measured gaps
+# between our itemisation and the league's own numbers, term by term)
+# Authored by PM 2026-09-17. Bundles two carded, bounded investigations that share one
+# surface: card 1KQeqWC0 (fum + the 40+yd TD bonuses) and card fXIYuvMN (the D/ST residual).
+# Both cards are pulled into this story; the PM keeps the cards, the session works the spec.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-wk-acc1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/1KQeqWC0   # + fXIYuvMN; both pulled into this story
+  status: ACCEPTED
+spec:
+  description: >
+    The recap surface (NF-WK-RC1) serves the league's platformTotal
+    as the standings fact and our per-seat scoring as the
+    explanation, with the gap disclosed. This story shrinks that
+    disclosed gap with measured, term-by-term closures — every
+    closure verified against Sleeper's own published figures on the
+    existing cross-check harness. Three parts, strictly ordered by
+    cost: (1) `fum` — the league's any-fumble penalty has no
+    canonical scorer key, so it rides through captured; closing it
+    alone moves team-total agreement 14/48 -> 27/48. Realized source
+    exists (fumbles_total, landed). ⚠️ ENTITLEMENT CHECKPOINT:
+    PAID_PLAYER_FIELDS derives from STAT_FIELD, so this addition
+    changes the paid field set — the derived diff comes to the PM
+    BEFORE merge, never as a silent side effect. (2) THE D/ST
+    RESIDUAL (fXIYuvMN): our construction reproduces Sleeper on only
+    35/48 team-weeks; one mechanism already found+fixed
+    (fumble_recovery_tds separate from def_tds); explain the
+    remaining 13, mechanism by mechanism, against the harness —
+    cleanest target SEA 2025-wk1 (ours 6.00 vs Sleeper 8.00,
+    realized line fully accounted, no term in the complete 56-key
+    settings able to supply the 2). ⛔ MH2.2: no settings term is
+    invented to force agreement — if Sleeper's number cannot be
+    derived from stats + settings, THAT is the finding, reported.
+    (3) STRETCH, only after 1+2 land: the three 40+yd TD bonuses
+    need pbp (passing_40 counts 40+yd PLAYS, not TDs — the wrong-key
+    RC1 refused); pbp ingest under the standing discipline
+    (verify-source-advances, partition semantics, freshness
+    contract, ONE ingest owner recorded against INC-0916's ledger),
+    then the derivation cross-checked against Sleeper totals. If
+    time or size says no, part 3 closes as PREPARED-NOT-EXECUTED
+    with the ingest design recorded. best_alpha=0 throughout; the
+    served standingsTotal is the league's and never changes here —
+    what changes is how much of it our itemisation explains.
+  acceptanceCriteria:
+    - description: >
+        MEASUREMENT DISCIPLINE: every closure lands with a
+        before/after reading on the SAME harness and weeks that
+        produced the 14/48 and 35/48 baselines (per-seat and
+        per-team-total agreement counts, quoted with their week
+        set); the divergence recorder's explained/unexplained split
+        updates so the residual signal stays clean; the recap's gap
+        DISCLOSURE text narrows automatically (it names terms from
+        the coverage report — verify the flip on a real league
+        payload, and verify the #1155 lesson still holds: the
+        disclosure requires a MEASURED gap, so a league where the
+        closed terms scored nothing shows no contradiction).
+        D/ST seat provenance: IF part 2 reaches full 48/48
+        reproduction, flipping the served seat from league_published
+        to our scorer is a PM DECISION reported with the evidence —
+        not an automatic consequence; the seat stays league_published
+        until ruled. FA-pool defence facts (WVR1's stated absence)
+        unlock the same way — note the state for WVR1's record.
+    - description: >
+        GUARDS + BOUNDARIES: every fix RED-proven on the harness
+        case that motivated it (unique anchors + baseline-pass +
+        NOT-SELECTED + resolve-every-node); the fum addition rides
+        the derived-map discipline (no hand-typed mirrors beyond the
+        three the map owns); no scorer file outside
+        app/backend/services touched beyond the map addition; the
+        MNF-schedules staleness (card yOhLHprC, open) is tagged in
+        any D/ST reading it could pollute rather than chased here.
+        Standing: worktree; PR -> dev; >2-min operator paste-ready;
+        no Trello; roadmap frozen; findings to closeout.followUps;
+        one frontend story at a time is UNTOUCHED (this story is
+        backend/scoring only — the disclosure copy it narrows is
+        server-supplied text, not page code).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-wk-acc1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "fum" / "D/ST" / "40" (board Credence Sports, 2026-09-17)'
+    duplicates: []
+    adjacent:
+      - "Cards 1KQeqWC0 + fXIYuvMN — PULLED into this story; their records are the scope statements."
+      - "NF-WK-RC1 (Phase B in flight) — the surface whose disclosure narrows; the harness, REALIZED_STAT_FIELD, and ruling (i)'s standingsTotal/itemisedTotal contract all bind verbatim; disjoint files except the shared map (coordinate the STAT_FIELD merge timing)."
+      - "NF-WVR1 (queued) — DST fact columns unlock on part 2's full reproduction (a PM ruling, noted not assumed)."
+      - "NF-INC-0916 ingest ledger — pbp, if part 3 executes, records its ownership there; one ingest owner."
+      - "MNF schedules staleness (yOhLHprC) — pollutes points-allowed reads for MNF teams until closed; tag, don't chase."
+      - "NF-ROS1 (IN FLIGHT) — disjoint (projection vs realized-scoring lanes)."
+  triedLedger:
+    files:
+      - "The cross-check harness + the divergence recorder (RC1) — the instrument; its explained/unexplained split is the story's scoreboard"
+      - "league_scoring STAT_FIELD + the derived-map/paid-set machinery (the entitlement checkpoint's object)"
+      - "docs/nf_wk_rc1_realized_source_diagnosis.md (fumbles_total landed; passing_40 wrong-key proof; the 56-key settings inventory)"
+      - "SEA 2025-wk1 (the cleanest residual reproduction target, figures quoted in the description)"
+  recordedNulls:
+    - "Inventing a settings term to force D/ST agreement — MH2.2, refused ex ante."
+    - "Mapping passing_40 to the 40+yd TD bonus — the measured wrong-key, refused."
+  supersedes: []
+  dependsOn:
+    - "Nothing in flight; part 3 optionally lands a pbp ingest (coordinate ownership); the fum paid-set diff gates on a PM reply"
+  feedsInto:
+    - "Recap team-total agreement 14/48 -> 27/48 (part 1) -> higher (part 2 mechanisms) ; the D/ST seat + WVR1 DST facts unlock decision; the trade/waiver surfaces inheriting a cleaner itemisation"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-wk-acc1-plan
+spec:
+  goalRef: { name: nf-wk-acc1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-fum
+        desc: "STAT_FIELD addition via the derived map; ⛔ paid-set diff to PM BEFORE merge; before/after on the harness."
+      - id: 2-dst-residual
+        desc: "Explain the 13 team-weeks, mechanism by mechanism; SEA wk1 first; MH2.2 boundary; full-reproduction -> PM decision point, not auto-flip."
+      - id: 3-40p-stretch
+        desc: "Only after 1+2: pbp ingest (one owner, verify-advance) + derivation + cross-check — or PREPARED-NOT-EXECUTED with the design."
+      - id: 4-verify
+        desc: "RED proofs; disclosure narrows on a real payload (#1155 measured-gap rule re-verified); divergence recorder split updated."
+      - id: 5-closeout
+        desc: "Agreement tables before/after + the D/ST seat-flip evidence (if reached) + WVR1 unlock state into closeout.followUps."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
