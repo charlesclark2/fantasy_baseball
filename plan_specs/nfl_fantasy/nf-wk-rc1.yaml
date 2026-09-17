@@ -10,7 +10,7 @@ metadata:
   name: nf-wk-rc1
   vertical: nfl_fantasy
   card: https://trello.com/c/3D2HnxXv   # EPIC NF-SEASON; RC1 card linked at kickoff by PM
-  status: IN_PROGRESS
+  status: CLOSED
 spec:
   description: >
     After each NFL week completes, every imported league gets (a) a
@@ -447,7 +447,9 @@ spec:
       - id: 6-closeout
         desc: "Verdict + realized-line inventory + findings into closeout.followUps (waiver recs will reuse the inventory)."
   closeout:
-    verdict: null
+    # PM 2026-09-17: RC1 closed DONE. Phase A + ①–④ + Phase B live (#1148/#1150/#1155/#1156/
+    # #1161/#1164), node 5 passed. Open items routed in the dated block at the end of followUps.
+    verdict: DONE
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
@@ -609,3 +611,29 @@ spec:
       league's two-decimal `standingsTotal`. The page renders both with
       `toFixed(2)` and the gap check snaps float noise, so nothing user-visible
       is wrong; rounding at the server is a one-line tidy for a later touch.
+
+
+      ── 📌 PM RULINGS ON THIS CLOSEOUT (2026-09-17; recorded by NF-WK-ACC1, whose
+      PR carries this edit — RC1's session had ended).
+      ⑮ RATIFIED: #1164's supersession of "an absent player renders his reason,
+      never a zero" holds for the LEAGUE-SCORED-ZERO case only. The provenance
+      label (`league_published` + `DID_NOT_PLAY_NOTE`) carries the distinction;
+      `league_scored_unmatched` is preserved for a league score > 0 with no line.
+      ⑦ RULED: a vendor restatement stays PARKED at its revision key with a WARN
+      page for a human. No auto-apply.
+      ⑥ → NF-WK-ACC1: wire the D/ST divergence recorder (a production caller of
+      `compare_to_platform` + `realized_dst.dst_row` on the recap path,
+      record-only semantics as ruled, the skip-league-published-seats fix kept)
+      BEFORE ACC1 measures part 2's baselines.
+      ⑧ → NF-WK-ACC1: `stats_team_week` gets its recurring writer and its
+      freshness / verify-advance wiring in ACC1's execution, when part 2 first
+      reads it. RC1 owned it on paper; ACC1 owns it in execution, and the
+      ownership is recorded in both specs.
+      ⑪ (box-trigger amendment for `app/backend/{services,models}`) → routed to
+      the hygiene/guard bundle.
+      ⑯ (`typescript.ignoreBuildErrors` / a tsc gate) → routed to the
+      hygiene/guard bundle.
+      The red-proof board drift → routed to the hygiene/guard bundle.
+      Week-2 first-run watch → an operator card.
+      ⑫ is noted by ACC1 and NOT duplicated: the season build's
+      `columns_behind` already catches a stale box image one run later.

@@ -108,11 +108,42 @@ def _auto(args) -> int:
     # run — it is a pure function of the served weeks, so an unchanged season is a cheap no-op and a
     # season artifact that fell behind (a prior fire that failed half-way) heals on the next one.
     summary["season_to_date"] = _season(args, s3, dry, summary)
+    summary["dst_inputs"], summary["dst_inputs_errors"] = _dst_inputs(
+        args, s3, dry, sorted(w for w, s in states.items() if s == "final"), q, delta)
 
     # ⭐ THE OP READS THIS LINE, not a regex over prose. A machine-readable result at a fixed
     # sentinel is what stops a log-format change from silently blinding the caller.
     print("RESULT " + json.dumps(summary, default=str))
     return 1 if summary["errors"] else 0
+
+
+def _dst_inputs(args, s3, dry: bool, final_weeks: list[int], q, delta) -> tuple[list, list]:
+    """NF-WK-ACC1 ⑥ — (re)publish every FINAL week's D/ST recorder inputs. Never raises.
+
+    ⭐ ITS FAILURES ARE RETURNED SEPARATELY FROM `summary["errors"]` ON PURPOSE. Those page CRITICAL
+    and fail the run, because the recap RENDERS from them; these feed a record-only recorder (D2
+    disposition (C)), so a failure here must not withhold or fail anything a reader sees. The op
+    reports them at WARN under their own dedup key.
+
+    ⭐ EVERY FINAL WEEK, EVERY FIRE — not only the weeks published this run — because the input
+    legitimately changes after a week is final (the Monday-night result lands late) and an
+    unchanged week costs one GET.
+    """
+    from quant_sports_intel_models.football.nfl.fantasy import realized_week
+
+    results, errors = [], []
+    for week in final_weeks:
+        try:
+            built = realized_week.build_dst_inputs(args.season, week, q=q, delta=delta)
+            results.append(realized_week.publish_dst_inputs(
+                built, s3=s3, bucket=args.s3_bucket, dry=dry))
+        except Exception as exc:  # noqa: BLE001 — record-only; see the docstring
+            log.warning("dst inputs wk%s FAILED: %s: %s", week, type(exc).__name__, exc)
+            errors.append({"week": week, "error": f"{type(exc).__name__}: {exc}"})
+    for r in results:
+        print(f"  dst inputs wk{r['week']}: {r['action']} ({r['teams']} defences, "
+              f"result pending: {r['resultPending'] or 'none'})")
+    return results, errors
 
 
 def _season(args, s3, dry: bool, summary: dict) -> dict:

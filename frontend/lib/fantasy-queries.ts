@@ -30,6 +30,7 @@ import {
   updateSavedLeague,
   getPowerRankings,
   getWeeklyRecap,
+  getWaiverPool,
 } from "@/lib/fantasy"
 import type {
   FantasyPreferences,
@@ -41,6 +42,7 @@ import type {
   ProjectionPayload,
   SavedLeague,
   WeeklyRecapPayload,
+  WaiverPoolPayload,
 } from "@/lib/fantasy"
 import type { LeagueConfig } from "@/lib/league-config"
 import type { BuiltBoard, RosterMatch } from "@/lib/league-scoring"
@@ -938,6 +940,24 @@ export function usePowerRankings(
       getPowerRankings(accessToken, leagueId as string, throughWeek as number, season),
     enabled: !!accessToken && !!leagueId && typeof throughWeek === "number" && throughWeek >= 1,
     staleTime: 10 * 60_000,
+    retry: false,
+  })
+}
+
+// ── NF-WVR1 Phase B — the waiver view ────────────────────────────────────────────────────────────
+//
+// ⭐ OPT-IN (`open`): every fetch re-reads the league's rosters from the platform, so the panel asks
+// only when the user opens it — never once per league on page load.
+// ⚠️ IDENTITY in `enabled`, as the recap hooks document; the SERVER enforces entitlement + quota.
+// `retry: false` — a 404 (a league outside the caller's quota) is a stated state, not a blip.
+export function useWaiverPool(leagueId: string | null, open: boolean, season: number = FANTASY_SEASON) {
+  const { accessToken } = useAuth()
+  return useQuery<WaiverPoolPayload>({
+    queryKey: ["nfl-fantasy-waiver-pool", leagueId, season],
+    queryFn: () => getWaiverPool(accessToken, leagueId as string, season, true),
+    enabled: open && !!accessToken && !!leagueId,
+    // Short: a waiver move is exactly the change this view exists to reflect.
+    staleTime: 60_000,
     retry: false,
   })
 }

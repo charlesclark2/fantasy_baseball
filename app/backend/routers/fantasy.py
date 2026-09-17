@@ -57,8 +57,13 @@ from app.backend.services import (
 # local scope that touches one, which is exactly the kind of thing a reviewer skims past.
 from app.backend.models import nfl_recap, nfl_weekly
 from app.backend.services import depth_targets as depth_targets_service
-from app.backend.services import waiver_pool
-from app.backend.services import weekly_league_board, weekly_recap, weekly_recap_store
+from app.backend.services import waiver_facts, waiver_pool
+from app.backend.services import (
+    weekly_league_board,
+    weekly_recap,
+    weekly_recap_divergence,
+    weekly_recap_store,
+)
 from app.backend.services.platform_import import sleeper_matchups
 
 logger = logging.getLogger(__name__)
@@ -1565,7 +1570,7 @@ def _recap_platform(record: dict) -> str:
     return str(record.get("source_platform") or "").strip().lower()
 
 
-def _recap_week(record: dict, season: int, week: int) -> dict:
+def _recap_week(record: dict, season: int, week: int, *, record_divergence: bool = False) -> dict:
     """One league-week, scored — from the POINT-IN-TIME record, fetching it once if absent.
 
     ⭐ THE STORE IS READ FIRST, ALWAYS. A recap must be stable after it renders (the D1 ruling), so
@@ -1595,16 +1600,47 @@ def _recap_week(record: dict, season: int, week: int) -> dict:
             status_code=404,
             detail=f"We have not recorded week {week}'s player statistics yet.")
 
+    realized_by_seat: dict = {}
     scored = weekly_recap.score_week(
         fetched=fetched,
         realized_rows=realized.get("players") or [],
         cfg=record,
+        realized_by_seat=realized_by_seat,
     )
+    # ⭐ ONLY on the single-week recap route: power rankings re-scores every week on every view,
+    # and recording there would multiply the recorder's S3 round-trips by the week count for a
+    # record the recap view already writes.
+    if record_divergence:
+        _record_recap_divergence(record, season, week, scored, realized_by_seat)
     state = str((manifest or {}).get("completeness") or "final")
     scored["completeness"] = state
     scored["completenessNote"] = nfl_recap.COMPLETENESS_NOTE.get(
         state, nfl_recap.COMPLETENESS_NOTE["partial"])
     return scored
+
+
+def _record_recap_divergence(record: dict, season: int, week: int, scored: dict,
+                             realized_by_seat: dict) -> None:
+    """NF-WK-ACC1 ⑥ — the divergence recorder's production caller. RECORD-ONLY.
+
+    ⛔ NEVER FAILS THE RECAP AND NEVER PAGES (D2 disposition (C)). Any failure — the D/ST input not
+    published yet is NOT a failure, it is recorded as `constructionSupplied: False` — is logged as a
+    warning and the recap is served unchanged. Nothing here reaches the response.
+    """
+    try:
+        dst_inputs = _load_json(nfl_recap.realized_dst_inputs_key(season, week))
+        out = weekly_recap_divergence.record(
+            scored=scored,
+            scoring=record.get("scoring") or {},
+            dst_inputs=dst_inputs if isinstance(dst_inputs, dict) else None,
+            realized_by_seat=realized_by_seat,
+            league_id=str(record.get("league_id") or ""),
+            bucket=_CACHE_BUCKET,
+        )
+        logger.info("[recap-divergence] %s", out)
+    except Exception as exc:  # noqa: BLE001 — record-only; see the docstring
+        logger.warning("[recap-divergence] not recorded for %s wk%s: %s: %s",
+                       season, week, type(exc).__name__, exc)
 
 
 @router.get("/nfl/weekly/recap")
@@ -1622,7 +1658,7 @@ def nfl_weekly_recap(
     15/16 week final the moment a game is postponed, silently.
     """
     record = _recap_league(request, user_id, league_id)
-    scored = _recap_week(record, season, week)
+    scored = _recap_week(record, season, week, record_divergence=True)
     return nfl_recap.WeeklyRecap(
         season=season, week=week, leagueId=league_id, leagueName=record.get("name"),
         platform=_recap_platform(record),
@@ -1684,7 +1720,7 @@ def nfl_weekly_power_rankings(
 #: client's own empty state rather than to a blank screen.
 WAIVER_PAYLOAD_KEYS: tuple[str, ...] = (
     "season", "league_id", "pool", "need", "rosters", "refusals", "caveats", "ordering",
-    "ordering_note",
+    "ordering_note", "realized",
 )
 
 #: ⚠️ A GENEROUS CEILING, NOT A SELECTION. The spec asks for a bounded fan-out with a loud refusal
@@ -1702,6 +1738,36 @@ MAX_POOL_ROWS = 1200
 #: NO credential and whose adapter forbids ever acquiring one — a PERMANENT absence whose honest
 #: remedy is "re-import this league", an action the user can take, never "coming soon".
 REFRESHABLE_PLATFORMS: frozenset[str] = frozenset({"sleeper"})
+
+#: The verified season-to-date realized artifact, memoized per season: `(loaded_at, manifest, body)`.
+#: ⚠️ ONLY A VERIFIED READ IS CACHED. RC1 writes rows then manifest, so a request landing between the
+#: two can read a pair that does not verify; caching that would withhold the facts for the whole TTL.
+_realized_season_memo: dict[int, tuple[float, dict, dict]] = {}
+_REALIZED_SEASON_TTL_SECONDS = 900
+
+
+def _realized_season(season: int) -> tuple[dict | None, dict | None, str | None]:
+    """`(manifest, body, absence_reason)` for the season-to-date realized artifact — ONE read pair,
+    whatever the week (PM ruling ⑯ = b). Exactly one of (manifest+body) or the reason is set."""
+    import time
+
+    now = time.time()
+    hit = _realized_season_memo.get(season)
+    if hit is not None and now - hit[0] < _REALIZED_SEASON_TTL_SECONDS:
+        return hit[1], hit[2], None
+    manifest = _load_json(nfl_recap.realized_season_manifest_key(season))
+    if manifest is None:
+        return None, None, "realized_not_published"
+    body = _load_json(nfl_recap.realized_season_players_key(season))
+    if body is None:
+        logger.warning("waiver facts: %s season manifest is served but its rows are not", season)
+        return None, None, "realized_lineage_unverified"
+    violations = waiver_facts.verify_season(manifest, body)
+    if violations:
+        logger.warning("waiver facts: %s season artifact failed lineage: %s", season, violations)
+        return None, None, "realized_lineage_unverified"
+    _realized_season_memo[season] = (now, manifest, body)
+    return manifest, body, None
 
 
 @router.get("/nfl/waiver-pool")
@@ -1818,7 +1884,12 @@ def nfl_waiver_pool(
     )
     need = waiver_pool.positional_need(my_rows, record)
 
-    # ── 4. the pool — withheld entirely when any refusal applies ─────────────────────────────────
+    # ── 4. the realized facts — one read pair, lineage-checked, league-scored ────────────────────
+    r_manifest, r_body, facts_absence = _realized_season(season)
+    facts = (waiver_facts.season_facts(r_manifest, r_body, record)
+             if facts_absence is None else None)
+
+    # ── 5. the pool — withheld entirely when any refusal applies ─────────────────────────────────
     pool = None
     if not refusals:
         groups = waiver_pool.free_agent_pool(board["players"], record.get("league_rosters"))
@@ -1826,24 +1897,34 @@ def nfl_waiver_pool(
         if total > MAX_POOL_ROWS:
             refusals = ["pool_over_cap"]
         else:
-            pool = [
-                {
+            pool = []
+            for g in groups:
+                players = [
+                    {
+                        "id": p.get("id"),
+                        "name": p.get("name"),
+                        "team": p.get("team"),
+                        "pos": p.get("pos"),
+                        "bye": p.get("bye"),
+                        "rookie": p.get("rookie"),
+                        # ⭐ FACTS, never a projection: `fpPpr` is never read here (PM ruling 1).
+                        "realized": (waiver_facts.fact_for(p, facts) if facts is not None
+                                     else None),
+                    }
+                    for p in g["players"]
+                ]
+                group_ranked = facts is not None and g["pos"] != "DST"
+                pool.append({
                     "pos": g["pos"],
-                    "available": len(g["players"]),
-                    "players": [
-                        {
-                            "id": p.get("id"),
-                            "name": p.get("name"),
-                            "team": p.get("team"),
-                            "pos": p.get("pos"),
-                            "bye": p.get("bye"),
-                            "rookie": p.get("rookie"),
-                        }
-                        for p in g["players"]
-                    ],
-                }
-                for g in groups
-            ]
+                    "available": len(players),
+                    # Per group, because DST stays unranked even when the others are ordered.
+                    "ordering": "realized_to_date" if group_ranked else "unranked",
+                    "facts_absence": (
+                        None if facts is not None and g["pos"] != "DST"
+                        else ("team_grain_not_covered" if facts is not None else facts_absence)
+                    ),
+                    "players": waiver_facts.order_group(players) if group_ranked else players,
+                })
 
     return {
         "season": season,
@@ -1864,10 +1945,46 @@ def nfl_waiver_pool(
         },
         # ⚠️ STATED ON THE PAYLOAD, not left to the client to remember. The ordering rule is part of
         # the claim this surface makes, and a client that forgets it renders a ranked-looking table.
-        "ordering": "unranked",
+        "ordering": "realized_to_date" if facts is not None else "unranked",
         "ordering_note": (
-            "Available players are listed by position in the board's own order and are NOT ranked. "
-            "Our season projection is a preseason full-season figure that does not reflect 2026 "
-            "on-field production, so it cannot honestly order who to add."
+            (
+                "Within each position, available players are listed by the points they have "
+                f"scored in your league's scoring over {_weeks_label(r_manifest)} of "
+                f"{season} — what they have done so far, not a forecast. Players with no stat "
+                "line in those weeks follow, in the board's own order. Team defences are not "
+                "ordered: we do not yet have their season-to-date results."
+            )
+            if facts is not None else (
+                "Available players are listed by position in the board's own order and are NOT "
+                "ranked. Our season projection is a preseason full-season figure that does not "
+                "reflect 2026 on-field production, so it cannot honestly order who to add."
+            )
+        ),
+        # ⭐ NF-WVR1 fact columns — additive. `excluded` is RC1's own list of served weeks NOT summed
+        # in, carried verbatim so a gap is stated, never a silently short season.
+        "realized": (
+            {
+                "absence": facts_absence,
+                "through_week": None, "weeks": [], "excluded": [],
+                "generated_at": None, "captured_terms": [],
+            }
+            if facts is None else {
+                "absence": None,
+                "through_week": r_manifest.get("through_week"),
+                "weeks": list(r_manifest.get("weeks") or []),
+                "excluded": [
+                    {"week": e.get("week"), "reason": e.get("reason")}
+                    for e in (r_manifest.get("excluded") or [])
+                ],
+                "generated_at": r_manifest.get("generated_at"),
+                "captured_terms": waiver_facts.captured_terms(facts["coverage"]),
+            }
         ),
     }
+
+
+def _weeks_label(manifest: dict) -> str:
+    weeks = list((manifest or {}).get("weeks") or [])
+    if not weeks:
+        return "no weeks"
+    return f"week {weeks[0]}" if len(weeks) == 1 else f"weeks {weeks[0]}–{weeks[-1]}"

@@ -41,6 +41,7 @@
 // season total is false precision).
 
 import Link from "next/link"
+import { WaiverView } from "@/components/fantasy/waiver-view"
 import { useMyTeams } from "@/lib/fantasy-queries"
 import type { MyTeamEntry } from "@/lib/fantasy-queries"
 import {
@@ -377,11 +378,15 @@ function LeagueCard({
           )}
           <p className="mt-3 text-[11px] text-gray-600">
             This page shows the preseason full-season projection, which does not yet reflect 2026
-            on-field production. Per-game splits, rest-of-season updates and waiver-wire
-            suggestions are coming in-season.
+            on-field production. Per-game splits and rest-of-season updates are coming in-season.
           </p>
         </>
       )}
+
+      {/* NF-WVR1 Phase B — who is on nobody's roster in this league. League-level, so it does not
+          wait on a linked team; the server states its own refusals (a truncated or incomplete
+          roster set withholds the list rather than rendering players who are already taken). */}
+      <WaiverView leagueId={league.league_id} />
     </section>
   )
 }

@@ -165,7 +165,7 @@ CASES: list[tuple[str, Path, str, str, str]] = [
     # ══ NODE 1 — the training feeds have an owner, an order and an SLA ════════════════════════
     ("the training-feed set is silently emptied, so the ingest pulls nothing and reports success",
      _INGEST,
-     'WEEKLY_STAT_SOURCES: list[str] = ["stats_player_week", "snap_counts"]',
+     'WEEKLY_STAT_SOURCES: list[str] = ["stats_player_week", "snap_counts", "stats_team_week"]',
      "WEEKLY_STAT_SOURCES: list[str] = []",
      f"{_FEED}::test_the_two_training_feeds_are_registered_free_nflverse_sources"),
 
