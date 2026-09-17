@@ -10,7 +10,7 @@ metadata:
   name: nf-ros1
   vertical: nfl_fantasy
   card: https://trello.com/c/PMVQXY99
-  status: ACCEPTED
+  status: CLOSED(CONSTRAINT_REFUSED)  # worker closeout 2026-09-17 — certified NO, nothing ships; pending PM acceptance
 spec:
   description: >
     Produce a rest-of-season fantasy value per player that honestly
@@ -155,8 +155,84 @@ spec:
       - id: 6-closeout
         desc: "Verdict + evaluation tables + the consumer contract statement for WVR1/trade into closeout.followUps."
   closeout:
-    verdict: null
-    followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+    verdict: >
+      REFUSED — CERTIFIED NO (`CONSTRAINT_REFUSED`, binding half = CALIBRATION). No
+      position ships a ROS value; consumers keep their stated absences; the my-teams
+      "preseason" copy fix stands. Registration committed before any fit (44395535, +
+      amendments 452735b2 / cfe8ffd8, both before any scoring); decisive run from
+      committed code 316c42e5, reproduced by a second invocation at max |diff| 0.0.
+      THE POINT WORKS: the credibility blend (prior rate × availability, updated by
+      realized REG production) beats carrying the preseason prior forward at every
+      position on 6/6 folds (2020-2025) — full-PPR CRPS lift QB +3.37, RB +3.50, WR
+      +3.24, TE +2.43, K +1.80, all BH-significant, DSR >= 0.996 except K (0.90), beats
+      the permuted matched foil by the full margin (the gain is per-player), beats every
+      degenerate, field PBO 0.0. THE PREDICTIVE DOES NOT: C9 (PIT max-decile deviation
+      <= 0.05) fails at all five positions (0.08-0.13); QB and K also miss the NF-D22
+      coverage floor; K also fails DSR and C8a. The incumbent's predictive fails C9 by the
+      same amount (0.109 vs 0.099), so the refusal is of the SHARED location-shift
+      residual construction, not of the realized-production update: it cannot express a
+      player-dependent zero atom (top-tercile projections get q05 = 0 on 29.9% of rows vs
+      a 5.2% realized zero rate). No fold/season trigger is published (classify_null's
+      raw POWER_LIMITED is the NF-D18 misleading direction for a calibration-bound null).
+      The waiver replacement level (§7) is INACTIVE (0 positions ship). Record:
+      quant_sports_intel_models/football/nfl/fantasy/ablation_results/
+      nf_ros1_preregistration.md §13, nf_ros1_walkforward.{json,md}.
+    followUps: |
+      1. SUCCESSOR (recommended, a new spec — PM's call): NF-ROS1b, the same certified-positive
+         point form with a PREDICTIVE that can express a player-dependent zero atom and a
+         projection-scaled spread (e.g. a hurdle P(plays again) × conditional ROS, or
+         ratio-scale residuals). C9 and C7 stay exactly as registered here (E2.1-r: the bar is
+         not softened; the FORM is what changes, declared on mechanism, not picked from this
+         story's figures). The §13.1 zero-atom diagnostic is a finding about NF-ROS1's
+         construction, not a menu. Carry the §3 bias notes and consider registering in-season
+         roster/injury STATUS at week k (the served prior has it, the historical one does not).
+      2. NODE 4 NOT BUILT — a decision the PM can reverse. With no certified position the
+         artifact would publish only absences consumers already state, plus a new served
+         writer to maintain. The contract (validated dump + write-gate + served-bytes assertion
+         + executing entrypoint smoke, the 0917B pattern) is specified in the registration §8 and
+         should be born in the successor story that first certifies a position. Nothing was
+         published; no deploy/publish step exists for the operator.
+      3. CONSUMER CONTRACT STATEMENT (WVR1 value column, trade engine): until a successor
+         certifies, there is NO rest-of-season value to consume — keep the stated absence
+         ("unranked"/"preseason projection") and never substitute the board's full-season fpPpr
+         or a prorated version of it (the prorated prior is the refused incumbent, not a
+         certified fallback). When certified, the artifact will be
+         fantasy/nfl/ros/<season>/<week>/{manifest,players}.json with rosPts/rosP10/rosP90 per
+         preset, the games-remaining basis (gamesPlayed, teamGamesRemaining, expGamesRemaining),
+         rateWeight/availWeight, and an `absence` field with THREE distinct values consumers must
+         render distinctly: not_certified | position_not_evaluated (every D/ST) |
+         no_preseason_prior (in-season additions, 1.2-3.8% of realized points historically).
+         Cross-position ordering only if `waiverValue` is certified; within-position ordering
+         needs no replacement arithmetic. The ROS stat line is STAT_FIELD-scored ⇒ paid substrate.
+      4. NAME LADDER UNEXERCISED ON HISTORY: every historical join was by gsis id (boards carry
+         back-filled rookie ids), so the name+position rung was never tested on real data. The
+         served 2026 board's 81 synthetic rookie ids are exactly where it matters — the successor
+         must test the join on that board before trusting it.
+      5. SCORED TERM SET: `two_pt` resolves CAPTURED on both sides (no historical board carries
+         proj_two_pt); a served artifact must score on the evaluated term set, not the live
+         board's wider one.
+      6. INSTRUMENT (PLATFORM): cv_power.classify_null returned POWER_LIMITED (K: "DSR alone needs
+         11 folds") for nulls bound by a CALIBRATION clause measured on ~1k-10k rows — the NF-D18
+         direction again. Suggest a `binding_clause` argument so a calibration/constraint-bound
+         null classifies itself instead of being hand-corrected downstream.
+      7. PROCESS DISCLOSURE: the decisive run took 2m30s and was run in-session; component timing
+         (assembly 10s, heaviest fold 2.8s) predicted it well under 2 minutes, but the per-row
+         PIT loop dominates at full scale. Reproduction run likewise. Vectorize PIT in any
+         successor before assuming in-session runtime.
+      8. A PIT "repair" was investigated and REJECTED on a positive control (§13.4) — the
+         amendment-1 atom rule passes a correctly specified censored predictive at 0.005. Do not
+         re-attempt it; the failure is the model's shape.
+      9. NF1.5 CONTRIB-VINTAGE (parked item) — CONFIRMED, as a presentation defect, not a data-
+         integrity one. `contrib` is copied verbatim from artifacts/nf1_player_contributions.json,
+         which `run_nf1_feature_importance.py` writes by hand (no scheduled job) from the NF1
+         model (nfl_fantasy_nf1_v1, generated 2026-08-02); the manifest's
+         featureContributionsMeta stamps that vintage and version honestly, so nothing is hidden.
+         But `contrib.totalPts` is NF1's own prediction, and the served point is the NF1.5 board
+         after TR2b level, INJ3b injury games, INJ4b designation discount, the rookie λ and the
+         NF1.5 reordering — none of which the drivers explain. Measured on the staged 2026
+         payload (generated 2026-08-25): the driver block's total differs from the served fpPpr
+         by a median 23.8 pts, p90 43.6, and by more than 5 pts on 92% of the 703 rows that carry
+         it (Jahmyr Gibbs: drivers sum to 253.0 beside a served 349.4). A "why" panel rendered
+         beside the served number therefore explains a different number. Owner's answer: confirm
+         the defect; either re-stamp the panel as "NF1 base model drivers" and show its own total,
+         or regenerate attributions against the served model. Not fixed here (no scope growth).
