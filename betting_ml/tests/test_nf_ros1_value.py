@@ -95,6 +95,18 @@ def test_the_pit_reads_flat_on_a_correctly_specified_censored_predictive():
     assert V.max_decile_dev(V.randomized_pit(y, qg, np.random.default_rng(4))) < 0.02
 
 
+def test_mass_below_the_lowest_knot_lands_below_the_first_level():
+    """A continuous predictive (no atom): the 5% of outcomes under q05 must map into [0, 0.05)."""
+    rng = np.random.default_rng(8)
+    n = 20000
+    mu, s = rng.uniform(200, 300, n), rng.uniform(10, 40, n)
+    qg = mu[:, None] + s[:, None] * norm.ppf(V.LEVELS)[None, :]
+    y = mu + s * rng.standard_normal(n)
+    u = V.randomized_pit(y, qg, np.random.default_rng(9))
+    assert abs(float((u < 0.05).mean()) - 0.05) < 0.01
+    assert abs(float((u > 0.95).mean()) - 0.05) < 0.01
+
+
 def test_the_pit_detects_a_miscalibrated_predictive():
     """…and it is not blind: the same law scored against knots half as wide must fail C9."""
     rng = np.random.default_rng(5)
@@ -199,6 +211,10 @@ def _fake_inputs():
                          team="LA", opponent_team="KC", season=2021, week=w, season_type="REG",
                          game_id=f"g{w}", carries=15.0, rushing_yards=80.0 + w, rushing_tds=0.0,
                          receptions=3.0, receiving_yards=20.0, fg_made_0_19=0.0))
+        # a defender with a box-score line — the evaluated-position filter must drop him
+        real.append(dict(player_id="D1", player_display_name="Kick Er", position="LB",
+                         team="KC", opponent_team="LA", season=2021, week=w, season_type="REG",
+                         game_id=f"g{w}", fg_made_20_29=5.0, pat_made=5.0))
         real.append(dict(player_id="K1", player_display_name="Kick Er", position="K",
                          team="KC", opponent_team="LA", season=2021, week=w, season_type="REG",
                          game_id=f"g{w}", fg_made_20_29=1.0, pat_made=2.0))

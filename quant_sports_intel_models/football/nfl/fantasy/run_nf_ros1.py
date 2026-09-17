@@ -159,8 +159,7 @@ def load_realized(seasons, version: int | None) -> pd.DataFrame:
     from quant_sports_intel_models.football.nfl.fantasy import realized_week as RW
     cols = sorted(set(RW.required_columns()))
     df = _delta_frame("stats_player_week", version, seasons, cols)
-    df = df[(df["season_type"] == "REG") & df["position"].isin(REALIZED_POSITIONS)]
-    return df.reset_index(drop=True)
+    return df[df["season_type"] == "REG"].reset_index(drop=True)
 
 
 def load_schedule(seasons, version: int | None) -> pd.DataFrame:
@@ -188,7 +187,9 @@ def team_week_games(sched: pd.DataFrame) -> pd.DataFrame:
 # ── frame assembly ────────────────────────────────────────────────────────────────────────────────
 def assemble(seasons, *, stats_version, schedules_version, d: Path) -> tuple[pd.DataFrame, dict]:
     boards = pd.concat([load_board(d, s) for s in seasons], ignore_index=True)
-    real = load_realized(seasons, stats_version).copy()
+    real = load_realized(seasons, stats_version)
+    # the evaluated-position filter lives HERE (not in the loader) so the assembly guard sees it
+    real = real[real["position"].isin(REALIZED_POSITIONS)].reset_index(drop=True).copy()
     sched = load_schedule(seasons, schedules_version).copy()
     # amendment 2 item 1 — ONE franchise canon on all three sides, applied here (not in the
     # loaders) so the assembly guard exercises it with raw vendor codes

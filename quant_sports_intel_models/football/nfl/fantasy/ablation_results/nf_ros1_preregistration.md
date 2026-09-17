@@ -438,3 +438,18 @@ control that a half-width predictive fails).
 `max_width` was first built with q10 = the max (coverage 0.000) — fixed to the registered [0, max];
 the vectorized residual application and fit memoization were verified to change **zero** figures on
 every other predictor (max diff 0.0 vs the pre-refactor smoke).
+
+### §13.6 Guards, RED-proven
+
+`betting_ml/tests/test_nf_ros1_value.py` (24 fast-gate clauses, incl. the REAL assembly path with only
+its three IO loaders stubbed) and `betting_ml/tests/nf_ros1_red_proof.py` (baseline-pass,
+resolve-every-node, NOT-SELECTED ⇒ only pytest exit 1 is a red, unique anchors, token-gone,
+stale-backup restore): **15/15 deliberate breaks turn their own clause red.** The first proof run
+found TWO vacuous guards, both fixed rather than excused: (1) the team canon and the evaluated-
+position filter lived in the IO loaders the fixture stubs, so the fixture's own re-implementation
+satisfied the guard — both now run inside `assemble` against raw vendor codes, with a defender row
+the filter must drop; (2) the censored PIT control's 0.02 tolerance could not see a misplaced lower
+tail — a focused lower-tail clause now owns that break. The team-canon/filter move is behaviour-
+preserving: a full regeneration from `75f7759e` (canon moved) matched the committed decisive record
+at 0.0; the final filter move is the same shape and its full reproduction is an operator step
+(> 2 min).
