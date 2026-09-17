@@ -16,7 +16,14 @@ RUN (BOX — reads the S3 NFL lake, writes the api-cache; ~15s):
 exactly this, sequenced behind `nfl_weekly_stats_ingest_op` in `sports_nfl_weekly_serving_job` so
 the consumer is refreshed downstream of its own feed IN THE SAME RUN (the INC-25 rule). It resolves
 every REG week from the lake, publishes each one that is FINAL and needs a write, and prints a
-`RESULT {json}` line the op reads.
+`RESULT {json}` line the op reads. Every fire also rebuilds the CUMULATIVE SEASON-TO-DATE artifact
+(`realized/<season>/season/`, PM ruling 2026-09-17) from the served weeks.
+
+⭐ `--check-published` is READ-ONLY and runs the publish-time contract against what is serving now —
+the stored week-1 artifact is the anchor the contract was measured against (~5s, LAPTOP or BOX):
+
+    AWS_DEFAULT_REGION=us-east-2 uv run python -m \
+      quant_sports_intel_models.football.nfl.fantasy.run_realized_week --season 2026 --check-published
 
   ⛔ AND IT PUBLISHES A FINAL WEEK OR NOTHING. A daily fire lands on Monday morning too, when the
   week is 15/16 games — `plan_auto` never plans a partial, so a pre-MNF fire writes nothing rather
@@ -97,10 +104,114 @@ def _auto(args) -> int:
             summary["events"].append(row)
         print(f"  wk{week}: {out['action']} — {out['reason']}")
 
+    # ⭐ THE SEASON-TO-DATE ARTIFACT IS REBUILT EVERY FIRE, not only when a week was written this
+    # run — it is a pure function of the served weeks, so an unchanged season is a cheap no-op and a
+    # season artifact that fell behind (a prior fire that failed half-way) heals on the next one.
+    summary["season_to_date"] = _season(args, s3, dry, summary)
+
     # ⭐ THE OP READS THIS LINE, not a regex over prose. A machine-readable result at a fixed
     # sentinel is what stops a log-format change from silently blinding the caller.
     print("RESULT " + json.dumps(summary, default=str))
     return 1 if summary["errors"] else 0
+
+
+def _season(args, s3, dry: bool, summary: dict) -> dict:
+    """Build (and unless `dry`, publish) the cumulative season-to-date artifact. Never raises —
+    a failure lands in `summary["errors"]` under `week: "season"`, which the op pages on.
+
+    ⚠️ ON A DRY RUN a week the real run would `backfill_hash` still reads as `unverifiable` here,
+    because the dry run does not install the hash. That exclusion is reported, not paged.
+    """
+    from quant_sports_intel_models.football.nfl.fantasy import realized_week
+
+    season = args.season
+    try:
+        served = {}
+        for week in sorted(_published_weeks(s3, args.s3_bucket, season)):
+            got = realized_week.load_served_week(season, week, s3=s3, bucket=args.s3_bucket)
+            if got is not None:
+                served[week] = got
+        built = realized_week.build_season(season, served)
+        man = built["manifest"]
+        if dry:
+            out = realized_week.season_publish_decision(
+                man, realized_week.published_season_manifest(season, s3=s3,
+                                                             bucket=args.s3_bucket))
+            out = {**out, "published": []}
+        else:
+            out = realized_week.publish_season(built, s3=s3, bucket=args.s3_bucket)
+            _verify_season(s3, args.s3_bucket, season, built, out)
+    except Exception as exc:  # noqa: BLE001 — recorded; the op pages on it
+        log.warning("season-to-date FAILED: %s: %s", type(exc).__name__, exc)
+        summary["errors"].append({"week": "season", "error": f"{type(exc).__name__}: {exc}"})
+        return {"action": "error", "error": f"{type(exc).__name__}: {exc}"}
+
+    report = {"action": out["action"], "reason": out["reason"],
+              "through_week": man["through_week"], "weeks": man["weeks"],
+              "excluded": man["excluded"], "n_rows": man["n_rows"]}
+    # ⛔ A SERVED FINAL WEEK THAT CANNOT ENTER THE SEASON TOTAL IS A DEFECT, NOT A NOTE. The
+    # artifact names it in `excluded` so a consumer can say so — but the cadence must page, or a
+    # season total stuck at week 3 reads as three quiet weeks for every player.
+    defects = realized_week.season_defects(built)
+    if defects and not dry:
+        summary["errors"].append({"week": "season",
+                                  "error": "served weeks excluded from the season-to-date artifact: "
+                                           + json.dumps(defects)})
+    if out.get("event"):
+        summary["events"].append({"week": "season", **report})
+    print(f"  season: {out['action']} — {out['reason']}")
+    return report
+
+
+def _verify_season(s3, bucket: str, season: int, built: dict, out: dict) -> None:
+    """Read back the served season manifest and prove it is THIS build (the `_verify_week` rule)."""
+    from quant_sports_intel_models.football.nfl.fantasy import realized_week
+
+    if not out.get("published"):
+        return
+    back = realized_week.published_season_manifest(season, s3=s3, bucket=bucket)
+    want = built["manifest"]["content_sha256"]
+    if back is None or back.get("content_sha256") != want:
+        raise RuntimeError(f"{season} season: published, but the served manifest reads back as "
+                           f"{(back or {}).get('content_sha256')!r}, not {want!r}")
+
+
+def _check_published(args) -> int:
+    """READ-ONLY. Run the publish-time contract against what is SERVING right now.
+
+    ⭐ THE STORED ARTIFACT IS THE ANCHOR (PM 2026-09-17). Week 1 was published by hand before this
+    contract existed, and the vendor's week-1 window is partly closed, so the served file is the one
+    copy of week 1 anybody can check the contract against. Exit 5 if anything served fails.
+    """
+    import boto3
+
+    from quant_sports_intel_models.football.nfl.fantasy import realized_week
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    season, bad = args.season, False
+    out = {"season": season, "weeks": [], "season_to_date": None}
+    for week in sorted(_published_weeks(s3, args.s3_bucket, season)):
+        man, players = realized_week.load_served_week(season, week, s3=s3, bucket=args.s3_bucket)
+        rep = realized_week.contract_report(man, players)
+        prior = man.get("content_sha256")
+        hash_ok = None if not prior else prior == realized_week.content_hash(players)
+        bad |= (not rep["ok"]) or hash_ok is False
+        out["weeks"].append({"week": week, "completeness": man.get("completeness"),
+                             "n_players": man.get("n_players"), "n_teams": man.get("n_teams"),
+                             "realized_games": man.get("realized_games"),
+                             "hashMatches": hash_ok, **rep})
+    smeta = realized_week.published_season_manifest(season, s3=s3, bucket=args.s3_bucket)
+    if smeta is not None:
+        body = json.loads(s3.get_object(
+            Bucket=args.s3_bucket,
+            Key=f"fantasy/nfl/{realized_week.realized_season_players_key(season)}")["Body"].read())
+        rep = realized_week.season_contract_report(
+            {"manifest": smeta, "columns": body["columns"], "rows": body["rows"]})
+        bad |= not rep["ok"]
+        out["season_to_date"] = {"through_week": smeta.get("through_week"),
+                                 "excluded": smeta.get("excluded"), **rep}
+    print(json.dumps(out, indent=2, default=str))
+    return 5 if bad else 0
 
 
 def _verify_week(s3, bucket: str, season: int, week: int, built: dict, out: dict) -> None:
@@ -154,6 +265,8 @@ def main() -> int:
     p.add_argument("--week", type=int, help="one week (omit with --auto)")
     p.add_argument("--auto", action="store_true",
                    help="publish every FINAL week that needs a write (the scheduled path)")
+    p.add_argument("--check-published", action="store_true",
+                   help="READ-ONLY: run the publish-time contract against the served artifacts")
     p.add_argument("--publish", action="store_true", help="write to S3 (else a dry build)")
     p.add_argument("--smoke", action="store_true",
                    help="build and report WITHOUT writing — the executing smoke")
@@ -162,6 +275,8 @@ def main() -> int:
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
+    if args.check_published:
+        return _check_published(args)
     if args.auto:
         if args.week is not None:
             raise SystemExit("--auto resolves its own weeks; do not also pass --week")
@@ -177,7 +292,9 @@ def main() -> int:
     print(json.dumps({k: v for k, v in man.items() if k != "columns"}, indent=2))
 
     if args.smoke or not args.publish:
-        print(f"\n[dry] would publish {len(built['players'])} rows to "
+        rep = realized_week.contract_report(man, built["players"])
+        print("\n[dry] contract: " + json.dumps({k: v for k, v in rep.items()}))
+        print(f"[dry] would publish {len(built['players'])} rows to "
               f"s3://{args.s3_bucket}/fantasy/nfl/"
               f"{realized_week.realized_players_key(args.season, args.week)}")
         return 0

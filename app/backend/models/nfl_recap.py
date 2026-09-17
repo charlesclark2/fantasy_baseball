@@ -50,6 +50,23 @@ def realized_manifest_key(season: int, week: int) -> str:
     return f"realized/{int(season)}/{int(week)}/manifest.json"
 
 
+#: The cumulative season-to-date artifact (PM ruling, NF-WVR1 ⑯ = option b, 2026-09-17). ⭐ The
+#: directory is the literal word `season`, NOT a number, and that is load-bearing: both week-listers
+#: (`run_realized_week._published_weeks` and the freshness op) count a served week only when the
+#: parent directory is all digits, so this key can never be read as a published week.
+REALIZED_SEASON_DIR = "season"
+
+
+def realized_season_players_key(season: int) -> str:
+    """Relative key (under `fantasy/nfl/`) of the season-to-date realized rows, one per player-game."""
+    return f"realized/{int(season)}/{REALIZED_SEASON_DIR}/players.json"
+
+
+def realized_season_manifest_key(season: int) -> str:
+    """Relative key (under `fantasy/nfl/`) of the season-to-date realized manifest."""
+    return f"realized/{int(season)}/{REALIZED_SEASON_DIR}/manifest.json"
+
+
 class RecapSeat(BaseModel):
     """One lineup slot as it was ACTUALLY started, with what it scored and where that came from."""
 

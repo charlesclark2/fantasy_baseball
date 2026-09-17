@@ -310,21 +310,26 @@ def nfl_realized_week_publish_op(context):
                                                                    "backfill_hash")))
     context.log.info("[METRIC] nfl_realized_events=%d", len(events))
     context.log.info("[METRIC] nfl_realized_errors=%d", len(errors))
+    season_to_date = summary.get("season_to_date") or {}
+    context.log.info("[METRIC] nfl_realized_season_through_week=%s action=%s",
+                     season_to_date.get("through_week"), season_to_date.get("action"))
 
     if errors:
         _page(context, "NFL realized week publish FAILED",
               "The realized stat lines Phase B's recap renders from did not advance this cycle.\n\n"
-              + "\n".join(f"- wk{e['week']}: {e['error']}" for e in errors),
+              + "\n".join(f"- {_realized_label(e)}: {e['error']}" for e in errors),
               severity="CRITICAL", dedup_key="nfl_realized_publish:failed")
         raise Exception(f"NFL realized publish failed for week(s) "
                         f"{[e['week'] for e in errors]}")
 
     if events:
-        _page(context, "NFL realized week: the vendor RESTATED a published week",
-              "The published week KEEPS SERVING and the new build is parked at a revision key — "
-              "nothing changed underneath a reader. This is a named event for a human to look at, "
-              "not an outage.\n\n"
-              + "\n".join(f"- wk{e['week']}: {e['action']} — {e['reason']}" for e in events),
+        _page(context, "NFL realized: a published artifact was deliberately NOT replaced",
+              "Either the vendor RESTATED a published week (the published week KEEPS SERVING and "
+              "the new build is parked at a revision key) or a build was refused because it would "
+              "have replaced a served artifact with a less complete one. Nothing changed underneath "
+              "a reader. This is a named event for a human to look at, not an outage.\n\n"
+              + "\n".join(f"- {_realized_label(e)}: {e['action']} — {e['reason']}"
+                          for e in events),
               severity="WARN", dedup_key="nfl_realized_publish:restated")
 
     # ⭐ A CADENCE FIRE WITH NOTHING TO DO IS THE COMMON CASE AND MUST STAY LEGIBLE. Most fires land
@@ -337,6 +342,11 @@ def nfl_realized_week_publish_op(context):
     else:
         context.log.info("[nfl realized] %s", "; ".join(
             f"wk{r['week']}={r['action']}" for r in results))
+
+
+def _realized_label(entry: dict) -> str:
+    """`wk3`, or `season-to-date` for the cumulative artifact's entries (`week: "season"`)."""
+    return "season-to-date" if entry.get("week") == "season" else f"wk{entry.get('week')}"
 
 
 def _parse_result_line(stdout: str) -> dict | None:
