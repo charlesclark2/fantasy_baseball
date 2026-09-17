@@ -1,0 +1,150 @@
+# Plan spec — NF-ROS1b (FULL tier, MODELING: the interval redesign — NF-ROS1's certified NO,
+# answered at the mechanism it named)
+# Authored by PM 2026-09-17. NF-ROS1 proved the UPDATE (Bühlmann rate×availability) beats the
+# incumbent at every position, 6/6 folds — and refused to ship because the location-shift
+# residual interval fails PIT calibration by SHAPE at every position. This successor changes
+# ONLY the interval, keeps every bar, and is a fresh §0.5 registration, not a retry.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-ros1b
+  vertical: nfl_fantasy
+  card: https://trello.com/c/PMVQXY99   # ROS1's record; ROS1b card linked at kickoff by PM
+  status: ACCEPTED
+spec:
+  description: >
+    Certify an ROS value by fixing what NF-ROS1's refusal named: the
+    interval cannot represent a player-specific chance of scoring
+    zero, and its spread does not scale with the projection (measured:
+    29.9% of top-third projections carried P5=0 while only 5.2%
+    scored zero; lowest PIT decile ~2x full; the INCUMBENT's interval
+    fails identically — shape, not overfitting). ⛔ FRESH REGISTRATION
+    DISCIPLINE: the new interval family is declared FROM THE
+    MECHANISM (a hurdle form — player-specific P(zero) x a
+    conditional spread that scales with the projection — or
+    ratio-scale residuals; the registration names ONE family and its
+    parameters), never reverse-engineered from ROS1's fold numbers;
+    the POINT form (eb_rate_avail as registered in ROS1) carries over
+    unchanged as the location; every ship-bar clause C1–C9 carries
+    over at the SAME values — this is not a softer retry of a refused
+    bar, it is a different instrument measured against the same bar
+    (the fix-the-spec honesty clause applies: ROS1's point-estimate
+    superiority is an already-measured result — this story's fresh
+    confirmation target is the INTERVAL, and C9 is where it lives or
+    dies). ⛔ §13.4 stands: the PIT atom rule is correct and is not
+    re-repaired. best_alpha=0; a second refusal is an acceptable,
+    reportable outcome.
+  acceptanceCriteria:
+    - description: >
+        §0.5 REGISTRATION before any fitting, inheriting ROS1's by
+        reference and declaring only the deltas: (a) the interval
+        family + parameters, from the mechanism; (b) the
+        roster/injury-status-at-week-k covariate question DECIDED at
+        registration (ROS1 noted the served prior has it, the
+        historical prior does not — declare in or out with the
+        train/eval asymmetry addressed, never added mid-run); (c) the
+        two_pt term-set rule carried (score on the evaluated term
+        set); (d) the same walk-forward (2020–2025, k=1–12, CRPS on
+        the 19-level grid), same anchors + matched foil + width
+        degenerates, same C1–C9 including PIT ≤ 0.05 and the
+        power-floor; (e) reproduction pins; (f) the name-join rung
+        TESTED on the 2026 board's 81 synthetic rookie ids this time
+        (ROS1's followUp 4 — it has never run on real data). classify
+        _null usage per ROS1's lesson: a null blocked by a binding
+        calibration clause is reported as CONSTRAINT-bound, with the
+        classifier's raw text kept but not acted on (the platform
+        binding_clause improvement is carded separately — do not
+        build it here).
+    - description: >
+        RUN + REPORT with ROS1's honesty mechanics verbatim:
+        anchors scored every run; collapse-to-prior flagged as a tie;
+        per-position verdicts; the decisive run reproduced at 0.0
+        from committed code; RED proof with every-test-can-fail
+        demonstrated (ROS1 caught two of its own vacuous guards —
+        assume yours has some too and hunt them); runtime honesty —
+        PROFILE before assuming the run fits in-session (ROS1's
+        vectorization didn't help; two runs crossed the 2-minute
+        line), and hand >2-min runs to the operator paste-ready.
+    - description: >
+        ON CERTIFICATION (any position clears all bars): build node
+        4 exactly as ROS1's registration §8 specifies — the published
+        artifact at fantasy/nfl/ros/<season>/<week>/{manifest,
+        players}.json, contracted FROM BIRTH (validated dump +
+        write-gate + served-bytes assertion + executing entrypoint
+        smoke; the 0917B pattern), with the three distinguishable
+        absences (not_certified / position_not_evaluated /
+        no_preseason_prior), certified positions only, waiverValue
+        only if its own registration clears, ROS stat line through
+        STAT_FIELD (paid substrate — the derived paid-set diff comes
+        to the PM before merge). The recurring publish cadence is
+        DECLARED but its schedule enablement is an operator step.
+        ON A SECOND REFUSAL: close as certified NO with the
+        mechanism named, consumers keep their absences, and the PM
+        decides whether a third form is worth funding — no in-story
+        iteration past the registered family (E2.1-r).
+    - description: >
+        Standing: worktree; PR -> dev; no serving-page code; no
+        WVR1/trade surface changes (they consume the artifact in
+        their own stories); no Trello; roadmap frozen; >2-min
+        operator paste-ready; findings to closeout.followUps; the
+        weekly model's outputs remain out of bounds absent explicit
+        registration; D/ST stays position_not_evaluated (team grain
+        — its path is the ACC1/team-feed lane, not this story).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-ros1b
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "ROS" / "interval" / "calibration" (board Credence Sports, 2026-09-17)'
+    duplicates: []
+    adjacent:
+      - "NF-ROS1 (Done, PMVQXY99) — the parent refusal; its registration, harness, anchors, and §13 findings are the inheritance; its point-form result is already-measured, never re-claimed as fresh."
+      - "NF-WVR1 / trade engine — consumers; their stated absences lift only on certification; the never-substitute-fpPpr rule stands."
+      - "NF-WK-ACC1 (IN FLIGHT) — disjoint (realized-scoring lane); shares STAT_FIELD — coordinate merge timing on any map change."
+      - "Serving-writer census (cg5FRtch) — node 4, if built, is born contracted and never joins the uncontracted list."
+      - "PLAT-CVP3 / cv_power binding_clause (ROS1 followUp 6) — platform improvement, separately triaged; not built here."
+  triedLedger:
+    files:
+      - "ablation_results/nf_ros1_preregistration{,_amendment_1,_amendment_2}.md + §13 (the refusal's mechanism, the PIT-repair rejection, the runtime findings)"
+      - "nf_ros1_walkforward.json (the before-side; the incumbent's identical C9 failure)"
+      - "ros_value.py + run_nf_ros1.py (the harness this story extends; hash-pinned priors)"
+  recordedNulls:
+    - "Softening C9 (or any bar) — refused ex ante; the successor changes the instrument, never the bar."
+    - "Re-repairing the PIT atom rule — §13.4, tested on synthetic truth, stands."
+    - "Reverse-engineering the interval family from ROS1's fold numbers — the family comes from the mechanism."
+  supersedes: []
+  dependsOn:
+    - "Nothing in flight; the stats ingest is verified running (ROS1's premise check: cron fire at 15:30:26Z)"
+  feedsInto:
+    - "WVR1's value column + cross-position waiverValue; the trade engine's core arithmetic; the first certified ROS artifact (node 4, contracted from birth); possibly the season board's own interval honesty (the incumbent fails C9 identically — a finding the board's owners inherit)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-ros1b-plan
+spec:
+  goalRef: { name: nf-ros1b }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-registration
+        desc: "Delta registration: interval family from the mechanism; covariate decision; name-join test plan; bars carried at same values. Report to PM when committed."
+      - id: 2-fit-evaluate
+        desc: "Walk-forward per registration; profile first; >2-min runs to operator; decisive run reproduced at 0.0."
+      - id: 3-verdict
+        desc: "Per-position certification against C1–C9; a second refusal closes honestly with the mechanism named."
+      - id: 4-artifact
+        desc: "ONLY on certification: the §8 artifact, contracted from birth; paid-set diff to PM; cadence declared, enablement operator-gated."
+      - id: 5-closeout
+        desc: "Verdict + tables + the consumer unlock state (WVR1/trade) into closeout.followUps."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
