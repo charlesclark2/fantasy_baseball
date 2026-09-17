@@ -201,3 +201,45 @@ spec:
       `def_fumble_rec` (an IDP counter applied at player grain). With fum + 40+yd
       team totals would reach 42/48; the remaining 6 are exactly these.
 
+
+      ── ⑦ PART 2 MEASURED (2026-09-17): FULL D/ST REPRODUCTION IS REACHABLE —
+      AND IT NEEDS `pbp`, WHICH MOVES THE PBP INGEST FROM PART 3 INTO PART 2.
+      Instrument: Sleeper's own per-team stat lines
+      (`/v1/stats/nfl/regular/2025/<wk>`), all 544 2025 REG team-weeks, compared
+      FIELD BY FIELD with the nflverse player sums and with pbp counts. Best
+      agreement per field: sacks pbp 544 (nflverse sums 535 — team sacks with no
+      credited sacker); INT 544; fumble recoveries = the OPPONENT's fumbles
+      recovered on non-special-teams plays 543; forced fumbles (per forcer, pbp)
+      539 — a two-directional vendor attribution residual, NOT derivable, left
+      as the MH2.2 finding; defensive TDs 544 and special-teams TDs 544 once
+      field-goal / extra-point / punt / kickoff plays count as special teams
+      (pbp leaves blocked-FG returns unflagged); safeties (pbp) 544 (nflverse
+      538); blocked kicks (pbp) 544; `def_st_ff` 544 and `def_st_fum_rec` 544
+      (the league scores these separately; we currently capture them); yards
+      allowed (nflverse) 544; POINTS ALLOWED = opponent score − 6 × opponent
+      defensive TDs − 2 × opponent safeties: 544/544 (RC1's −7 × (def + ST +
+      fumble-recovery TDs) rule: 457). Every term is a key the league's own
+      56-key settings carry; no weight was invented.
+      SCORED against the league's started D/ST seats: 48/48 on weeks 1-4 and
+      154/155 on weeks 5-17 (byes score 0 on both sides). The one miss (PHI
+      wk12) is the forced-fumble field alone — substituting Sleeper's ff count
+      gives 155/155. ⚠️ Honest scope: the mechanism set found on weeks 1-4
+      ONLY (blocked kicks, ST TDs charged, opponent safeties excluded, pbp
+      safeties) scored 143/155 held out (from 127); the counting-convention
+      refinements (fumbling-team rule, ST play classes, 6 not 7) were selected
+      against the stat lines of ALL 2025 weeks, so 154/155 is not a clean
+      held-out figure. Validation on 2026 weeks as they complete is the clean
+      test.
+      ⇒ PM DECISIONS: (a) the pbp ingest is a PART-2 prerequisite, not a part-3
+      stretch — `play_by_play_2026.parquet` is published in the same vendor run
+      (2026-09-16T14:12:07Z, 1.36 MB for week 1), so it could join
+      `WEEKLY_STAT_SOURCES` under the one existing owner exactly as
+      `stats_team_week` did; (b) with ~full reproduction in hand, whether the
+      served D/ST seat flips from `league_published` to our scorer (NOT done —
+      the seat stays league-published until ruled); (c) WVR1's FA-pool DST
+      fact columns unlock on the same ruling (state noted for WVR1's record:
+      evidence exists, ruling pending, construction not yet in code).
+      📌 MNF staleness (yOhLHprC) did not touch these readings — 2025 schedules
+      are complete; it tags 2026 wk1 DEN + KC as `resultPending` in the wired
+      recorder.
+
