@@ -143,7 +143,6 @@ def load_board(d: Path, season: int) -> pd.DataFrame:
     b = b.drop_duplicates("player_id", keep="first").reset_index(drop=True)
     b["season"] = season
     b["is_rookie"] = b["is_rookie"].fillna(False).astype(bool)
-    b["team_id"] = [normalize_team(t) or None for t in b["team_id"]]
     return b
 
 
@@ -160,18 +159,14 @@ def load_realized(seasons, version: int | None) -> pd.DataFrame:
     from quant_sports_intel_models.football.nfl.fantasy import realized_week as RW
     cols = sorted(set(RW.required_columns()))
     df = _delta_frame("stats_player_week", version, seasons, cols)
-    df = df[(df["season_type"] == "REG") & df["position"].isin(REALIZED_POSITIONS)].copy()
-    df["team"] = [normalize_team(t) for t in df["team"]]
+    df = df[(df["season_type"] == "REG") & df["position"].isin(REALIZED_POSITIONS)]
     return df.reset_index(drop=True)
 
 
 def load_schedule(seasons, version: int | None) -> pd.DataFrame:
     df = _delta_frame("schedules", version, seasons,
                       ["season", "week", "game_type", "home_team", "away_team"])
-    df = df[df["game_type"] == "REG"].copy()
-    for c in ("home_team", "away_team"):
-        df[c] = [normalize_team(t) for t in df[c]]
-    return df.reset_index(drop=True)
+    return df[df["game_type"] == "REG"].reset_index(drop=True)
 
 
 def team_week_games(sched: pd.DataFrame) -> pd.DataFrame:
@@ -193,8 +188,15 @@ def team_week_games(sched: pd.DataFrame) -> pd.DataFrame:
 # ── frame assembly ────────────────────────────────────────────────────────────────────────────────
 def assemble(seasons, *, stats_version, schedules_version, d: Path) -> tuple[pd.DataFrame, dict]:
     boards = pd.concat([load_board(d, s) for s in seasons], ignore_index=True)
-    real = load_realized(seasons, stats_version)
-    sched = load_schedule(seasons, schedules_version)
+    real = load_realized(seasons, stats_version).copy()
+    sched = load_schedule(seasons, schedules_version).copy()
+    # amendment 2 item 1 — ONE franchise canon on all three sides, applied here (not in the
+    # loaders) so the assembly guard exercises it with raw vendor codes
+    boards["team_id"] = [normalize_team(t) or None if isinstance(t, str) else None
+                         for t in boards["team_id"]]
+    real["team"] = [normalize_team(t) for t in real["team"]]
+    for c in ("home_team", "away_team"):
+        sched[c] = [normalize_team(t) for t in sched[c]]
     tw = team_week_games(sched)
 
     prior_rows = prior_payload_rows(boards)

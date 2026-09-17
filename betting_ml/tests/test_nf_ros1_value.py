@@ -207,7 +207,6 @@ def _fake_inputs():
 
 @pytest.fixture
 def assembled(monkeypatch):
-    from quant_sports_intel_models.football.nfl.entity.names import normalize_team
     from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1 as N
 
     board, real, sched = _fake_inputs()
@@ -215,7 +214,6 @@ def assembled(monkeypatch):
     def fake_board(d, s):
         b = board.copy()
         b["season"] = s
-        b["team_id"] = [normalize_team(t) or None for t in b["team_id"]]
         return b
 
     def fake_real(seasons, version):
@@ -227,14 +225,10 @@ def assembled(monkeypatch):
         # the real table carries every stat column populated (0, not null) on every row — measured
         # on 2021 kickers; a NaN would propagate through flatten_realized_row's sums, by design
         r[list(N.R.REALIZED_STAT_COLUMNS)] = r[list(N.R.REALIZED_STAT_COLUMNS)].fillna(0.0)
-        r["team"] = [normalize_team(t) for t in r["team"]]
         return r
 
     def fake_sched(seasons, version):
-        s = sched.copy()
-        for c in ("home_team", "away_team"):
-            s[c] = [normalize_team(t) for t in s[c]]
-        return s
+        return sched.copy()          # RAW vendor codes (LA) — assemble must fold them
 
     monkeypatch.setattr(N, "load_board", fake_board)
     monkeypatch.setattr(N, "load_realized", fake_real)
@@ -252,9 +246,23 @@ def test_assembly_runs_and_carries_every_evaluated_player(assembled):
 
 def test_the_era_code_resolves_to_the_schedule_team(assembled):
     frame, _, _ = assembled
-    # board LAR, schedule LA — one canon on both sides (amendment 2 item 1)
-    p1 = frame[(frame["player_id"] == "P2")]
+    # board LAR, schedule LA, realized LA — one canon on all sides (amendment 2 item 1). P1's
+    # week-9 bye proves he is on the LA/LAR schedule, not the league-median fallback.
+    p1 = frame[frame["player_id"] == "P1"]
     assert (p1["team_basis"] == "team").all()
+    assert set(p1["team"]) == {"LAR"}
+
+
+def test_max_width_is_the_registered_zero_to_max_interval():
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1 as N
+    train = pd.DataFrame({"season": [2020] * 3, "pos": ["RB"] * 3, "y_full_ppr": [0.0, 50.0, 300.0]})
+    test = pd.DataFrame({"pos": ["RB", "RB"], "y_full_ppr": [0.0, 299.0]})
+    fold = {"season": 2021, "test": test,
+            "pred": {"full_ppr": {"w": (np.array([10.0, 10.0]), np.zeros((2, 19)))}}}
+    N.add_width_degenerates(fold, "w", train, "full_ppr")
+    q = fold["pred"]["full_ppr"]["max_width"][1]
+    assert (q[:, V.Q10_IDX] == 0).all() and (q[:, V.Q90_IDX] == 300.0).all()
+    assert V.coverage80(test["y_full_ppr"], q).all()
 
 
 def test_an_unsigned_never_played_player_gets_the_league_median_schedule(assembled):

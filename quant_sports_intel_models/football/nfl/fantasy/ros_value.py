@@ -261,27 +261,28 @@ def coverage80(y, qgrid) -> np.ndarray:
 
 
 def randomized_pit(y, qgrid, rng: np.random.Generator) -> np.ndarray:
-    """Amendment 1 item 6."""
+    """Amendment 1 item 6 (vectorized; identical arithmetic and draws to the per-row form)."""
     y = np.asarray(y, dtype=float)
-    u = np.empty(len(y))
-    draws = rng.random(len(y))
-    for i in range(len(y)):
-        q = qgrid[i]
-        yi = y[i]
-        lo_i = int(np.searchsorted(q, yi, side="left"))
-        hi_i = int(np.searchsorted(q, yi, side="right"))
-        if hi_i == 0:
-            u[i] = 0.05 * draws[i]
-        elif lo_i == len(q):
-            u[i] = 0.95 + 0.05 * draws[i]
-        elif lo_i < hi_i:                       # an atom: y equals one or more knots
-            a = max(0.0, LEVELS[lo_i] - 0.05)
-            b = LEVELS[hi_i - 1]
-            u[i] = a + (b - a) * draws[i]
-        else:                                   # strictly between q[lo_i-1] and q[lo_i]
-            x0, x1 = q[lo_i - 1], q[lo_i]
-            f0, f1 = LEVELS[lo_i - 1], LEVELS[lo_i]
-            u[i] = f0 + (f1 - f0) * (yi - x0) / (x1 - x0)
+    q = np.asarray(qgrid, dtype=float)
+    n, m = q.shape
+    draws = rng.random(n)
+    lo = (q < y[:, None]).sum(axis=1)          # searchsorted(q, y, "left")
+    hi = (q <= y[:, None]).sum(axis=1)         # searchsorted(q, y, "right")
+    u = np.empty(n)
+    below = hi == 0
+    above = (lo == m) & ~below
+    atom = (lo < hi) & ~below & ~above
+    inner = ~(below | above | atom)
+    u[below] = 0.05 * draws[below]
+    u[above] = 0.95 + 0.05 * draws[above]
+    a = np.maximum(0.0, LEVELS[np.minimum(lo, m - 1)] - 0.05)
+    bb = LEVELS[np.maximum(hi - 1, 0)]
+    u[atom] = a[atom] + (bb[atom] - a[atom]) * draws[atom]
+    i = np.where(inner)[0]
+    li = lo[i]
+    x0, x1 = q[i, li - 1], q[i, li]
+    f0, f1 = LEVELS[li - 1], LEVELS[li]
+    u[i] = f0 + (f1 - f0) * (y[i] - x0) / (x1 - x0)
     return u
 
 
