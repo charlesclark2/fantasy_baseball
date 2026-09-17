@@ -140,8 +140,8 @@
   "unresolved_team_rows": 0
  },
  "meta": {
-  "commit": "214f911e",
-  "generated_at": "2026-09-17T05:37:56+00:00",
+  "commit": "41cbb3e3",
+  "generated_at": "2026-09-17T05:54:29+00:00",
   "interval": "hurdle",
   "prior_sha16": {
    "nf1_5_season_projections_2019.parquet": "e7640a1026b5ac9d",
@@ -555,6 +555,41 @@
       "rows": 703
      }
     ]
+   },
+   "post_smoke_companion_diagnostic": {
+    "label": "POST-SMOKE COMPANION DIAGNOSTIC \u2014 top-tercile atom calibration (gates nothing; not a clause, not in V/PBO/DSR, not in any verdict)",
+    "top_tercile_atom_calibration": {
+     "K": {
+      "difference": 0.013925853613322228,
+      "mean_predicted_p_zero": 0.029389771139095425,
+      "realized_zero_share": 0.015463917525773196,
+      "top_tercile_rows": 388
+     },
+     "QB": {
+      "difference": 0.033038350751545806,
+      "mean_predicted_p_zero": 0.0907306584438535,
+      "realized_zero_share": 0.057692307692307696,
+      "top_tercile_rows": 832
+     },
+     "RB": {
+      "difference": -0.004414890049159265,
+      "mean_predicted_p_zero": 0.0398266829845486,
+      "realized_zero_share": 0.04424157303370786,
+      "top_tercile_rows": 1424
+     },
+     "TE": {
+      "difference": 0.053642282311406206,
+      "mean_predicted_p_zero": 0.09222749131462164,
+      "realized_zero_share": 0.03858520900321544,
+      "top_tercile_rows": 1244
+     },
+     "WR": {
+      "difference": 0.01721800424704241,
+      "mean_predicted_p_zero": 0.06286646841086493,
+      "realized_zero_share": 0.045648464163822525,
+      "top_tercile_rows": 2344
+     }
+    }
    },
    "reference_only_winner_at_location_shift": {
     "arm": "eb_rate_avail",

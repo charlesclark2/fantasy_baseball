@@ -1,6 +1,6 @@
 # NF-ROS1b walk-forward (hurdle interval) — SMOKE (code-path proof, never a gate)
 
-Generated 2026-09-17T05:37:56+00:00 · commit `214f911e` · folds [2020, 2021] · registration `nf_ros1b_preregistration.md` + amendment 1, inheriting `nf_ros1_preregistration.md` + amendments 1–2.
+Generated 2026-09-17T05:54:29+00:00 · commit `41cbb3e3` · folds [2020, 2021] · registration `nf_ros1b_preregistration.md` + amendment 1, inheriting `nf_ros1_preregistration.md` + amendments 1–2.
 
 **Winner (pooled full-PPR CRPS):** `eb_rate_avail` · field PBO None (precondition < 0.2: FAIL) · flips {'eb_rate_avail': 2}
 
@@ -225,6 +225,18 @@ State: **INACTIVE** — only 0 position(s) ship the value
 | WR | location_shift_reference | 0.380 | 0.046 | 0.202 |
 | TE | location_shift_reference | 0.576 | 0.039 | 0.206 |
 | K | location_shift_reference | 0.000 | 0.015 | 0.205 |
+
+The registered §7 prediction (the hurdle's q05 = 0 share falls toward the realized zero share) is kept as written. A q05 = 0 share is not a calibration reading: q05 = 0 exactly when P(zero) ≥ 0.05 (amendment 2).
+
+### POST-SMOKE COMPANION DIAGNOSTIC — top-tercile atom calibration (gates nothing; not a clause, not in V/PBO/DSR, not in any verdict)
+
+| pos | top-tercile rows | mean predicted P(zero) | realized zero share | difference |
+|---|---|---|---|---|
+| QB | 832 | 0.091 | 0.058 | +0.033 |
+| RB | 1424 | 0.040 | 0.044 | -0.004 |
+| WR | 2344 | 0.063 | 0.046 | +0.017 |
+| TE | 1244 | 0.092 | 0.039 | +0.054 |
+| K | 388 | 0.029 | 0.015 | +0.014 |
 
 ### π reliability (10 equal-count bins: predicted → realized)
 

@@ -1,6 +1,6 @@
 # NF-ROS1b parent reproduction (location-shift) — SMOKE (code-path proof, never a gate)
 
-Generated 2026-09-17T05:37:17+00:00 · commit `214f911e` · folds [2020, 2021] · registration `nf_ros1b_preregistration.md` + amendment 1, inheriting `nf_ros1_preregistration.md` + amendments 1–2.
+Generated 2026-09-17T05:54:56+00:00 · commit `41cbb3e3` · folds [2020, 2021] · registration `nf_ros1b_preregistration.md` + amendment 1, inheriting `nf_ros1_preregistration.md` + amendments 1–2.
 
 **Winner (pooled full-PPR CRPS):** `eb_rate_avail` · field PBO None (precondition < 0.2: FAIL) · flips {'eb_rate_avail': 2}
 
