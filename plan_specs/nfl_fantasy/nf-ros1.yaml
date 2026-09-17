@@ -10,7 +10,7 @@ metadata:
   name: nf-ros1
   vertical: nfl_fantasy
   card: https://trello.com/c/PMVQXY99
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Produce a rest-of-season fantasy value per player that honestly
