@@ -1,0 +1,65 @@
+{
+ "meta": {
+  "commit": "8fca7a81",
+  "generated_at": "2026-09-18T01:34:16+00:00",
+  "prior_sha16": {
+   "nf1_5_season_projections_2019.parquet": "e7640a1026b5ac9d",
+   "nf1_5_season_projections_2020.parquet": "c0a7aa5d3d8277ce",
+   "nf1_5_season_projections_2021.parquet": "a6645484fd204937",
+   "nf1_5_season_projections_2022.parquet": "b76490e08c123f5a",
+   "nf1_5_season_projections_2023.parquet": "abebdff5be7e9bbc",
+   "nf1_5_season_projections_2024.parquet": "3aa7150e245a54af",
+   "nf1_5_season_projections_2025.parquet": "3580273de0469b1d",
+   "nfl_fantasy_kdst_projections_2019.parquet": "8c5955a8eb134254",
+   "nfl_fantasy_kdst_projections_2020.parquet": "ab4513d2cafc5692",
+   "nfl_fantasy_kdst_projections_2021.parquet": "83a11dc70dfa2527",
+   "nfl_fantasy_kdst_projections_2022.parquet": "317bc59367da943f",
+   "nfl_fantasy_kdst_projections_2023.parquet": "f0593e8c851e70dc",
+   "nfl_fantasy_kdst_projections_2024.parquet": "5efac9750e2901a9",
+   "nfl_fantasy_kdst_projections_2025.parquet": "509633c49b466bce"
+  },
+  "rows": 65916,
+  "story": "NF-ROS1b"
+ },
+ "result": {
+  "bar": 0.05,
+  "decision": "STOP_TO_PM",
+  "rb_rookie": {
+   "coverage80": 0.7636612021857924,
+   "decile_shares": [
+    0.09016393442622951,
+    0.07855191256830601,
+    0.06967213114754098,
+    0.07718579234972678,
+    0.09153005464480875,
+    0.1051912568306011,
+    0.07923497267759563,
+    0.0976775956284153,
+    0.12978142076502733,
+    0.18101092896174864
+   ],
+   "pit_max_decile_dev": 0.08101092896174864,
+   "player_seasons": 122,
+   "rows": 1464
+  },
+  "rb_veteran_context_only": {
+   "coverage80": 0.8704179513532031,
+   "decile_shares": [
+    0.10371702637889688,
+    0.10037684138403563,
+    0.10286056868790681,
+    0.10585817060637205,
+    0.10294621445700583,
+    0.10354573484069887,
+    0.10277492291880781,
+    0.09635149023638233,
+    0.09361082562521411,
+    0.08795820486467969
+   ],
+   "pit_max_decile_dev": 0.012041795135320318,
+   "player_seasons": 973,
+   "rows": 11676
+  },
+  "winner": "eb_rate_avail"
+ }
+}
