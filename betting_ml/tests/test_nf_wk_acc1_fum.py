@@ -39,9 +39,18 @@ _CFG = {"scoring": _SCORING}
 
 
 def _row(**over):
-    """One realized line: 100 rushing yards, two fumbles, one of them lost on a rush."""
+    """One realized line: 100 rushing yards, two fumbles, one of them lost on a rush.
+
+    ⚠️ `fumbles_lost_total` IS THE COLUMN THE TERM READS, and it is what a real weekly line carries
+    alongside the per-phase breakdown. NF-WK-ACC1 ruling ① (2026-09-18) moved `fumbles_lost` from the
+    three per-phase columns onto the total; the per-phase columns stay on the row because the artifact
+    still carries them as declared diagnostics (`REALIZED_DIAGNOSTIC_COLUMNS`), which is exactly the
+    shape a lake row has. A fixture carrying only the per-phase columns would resolve the term
+    CAPTURED and score zero — which is how this suite caught the ruling, correctly.
+    """
     row = {"player_display_name": "Real Player", "position": "RB", "team": "ATL",
-           "rushing_yards": 100, "fumbles_total": 2, "rushing_fumbles_lost": 1}
+           "rushing_yards": 100, "fumbles_total": 2,
+           "fumbles_lost_total": 1, "rushing_fumbles_lost": 1}
     row.update(over)
     return row
 
@@ -81,9 +90,15 @@ def test_the_any_fumble_rule_is_applied_and_charged_from_the_total_fumble_column
 
 
 def test_the_two_fumble_terms_read_different_columns_and_cannot_collapse_into_one():
-    """`fum` counts EVERY fumble; `fumbles_lost` counts the per-phase lost ones. A row that fumbled
-    twice and lost neither must still be charged the any-fumble rule and nothing else."""
-    scored = _score([_row(fumbles_total=2, rushing_fumbles_lost=0)])
+    """`fum` counts EVERY fumble; `fumbles_lost` counts the ones actually lost. A row that fumbled
+    twice and lost neither must still be charged the any-fumble rule and nothing else.
+
+    ⚠️ BOTH lost-fumble columns are zeroed deliberately. Zeroing only the per-phase one would leave
+    `fumbles_lost_total` at 1 and change the arithmetic; zeroing only the total would make the clause
+    pass while the row still claims a lost fumble in its breakdown. The point is a row that lost
+    nothing, stated consistently.
+    """
+    scored = _score([_row(fumbles_total=2, fumbles_lost_total=0, rushing_fumbles_lost=0)])
     assert scored["teams"][0]["seats"][0]["points"] == pytest.approx(8.0)
     assert realized_stat_fields.REALIZED_STAT_SOURCE["fum"] == ("fumbles_total",)
     assert "fumbles_total" not in realized_stat_fields.REALIZED_STAT_SOURCE["fumbles_lost"]

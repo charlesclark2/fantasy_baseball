@@ -122,6 +122,10 @@ def required_columns() -> tuple[str, ...]:
         | set(R.REALIZED_KEY_COLUMNS)
         | {R.REALIZED_PPR_COLUMN}
         | set(W.EXPLANATION_COLUMNS)
+        # Carried for diagnosis rather than scoring, and load-bearing for the publish path — see
+        # `realized_stat_fields.REALIZED_DIAGNOSTIC_COLUMNS` for why dropping them would silently
+        # strand the ruling-① map change on every already-published week.
+        | set(R.REALIZED_DIAGNOSTIC_COLUMNS)
     ))
 
 

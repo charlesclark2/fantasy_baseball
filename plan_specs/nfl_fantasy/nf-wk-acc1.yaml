@@ -10,7 +10,7 @@ metadata:
   name: nf-wk-acc1
   vertical: nfl_fantasy
   card: https://trello.com/c/1KQeqWC0   # + fXIYuvMN; both pulled into this story
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     The recap surface (NF-WK-RC1) serves the league's platformTotal
@@ -131,7 +131,19 @@ spec:
       - id: 5-closeout
         desc: "Agreement tables before/after + the D/ST seat-flip evidence (if reached) + WVR1 unlock state into closeout.followUps."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED. The recap's disclosed gap was closed term by term, each closure
+      verified on the Sleeper cross-check harness through the production path.
+      Team totals agreeing, the operator's league, 2025 weeks 1-4: 14/48 at RC1's
+      baseline -> 47/48. Player seats diverging: 61 -> 1. D/ST constructions
+      agreeing: 35/48 -> 48/48. The single remaining divergence is ruling ②'s Trey
+      Benson row, which the pre-declared gate refused to fix on measured evidence
+      and which is recorded-not-decided. The term inventory is COMPLETE: every one
+      of the 48 team-weeks either agrees or is one named mechanism.
+      ⛔ THE D/ST SEAT DID NOT MOVE and nothing was flipped: the served seat still
+      carries the league's own published figure (D2 disposition C), and the flip is
+      gated on ruling ③'s pre-registered forward trigger, restated verbatim in ⑬
+      below. NF-WVR1's free-agent defence fact columns therefore remain LOCKED.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
@@ -538,3 +550,203 @@ spec:
       the vacuous-guard family with a skip in place of a passing assertion. Left for
       NF-INFRA2's owner; flagged because a monitor whose test cannot run in CI is a
       monitor nobody is watching (E11.30's shape, at the test layer).
+
+
+      ── ⑬ (2026-09-18) CLOSEOUT. The PM ruled ① option A, ② option A gated on a
+      pre-declared verification, and the story CLOSED.
+
+      ═══ THE FINAL AGREEMENT TABLE, all stages, one instrument ═══
+      Every row is `run_nf_wk_acc1_crosscheck` over Sleeper league
+      1268257036043292672, season 2025, weeks 1-4, driving the SAME functions the
+      recap route and the divergence recorder call. Nothing here is a re-derivation.
+
+        stage                          team totals   player seats   D/ST
+        ───────────────────────────── ───────────── ────────────── ────────
+        RC1 baseline                      14/48        61 diverging  35/48
+        part 1 — `fum` applied            27/48        24 diverging  35/48
+        part 2 — pbp D/ST construction   27/48        24 diverging  48/48
+        part 3 — 40+ yd TD bonuses       42/48         2 diverging  48/48
+        part 3 — name+team join          46/48         2 diverging  48/48
+        ruling ① — fumbles_lost_total    47/48         1 diverging  48/48
+
+      Weeks 1, 2 and 3 are now 12/12 and carry NO disclosure at all. Part 2's D/ST
+      figure is 154/155 on 2025 weeks 5-17 as well; team totals stayed flat across
+      part 2 BY CONSTRUCTION, because the served D/ST seat carries the league's own
+      number and the construction cannot move a team total until the seat flips.
+
+      ═══ RULING ① — SHIPPED (option A) ═══
+      `fumbles_lost` reads `fumbles_lost_total`. Measured on DJ Moore's real 2025
+      wk1 line under the league's real settings: 8.40 -> 7.40 against the league's
+      published 7.40, the gap being exactly the one `fumbles_lost` weight.
+      THE AMENDED REFUSAL says the four things the ruling required, and is in
+      `realized_stat_fields`'s header rather than paraphrased here:
+        * WHAT THE OLD REFUSAL CLAIMED — kept VERBATIM, including its closing "⛔ Do
+          not 'tidy' this back to the total: it is shorter, it reads more natural,
+          and it is wrong", so a reader can see exactly what was overturned.
+        * WHICH HALF DIED, AND WHY — the nflverse-PPR-parity half. THERE IS NO LIVE
+          PARITY GUARD: `REALIZED_PPR_COLUMN` is nflverse's own
+          `fantasy_points_ppr`, carried through VERBATIM and never recomputed, so no
+          number this system serves depends on which column `fumbles_lost` reads.
+          The 1,116-of-1,118 figure the old comment cited was a one-off in-session
+          probe, not a clause any suite runs — a refusal resting on a guard that
+          does not exist.
+        * WHICH HALF IS SUPERSEDED, AND BY WHAT — the projected/realized symmetry
+          half is REAL and is superseded by part 1's option D, which established
+          that a realized-only term with no projection twin is a legitimate shape.
+          On the recap surface this scorer's registered job is to explain the
+          LEAGUE'S number, and Sleeper charges on the total.
+        * THE MEASURED COST THAT FORCED IT — 36 rows over 2025 REG (249 vs 213), 28
+          at startable offensive positions (WR 22, RB 4, QB 2); 2 rows in 2026 wk1;
+          1 of 48 team-weeks.
+        * AND WHAT IS STILL TRUE, so the pendulum does not swing back: the two
+          columns genuinely mean different things, and a consumer pairing this term
+          against the PROJECTED twin is still pairing two different quantities.
+      ⛔ THE THREE PER-PHASE COLUMNS STAY IN THE ARTIFACT as declared
+      `REALIZED_DIAGNOSTIC_COLUMNS`. They are no longer a scoring source, but a
+      column LEAVING the artifact shrinks the column set, and a shrink classifies as
+      a vendor `restate` — so every already-published week would keep serving its
+      old rows and the ruling would never reach a reader. They are also the evidence
+      for the distinction the ruling turned on (`fumbles_lost_total` minus their sum
+      IS "lost outside the three offensive phases").
+
+      ═══ RULING ② — THE GATE SAID CONTRADICTED; REVERTED TO OPTION C ═══
+      The gate was committed WITH ITS BAR SET AND NO RESULT (commit c4c69d42) before
+      it was run, so the pass/fail rule is provably prior to the answer. It then
+      returned CONTRADICTED on ALL 19 rows, and the map is UNTOUCHED.
+      WHY: Sleeper has TWO stat namespaces and our importer maps the one that appears
+      in LEAGUE SETTINGS.
+        team-defence : `sack` / `ff` / `fum_rec`  -> credited ONLY to `DEF` and
+                       `TEAM_*` entries, never to any individual of any position.
+                       These are the keys a league's `def_*` weights reference.
+        individual   : `idp_sack` / `idp_ff` / `idp_fum_rec` / `st_ff` / `st_fum_rec`
+                       -> what an individual player is credited with.
+      Sleeper credits every one of the 19 offensively-listed rows under the SECOND
+      namespace — Trey Benson wk4 carries `idp_fum_rec` 1.0, Jalen Hurts wk14
+      `idp_fum_rec`, Devontez Walker wk16 both `idp_ff` and `idp_sack`. ⇒ the rule is
+      NAMESPACE, not position. Position-scoping would have given the right answer for
+      the WRONG REASON on these rows and the WRONG answer for a league paying
+      `idp_*`. Per the ruling that is a study, not a guess, so nothing moved.
+      ⭐ THE REAL DEFECT THE GATE EXPOSED, and it is bigger than the row that
+      started it: our seven `def_*` terms ARE Sleeper's team-defence weights, and
+      they sit in the PLAYER-grain realized map. So a league's team-defence weight is
+      applied at player grain to anyone whose weekly line happens to carry the
+      counter — while the D/ST construction applies it correctly at team grain. And
+      the importer maps NO `idp_*` key at all, so an IDP league's IDP terms are
+      silently unscored. That is the study the PM asked for; ⛔ it is NOT the
+      position scope, and a session reading only "Trey Benson is still 1.00 out"
+      must not reach for one. A guard pins the non-change.
+      ⚠️ THE FIRST RUN OF THAT GATE WAS VACUOUS and is recorded as such rather than
+      quietly corrected. It read the team-defence keys, which NO individual player of
+      ANY position ever carries, so it could not have failed and returned PASS on
+      nothing — in a file whose own header warned about exactly that mechanism. The
+      RULE the PM pre-declared is unchanged; only which column the gate reads moved.
+      A vacuity control now refuses to report a sweep of zeros as a PASS unless every
+      individual key demonstrably reaches someone (measured: `idp_sack` 634,
+      `idp_ff` 202, `idp_fum_rec` 118, `st_ff` 42, `st_fum_rec` 16). ⚠️ That
+      control's OWN first cut was also wrong — a dict comprehension looping weeks
+      into a key-keyed dict kept only the last week and called two live keys dead. It
+      failed in the SAFE direction, which is the only reason it was harmless.
+
+      ═══ NF-WVR1's D/ST FACT COLUMNS — STILL LOCKED, VERIFIED NOT ASSUMED ═══
+      `waiver_facts.FACT_POSITIONS` is `{QB, RB, WR, TE, K}`; DST is absent and a
+      defence's cell carries `team_grain_not_covered`, whose documented unlock is
+      "when card fXIYuvMN validates our own team-defence construction". That
+      validation is ruling ③'s trigger, which has not run. ⇒ the columns remain
+      LOCKED and this story did not unlock them. Part 2 makes the unlock REACHABLE
+      (the construction now reproduces 48/48 and 154/155 on 2025) but reachable is
+      not certified, and the two must not be confused.
+
+      ═══ RULING ③'s FROZEN CRITERION — QUOTED VERBATIM, per the PM, so the
+      tracking item never paraphrases it ═══
+      "③ = the flip is GATED on a pre-registered forward trigger, declared now.
+      Freeze the construction rules as of the ruling — no further refinement against
+      2025 — then score each completed 2026 week through the frozen rules. After
+      three completed 2026 weeks (weeks 2-4, ~09-23 / 09-30 / 10-07) bring the clean
+      out-of-sample tally. Flip standard: 100% agreement on all started defences; a
+      miss is disqualifying unless it is a documented both-directions vendor
+      disagreement of the forced-fumble class. If it clears, the seat flips and
+      NF-WVR1's free-agent defence fact columns unlock in the same ruling (one
+      certification)."
+      STATE AGAINST IT: the rules are FROZEN in
+      `quant_sports_intel_models/football/nfl/fantasy/realized_dst_pbp.py`, whose
+      header is the freeze and carries the ⛔ that no rule may change to close a 2025
+      disagreement. 2026 week 1 is NOT part of the tally — it was already in hand
+      when the rules were frozen, so it is wiring confirmation, not held-out
+      evidence. ⚠️ Week 1 nevertheless behaved: through the live recorder the PHI
+      defence, previously 2 against the league's 4 and unexplained, now AGREES (the
+      blocked-kick class), and DEN was the only remaining divergence, correctly
+      tagged `scheduleResultPending` on a Monday-night game. The tally starts at
+      week 2 and the PM owns it and the flip decision.
+
+      ═══ OPERATOR STEPS ═══
+      (1) `./infrastructure/lambda/deploy.sh` after this merges to `main` — the
+      recap scorer needs the ruling-① mapping, part 3's three map terms and the join
+      fallback. Without it the bonuses score zero, two-way players stay unmatched and
+      a lateral-class lost fumble is still uncharged.
+      (2) Re-publish the 2026 weeks. ⚠️ EVERY ALREADY-PUBLISHED WEEK IS NOW
+      `columns_behind` FOR THE SEASON ARTIFACT until it is, because the column
+      contract widened (`fumbles_lost_total`, plus part 3's three `pbp_*` columns) —
+      pinned by its own clause in `test_nf_wk_rc1_contract.py` on the UNTOUCHED
+      capture. The weekly re-publish is the new `widen_columns` action: expect that
+      word in the box log with `addedColumns` naming the four. ⛔ If it says
+      `restate` instead, the widen was refused because something the vendor
+      publishes also moved, and that needs a human by design.
+
+      ═══ FINDINGS, NOT OURS ═══
+      * `frontend/lib/league-scoring.ts::matchRosterToBoard` has NO production
+        caller — server-side scoring (NF-EPIC1) moved the join to the Lambda and the
+        TS copy now backs only the e2e mock. Kept in step with part 3 anyway, because
+        a copy that silently diverges is the many-owners shape; whether it should
+        still exist is that story's question.
+      * `test_nf_infra2_board_publish_sla`'s real-op clause is RED on `dev`, verified
+        on a clean detached control worktree at 96fdaaae. It skips wherever
+        `dbt/target/manifest.json` is absent, so it is GREEN BY ABSENCE in CI and red
+        wherever it can execute — the vacuous-guard family with a skip in place of a
+        passing assertion. Received and recorded on the hygiene bundle by the PM.
+
+      ═══ ⑭ POST-CLOSEOUT (2026-09-18): RULING ① IS A DELIBERATE DEPARTURE FROM
+      nflverse, MEASURED — AND IT PUT TWO FIXTURE SUITES BEHIND THE CONTRACT ═══
+      Found by PR #1190's CI going RED on the `core` shard AFTER the closeout was
+      written. Two families, one cause, and one of them is a real finding rather
+      than a fixture chore.
+      (a) WHICH AUTHORITY nflverse ACTUALLY BACKS, now measured instead of assumed.
+      ⑥ above recorded the per-phase reading as chosen "for nflverse-PPR parity
+      (two authorities disagree)" without saying which side nflverse takes. Over
+      2025 REG (18,539 rows) the two readings differ on 36 rows and nflverse's own
+      `fantasy_points_ppr` charges the PER-PHASE reading on EVERY ONE of them,
+      while Sleeper charges the total. So ruling ① is a deliberate, measured
+      departure from nflverse in favour of the league whose number the recap
+      exists to explain — which is exactly what the ruling instructed, and is
+      strictly more than "the parity argument is dead". It is dead only because
+      `REALIZED_PPR_COLUMN` is CARRIED VERBATIM: the moment anything recomputes a
+      PPR total from these columns rather than copying the source's, it will
+      diverge from nflverse's published figure on those 36 rows. Recorded in the
+      map header's "what is still true" clause and pinned by
+      `test_nf_wvr1_fact_columns.py::test_a_return_fumble_is_where_our_scorer_and_
+      nflverses_own_ppr_part_company`, which injects a return fumble (total 1,
+      per-phase 0) and requires the season facts to move by exactly one
+      lost-fumble weight. ⚠️ That clause had to be built deliberately: the
+      committed capture predates `fumbles_lost_total`, so the adapted fixture
+      fills it from the per-phase sum and the two readings agree BY CONSTRUCTION
+      on every real row — the WVR1 PPR identity therefore proves nothing about
+      this ruling, and its docstring now says so.
+      (b) THE CONTRACT WIDENING REACHED TWO SUITES AT ONCE, and only one was
+      adapted. `test_nf_wk_rc1_contract.py` was fixed in-session; `test_nf_wvr1_
+      fact_columns.py` builds a season from the SAME committed capture and was
+      not, so all 12 of its season-derived clauses failed with empty facts
+      (StopIteration / "0 > 300") — one `columns_behind` gap presenting as a
+      dozen unrelated join and ordering failures. `test_nf_wk_acc1_fum.py`'s
+      hand-built row carried only the per-phase column, so after ruling ① the
+      term read CAPTURED and scored 0 (8.40-shaped arithmetic in miniature).
+      ⇒ The adaptation now has ONE owner, `betting_ml/tests/_realized_capture.py`,
+      imported by both suites — a copy per file is a second owner of one rule and
+      the next widening would fix one and leave the other asserting an old
+      contract (the repo's INC-30/36/38 shape, on a test helper).
+      ⭐ THE PROCESS LESSON, which is the transferable part: the change was to a
+      SHARED instrument (`realized_stat_fields.py`) and the session ran the
+      `football` shard — the shard of the files it touched. Every guard that broke
+      lives in `core`. `uv run python scripts/ci_shards.py --shard core` is the
+      catch-all that most cross-cutting guards land in; after editing a shared
+      map/instrument, run the shard that OWNS its guards, not the shard of the
+      edit. (CLAUDE.md already carries this rule from NF-INJ3b-M; this is its
+      second instance and the first where it cost a red PR.)
