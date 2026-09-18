@@ -1086,3 +1086,23 @@ spec:
       📌 ⑮/㉘ FORWARD, from the ratification: ACC1's D/ST flip is gated on a pre-registered
       three-week 2026 out-of-sample trigger (~2026-10-08) and WVR1's defence-facts unlock rides that
       SAME certification — one ruling, both surfaces. Nothing to do here until it fires.
+
+      ㊴ ✅ POST-DEPLOY VERIFICATION OF THE TRIAGE, 2026-09-18 (operator, real 10-team Sleeper league,
+      `main` + `deploy.sh` both landed). ⭐ THE READING THAT MATTERED IS THE TWO-SIDED ONE: ⑰ added a
+      NEW REFUSAL PATH to a live endpoint, so the risk being measured was not "does it catch an alias"
+      (RED-proven) but "does it now withhold a HEALTHY league's list". It does not —
+      `refusals []` · `pool served True` · `alias_suspects []` · `off_board []` · **`matched 147`**,
+      which reproduces the ⑫ runtime gate's 147 EXACTLY (136 players + 11 D/ST), so the detector is
+      running on the same population and staying silent on it. CloudWatch `"alias detector refused"`:
+      no events in the window — silence is the expected result for a healthy league, and the log line
+      exists only for the refusing path. Anon request still 401 at the gateway (NF3.2 unchanged).
+      ㉟ and ㊱ confirmed by eye on the deployed surface: the thinnest-slot sentence no longer names an
+      IR player, and the grouped "Scoring we don't include yet" expansion renders and names its terms.
+      ⚠️ ONE INSTRUMENT IN THAT CHECK WAS MINE AND WAS WRONG: a `performance.getEntriesByType
+      ("resource")` console probe reported "no waiver-pool request yet" on a load where the panel had
+      demonstrably rendered from a live response. A resource-timing read is NOT a request detector (the
+      buffer and the frame it runs in both decide what it can see), and — the point — its negative is
+      UNINFORMATIVE in both directions: it cannot distinguish "the request did not fire" from "my probe
+      cannot see it". The authed payload read is what settled it. A probe whose failure state is
+      indistinguishable from the thing it is looking for is the G100-D1 class, and it should never have
+      been offered beside a definitive check.
