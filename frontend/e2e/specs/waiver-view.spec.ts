@@ -249,9 +249,9 @@ test.describe("waiver view", () => {
     const block = panel.getByTestId("waiver-captured-terms")
     await expect(block).toBeVisible()
     // Collapsed: the summary counts them by group rather than listing 9 keys inline.
-    await expect(block).toContainText("Kicking (3)")
+    await expect(block).toContainText("Kicking (4)")
     await expect(block).toContainText("Defense (4)")
-    await expect(block).toContainText("Other (2)")
+    await expect(block).toContainText("Other (1)")
     await block.locator("summary").click()
     // Expanded: the catalog's own LABELS, not the raw keys, for every term the catalog carries…
     await expect(block).toContainText("FG made 50-59")

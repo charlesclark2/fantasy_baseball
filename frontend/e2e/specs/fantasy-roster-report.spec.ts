@@ -722,8 +722,48 @@ test.describe("injured reserve is not bench depth", () => {
     return m ? m[1].trim() : null
   }
 
+  /**
+   * ⚠️ THE SHARED `drafted` FIXTURE CANNOT EXERCISE THIS AS-IS, and the non-vacuity assertion below
+   * is what said so rather than a guess — twice, each time naming a different structural reason:
+   *   1. its roster carries ONE kicker and ONE defence, so those slots have no eligible bench body,
+   *      their drop is the WHOLE slot, and `worstCover` lands on one of them saying "nobody eligible";
+   *   2. that league is SUPERFLEX with TWO starting TEs (by design — the second QB is the superflex
+   *      filler), so BOTH QBs and BOTH TEs start and the bench holds no QB or TE either. QB is then
+   *      the thinnest slot and is structurally uncoverable.
+   * A test asserting on a named cover would have failed for those reasons and been "fixed" by
+   * weakening the assertion until it asserted nothing.
+   *
+   * So both cases add ONE spare at every starting position, taken from the board the payload actually
+   * serves (never invented, or the row would be an honest miss for an unrelated reason). Every slot
+   * then has cover, and `worstCover` names a real bench player.
+   */
+  function deepenBench(extra?: (path: string, body: any) => any) {
+    return (path: string, body: any) => {
+      if (!path.startsWith("/fantasy/nfl/league-board")) return extra ? extra(path, body) : body
+      const rostered = new Set((body.roster ?? []).map((r: any) => String(r?.board?.id ?? "")))
+      for (const pos of ["QB", "RB", "WR", "TE", "K", "DST"]) {
+        const backup = (body.board?.players ?? []).find(
+          (p: any) => p?.pos === pos && !rostered.has(String(p.id)) && p.pts != null && p.vor != null,
+        )
+        if (backup) {
+          body.roster.push({
+            roster: {
+              player_key: `e2e-backup-${backup.id}`,
+              name: backup.name,
+              position: pos,
+              team: backup.team,
+              starter: false,
+            },
+            board: backup,
+          })
+        }
+      }
+      return extra ? extra(path, body) : body
+    }
+  }
+
   test("a healthy bench player IS named as cover", async ({ page }) => {
-    const { errors } = await openReport(page)
+    const { errors } = await openReport(page, { transform: deepenBench() })
     const name = await coverName(page)
     expect(
       name,
@@ -733,7 +773,7 @@ test.describe("injured reserve is not bench depth", () => {
   })
 
   test("the same player on IR is NOT named as cover", async ({ page }) => {
-    const { errors } = await openReport(page)
+    const { errors } = await openReport(page, { transform: deepenBench() })
     const healthy = await coverName(page)
     expect(healthy).toBeTruthy()
 
@@ -741,13 +781,12 @@ test.describe("injured reserve is not bench depth", () => {
     // board, the lineup, the roster — is byte-identical, so the sentence can only move for this one
     // reason.
     const { errors: errors2 } = await openReport(page, {
-      transform: (path: string, body: any) => {
-        if (!path.startsWith("/fantasy/nfl/league-board")) return body
+      transform: deepenBench((path: string, body: any) => {
         for (const row of body.roster ?? []) {
           if (String(row?.board?.name ?? "") === healthy) row.roster.slot = "ir"
         }
         return body
-      },
+      }),
     })
     const withIr = await coverName(page)
     expect(withIr, "an injured-reserve player was still offered as bench cover").not.toBe(healthy)
