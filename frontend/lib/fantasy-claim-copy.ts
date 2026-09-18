@@ -34,6 +34,8 @@
 // runs the export's `_CLAIM_DENYLIST` plus the governance gate over them, so the screening covers
 // the frontend copy and not only the generated copy.
 
+import { SCORING_CATALOG } from "@/lib/league-config"
+
 /** The acquisition wedge, in the order it should be read. What the product IS — no comparison to
  *  anyone, no measured figure, nothing to reconcile against a scorecard.
  *
@@ -1653,7 +1655,30 @@ export const WAIVER_REFUSAL_TEXT: Record<string, string> = {
     "We are missing at least one team's roster in this league, so a list of available players would include some who are already taken. Re-import the league to fix it.",
   pool_over_cap:
     "This league's available-player list is larger than we can show in one view, so we are not showing a partial one.",
+  // ⑰ The alias detector. Names the pair when we have it (`waiverAliasNote`), because "a name
+  // didn't match" with no name in it sends the reader nowhere.
+  rostered_alias_unmatched:
+    "One of your league's rostered players is spelled differently on our board, so the list would have offered a player who is already taken. We are withholding it until the match is fixed.",
 }
+/** The ⑰ alias pair(s), named. Returns null when the payload carries none — an older backend, or
+ *  any other refusal — so the generic sentence above stands alone rather than printing an empty
+ *  "we found: ." (the NF-C0 `?? []` rule: a missing key degrades to silence, never to a blank claim). */
+export function waiverAliasNote(
+  suspects: readonly { rostered: { name?: string | null }; board: readonly { name?: string | null }[] }[]
+    | null
+    | undefined,
+): string | null {
+  const pairs = (suspects ?? [])
+    .map((s) => {
+      const theirs = String(s.rostered?.name ?? "").trim()
+      const ours = (s.board ?? []).map((b) => String(b?.name ?? "").trim()).filter(Boolean)
+      return theirs && ours.length ? `your "${theirs}" and our "${ours.join('" / "')}"` : ""
+    })
+    .filter(Boolean)
+  if (!pairs.length) return null
+  return `The names that did not line up: ${pairs.join("; ")}.`
+}
+
 export const WAIVER_REFUSAL_FALLBACK =
   "We can't list available players for this league right now, because the list could include players who are already taken."
 
@@ -1692,6 +1717,69 @@ export function waiverCoverageNote(weeks: readonly number[]): string | null {
   const span = weeks.length === 1 ? `week ${weeks[0]}` : `weeks ${weeks[0]}–${weeks[weeks.length - 1]}`
   return `Points cover ${span} of this season.`
 }
+
+/** ⭐ ㉜ = (b), PM RULING 2026-09-18 — NAME THE TERMS, GROUPED.
+ *
+ * The generic sentence alone was the weaker honesty once naming was available, and the gap CANNOT be
+ * quantified: a `captured` term is by definition one with no realized source, so there is no value to
+ * sum and "you are missing about N points" does not exist at any effort. A list is the maximum
+ * disclosure there is — but a wall of 18 raw keys is not disclosure either, so they are grouped and
+ * the group names its own terms on expansion.
+ *
+ * Labels and groups come from `SCORING_CATALOG`, the editor's own catalog, so a term renders here
+ * under the SAME name the user set it under. A key the catalog does not carry (a platform-specific
+ * fine key) is never dropped — it lands in "Other" under its raw key, because a silently shortened
+ * list is the defect this whole entry exists to avoid. */
+export interface WaiverCapturedGroup {
+  group: string
+  terms: string[]
+}
+
+/** ⚠️ READ OFF THE CATALOG'S REAL GROUP VALUES, WHICH ARE EDITOR SECTIONS, NOT THESE THREE BUCKETS:
+ *  the defensive terms live under `defense` AND `dst_points_allowed` AND `dst_yards_allowed` (the
+ *  editor renders the two points/yards tables as their own sections). A map written from the three
+ *  bucket names alone would have filed 18 of the 20 defensive terms under "Other" — measured
+ *  against `league-config.ts`, not assumed. */
+const _CAPTURED_GROUP_LABEL: Record<string, string> = {
+  kicking: "Kicking",
+  defense: "Defense",
+  dst_points_allowed: "Defense",
+  dst_yards_allowed: "Defense",
+}
+const _CAPTURED_GROUP_ORDER = ["Kicking", "Defense", "Other"]
+
+/** A key the catalog does not carry at all — a platform-specific spelling. Grouped by its prefix so
+ *  a genuinely-kicking term is not filed under "Other"; it keeps its RAW key as its label, because a
+ *  humanised guess could misname a term the user set and a raw key cannot. */
+function _capturedFallbackGroup(key: string): string {
+  if (/^(fg|pat)_/.test(key) || key.startsWith("fgm")) return "Kicking"
+  if (/^(def|dst|st)_/.test(key)) return "Defense"
+  return "Other"
+}
+
+export function waiverCapturedGroups(keys: readonly string[] | null | undefined): WaiverCapturedGroup[] {
+  const byGroup = new Map<string, string[]>()
+  for (const key of keys ?? []) {
+    const term = SCORING_CATALOG.find((t) => t.key === key)
+    const group = term ? (_CAPTURED_GROUP_LABEL[term.group] ?? "Other") : _capturedFallbackGroup(key)
+    const label = term?.label ?? key
+    const list = byGroup.get(group) ?? []
+    list.push(label)
+    byGroup.set(group, list)
+  }
+  return _CAPTURED_GROUP_ORDER.filter((g) => byGroup.has(g)).map((g) => ({
+    group: g,
+    terms: (byGroup.get(g) ?? []).slice().sort((a, b) => a.localeCompare(b)),
+  }))
+}
+
+/** The one-line summary on the expansion's own control: "Kicking (8), Defense (9)". */
+export function waiverCapturedSummary(groups: readonly WaiverCapturedGroup[]): string {
+  return groups.map((g) => `${g.group} (${g.terms.length})`).join(", ")
+}
+
+/** The expansion's own control. Says what the list IS, so the summary is not a bare count. */
+export const WAIVER_CAPTURED_SUMMARY_LABEL = "Scoring we don't include yet:"
 
 export const WAIVER_CAPTURED_NOTE =
   "Your league also scores some things these totals don't include yet, so a player's figure here can differ from your league's page."

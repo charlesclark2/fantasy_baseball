@@ -88,6 +88,10 @@ export interface ReportPlayer {
   g: number | null
   /** The lineup slot this player fills, or null when they are on the bench. */
   slot: string | null
+  /** ⑰/㉖ — the PLATFORM's roster slot says this player is on IR or the taxi squad, so they are not
+   *  available to step into a starting slot this week. ⚠️ DISTINCT FROM `slot` ABOVE, which is the
+   *  lineup slot THIS report assigns; conflating them is the whole bug this field exists to fix. */
+  reserved: boolean
 }
 
 /** What the join could and could not see — rendered, never swallowed. */
@@ -523,6 +527,12 @@ export function fragility(lineup: Lineup, bench: ReportPlayer[], board: Player[]
     let best: ReportPlayer | null = null
     let bestRate = 0
     for (const b of bench) {
+      // ⭐ ㉖ (PM ruling 2026-09-18) — AN IR/TAXI PLAYER IS NOT BENCH DEPTH. `worstCover` answers
+      // "if this starter is out, who steps in?", and a player the platform has on injured reserve
+      // cannot. Naming one here told a manager a thin slot was covered by somebody unavailable —
+      // the same wrongness #1172 fixed in the need annotation, one surface over. The rest of the
+      // report is deliberately unchanged (see the record's ㉖ note for its two siblings).
+      if (b.reserved) continue
       if (!slot.eligible.includes(b.pos)) continue
       const r = perGameRate(b)
       if (r == null) continue
@@ -748,6 +758,9 @@ export function toReportPlayers(rows: RosterMatchRow[]): {
       vor: b.vor,
       g: b.g ?? null,
       slot: null,
+      // `?? false` per NF-C0: a league saved before `slot` existed carries none, and the honest
+      // fallback is "not reserved" — the pre-㉖ reading, never a silent exclusion.
+      reserved: row.roster?.slot === "ir" || row.roster?.slot === "taxi",
     })
   }
   return { players, unmatched }

@@ -51,12 +51,15 @@ BREAKS = [
         None,
     ),
     (
+        # ⚠️ RE-ANCHORED, not deleted (MH2.7): ⑰ moved the key-building into `_rostered_entries` so
+        # the subtraction and its own detector cannot read the roster two different ways. The
+        # PROPERTY under test is unchanged — the join is on NAME, never an id.
         "the pool subtraction joins on ID instead of name",
         POOL,
-        '            keys.add(league_scoring._join_key(name, p.get("position"), p.get("team")))',
-        '            keys.add(str(p.get("player_key") or ""))',
+        '                "key": league_scoring._join_key(name, p.get("position"), p.get("team")),',
+        '                "key": str(p.get("player_key") or ""),',
         "test_the_subtraction_joins_on_name_not_id_so_a_synthetic_id_row_still_subtracts",
-        "keys.add(league_scoring._join_key(",
+        '"key": league_scoring._join_key(',
     ),
     (
         "an un-refreshable platform WITHHOLDS the pool instead of caveating it",
@@ -219,6 +222,42 @@ BREAKS = [
         "                    for e in []",
         F("test_an_excluded_week_is_carried_as_a_stated_gap"),
         'r_manifest.get("excluded")',
+    ),
+
+    # ── ⑰ THE ALIAS DETECTOR (PM ruling 2026-09-18) ───────────────────────────────────────────────
+    # The ruling asked for a planted alias divergence specifically. Three breaks, because the
+    # detector has three separable failure modes and a single break would leave two unproven.
+    (
+        "the alias detector never fires (its comparison always says no)",
+        POOL,
+        "    return r_first.startswith(b_first) or b_first.startswith(r_first)",
+        "    return False",
+        "test_the_alias_detector_fires_on_the_measured_case_and_names_both_spellings",
+        None,
+    ),
+    (
+        "the alias detector refuses a rostered player who is merely OFF THE BOARD (the other cause)",
+        POOL,
+        '        if hits:\n            alias_suspects.append({"rostered": row, "board": hits})\n        else:\n            off_board.append(row)',
+        '        alias_suspects.append({"rostered": row, "board": hits})',
+        "test_a_rostered_player_genuinely_off_the_board_does_NOT_refuse",
+        None,
+    ),
+    (
+        "the alias comparison goes fuzzy and calls two different players one (planted: Kelce/Kelce)",
+        POOL,
+        "    if len(r_first) < 3 or len(b_first) < 3:\n        return False\n    return r_first.startswith(b_first) or b_first.startswith(r_first)",
+        "    return True",
+        "test_the_alias_comparison_does_not_fire_on_two_different_players",
+        None,
+    ),
+    (
+        "the endpoint computes the reconciliation and serves the pool anyway",
+        ROUTER,
+        "        if alias:\n            refusals = alias\n        elif total > MAX_POOL_ROWS:",
+        "        if total > MAX_POOL_ROWS:",
+        "test_the_endpoint_withholds_the_pool_when_the_alias_detector_fires",
+        None,
     ),
 ]
 

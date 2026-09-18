@@ -1749,6 +1749,7 @@ def nfl_weekly_power_rankings(
 #: client's own empty state rather than to a blank screen.
 WAIVER_PAYLOAD_KEYS: tuple[str, ...] = (
     "season", "league_id", "pool", "need", "rosters", "refusals", "caveats", "ordering",
+    "reconciliation",
     "ordering_note", "realized",
 )
 
@@ -1932,10 +1933,32 @@ def nfl_waiver_pool(
 
     # ── 5. the pool — withheld entirely when any refusal applies ─────────────────────────────────
     pool = None
+    reconciliation = None
     if not refusals:
         groups = waiver_pool.free_agent_pool(board["players"], record.get("league_rosters"))
         total = sum(len(g["players"]) for g in groups)
-        if total > MAX_POOL_ROWS:
+        # ⭐ PM RULING ⑰ — reconcile BEFORE serving. An alias the name join missed leaves a rostered
+        # player in the pool, which is this feature's one must-never, so the detector withholds the
+        # list and names the pair. An off-board rostered player is NOT a defect and does not refuse
+        # (see `reconcile_rostered`). Logged with the league id because the ruling asks for the
+        # evidence the crosswalk decision currently lacks.
+        reconciliation = waiver_pool.reconcile_rostered(
+            board["players"], groups, record.get("league_rosters")
+        )
+        alias = waiver_pool.alias_refusals(reconciliation)
+        if alias:
+            logger.warning(
+                "waiver pool: ⑰ alias detector refused league %s — %s",
+                league_id,
+                "; ".join(
+                    f"roster {s['rostered']['name']} ({s['rostered']['pos']}) ~ board "
+                    + ", ".join(str(b["name"]) for b in s["board"])
+                    for s in reconciliation["alias_suspects"]
+                ),
+            )
+        if alias:
+            refusals = alias
+        elif total > MAX_POOL_ROWS:
             refusals = ["pool_over_cap"]
         else:
             pool = []
@@ -1974,6 +1997,9 @@ def nfl_waiver_pool(
         "need": need,
         "refusals": refusals,
         "caveats": caveats,
+        # ⑰ diagnostic: the counts the reconciliation compared, the alias pair(s) that refused, and
+        # the off-board rows that deliberately did NOT refuse. Present whenever a pool was attempted.
+        "reconciliation": reconciliation,
         "rosters": {
             "synced_at": record.get("league_rosters_synced_at"),
             "refreshed": refreshed,

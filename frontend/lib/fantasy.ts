@@ -1165,6 +1165,16 @@ export interface WaiverPoolPayload {
   }
   ordering: WaiverOrdering
   ordering_note: string
+  /** ⑰ the rostered-vs-pool reconciliation. `alias_suspects` non-empty ⇒ the pool is refused with
+   *  `rostered_alias_unmatched`; `off_board` rows deliberately do NOT refuse (they cannot be
+   *  offered). Optional: a backend that ships behind the client simply omits it. */
+  reconciliation?: {
+    implied_rostered: Record<string, number>
+    live_rostered: Record<string, number>
+    matched: number
+    off_board: { name: string; pos: string; team: string }[]
+    alias_suspects: { rostered: { name: string; pos: string; team: string }; board: { name: string; pos: string; team: string }[] }[]
+  } | null
   realized?: {
     absence: "realized_not_published" | "realized_lineage_unverified" | null
     through_week: number | null
