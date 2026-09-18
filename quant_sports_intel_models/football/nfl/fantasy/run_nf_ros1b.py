@@ -244,8 +244,55 @@ def rb_rookie_read(result: dict) -> dict:
                       "coverage80": float(V.coverage80(y[mask], q[mask]).mean()),
                       "decile_shares": (np.histogram(np.clip(u, 0, 1 - 1e-12), bins=10,
                                                      range=(0, 1))[0] / len(u)).tolist()}
+        # ⛔ Amendment 5 — DESCRIPTIVE ONLY, gates nothing, and computed from the PIT draw ABOVE.
+        # Re-drawing here would be a second reading of a gate that has already fired.
+        out[label]["spread"] = pit_spread(u, ps[mask])
     out["decision"] = rb_rookie_decision(out["rb_rookie"].get("pit_max_decile_dev"))
     return out
+
+
+def pit_spread(u: np.ndarray, keys: np.ndarray) -> dict:
+    """Amendment 5: is a decile excess carried by a FEW player-seasons, or a broad tilt?
+
+    ⛔ DESCRIPTIVE. It declares no threshold and returns no verdict — "few" versus "broad" is the
+    PM's reading, and a cutoff invented after the stop fired would be the bar-after-the-answer
+    inversion this story exists to avoid (E2.1-r). Pure: the caller owns the PIT draw.
+    """
+    u = np.clip(np.asarray(u, dtype=float), 0, 1 - 1e-12)
+    uniq, inv = np.unique(np.asarray(keys), return_inverse=True)
+    n_ps = len(uniq)
+    means = np.bincount(inv, weights=u) / np.bincount(inv)
+    rows_per = np.bincount(inv)
+
+    top = u >= 0.9                                    # the top PIT decile
+    top_per = np.bincount(inv, weights=top.astype(float))
+    order = np.argsort(top_per)[::-1]
+    top_rows = float(top.sum())
+    shares = np.asarray(np.histogram(u, bins=10, range=(0, 1))[0], dtype=float) / len(u)
+
+    def z(n: int) -> list[float]:
+        """Each decile share in SEs of a calibrated predictive, at the given effective n."""
+        se = float(np.sqrt(0.10 * 0.90 / n))
+        return [float((s - 0.10) / se) for s in shares]
+
+    return {
+        # 1 — where the player-seasons themselves sit
+        "player_season_mean_pit_deciles":
+            (np.histogram(np.clip(means, 0, 1 - 1e-12), bins=10, range=(0, 1))[0]).tolist(),
+        "player_season_mean_pit_median": float(np.median(means)),
+        "player_season_mean_pit_mean": float(means.mean()),
+        "player_seasons_above_half": int((means > 0.5).sum()),
+        # 2 — concentration of the top-decile mass
+        "top_decile_rows": int(top_rows),
+        "top_decile_player_seasons": int((top_per > 0).sum()),
+        "top_decile_share_from_10_largest_contributors":
+            (float(top_per[order][:10].sum() / top_rows) if top_rows else None),
+        "player_seasons_entirely_in_top_decile": int(((top_per == rows_per) & (rows_per > 0)).sum()),
+        # 3 — the SHAPE, read under both dependence assumptions (amendment 3's framing, extended
+        #     from the maximum to every decile)
+        "decile_z_rows_independent": z(len(u)),
+        "decile_z_fully_clustered": z(n_ps),
+    }
 
 
 def rb_rookie_decision(dev) -> str:
@@ -257,9 +304,75 @@ def rb_rookie_decision(dev) -> str:
     return "STOP_TO_PM"
 
 
+def _spread_lines(res: dict, r: dict, v: dict) -> list[str]:
+    """Amendment 5's section of the report. Descriptive; it states no verdict."""
+    s, sv = r.get("spread"), v.get("spread")
+    if not s:
+        return []
+    rep = res.get("reproduction")
+    L = ["", "---", "", "## Amendment 5 — the per-player spread (descriptive; gates nothing)", ""]
+    if rep is None:
+        L += ["No prior artifact was on disk, so this run has nothing to reproduce.", ""]
+    elif rep.get("identical"):
+        L += [f"✅ Reproduces the prior read exactly — `pit_max_decile_dev` "
+              f"{rep['now']['pit_max_decile_dev']}, decision `{rep['prior_decision']}` — so the "
+              f"spread below describes the same reading the rule already fired on.", ""]
+    else:
+        L += [f"⛔ **THIS RUN DOES NOT REPRODUCE THE PRIOR READ** (`{rep}`). Amendment 5 voids the "
+              f"spread in that case: report the discrepancy, not the spread.", ""]
+    L += [f"The excess sits in the top decile. Of {s['top_decile_rows']} rookie rows there, "
+          f"{s['top_decile_player_seasons']} distinct player-seasons contribute; the ten largest "
+          f"contributors carry {s['top_decile_share_from_10_largest_contributors']:.1%} of them, "
+          f"and {s['player_seasons_entirely_in_top_decile']} player-season(s) sit entirely inside "
+          f"it.", "",
+          f"Per-player-season mean PIT: median {s['player_season_mean_pit_median']:.3f}, mean "
+          f"{s['player_season_mean_pit_mean']:.3f}, with "
+          f"{s['player_seasons_above_half']} of {r['player_seasons']} above 0.5 "
+          f"(veteran control: median {sv['player_season_mean_pit_median']:.3f}, "
+          f"{sv['player_seasons_above_half']} of {v['player_seasons']} above 0.5).", "",
+          "Decile shares in SEs of a calibrated predictive, under both dependence readings "
+          "(amendment 3's framing, extended from the maximum to the shape):", "",
+          "| decile | rookie share | z (rows independent) | z (fully clustered) | veteran share |",
+          "|---|---|---|---|---|"]
+    for i in range(10):
+        L.append(f"| {i + 1} | {r['decile_shares'][i]:.3f} | "
+                 f"{s['decile_z_rows_independent'][i]:+.2f} | "
+                 f"{s['decile_z_fully_clustered'][i]:+.2f} | {v['decile_shares'][i]:.3f} |")
+    L += ["", "⛔ No threshold for 'few' versus 'broad' is declared here. The disposition is the "
+              "PM's (amendment 3 / PM R2): a disclosed rookie-stratum note, or rookie rows served "
+              "as a stated absence."]
+    return L
+
+
+def reproduction_of_prior(res: dict, jp: Path) -> dict | None:
+    """Amendment 5: a re-run that happens AFTER its own result is known must prove it moved nothing.
+
+    Returns `None` when there is no prior artifact (a first run has nothing to reproduce, and
+    claiming otherwise would be the vacuous pass). Never raises on a malformed prior — an
+    unreadable prior is `identical: null`, which is "unverified", not "the same".
+    """
+    if not jp.exists():
+        return None
+    try:
+        prior = json.loads(jp.read_text())["result"]
+    except (ValueError, KeyError, OSError) as exc:
+        return {"prior_read_error": str(exc), "identical": None}
+    keys = ("pit_max_decile_dev", "coverage80")
+    before = {k: prior.get("rb_rookie", {}).get(k) for k in keys}
+    now = {k: res.get("rb_rookie", {}).get(k) for k in keys}
+    return {"prior_generated_at": prior.get("generated_at") or None,
+            "prior_decision": prior.get("decision"), "prior": before, "now": now,
+            "identical": bool(before == now and prior.get("decision") == res.get("decision"))}
+
+
 def write_rb_rookie(res: dict, meta: dict) -> tuple[Path, Path]:
     jp = RESULTS / f"{RB_ROOKIE_STEM}.json"
     mp = RESULTS / f"{RB_ROOKIE_STEM}.md"
+    repro = reproduction_of_prior(res, jp)      # ⚠️ BEFORE the overwrite, or there is no prior
+    if repro is not None:
+        res = {**res, "reproduction": repro}
+        if repro["identical"] is False:
+            log.error("RB-rookie re-run does NOT reproduce the prior decision number: %s", repro)
     jp.write_text(json.dumps(N._clean({"meta": meta, "result": res}), indent=1, sort_keys=True))
     r, v = res["rb_rookie"], res["rb_veteran_context_only"]
     L = ["# NF-ROS1b amendment 3 — the RB-rookie C9 read", "",
@@ -275,6 +388,7 @@ def write_rb_rookie(res: dict, meta: dict) -> tuple[Path, Path]:
          "predictive the statistic exceeds 0.05 with probability ≈ 0.000 if rows were independent "
          "and ≈ 0.51 if a player-season's 12 rows shared one PIT value.", "",
          f"RB-rookie decile shares: {[round(x, 3) for x in r.get('decile_shares', [])]}"]
+    L += _spread_lines(res, r, v)
     mp.write_text("\n".join(L) + "\n")
     return jp, mp
 

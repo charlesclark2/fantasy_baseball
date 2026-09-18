@@ -646,3 +646,134 @@ Appended below the §13 line, editing nothing above it.
   weekly-serving-job branch + `NF_ROS_PUBLISH_ENABLED`; the ROS Std/Half values priced PAID (PPR
   free, with its band); §13 finding ⑪ carried on the served manifest. GATES NOTHING and moves no
   bar — C1–C9 stand as registered and as measured.
+
+---
+
+## §15 The RB-rookie read fired the STOP (amendment 3; appended 2026-09-18)
+
+`nf_ros1b_rb_rookie_c9.{json,md}`, generated from committed code at `8fca7a81`:
+
+| stratum | rows | player-seasons | C9 (PIT max-decile dev) | cov80 |
+|---|---|---|---|---|
+| RB rookie | 1,464 | 122 | **0.0810** | 0.7637 |
+| RB veteran (context only) | 11,676 | 973 | 0.0120 | 0.8704 |
+
+**0.0810 > 0.05 ⇒ `STOP_TO_PM`**, the branch amendment 3 declared before the number existed. The
+certification is untouched: this is a stratum inside a certified position, and the decision it
+gates is how rookie rows are SERVED, not whether RB certified.
+
+**What the number alone does not settle.** Amendment 3 bounded how often a calibrated predictive
+produces a max-decile deviation this large — ≈0.000 if rows were independent, ≈0.51 if a
+player-season's rows moved as one — so 0.0810 sits inside the range a calibrated predictive can
+produce under strong clustering, and outside it under independence. The reading is therefore about
+the SHAPE, which amendment 3 did not ask for and which amendment 5 defines before computing:
+the rookie decile shares ramp upward and the excess is in the top two deciles (0.130, 0.181 against
+0.100), against a veteran control that is flat (max deviation 0.0120). Rookie coverage is 0.7637.
+
+⛔ Nothing here re-scores the gate, and no new bar is declared. The disposition — a disclosed
+rookie-stratum note, or rookie rows served as a stated absence — is the PM's, on amendment 3's
+pre-declared trigger.
+
+---
+
+## §16 The per-player spread (amendment 5; appended 2026-09-18)
+
+Generated at `e702a625`. **It reproduces the fired read exactly** — `pit_max_decile_dev`
+0.08101092896174864, `coverage80` 0.7636612021857924, decision `STOP_TO_PM`
+(`reproduction.identical: true`) — so what follows describes the same reading the rule already
+fired on, not a second one.
+
+### Concentration of the top-decile mass
+
+| | rookie | veteran (control) |
+|---|---|---|
+| rows in the top PIT decile | 265 | 1,027 |
+| distinct player-seasons contributing | **54 of 122 (44.3%)** | 225 of 973 (23.1%) |
+| player-seasons entirely inside it | 1 | 6 |
+| share carried by the ten largest contributors | 37.7% | 11.3% |
+
+⚠️ The last row is **not comparable across strata**: ten player-seasons are 8.2% of the rookie
+stratum and 1.0% of the veteran one, so the rookie figure is mechanically larger. The comparable
+statement is the second row — and 62.3% of the rookie top-decile mass comes from contributors
+*outside* its ten largest.
+
+### Where the player-seasons themselves sit
+
+| | rookie | veteran (control) |
+|---|---|---|
+| median per-player-season mean PIT | **0.594** | 0.435 |
+| mean | 0.567 | 0.488 |
+| share above 0.5 | **63.1%** (77/122) | 41.4% (403/973) |
+| decile histogram of those means | [5, 7, 19, 5, 9, 17, 15, 14, 15, 16] | [29, 55, 119, 229, 138, 98, 89, 78, 91, 47] |
+
+⭐ **The veteran control, not 0.5, is the calibrated reference for this statistic.** Veterans sit at
+41.4% above half, so comparing rookies against a naive 0.5 understates the gap. The two-sample
+reading, **at the player-season level — where within-player clustering is handled by construction
+because the player-season IS the unit** — is **+0.217, z = 4.67**.
+
+The histograms say the same thing in shape: veteran player-season means pile up in the middle as
+rows accumulate, which is what calibration looks like; rookie means do not, and their upper half is
+heavier than their lower.
+
+### What this settles, and what it does not
+
+The excess is **not** carried by a small set of breakout seasons while the bulk sits near-uniform:
+44.3% of rookie player-seasons contribute to it, the bulk are **not** near-uniform, and the tilt is
+visible in the whole distribution rather than its tail alone. Within-player clustering is real and
+large (4.91 top-decile rows per contributing player-season against 1.67 under calibrated
+independence) — but that describes how one player-season's rows co-move, not how many
+player-seasons are tilted, and it is present in the veteran control too.
+
+⛔ **No trimmed re-read was computed.** "Drop the K largest contributors and recompute C9" is an
+available-looking concentration measure and it is inadmissible: it re-reads a fired gate on a
+population chosen after seeing the result, which is the post-hoc field trim this program refuses
+(MH2.2). The concentration evidence above is descriptive and needs no re-reading.
+
+### The PM's anticipatory constraints on either disposition (2026-09-18, recorded before the choice)
+
+* If **(i) a disclosed note**: it must say what the evidence says — that rookie rest-of-season
+  ranges have historically been thin on the upside — not a generic "rookies are uncertain".
+* If **(ii) a stated absence**: the reason code names the stratum honestly
+  (`rookie_interval_not_certified` or similar) and renders distinguishably, because a rookie owner
+  seeing his player absent from a certified-RB artifact deserves the real reason.
+* Either way, a **rookie-specific interval treatment is a registered-successor candidate, not an
+  in-story patch.**
+
+---
+
+## §17 The disposition: rookie rows are a stated absence (PM, 2026-09-18)
+
+The PM's mapping was fixed **before** the spread existed (amendment 5 / §16): concentrated ⇒ a
+disclosed note; broad ⇒ a stated absence. The spread read broad on every statistic that matters, so
+the disposition is **(ii)**, and it cannot be argued backward from a preferred outcome.
+
+**What is served.** A rookie at a certified position carries `absence:
+"rookie_interval_not_certified"`, `certified: false`, and **no value in either direction** — no
+band and **no point estimate**. The PM's reason, recorded: serving a certified-looking number whose
+interval was just refused would split one row's honesty in half.
+
+**Two implementation details that are decisions, not mechanics:**
+
+1. **The reason is keyed on the board's `rookie` FLAG, never on the id shape.** On the live 2026
+   board all 13 RB rookies happen to carry a synthetic id (13 of 13, verified against the served
+   blob), so an id-shape rule would agree today and diverge silently the first time a rookie
+   arrives with a gsis id. The guard's fixture carries a gsis-id rookie precisely so the two rules
+   are distinguishable.
+2. **The rookie reason BINDS over `join_unresolved`,** because only one of them is the reason a
+   value is missing: fixing a join would still leave the interval uncertified, so `join_unresolved`
+   would tell that owner something false. The join failure is not lost — `join_unresolved_names` is
+   now built from the identity AUDIT rather than from the served label, so a rookie's broken join
+   is still counted and named.
+
+**Measured on the live build (dry run, week 1 of 2026):** 870 players, **184 certified RB rows**
+(was 197), **13 `rookie_interval_not_certified`**, 641 `not_certified`, 32
+`position_not_evaluated`, 10 `no_preseason_prior`, 0 `join_unresolved`, and the stratum note on the
+manifest.
+
+**Blast radius: 13 rows today, growing as rookies accumulate games** — and the growth cuts both
+ways, because every completed week adds rookie evidence for the successor (followUp ⑳).
+
+**Guards:** 51/51 RED (31 interval + 20 node 4), including the five that make this disposition
+falsifiable — the rookie branch removed, the reason keyed on the id shape, the join list reading the
+served label again, the manifest losing the stratum qualifier, and the note falling back to a
+generic "rookies are uncertain" hedge.
