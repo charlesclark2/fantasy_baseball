@@ -105,7 +105,23 @@ STAT_FIELD: dict[str, str] = {
     "dst_pa_g_14_17": "paG14_17", "dst_pa_g_18_20": "paG18_20", "dst_pa_g_21_27": "paG21_27",
     "dst_pa_g_28_34": "paG28_34", "dst_pa_g_35_45": "paG35_45", "dst_pa_g_46p": "paG46p",
     # NF-C0e graduated terms. A term that FAILED its held-out degenerate-baseline gate
-    # (pat_missed, fum, st_player_td, fumble_rec_td) is deliberately absent here.
+    # (pat_missed, st_player_td, fumble_rec_td) is deliberately absent here.
+    #
+    # ⭐ `fum` IS PRESENT AND IS NOT A GRADUATION (NF-WK-ACC1 part 1, PM ruling 2026-09-18, option
+    # D, recorded in the ruling's own words): "NF-C0e rejected PROJECTING fumbles, a forecast we
+    # measurably cannot make with skill; the recap scores a COMPLETED WEEK, where a fumble count is
+    # a recorded fact. Different question, different answer." So the key lands HERE — the map that
+    # lets `realized_stat_fields` name a term the scorer may apply — and NOWHERE ELSE: it gains no
+    # `NFL_PROFILE.stat_columns` column and no entry in the TS mirror, so the projection board does
+    # not move and NF-C0e's `test_a_term_that_failed_its_heldout_gate_STAYS_CAPTURED` still holds.
+    # ⚠️ RATIFIED CONSEQUENCE: the same league rule reads APPLIED in the weekly recap (which
+    # resolves against the REALIZED map) and CAPTURED on the season board (which resolves against
+    # the projection profile). Two true statements from two surfaces, each naming only what it
+    # serves; ⛔ neither may be "tidied" into agreement by giving this term a projection column.
+    # ⚠️ ENTITLEMENT: `PAID_PLAYER_FIELDS` is DERIVED below, so this line adds `fumAny` to the paid
+    # set (+{fumAny}, nothing removed, weekly paid set unchanged — the diff the PM accepted). No
+    # payload emits `fumAny` today, so the addition is inert until one does.
+    "fum": "fumAny",
     "pass_td_40p": "passTd40p", "rush_td_40p": "rushTd40p", "rec_td_40p": "recTd40p",
     "def_forced_fumble": "ff",
     "dst_yards_allowed": "yaTot",
@@ -114,6 +130,19 @@ STAT_FIELD: dict[str, str] = {
     "dst_ya_g_400_449": "yaG400_449", "dst_ya_g_450_499": "yaG450_499",
     "dst_ya_g_500_549": "yaG500_549", "dst_ya_g_550p": "yaG550p",
 }
+
+#: ⭐ KEYS THIS MAP CARRIES THAT NO PROJECTION SERVES — scored only on a COMPLETED week, from the
+#: realized line (NF-WK-ACC1 part 1, PM ruling 2026-09-18 option D; the reasoning is on `fum`'s entry
+#: above). They are the ONE legitimate asymmetry between this map and its TypeScript mirror: the
+#: browser scores the projection payload, which cannot carry a field no projection produces, while
+#: the server also scores finished weeks, where the quantity is a recorded fact.
+#:
+#: ⛔ THIS SET MUST NOT GROW BY HABIT. It is declared here (rather than derived) only because
+#: deriving it needs `NFL_PROFILE`, whose import this Lambda deliberately does not pay for on a cold
+#: path — so `test_nf_wk_acc1_fum.py` asserts it equals the MECHANICAL rule ("named by the realized
+#: map, absent from the projection profile") and goes red if a key is added here without that being
+#: true. A new member therefore needs a ruling, not an edit.
+REALIZED_ONLY_KEYS: frozenset[str] = frozenset({"fum"})
 
 #: ⭐ THE SECOND DERIVATION (PM ack, 2026-09-18 — NF-ROS1b). The per-scoring values were the one
 #: half of this module still spelled as a HAND LIST of two field names (`{"fpStd", "fpHalf"}`), and

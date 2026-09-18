@@ -268,3 +268,50 @@ spec:
       contaminated record `fantasy/nfl/recap-divergence/2025/wk1/sleeper/
       92ec5c36-9ad9-4f09-a1fb-66716094d6ab.json` once the fix is deployed, so
       the explained/unexplained stream carries no cross-season rows.
+
+
+      ── ⑨ (2026-09-18) PART 1 LANDED UNDER OPTION D, MEASURED. `fum` (Sleeper's
+      own raw key for ANY fumble — the importer carries it through unmapped
+      because no canonical term existed) now joins `projection_fields.STAT_FIELD`
+      as `fumAny` and `realized_stat_fields.REALIZED_STAT_SOURCE` as
+      `fumbles_total`, so a COMPLETED week scores a rule we previously only kept.
+      Nothing else moved: no `NFL_PROFILE.stat_columns` column, no TS mirror
+      entry, NF-C0e's `test_a_term_that_failed_its_heldout_gate_STAYS_CAPTURED`
+      untouched and still green.
+      MEASURED on the committed harness, 2025 weeks 1-4 (the same weeks as the
+      14/48 baseline): team totals 14/48 -> 27/48; diverging player seats 61 ->
+      24; D/ST unchanged at 35/48 (part 2's object). The disclosure now names
+      only fumble-recovery TDs, the three 40+ yard bonuses, missed extra points
+      and return TDs — "fumbles" is gone.
+      PAID-SET RECORD (the entitlement checkpoint, as the PM asked it be
+      recorded): +{fumAny}, nothing removed, weekly paid set unchanged, and
+      INERT — no payload emits `fumAny`, pinned by a guard that goes red if one
+      ever does.
+      TWO GUARDS RE-ANCHORED, NOT WEAKENED, because the backend map is now a
+      strict superset of its TS mirror: NF-EPIC1's
+      `test_the_stat_field_map_mirrors_the_frontend` and NF-INJ1-C's
+      `counting_stat_fields` both read a new declared
+      `projection_fields.REALIZED_ONLY_KEYS`, and a new guard pins THAT set to
+      the mechanical rule that justifies it (named by the realized map, absent
+      from the projection profile) so it cannot be widened by hand — a member
+      needs a ruling, not an edit. 7 deliberate breaks, all RED.
+      ⚠️ THE PLAYER-SIDE EXPLAINED/UNEXPLAINED SPLIT IS NOW INACTIVE, AND THAT IS
+      THE HONEST STATE, NOT A REGRESSION: `fum` was the only captured term the
+      realized line could value, so with it APPLIED the 24 remaining diverging
+      seats are all UNEXPLAINED by construction (a mechanism that cannot act is a
+      finding — NF1.9). Pinned by its own test so the reading is never mistaken
+      for RC1's defect (a split that reported nothing because nothing fed it).
+      📌 COPY CHECK (PM requirement on ruling ①): the season board's captured
+      label already reads "Saved with your league, but NOT applied — we do not
+      project this stat" on both surfaces that render it — projection-specific,
+      so the two surfaces read as consistent. No wording change was needed; the
+      wording is now PINNED on both (the string is duplicated between
+      league-settings-editor.tsx and league-import.tsx, a pre-existing drift
+      surface left in place but guarded).
+      🔎 FINDING, NOT OURS: `betting_ml/tests/nf_inj1_c_red_proof.py` has ROTTED
+      on dev — two of its anchors reference `STAT_LINE_WITHHELD_LABEL`'s old
+      wording ("availability-adjusted") while dev's copy reads "inconsistent with
+      projected games", so those breaks report a problem rather than a RED.
+      Verified pre-existing on origin/dev and untouched by this change (a red
+      proof whose anchor rots stops proving anything — the same class NF-DTB-1
+      recorded). Left for NF-INJ1-C's owner.

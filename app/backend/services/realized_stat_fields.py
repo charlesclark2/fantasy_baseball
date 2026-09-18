@@ -127,6 +127,16 @@ REALIZED_STAT_SOURCE: dict[str, tuple[str, ...]] = {
     # ⚠️ NOT `fumbles_lost_total` — that counts return fumbles too. See the header; the parity
     # clause caught this, and the projected twin is an offensive-touch heuristic.
     "fumbles_lost": ("sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost"),
+    # ⭐ ANY fumble, lost or recovered by your own team — a DIFFERENT term from `fumbles_lost`
+    # above, and the league pays both (Sleeper: `fum` −1 and `fum_lost` −1, so a lost fumble costs
+    # a manager twice). `fum` is Sleeper's own key, carried through unmapped by the importer
+    # because no canonical term existed for it; naming it here is what turns it from a rule we
+    # merely KEPT into one we APPLY (NF-WK-ACC1 part 1, PM ruling 2026-09-18 option D — the
+    # reasoning is on `projection_fields.STAT_FIELD`'s entry, beside the paid-set consequence).
+    # ⚠️ `fumbles_total`, NOT the three per-phase columns: this term counts every fumble, which is
+    # exactly what the per-phase sum deliberately excludes (return fumbles). Measured on 2025
+    # weeks 1-4: team totals 14/48 -> 27/48, diverging player seats 61 -> 24.
+    "fum": ("fumbles_total",),
     "two_pt": ("passing_2pt_conversions", "rushing_2pt_conversions", "receiving_2pt_conversions"),
     # ── kicking ──
     "fg_att": ("fg_att",),
