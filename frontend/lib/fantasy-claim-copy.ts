@@ -1738,7 +1738,7 @@ export interface WaiverCapturedGroup {
 /** ⚠️ READ OFF THE CATALOG'S REAL GROUP VALUES, WHICH ARE EDITOR SECTIONS, NOT THESE THREE BUCKETS:
  *  the defensive terms live under `defense` AND `dst_points_allowed` AND `dst_yards_allowed` (the
  *  editor renders the two points/yards tables as their own sections). A map written from the three
- *  bucket names alone would have filed 18 of the 20 defensive terms under "Other" — measured
+ *  bucket names alone would have filed 18 of the 26 defensive terms under "Other" — measured
  *  against `league-config.ts`, not assumed. */
 const _CAPTURED_GROUP_LABEL: Record<string, string> = {
   kicking: "Kicking",

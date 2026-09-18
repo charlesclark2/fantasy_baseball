@@ -1063,7 +1063,7 @@ spec:
       a term reads under the name the user set it under. ⭐ AND A MEASUREMENT THE OBVIOUS
       IMPLEMENTATION WOULD HAVE GOT WRONG: `SCORING_CATALOG`'s `group` values are EDITOR SECTIONS,
       not these three buckets — the defensive terms live under `defense` AND `dst_points_allowed`
-      AND `dst_yards_allowed` — so a map written from the bucket names alone files 18 of the 20
+      AND `dst_yards_allowed` — so a map written from the bucket names alone files 18 of the 26
       defensive terms under "Other". Read off `league-config.ts`, not assumed. A key the catalog does
       not carry keeps its RAW key (a humanised guess could misname a term the user set) and is
       grouped by prefix, never dropped. ⛔ No figure is claimed for the gap, and a guard asserts the
@@ -1106,3 +1106,12 @@ spec:
       cannot see it". The authed payload read is what settled it. A probe whose failure state is
       indistinguishable from the thing it is looking for is the G100-D1 class, and it should never have
       been offered beside a definitive check.
+
+      ㊵ 🔢 CORRECTION TO ㊱'s OWN ARITHMETIC (2026-09-18, found while recapping the session): the
+      count of defensive terms a bucket-name-only group map would misfile is **18 of 26**, not "18 of
+      20". `SCORING_CATALOG` carries 8 `defense` + 9 `dst_points_allowed` + 9 `dst_yards_allowed` = 26
+      defensive entries, of which such a map catches only the 8. The FINDING is unchanged and if
+      anything larger than stated — 18 misfiled terms out of 26 rather than out of 20 — but a wrong
+      denominator in a record is the thing a later reader inherits and re-quotes (the
+      "a stale premise in prose propagates by copy" class), so it is corrected in the spec AND in the
+      code comment that carried the same figure, rather than left for someone to re-derive.
