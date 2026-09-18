@@ -351,7 +351,16 @@ def matchups(teams: list[dict]) -> list[dict]:
 #: future alert's clean signal).
 #:
 #: ⚠️ DELIBERATELY TINY, AND THAT IS THE HONEST STATE. `fum` is the only captured term whose value
-#: this line can supply today. The three 40+ yard TD bonuses CANNOT be explained here — deriving
+#: this line can supply today.
+#: ⭐ AND SINCE NF-WK-ACC1 PART 1 (PM ruling 2026-09-18, option D) `fum` IS NORMALLY APPLIED, NOT
+#: CAPTURED — `realized_stat_fields` now maps it onto `fumbles_total`, so `resolve_scoring` scores it
+#: and it contributes nothing to this split. The entry STAYS because the split keys on the RUNTIME
+#: verdict, not on this map: a week whose line does not carry `fumbles_total` still resolves the term
+#: CAPTURED, and that is exactly the week whose divergence this explains. Measured effect of the
+#: closure on 2025 weeks 1-4: team totals 14/48 -> 27/48, diverging seats 61 -> 24, and the 24
+#: remaining are all UNEXPLAINED — which is the correct reading, not a regression: the explained
+#: portion was `fum`, and a term we now score cannot also explain a gap.
+#: The three 40+ yard TD bonuses CANNOT be explained here — deriving
 #: them needs `pbp`, and `passing_40` counts 40+ yard PLAYS rather than touchdowns, so mapping it
 #: would be a wrong-key that scores silently (node 1 measured it exceeding the touchdown count).
 #: A term absent from this map leaves its share in the UNEXPLAINED residual, which is the correct

@@ -268,3 +268,94 @@ spec:
       contaminated record `fantasy/nfl/recap-divergence/2025/wk1/sleeper/
       92ec5c36-9ad9-4f09-a1fb-66716094d6ab.json` once the fix is deployed, so
       the explained/unexplained stream carries no cross-season rows.
+
+
+      ── ⑨ (2026-09-18) PART 1 LANDED UNDER OPTION D, MEASURED. `fum` (Sleeper's
+      own raw key for ANY fumble — the importer carries it through unmapped
+      because no canonical term existed) now joins `projection_fields.STAT_FIELD`
+      as `fumAny` and `realized_stat_fields.REALIZED_STAT_SOURCE` as
+      `fumbles_total`, so a COMPLETED week scores a rule we previously only kept.
+      Nothing else moved: no `NFL_PROFILE.stat_columns` column, no TS mirror
+      entry, NF-C0e's `test_a_term_that_failed_its_heldout_gate_STAYS_CAPTURED`
+      untouched and still green.
+      MEASURED on the committed harness, 2025 weeks 1-4 (the same weeks as the
+      14/48 baseline): team totals 14/48 -> 27/48; diverging player seats 61 ->
+      24; D/ST unchanged at 35/48 (part 2's object). The disclosure now names
+      only fumble-recovery TDs, the three 40+ yard bonuses, missed extra points
+      and return TDs — "fumbles" is gone.
+      PAID-SET RECORD (the entitlement checkpoint, as the PM asked it be
+      recorded): +{fumAny}, nothing removed, weekly paid set unchanged, and
+      INERT — no payload emits `fumAny`, pinned by a guard that goes red if one
+      ever does.
+      TWO GUARDS RE-ANCHORED, NOT WEAKENED, because the backend map is now a
+      strict superset of its TS mirror: NF-EPIC1's
+      `test_the_stat_field_map_mirrors_the_frontend` and NF-INJ1-C's
+      `counting_stat_fields` both read a new declared
+      `projection_fields.REALIZED_ONLY_KEYS`, and a new guard pins THAT set to
+      the mechanical rule that justifies it (named by the realized map, absent
+      from the projection profile) so it cannot be widened by hand — a member
+      needs a ruling, not an edit. 7 deliberate breaks, all RED.
+      ⚠️ THE PLAYER-SIDE EXPLAINED/UNEXPLAINED SPLIT IS NOW INACTIVE, AND THAT IS
+      THE HONEST STATE, NOT A REGRESSION: `fum` was the only captured term the
+      realized line could value, so with it APPLIED the 24 remaining diverging
+      seats are all UNEXPLAINED by construction (a mechanism that cannot act is a
+      finding — NF1.9). Pinned by its own test so the reading is never mistaken
+      for RC1's defect (a split that reported nothing because nothing fed it).
+      📌 COPY CHECK (PM requirement on ruling ①): the season board's captured
+      label already reads "Saved with your league, but NOT applied — we do not
+      project this stat" on both surfaces that render it — projection-specific,
+      so the two surfaces read as consistent. No wording change was needed; the
+      wording is now PINNED on both (the string is duplicated between
+      league-settings-editor.tsx and league-import.tsx, a pre-existing drift
+      surface left in place but guarded).
+      🔎 FINDING, NOT OURS: `betting_ml/tests/nf_inj1_c_red_proof.py` has ROTTED
+      on dev — two of its anchors reference `STAT_LINE_WITHHELD_LABEL`'s old
+      wording ("availability-adjusted") while dev's copy reads "inconsistent with
+      projected games", so those breaks report a problem rather than a RED.
+      Verified pre-existing on origin/dev and untouched by this change (a red
+      proof whose anchor rots stops proving anything — the same class NF-DTB-1
+      recorded). Left for NF-INJ1-C's owner.
+
+
+      ── ⑩ (2026-09-18) PART 2 LANDED: THE PLAY-DERIVED D/ST CONSTRUCTION, WITH ITS
+      RULES FROZEN AND ITS INGEST OWNED. Three pieces.
+      (a) INGEST (PM ruling ②): `pbp` joined `WEEKLY_STAT_SOURCES`, so
+      `nfl_weekly_stats_ingest_op` is its one owner and the existing freshness op
+      judges it — no new schedule, no new lane. Measured before wiring: 3.6 s for
+      2026 weeks 1-2 (2,756 plays) against a 900 s budget. Ownership recorded in
+      nf-inc-0916's ledger. ⚠️ RUNTIME GATE: needs one real box run (CI mocks IO).
+      (b) THE FROZEN RULES live in
+      `quant_sports_intel_models/football/nfl/fantasy/realized_dst_pbp.py`, whose
+      header IS the freeze: every rule, what it reproduced, and an explicit ⛔ that
+      no rule may be changed to close a 2025 disagreement (a 2025-driven
+      refinement would make the 2026 tally in-sample polish wearing an
+      out-of-sample badge). Re-derived from scratch against Sleeper's own 2025
+      per-team stat lines, all 544 team-weeks: sacks, interceptions, defensive
+      TDs, ST TDs, safeties, blocked kicks, ST forced fumbles, ST fumble
+      recoveries, POINTS ALLOWED and yards allowed all 544/544; fumble recoveries
+      543/544; forced fumbles 539/544 (the both-directions vendor residual,
+      reported not chased — MH2.2).
+      ⚠️ TWO RULES DIFFERED FROM WHAT THIS SPEC'S OWN ⑦ RECORDED, and the
+      re-derivation is what caught it — the record's prose was right, my first
+      implementation was not: points allowed charges the opponent's SPECIAL-TEAMS
+      touchdowns and removes only their DEFENSIVE ones at 6 (excluding ST too
+      reads 518/544), and a fumble RECOVERY keys on WHO FUMBLED rather than who
+      had possession (543 vs 539 — they differ on a fumble by a player whose side
+      does not have the ball, as after an interception). A forced fumble does key
+      on possession. Both now carry their measured alternative in the code.
+      (c) WIRED, MEASURED END TO END: D/ST agreement 35/48 -> 48/48 on 2025 weeks
+      1-4 through the production path (the harness drives the same functions the
+      box publish and the recorder call), and 154/155 on weeks 5-17 with the one
+      miss a forced-fumble count. A defence on BYE counts 0 on both sides (three
+      such seats; verified 0 scheduled games, not silently credited).
+      Team totals stay 27/48 BY CONSTRUCTION, not as a failure: the served D/ST
+      seat carries the league's own figure (D2 disposition C), so the D/ST
+      construction cannot move a team total until the seat flips.
+      ⛔ THE SEAT DID NOT MOVE and nothing was flipped. The 2026 trigger is the
+      gate (PM ruling ③).
+      📌 THE DEGRADED PATH IS LEGIBLE: `dst_inputs.json` now carries
+      `construction` (`pbp_frozen` | `player_sums`) plus a
+      `constructionFallbackReason`, and the points-allowed disclosure text
+      switches with it — a week whose plays are not published yet still produces
+      a line, and cannot pass for the frozen construction.
+      10 deliberate breaks, all RED; 21 new tests.

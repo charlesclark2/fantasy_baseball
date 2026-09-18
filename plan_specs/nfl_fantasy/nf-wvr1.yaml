@@ -400,7 +400,35 @@ spec:
       - id: 5-closeout
         desc: "Verdict + the value+need framework statement for the trade engine into closeout.followUps."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED (scope-reduced by PM ruling, not by omission) — 2026-09-17. Live on `main` with the
+      Lambda redeployed; operator confirmed the surface renders correctly for their real 10-team
+      Sleeper league. What ships: `GET /fantasy/nfl/waiver-pool` (the FA pool = board minus every
+      rostered player, one bounded Sleeper refresh), per-position REALIZED season-to-date fact
+      columns read from RC1's cumulative artifact under one lineage-verified GET, positional need
+      from the caller's own roster, and the My Teams waiver view. PRs #1147 / #1151 / #1153 (Phase A)
+      · #1169 (Phase B + fact columns) · #1172 (IR/taxi + player links + own-roster heal).
+
+      ⛔ WHAT DID NOT SHIP, AND WHY IT IS A CLOSE RATHER THAN A GAP: the spec's own description asks
+      for a ranking by PROJECTED REST-OF-SEASON VALUE. That quantity does not exist to be shipped
+      honestly — the season board is a full-season projection with NO in-season production channel
+      (measured; `waiver_pool.py`'s module docstring carries the evidence), and NF-ROS1 closed as a
+      CERTIFIED NO. The PM ruled the value column out rather than relabelled (the Mendoza row: top
+      of the available pool at 268.3 projected points having taken zero snaps). ⇒ the shipped
+      ordering basis is REALIZED_TO_DATE, stated in the payload and on the page, and the value
+      ordering is PARKED on a validated ROS quantity (NF-ROS1b in flight). The never-substitute-
+      `fpPpr` rule held end to end.
+
+      ⚖️ ONE STATED ABSENCE CARRIED, NOT PAPERED OVER: D/ST facts ship as `team_grain_not_covered`
+      (ruling item 3 / ⑮ / ㉘) — zero DST rows exist in the artifact, and Sleeper cannot fill it
+      because it scores only STARTED defences. The unlock is card fXIYuvMN (our own team-grain
+      construction validated), not this story.
+
+      ⏭️ OPEN AT CLOSE (neither blocks the close): the full browser red proof is an operator run
+      (~12 min, ㉓ — `RECORDED_BOARD` 227/220/7 is asserted-in-commit but UNVERIFIED until it runs),
+      and followUps ⑰ / ㉑ / ㉒ / ㉖-tail / ㉙ are PM triage. `metadata.status` is left IN_PROGRESS
+      for the PM flip per convention (the worker writes the verdict; the PM flips status and
+      archives the card).
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
@@ -885,3 +913,57 @@ spec:
       manifest exists — RC1's `nfl_realized_freshness_op` joined the injuries job and the exhaustive
       node-set was not updated. It SKIPS in CI and in clean worktrees (no manifest), so it is
       invisible there. Control-run on clean `origin/dev`: skipped. Owner: RC1 / NF-INFRA1.
+
+      ── NODE 5 CLOSEOUT, 2026-09-17 ──
+
+      ㉚ ✅ POST-DEPLOY LIVE VERIFICATION (operator, 2026-09-17): #1172 merged to `dev` and promoted
+      to `main`, `infrastructure/lambda/deploy.sh` run, and the operator confirms the surface renders
+      correctly on My Teams for their real league. ⇒ ㉖ (IR/taxi filed as bench) and ㉗ (player links
+      in a new tab) are VERIFIED LIVE, not merely merged; ㉔'s changelog condition (the surface
+      rendering a real league's live pool) was already satisfied at #1172 and both entries are in
+      `frontend/data/changelog.json` under week 2026-09-14. The ONE runtime item still unrun is the
+      full browser red proof (㉓) — an operator step by the >2-min rule, and a guard-quality check,
+      not a condition of the feature working.
+
+      ㉛ 📐 THE VALUE + NEED FRAMEWORK, FOR MEMBER 4 (THE TRADE ENGINE) — what transfers, and the
+      two places a reflex reuse would be WRONG. Written as node 5 owes it, from what was measured
+      here rather than from the plan's intent.
+
+      WHAT TRANSFERS AS-IS (all four are single-owner and already live):
+        · `waiver_pool.positional_need(my_roster_rows, cfg)` — the cross-position instrument. Per
+          position: `have` / `req` (dedicated starting slots from the league's own config) /
+          `reserved` (IR+taxi, EXCLUDED from depth) → `need` ∈ open_starter | thin | covered.
+        · `league_scoring.score_row` + `resolve_scoring(..., fields=available_fields(...))` — THE one
+          scorer. Every number on a fantasy surface goes through it or it is not comparable.
+        · `sleeper.refresh_league_rosters` — THE one roster-refresh owner, bounded fan-out, and since
+          #1172 it also returns `teams_full` (every team's full rows WITH `slot`), which is exactly
+          the two-sided input a trade engine needs and does not have to build.
+        · `waiver_facts` — realized season-to-date per player from ONE lineage-verified GET of RC1's
+          cumulative artifact, summed over `manifest.weeks` only, with `excluded` surfaced as a
+          stated gap. Facts and projected value stay SEPARATE columns with separate provenance; they
+          are never merged into one number (PM ruling, Q4).
+
+      ⚠️ TRAP 1 — DO NOT INHERIT WVR1's VOR REFUSAL. WVR1 forbids cross-position player ranking
+      because the FA pool IS the below-replacement population BY CONSTRUCTION, so draft-VOR is ≤0
+      across it and the lowest-dispersion positions float up (measured on the live 870-row board:
+      top-25 available = 6 QB / 3 TE / 16 K by raw points, 14 K / 8 DST / 2 TE / 1 QB by VOR). A
+      TRADE population is the opposite — rostered, largely above replacement — so VOR is a live
+      instrument there and copying the prohibition would discard the right tool. What DOES transfer
+      is the discipline that produced it: measure the ranking over the REAL population through the
+      REAL scorer before trusting it, because the defect was invisible to reasoning and obvious to
+      one measurement.
+
+      ⚠️ TRAP 2 — A TRADE ENGINE IS GATED ON A FORWARD VALUE QUANTITY IN A WAY WVR1 WAS NOT. WVR1
+      could ship honestly on REALIZED facts + need because "who should I add" tolerates a
+      what-has-happened basis. A trade is inherently forward-looking and SYMMETRIC: ranking a swap
+      on realized-to-date alone prices both sides on the past and is plausible-but-wrong at the
+      feature's core question (the same sentence the PM used to refuse the value column here). ⇒
+      member 4 should be sequenced AFTER a validated ROS quantity exists (NF-ROS1 = certified NO;
+      NF-ROS1b in flight) — and ⛔ `fpPpr` is never the substitute.
+
+      ALSO OWED FORWARD, cheap to state now: `positional_need` is SINGLE-ROSTER; a trade changes
+      BOTH rosters' need, so member 4 needs it evaluated twice (the counterparty's rows are in
+      `teams_full`) and must keep the `reserved` exclusion on both sides — otherwise it will read a
+      position as covered by an injured body, which is precisely the ㉖ defect one surface over.
+      And `roster-report.ts` (NF-C6P2) still splits on `starter` alone (㉖-tail), so any trade
+      surface reusing it inherits that bug until the PM triages it.

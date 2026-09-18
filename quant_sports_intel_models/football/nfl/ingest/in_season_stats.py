@@ -89,7 +89,22 @@ log = logging.getLogger(__name__)
 #: so the INC-25 ordering and the one-owner rule both hold, and `nfl_weekly_stats_freshness_op`
 #: judges its CONTENT (max week vs the schedule) with no new wiring. Ownership: NF-WK-ACC1
 #: (successor to RC1's paper ownership), recorded in nf-inc-0916 + nf-wk-acc1.
-WEEKLY_STAT_SOURCES: list[str] = ["stats_player_week", "snap_counts", "stats_team_week"]
+#: ⭐ `pbp` JOINED 2026-09-18 (NF-WK-ACC1 part 2, PM ruling ② — "an extension of an owned pattern,
+#: not a new lane"). It is the D/ST construction's PLAY-LEVEL input, and it is the only source that
+#: can supply the terms the team- and player-grain tables structurally cannot: a blocked kick, which
+#: play classes count as special teams, which team conceded a safety, and who forced a fumble.
+#: Measured over all 544 team-weeks of 2025, a pbp-derived construction reproduces Sleeper's own
+#: figures on sacks, safeties, blocked kicks, defensive/ST touchdowns and ST fumble terms 544/544,
+#: and points allowed 544/544 against 457 for the team-table rule it replaces.
+#: It rides THIS op for the same three reasons `stats_team_week` does: the SAME vendor run publishes
+#: it (`play_by_play_2026.parquet` at 2026-09-16T14:12:07Z, ~1.36 MB for week 1, seconds before the
+#: player file), so the INC-25 ordering holds; nothing else ingests it on any cadence, so the
+#: one-owner rule holds; and `nfl_weekly_stats_freshness_op` judges its CONTENT with no new wiring.
+#: ⏱️ COST, MEASURED BEFORE WIRING IT (2026-09-18, weeks 1-2 of 2026 = 2,756 plays): 3.6 s end to
+#: end against a 900 s op budget. The file is cumulative-per-season, so this grows with the season
+#: rather than the run count; a full 2025 season is ~49k plays, i.e. still seconds.
+#: Ownership: NF-WK-ACC1, recorded in nf-inc-0916's ledger + nf-wk-acc1.
+WEEKLY_STAT_SOURCES: list[str] = ["stats_player_week", "snap_counts", "stats_team_week", "pbp"]
 
 # ── registry integrity, mirroring the ROLL_FORWARD_SOURCES assertions ────────────────────────
 assert all(n in SOURCES for n in WEEKLY_STAT_SOURCES), "WEEKLY_STAT_SOURCES has an unknown source"
