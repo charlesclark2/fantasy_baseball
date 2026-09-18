@@ -152,6 +152,11 @@ def realized_board(realized_rows: list[dict], resolved: dict, stat_field: dict[s
             "team": str(row.get("team") or ""),
             "opp": str(row.get("opponent_team") or ""),
             "leaguePts": league_scoring.score_row(flat, pos, resolved, stat_field)["pts"],
+            # NF-WK-ACC1 part 3: the scored stat row, kept so a seat matched on NAME+TEAM (where the
+            # two sides disagree about the player's POSITION) can be re-scored at the position the
+            # LEAGUE used. Internal to the join, like `explain` — a seat copies named fields only, so
+            # this never reaches the served payload.
+            "flat": flat,
             # The source's own PPR, carried for the points-head pair boundary (i) allows. NEVER
             # recomputed — a second computation of a number the source publishes is a drift
             # surface for no gain.
@@ -239,8 +244,31 @@ def score_week(
                 if realized_by_seat is not None:
                     realized_by_seat[(team.get("teamKey"), seat.get("seat"))] = dict(
                         hit.get("explain") or {})
+                pts = hit["leaguePts"]
+                # ⭐ A NAME+TEAM MATCH MEANS THE TWO SIDES DISAGREE ABOUT THE POSITION, so the board's
+                # own points were computed at the LAKE's position. `score_row`'s only
+                # position-dependent term is the league's `position_bonuses`, so re-score at the
+                # position the LEAGUE used — otherwise a league paying, say, a WR reception bonus
+                # would under-score a two-way player whose lake row says `CB`, silently and only for
+                # him. (Measured on the operator's league this is inert — it publishes no position
+                # bonuses — which is exactly why it would have gone unnoticed there and shipped wrong
+                # for a league that does.)
+                if join.get("matchedOn") == "name_team" and hit.get("flat") is not None:
+                    league_pos = league_scoring.normalize_position(seat.get("position") or "")
+                    # ⚠️ THE INNER CHECK IS REDUNDANT BY CONSTRUCTION, stated so nobody hunts for the
+                    # case that makes it fire (a reader who assumes it is load-bearing will look for a
+                    # name+team match whose positions AGREE, and there is none). A fallback match
+                    # requires the `name|position` key to have MISSED; the fallback and primary keys
+                    # share the same folded name, so if the positions also normalized equal the
+                    # primary would have hit. ⇒ on this branch the positions always differ. It is kept
+                    # as a cheap invariant in case the primary key ever changes shape, and it is
+                    # deliberately NOT red-proven — a condition that cannot be made false is a finding,
+                    # not a guard we can claim (NF1.9).
+                    if league_pos and league_pos != hit.get("pos"):
+                        pts = league_scoring.score_row(
+                            hit["flat"], league_pos, resolved, field_map)["pts"]
                 row.update({
-                    "points": hit["leaguePts"], "source": SOURCE_OUR_SCORER,
+                    "points": pts, "source": SOURCE_OUR_SCORER,
                     "pprPts": hit.get("pprPts"), "opp": hit.get("opp"), "absence": None,
                 })
             if row.get("points") is not None:

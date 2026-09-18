@@ -363,3 +363,178 @@ spec:
       switches with it — a week whose plays are not published yet still produces
       a line, and cannot pass for the frozen construction.
       10 deliberate breaks, all RED; 21 new tests.
+
+
+      ── ⑪ (2026-09-18) PART 3 LANDED: THE 40+ YARD TOUCHDOWN BONUSES ARE APPLIED,
+      AND THE LAST BIG PLAYER-SIDE RESIDUAL WAS A POSITION JOIN, NOT A NAME ONE.
+      Measured through the production path (`run_nf_wk_acc1_crosscheck`, the
+      operator's league 1268257036043292672, 2025 weeks 1-4 — the same window as
+      every figure in this spec):
+        team totals agreeing    27/48 -> 42/48 (the bonuses) -> 46/48 (the join)
+        player seats diverging  24 -> 2
+        D/ST                    48/48, untouched
+      The disclosure no longer names the 40+ yard bonuses, and weeks 2 and 3 now
+      carry NO disclosure at all — the first weeks in this story where our
+      itemisation reproduces the league's own total for every team.
+      (a) THE DERIVATION is a new frozen module
+      `quant_sports_intel_models/football/nfl/fantasy/realized_player_pbp.py`,
+      whose header IS the freeze: the rule, its verifications, and the same ⛔ the
+      D/ST freeze carries (no rule may change to close a specific disagreement —
+      MH2.2). It is PLAYER-side and touches no D/ST term, so it is independent of
+      the 2026 seat-flip trigger and cannot move it.
+      ⭐ VERIFIED BY A COMMITTED RUNNER, not an in-session probe — part 2's
+      field-by-field work lives only in ⑦'s prose, which is the gap RC1 ⑥ already
+      named. `run_nf_wk_acc1_long_td_verify.py` re-derives every figure below.
+      TWO CHECKS, AND THE CONTROL TABLE IS WHAT MAKES THEM EVIDENCE: the weekly
+      total agrees with Sleeper's own on 18 of 18 weeks of 2025, and the subset
+      identity against `stats_player_week` (a 40+ yard TD count can never exceed
+      that player's TD count of that type) holds on 5,780 of 5,780 derived
+      player-weeks over 1999-2025 with 0 unjoined. Each check is BLIND to the
+      other's error class — a threshold of 41 or 39 breaks the aggregate on 5 of 18
+      weeks and the identity on none; swapping passer/receiver breaks the identity
+      138 times and the aggregate on none. Either figure alone would have been a
+      guard that cannot fail in the direction that matters.
+      ⭐ THE AGGREGATE IS SUMMED ON PURPOSE. Sleeper's own `gsis_id` is NULL for
+      most recent players (3,125 of 9,421 active; Bijan Robinson and Michael Penix
+      both null), so a per-player join to Sleeper would have dropped exactly the
+      players a fantasy league cares about while reporting a high match rate — the
+      NF-W9-0 rookie-crosswalk trap, avoided by needing no crosswalk at all.
+      ⚠️⚠️ THE LATERAL CLAUSE WOULD OTHERWISE HAVE SHIPPED WRONG AND BEEN
+      INVISIBLE, and it is the strongest thing part 3 learned. On a play ending in
+      a lateral the touchdown belongs to whoever crossed the line, not to the
+      player who caught the pass; nflverse records that in
+      `lateral_receiver_player_id` and leaves the primary column pointing at the
+      first player. Measured on 2024 wk17 (Goff -> 1 yard to Amon-Ra St. Brown, who
+      laterals to Jameson Williams for 41 and the score): Sleeper credits WILLIAMS
+      and not St. Brown. NEITHER CHECK CATCHES IT ALONE — a lateral moves WHICH
+      player is credited without changing HOW MANY, so the weekly total is
+      byte-identical either way (6/1/6 on that week under both rules), and that
+      week St. Brown scored a different, shorter receiving touchdown so his
+      `receiving_tds` was 1 and the identity bound was satisfied by the WRONG
+      touchdown. Only the external per-player authority separated them. Across the
+      whole lake the simple rule produces 3 identity violations and every one is a
+      lateral — the check found the mechanism unaided before anyone looked for it.
+      ⭐ A SECOND AUTHORITY CORROBORATES THIS SPEC'S OWN WRONG-KEY PROOF: Sleeper
+      carries BOTH spellings as separate keys (`rec_40p` the play count beside
+      `rec_td_40p` the touchdown count), so the platform we reproduce distinguishes
+      exactly the two quantities `passing_40` would have conflated.
+      (b) THE MAP CARRIES TWO SOURCES NOW. `REALIZED_PBP_SOURCE` holds the three
+      keys, `REALIZED_SOURCE_ALL` is the union the scorer reads, and
+      `REALIZED_STAT_COLUMNS` stays the weekly-line SELECT — asking
+      `stats_player_week` for a play-derived column would fail the read outright.
+      The column names are declared on BOTH sides (the Lambda cannot import
+      `quant_sports_intel_models`) and PINNED to each other by a guard, the same
+      shape part 2 used for the D/ST terms. The three 40p entries in
+      `REALIZED_ABSENCE_REASON` were REWORDED rather than deleted, because their
+      MEANING changed: they no longer say "we have no source for this" but "the
+      plays for this week have not landed yet", which points at a different fix.
+      ⭐ THE COUNTS ARE WRITTEN AS ZERO ON EVERY ROW, not only on the scorers, and
+      that is load-bearing: `available_fields` decides APPLIED vs CAPTURED on
+      whether the field is present AT ALL, so crediting only the handful of long-TD
+      scorers would make the verdict depend on whether anyone happened to score one
+      — and a week with no 40+ yard touchdown would report the bonus as "not in
+      this number" when it was applied and correctly came to nothing.
+      📌 THE DEGRADED PATH IS LEGIBLE, as part 2's is: the manifest carries
+      `playerConstruction` (`pbp_joined` | `player_week_only`) plus a
+      `playerConstructionFallbackReason`, and `served_columns` declares the derived
+      columns ONLY when they were derived — declaring them unconditionally would
+      make every week whose plays are not published yet fail its own publish
+      contract, turning a legitimate degraded build into an outage.
+      (c) ⛔ A NEW PUBLISH DECISION WAS REQUIRED, AND WITHOUT IT THIS WHOLE CHANGE
+      WOULD HAVE BEEN A NO-OP FOREVER — the single most consequential thing part 3
+      found. Any new column changes every row's content hash, so every
+      already-published week would have classified as a vendor `restate`, kept
+      serving its old rows, and never shown the bonus, while the log filled with
+      restatement events blaming the vendor for a change we made ourselves.
+      `widen_columns` is the case RC1's own `upgrade` already implies (a build that
+      is strictly MORE than what is served is not a conflict). ⛔ It cannot become a
+      back door: the verdict is decided on a hash taken over the PUBLISHED week's
+      OWN column set, so a vendor correction landing in the same build still falls
+      through to `restate`, and with no rows supplied it refuses to assume the
+      harmless case. `publish` now ASSERTS that each decision's `servingWrite` flag
+      and the write-action set agree — this story's new action announced
+      `servingWrite: True` while the set omitted it, which would have been a
+      serving write silently skipped, i.e. a week that simply never updates.
+      (d) ⚠️ THE JOIN FIX CORRECTS THIS SPEC'S OWN ⑥. Travis Hunter does NOT fail
+      the name join — his name matched perfectly in every week. He is `WR` on
+      Sleeper and `CB` in `stats_player_week` (he plays both ways), so the POSITION
+      component of the key never met, and chasing the name would have found
+      nothing. 4 of the 6 team-weeks still open after the bonuses landed were his.
+      A second pass keys on name + FRANCHISE; it requires the team to agree ("Josh
+      Allen" is a QB on BUF and a linebacker on JAX — a bare-name fallback would
+      hand a manager the wrong man's line, strictly worse than the honest
+      non-match), DROPS an ambiguous pair rather than arbitrating it (NF-W9-0),
+      never overrides a primary hit, and never applies to a D/ST slot (whose
+      franchise key already works, NF-C6P3). The 4 newly-compared seats all AGREE.
+      ⭐ A FALLBACK MATCH IS RE-SCORED AT THE POSITION THE LEAGUE USED, because
+      `score_row`'s one position-dependent term is the league's `position_bonuses`
+      and the board's own figure was computed at the LAKE's position. Measured as
+      INERT on the operator's league (it publishes no position bonuses at all) —
+      which is precisely why it would have gone unnoticed there and shipped wrong
+      for a league that does.
+      🧪 33 new tests; 23 deliberate breaks, all RED. Two breaks came back GREEN on
+      the first run and both were real findings about the TESTS, which is the whole
+      point of the proof: one fixture failed a SECOND clause of an and-composed rule
+      so it proved nothing about the clause it named (NF-D17 — fixed by making the
+      rows still CARRY the vanished column so only the disappearance clause can
+      refuse), and one condition turned out to be REDUNDANT BY CONSTRUCTION (a
+      name+team match requires the position key to have missed, so the positions
+      necessarily differ on that branch). The second is documented at the call site
+      as a cheap invariant and deliberately NOT claimed as a guard — a condition
+      that cannot be made false is a finding, not a guard (NF1.9).
+      🔎 FINDING, NOT OURS: `frontend/lib/league-scoring.ts`'s `matchRosterToBoard`
+      has NO production caller — server-side scoring (NF-EPIC1) moved the join to
+      the Lambda, and the TS copy now backs only the e2e mock. It was kept in step
+      with this change anyway (a copy that silently diverges is the many-owners
+      shape, and the next production caller would inherit the older behaviour), but
+      whether it should still exist is a question for that story's owner.
+
+
+      ── ⑫ (2026-09-18) ⛔ THE LAST TWO RESIDUALS NEED RULINGS, AND NEITHER WAS
+      TOUCHED. The term inventory is now COMPLETE — every one of the 48 team-weeks
+      either agrees or is explained by a named mechanism, which is the answer to
+      RC1's "nothing can explain this" lesson. The two that remain are 1.00 point
+      each, in the SAME direction (we score HIGHER than the league):
+      ① DJ MOORE, 2025 wk1 — ours 8.40 vs the league's 7.40. Diagnosed exactly:
+      his row carries `fumbles_total = 1` and `fumbles_lost_total = 1` with all
+      THREE per-phase lost-fumble columns at 0 (a fumble outside the three
+      offensive phases). The league pays `fum` −1 AND `fumbles_lost` −1, so Sleeper
+      charges −2; we charge only `fum` −1, because `realized_stat_fields` maps
+      `fumbles_lost` onto the three per-phase columns.
+      ⛔ THAT MAPPING CARRIES AN EXPLICIT DOCUMENTED REFUSAL ("Do not 'tidy' this
+      back to the total: it is shorter, it reads more natural, and it is wrong"),
+      so it was NOT changed unilaterally. ⚠️ BUT ONE HALF OF ITS STATED REASONING
+      IS WEAKER THAN RECORDED, and the PM should know before ruling: the header
+      cites nflverse-PPR parity, and there is NO live parity guard — `pprPts` is
+      nflverse's own `fantasy_points_ppr` CARRIED THROUGH VERBATIM, never
+      recomputed, so no served number depends on the column choice. What survives
+      is the projected/realized symmetry argument (the projected twin is an
+      offensive-touch heuristic that cannot mean a return fumble) — and part 1's
+      option D already established the precedent for a realized-only term that has
+      no projection twin. SIZED: 36 rows differ over 2025 REG (249 vs 213), 28 of
+      them at startable offensive positions (WR 22, RB 4, QB 2); 2 rows in 2026
+      week 1; 1 of 48 team-weeks in this window.
+      ② TREY BENSON, 2025 wk4 — ours 9.70 vs the league's 8.70. An RB whose row
+      carries `fumble_recovery_opp = 1`, so our scorer applies the league's
+      `def_fumble_rec` weight (1.0) at player grain; Sleeper pays an offensive
+      player nothing for it. The question is whether an IDP DEFENSIVE term should
+      apply at a non-defensive position at all — a scoring-policy question that
+      reaches every league with IDP weights, not a mapping fix, so it is recorded
+      rather than decided. SIZED: 9 player-weeks in all of 2025 REG carry a
+      defensive fumble recovery at an offensive position (WR 4, RB 3, QB 1, TE 1),
+      plus 9 with a forced fumble and 1 with a sack — ~9 of 6,563 offensive rows.
+      ⇒ ① is ~6x more common than ② among rows that can reach a lineup. Both are
+      MH2.2-adjacent (two authorities disagreeing, not a term we may invent), and
+      both are one-line changes once ruled.
+      🔎 SECOND FINDING, NOT OURS, AND IT IS A GUARD CI CAN NEVER RUN:
+      `betting_ml/tests/test_nf_infra2_board_publish_sla.py::test_the_REAL_op_pages_on_a_degraded_input_and_still_publishes`
+      is RED on `origin/dev`. Verified on a clean detached control worktree at
+      96fdaaae, so it is pre-existing and untouched by this change. ⚠️ THE REASON
+      NOBODY HAS SEEN IT: the test guards itself with `_skip_without_manifest()`,
+      and `dbt/target/manifest.json` is gitignored — so it SKIPS in CI and in every
+      fresh worktree, and runs only in a checkout that has the manifest (the
+      operator's main tree, or a worktree with the symlink). It is therefore green
+      by absence wherever it is checked and red wherever it can actually execute —
+      the vacuous-guard family with a skip in place of a passing assertion. Left for
+      NF-INFRA2's owner; flagged because a monitor whose test cannot run in CI is a
+      monitor nobody is watching (E11.30's shape, at the test layer).
