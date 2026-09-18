@@ -526,3 +526,15 @@ spec:
       ⇒ ① is ~6x more common than ② among rows that can reach a lineup. Both are
       MH2.2-adjacent (two authorities disagreeing, not a term we may invent), and
       both are one-line changes once ruled.
+      🔎 SECOND FINDING, NOT OURS, AND IT IS A GUARD CI CAN NEVER RUN:
+      `betting_ml/tests/test_nf_infra2_board_publish_sla.py::test_the_REAL_op_pages_on_a_degraded_input_and_still_publishes`
+      is RED on `origin/dev`. Verified on a clean detached control worktree at
+      96fdaaae, so it is pre-existing and untouched by this change. ⚠️ THE REASON
+      NOBODY HAS SEEN IT: the test guards itself with `_skip_without_manifest()`,
+      and `dbt/target/manifest.json` is gitignored — so it SKIPS in CI and in every
+      fresh worktree, and runs only in a checkout that has the manifest (the
+      operator's main tree, or a worktree with the symlink). It is therefore green
+      by absence wherever it is checked and red wherever it can actually execute —
+      the vacuous-guard family with a skip in place of a passing assertion. Left for
+      NF-INFRA2's owner; flagged because a monitor whose test cannot run in CI is a
+      monitor nobody is watching (E11.30's shape, at the test layer).
