@@ -87,7 +87,12 @@ def _auto(args) -> int:
             if dry:
                 decision = realized_week.publish_decision(
                     built["manifest"],
-                    realized_week.published_manifest(season, week, s3=s3, bucket=args.s3_bucket))
+                    realized_week.published_manifest(season, week, s3=s3, bucket=args.s3_bucket),
+                    # ⭐ The rows, so a --dry-run reports the SAME action a real run would take: the
+                    # widen-vs-restate distinction cannot be made from the manifests alone, and a
+                    # dry run that says `restate` where the real run says `widen_columns` would be
+                    # worse than no dry run at all.
+                    built["players"])
                 out = {**decision, "published": [], "revision": [],
                        "completeness": built["manifest"]["completeness"]}
             else:

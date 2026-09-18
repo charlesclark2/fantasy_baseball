@@ -649,6 +649,16 @@ def published_positions(board_players: list[dict]) -> list[str]:
     return [p for p in PROJECTABLE_POSITIONS if p in seen]
 
 
+def _name_team_key(name: str, team: str | None) -> str:
+    """The FALLBACK key: normalized name + resolved franchise, with no position component.
+
+    Empty when either half is missing, so an unresolvable row can never collide with another.
+    """
+    folded = normalize_player_name(name)
+    franchise = normalize_team(team)
+    return f"{folded}|{franchise}" if folded and franchise else ""
+
+
 def match_roster_to_board(roster: list[dict], board_players: list[dict]) -> list[dict]:
     """Join an imported roster onto an already-scored board, by normalized name + position.
 
@@ -658,18 +668,57 @@ def match_roster_to_board(roster: list[dict], board_players: list[dict]) -> list
     ⭐ NF-C6P3 — a D/ST row keys on its FRANCHISE instead (see the block above): the name join
     structurally never matched a team defence on any platform, which left the starting D/ST slot
     empty and silently absent from the headline total.
+
+    ⭐⭐ NF-WK-ACC1 PART 3 — A SECOND PASS ON NAME + TEAM, because the POSITION component is a thing
+    the two sides genuinely disagree about for a TWO-WAY PLAYER. Measured: Travis Hunter is `WR` on
+    Sleeper and `CB` in `stats_player_week` (he plays both), so `travis hunter|WR` never met
+    `travis hunter|CB` and his seat came back unmatched in EVERY week of 2025 — 4 of the 6 team-weeks
+    still disagreeing after the 40+ yard bonuses landed. His NAME matched perfectly the whole time;
+    the spec's "fails the name join" was the wrong diagnosis, and chasing the name would have found
+    nothing.
+
+    ⛔ THE FALLBACK REQUIRES THE FRANCHISE TO AGREE, AND REFUSES AMBIGUITY. Name alone would be
+    dangerous — "Josh Allen" is a QB on BUF and a linebacker on JAX, and a bare-name fallback would
+    hand a manager the wrong man's stat line, which is strictly worse than the honest non-match it
+    replaces. Requiring the team separates those two, and a name+team that matches MORE THAN ONE
+    board row is dropped rather than arbitrated (the NF-W9-0 rule: drop an ambiguous id, never pick).
+
+    ⛔ IT NEVER OVERRIDES A PRIMARY HIT and never applies to a D/ST slot, whose franchise key already
+    works. So it can only ever convert a non-match into a match — it cannot move a seat that resolves
+    today.
+
+    Each entry carries `matchedOn` (`name_position` | `name_team` | None), which is what lets a caller
+    notice the position disagreement rather than silently scoring a WR's seat at a cornerback's
+    position — see `weekly_recap.score_week`, where a league's position bonus is re-applied.
     """
     by_key: dict[str, dict] = {}
     for p in board_players:
         key = _join_key(str(p.get("name") or ""), p.get("pos"), p.get("team"))
         by_key.setdefault(key, p)
 
+    # The fallback index, built ONLY from unambiguous name+team pairs. D/ST rows are excluded: their
+    # franchise key already joins, and their rendered name ("JAX D/ST") must never become a candidate
+    # for a human player's seat.
+    grouped: dict[str, list[dict]] = {}
+    for p in board_players:
+        if normalize_position(p.get("pos") or "") == "DST":
+            continue
+        fk = _name_team_key(str(p.get("name") or ""), p.get("team"))
+        if fk:
+            grouped.setdefault(fk, []).append(p)
+    by_name_team = {k: v[0] for k, v in grouped.items() if len(v) == 1}
+
     out: list[dict] = []
     for r in roster:
         name = str(r.get("name") or "")
         if not name:
-            out.append({"roster": r, "board": None})
+            out.append({"roster": r, "board": None, "matchedOn": None})
             continue
         key = _join_key(name, r.get("position") or "", r.get("team"))
-        out.append({"roster": r, "board": by_key.get(key)})
+        hit = by_key.get(key)
+        matched_on = "name_position" if hit is not None else None
+        if hit is None and normalize_position(r.get("position") or "") != "DST":
+            hit = by_name_team.get(_name_team_key(name, r.get("team")))
+            matched_on = "name_team" if hit is not None else None
+        out.append({"roster": r, "board": hit, "matchedOn": matched_on})
     return out
