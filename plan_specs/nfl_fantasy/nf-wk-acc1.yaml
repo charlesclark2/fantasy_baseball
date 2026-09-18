@@ -315,3 +315,47 @@ spec:
       Verified pre-existing on origin/dev and untouched by this change (a red
       proof whose anchor rots stops proving anything — the same class NF-DTB-1
       recorded). Left for NF-INJ1-C's owner.
+
+
+      ── ⑩ (2026-09-18) PART 2 LANDED: THE PLAY-DERIVED D/ST CONSTRUCTION, WITH ITS
+      RULES FROZEN AND ITS INGEST OWNED. Three pieces.
+      (a) INGEST (PM ruling ②): `pbp` joined `WEEKLY_STAT_SOURCES`, so
+      `nfl_weekly_stats_ingest_op` is its one owner and the existing freshness op
+      judges it — no new schedule, no new lane. Measured before wiring: 3.6 s for
+      2026 weeks 1-2 (2,756 plays) against a 900 s budget. Ownership recorded in
+      nf-inc-0916's ledger. ⚠️ RUNTIME GATE: needs one real box run (CI mocks IO).
+      (b) THE FROZEN RULES live in
+      `quant_sports_intel_models/football/nfl/fantasy/realized_dst_pbp.py`, whose
+      header IS the freeze: every rule, what it reproduced, and an explicit ⛔ that
+      no rule may be changed to close a 2025 disagreement (a 2025-driven
+      refinement would make the 2026 tally in-sample polish wearing an
+      out-of-sample badge). Re-derived from scratch against Sleeper's own 2025
+      per-team stat lines, all 544 team-weeks: sacks, interceptions, defensive
+      TDs, ST TDs, safeties, blocked kicks, ST forced fumbles, ST fumble
+      recoveries, POINTS ALLOWED and yards allowed all 544/544; fumble recoveries
+      543/544; forced fumbles 539/544 (the both-directions vendor residual,
+      reported not chased — MH2.2).
+      ⚠️ TWO RULES DIFFERED FROM WHAT THIS SPEC'S OWN ⑦ RECORDED, and the
+      re-derivation is what caught it — the record's prose was right, my first
+      implementation was not: points allowed charges the opponent's SPECIAL-TEAMS
+      touchdowns and removes only their DEFENSIVE ones at 6 (excluding ST too
+      reads 518/544), and a fumble RECOVERY keys on WHO FUMBLED rather than who
+      had possession (543 vs 539 — they differ on a fumble by a player whose side
+      does not have the ball, as after an interception). A forced fumble does key
+      on possession. Both now carry their measured alternative in the code.
+      (c) WIRED, MEASURED END TO END: D/ST agreement 35/48 -> 48/48 on 2025 weeks
+      1-4 through the production path (the harness drives the same functions the
+      box publish and the recorder call), and 154/155 on weeks 5-17 with the one
+      miss a forced-fumble count. A defence on BYE counts 0 on both sides (three
+      such seats; verified 0 scheduled games, not silently credited).
+      Team totals stay 27/48 BY CONSTRUCTION, not as a failure: the served D/ST
+      seat carries the league's own figure (D2 disposition C), so the D/ST
+      construction cannot move a team total until the seat flips.
+      ⛔ THE SEAT DID NOT MOVE and nothing was flipped. The 2026 trigger is the
+      gate (PM ruling ③).
+      📌 THE DEGRADED PATH IS LEGIBLE: `dst_inputs.json` now carries
+      `construction` (`pbp_frozen` | `player_sums`) plus a
+      `constructionFallbackReason`, and the points-allowed disclosure text
+      switches with it — a week whose plays are not published yet still produces
+      a line, and cannot pass for the frozen construction.
+      10 deliberate breaks, all RED; 21 new tests.

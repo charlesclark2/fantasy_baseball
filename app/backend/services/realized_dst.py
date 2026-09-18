@@ -94,6 +94,16 @@ DST_YARDS_KEY = "dst_yards_allowed"
 #: plus an ASSUMED made extra point — see the header; disclosed on the wire, never silent.
 NON_OFFENSIVE_TD_POINTS = 7
 
+#: What the wire says when the FROZEN play-derived rule produced the figure (NF-WK-ACC1 part 2).
+#: There is no assumption left to disclose: the charge is read off the plays rather than estimated,
+#: and it reproduced 544 of 544 team-weeks in 2025 against the league's own published figures.
+POINTS_ALLOWED_RULE_PBP = (
+    "Points allowed excludes touchdowns scored by the opposing DEFENCE (removed at 6 points, the "
+    "touchdown itself — the extra point is a separate play your defence is not on the field for) and "
+    "safeties the opponent scored (2 points). Their special-teams touchdowns stay charged. Read from "
+    "play-by-play, not estimated."
+)
+
 POINTS_ALLOWED_ASSUMPTION = (
     "Points allowed excludes touchdowns scored by the opposing defence or special teams, which are "
     "not charged to your defence. Each is removed at 7 points (the score plus an assumed extra "
@@ -190,10 +200,27 @@ def net_yards_allowed(passing: float | None, rushing: float | None, sack_yards: 
     return float(passing or 0.0) + float(rushing or 0.0) + float(sack_yards or 0.0)
 
 
+#: Terms a D/ST line can carry that the PLAYER table cannot supply at all — they come from
+#: play-by-play (NF-WK-ACC1 part 2, frozen 2026-09-18; the rules live in
+#: `quant_sports_intel_models/football/nfl/fantasy/realized_dst_pbp.py`).
+#:
+#: ⚠️ THEY BELONG HERE RATHER THAN IN `realized_stat_fields.REALIZED_STAT_SOURCE` BECAUSE THAT MAP
+#: IS A CONTRACT ABOUT ONE TABLE — scorer key → `stats_player_week` column. A blocked kick has no
+#: player column in the seasons we hold; a defence-credited special-teams fumble is not a player
+#: stat at all. Naming them there would claim a column that does not exist; naming them here says
+#: what is true: the D/ST line serves them under their own name, and something else supplies them.
+#: `def_st_ff` / `def_st_fum_rec` are Sleeper's own raw keys (the importer carries them through
+#: unmapped, as it does `fum`) — the DEFENCE-credited versions, distinct from the player-credited
+#: `st_ff` / `st_fum_rec` a returner earns.
+REALIZED_PBP_DST_FIELD: dict[str, str] = {
+    k: k for k in ("def_blocked_kick", "def_st_ff", "def_st_fum_rec")
+}
+
 #: The `dst_*` scorer keys this module supplies, each served under its OWN name on the row. Merged
 #: with `REALIZED_STAT_FIELD` by `dst_stat_field()` so a caller never hand-assembles the two.
 REALIZED_DST_FIELD: dict[str, str] = {
-    k: k for k in [DST_POINTS_KEY, DST_YARDS_KEY, *PA_BUCKETS, *YA_BUCKETS]
+    **{k: k for k in [DST_POINTS_KEY, DST_YARDS_KEY, *PA_BUCKETS, *YA_BUCKETS]},
+    **REALIZED_PBP_DST_FIELD,
 }
 
 
@@ -218,6 +245,7 @@ def dst_row(
     opponent_rushing_yards: float | None,
     opponent_sack_yards_lost: float | None,
     team_defensive_stats: dict[str, float] | None = None,
+    points_allowed_override: float | None = None,
 ) -> dict:
     """One team-week's D/ST line, keyed so `league_scoring.score_row` can read it directly.
 
@@ -226,7 +254,14 @@ def dst_row(
     scorer's stat keys — they are the SAME keys `realized_stat_fields` maps at player grain, summed
     to the team, so there is one vocabulary rather than two.
     """
-    pa = points_allowed(opponent_score, opponent_non_offensive_tds)
+    # ⭐ `points_allowed_override` IS THE FROZEN PLAY-DERIVED FIGURE (NF-WK-ACC1 part 2). When a
+    # caller has play-by-play it computes points allowed under the frozen rule — the opponent's score
+    # minus 6 per touchdown their DEFENCE scored minus 2 per safety — which reproduced 544 of 544
+    # team-weeks in 2025 against the 457 this module's own 7-point rule reaches. The 7-point rule
+    # stays as the fallback for a week with no plays, and `dst_inputs`' `source` says which ran, so a
+    # degraded construction is never mistaken for the frozen one.
+    pa = (float(points_allowed_override) if points_allowed_override is not None
+          else points_allowed(opponent_score, opponent_non_offensive_tds))
     ya = net_yards_allowed(opponent_passing_yards, opponent_rushing_yards, opponent_sack_yards_lost)
     # ⭐ TRANSLATE SCORER KEYS → THE FIELD NAMES THE MAP POINTS AT. The caller names counters in the
     # scorer's own vocabulary (`def_fumble_rec`), which is the natural thing to write; `score_row`
@@ -234,13 +269,17 @@ def dst_row(
     # translation here is what stops the two spellings drifting at a call site — see the note on
     # `dst_stat_field`, which is where that mistake actually happened.
     row: dict = {}
+    # ⚠️ VALIDATED AGAINST THE MAP THE LINE IS ACTUALLY SCORED UNDER (`dst_stat_field()`), not
+    # against the player-grain map alone: the play-derived terms above live only in the D/ST half,
+    # and validating against the narrower map would refuse exactly the counters part 2 adds.
+    scoring_map = dst_stat_field()
     for key, value in (team_defensive_stats or {}).items():
-        if key not in REALIZED_STAT_FIELD:
+        if key not in scoring_map:
             raise DstBucketError(
                 f"{key!r} is not a stat key the realized map knows, so nothing would ever read it. "
                 "A counter under an unrecognised key scores zero with no error (the NF-C0e class)."
             )
-        row[REALIZED_STAT_FIELD[key]] = value
+        row[scoring_map[key]] = value
     if pa is not None:
         row[DST_POINTS_KEY] = pa
         row.update(_bucket_indicators(pa, PA_BUCKETS))

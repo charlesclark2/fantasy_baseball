@@ -73,6 +73,7 @@ from datetime import datetime, timezone
 
 from app.backend.services import league_scoring
 from app.backend.services import realized_dst as D
+from quant_sports_intel_models.football.nfl.fantasy import realized_dst_pbp as DP
 from app.backend.services import realized_stat_fields as R
 from app.backend.services import weekly_recap as W
 
@@ -708,16 +709,21 @@ def _num(stats: dict, col: str) -> float:
     return 0.0 if math.isnan(f) else f
 
 
-def team_week_inputs(team_stats: dict[str, dict], games: list[dict]) -> dict[str, dict]:
+def team_week_inputs(team_stats: dict[str, dict], games: list[dict],
+                     pbp_counters: dict[str, dict] | None = None) -> dict[str, dict]:
     """BOX-SIDE half: `{defence: {line, opponent, gameId, resultPending}}` for one week.
 
     `team_stats` maps a lake team code to that team's summed `DST_TEAM_COLUMNS`; `games` are the
     week's schedule rows (`game_id`, `home_team`, `away_team`, `home_score`, `away_score`).
 
-    ⚠️ THIS IS RC1's CONSTRUCTION EXACTLY — the one that reproduced 35 of 48 — and it is wired as-is
-    on purpose: the recorder must reproduce the known baseline before any mechanism is changed, or
-    the starting point of the residual work is unreproducible. Closures land as separate, measured
-    edits to this function.
+    ⭐ TWO CONSTRUCTIONS, AND THE CALLER'S DATA DECIDES WHICH (NF-WK-ACC1 part 2). With
+    `pbp_counters` — `{lake team code: counters}` from `realized_dst_pbp.team_game_counters`, whose
+    rules are FROZEN as of 2026-09-18 — every defensive term and points allowed come from the plays,
+    which reproduced the league's own figures on 48 of 48 started defences in 2025 weeks 1-4. Without
+    them this stays RC1's summed-player construction, which reproduced 35 of 48.
+    ⛔ THE DEGRADED PATH IS NEVER SILENT: `build_dst_inputs` stamps which construction ran in the
+    artifact's `source`, so a week built without plays is legible as such rather than passing for the
+    frozen one (a fallback that cannot announce itself is indistinguishable from a measurement).
 
     A team with no stats row is OMITTED rather than zero-filled: `compare_to_platform` reports an
     omitted defence as `notConstructed`, never as agreement.
@@ -732,17 +738,25 @@ def team_week_inputs(team_stats: dict[str, dict], games: list[dict]) -> dict[str
             m, o = team_stats[me], team_stats[opp]
             score = None if opp_score is None or (isinstance(opp_score, float) and math.isnan(opp_score)) \
                 else float(opp_score)
-            non_offensive = (_num(o, "def_tds") + _num(o, "special_teams_tds")
-                             + _num(o, "fumble_recovery_tds"))
-            counters = {
-                "def_sacks": _num(m, "def_sacks"),
-                "def_int": _num(m, "def_interceptions"),
-                "def_fumble_rec": _num(m, "fumble_recovery_opp"),
-                "def_td": _num(m, "def_tds") + _num(m, "fumble_recovery_tds"),
-                "def_safety": _num(m, "def_safeties"),
-                "def_forced_fumble": _num(m, "def_fumbles_forced"),
-                "st_td": _num(m, "special_teams_tds"),
-            }
+            mine_pbp = (pbp_counters or {}).get(me)
+            theirs_pbp = (pbp_counters or {}).get(opp)
+            pa_override = None
+            if mine_pbp is not None and theirs_pbp is not None:
+                counters = {k: float(mine_pbp.get(k) or 0.0) for k in DP.COUNTER_KEYS}
+                pa_override = DP.points_allowed(score, theirs_pbp)
+                non_offensive = 0.0  # unused: the frozen figure arrives as the override
+            else:
+                non_offensive = (_num(o, "def_tds") + _num(o, "special_teams_tds")
+                                 + _num(o, "fumble_recovery_tds"))
+                counters = {
+                    "def_sacks": _num(m, "def_sacks"),
+                    "def_int": _num(m, "def_interceptions"),
+                    "def_fumble_rec": _num(m, "fumble_recovery_opp"),
+                    "def_td": _num(m, "def_tds") + _num(m, "fumble_recovery_tds"),
+                    "def_safety": _num(m, "def_safeties"),
+                    "def_forced_fumble": _num(m, "def_fumbles_forced"),
+                    "st_td": _num(m, "special_teams_tds"),
+                }
             line = D.dst_row(
                 opponent_score=score,
                 opponent_non_offensive_tds=non_offensive,
@@ -750,6 +764,7 @@ def team_week_inputs(team_stats: dict[str, dict], games: list[dict]) -> dict[str
                 opponent_rushing_yards=_num(o, "rushing_yards"),
                 opponent_sack_yards_lost=_num(o, "sack_yards_lost"),
                 team_defensive_stats=counters,
+                points_allowed_override=pa_override,
             )
             # Keyed by the SCORER'S team vocabulary so the lake's `LA` and Sleeper's `LAR` meet.
             key = _team_key(me)
@@ -784,15 +799,59 @@ def build_dst_inputs(season: int, week: int, *, q, delta) -> dict:
         where season = {int(season)} and week = {int(week)} and game_type = 'REG'
     """).to_dict("records")
     team_stats = {str(r["team"]): r for r in stats if r.get("team")}
-    teams = team_week_inputs(team_stats, [_clean(g) for g in games])
-    return {
+    pbp_counters, pbp_error = _pbp_counters(season, week, q=q, delta=delta)
+    teams = team_week_inputs(team_stats, [_clean(g) for g in games], pbp_counters)
+    frozen = pbp_counters is not None
+    out = {
         "season": int(season),
         "week": int(week),
-        "source": "stats_player_week (summed by team) + schedules",
-        "pointsAllowedAssumption": D.POINTS_ALLOWED_ASSUMPTION,
+        "source": ("pbp (frozen 2026-09-18 rules) + stats_player_week (yards allowed) + schedules"
+                   if frozen else "stats_player_week (summed by team) + schedules"),
+        "construction": "pbp_frozen" if frozen else "player_sums",
+        "pointsAllowedAssumption": (D.POINTS_ALLOWED_RULE_PBP if frozen
+                                    else D.POINTS_ALLOWED_ASSUMPTION),
         "teams": teams,
         "resultPendingTeams": sorted(t for t, e in teams.items() if e["resultPending"]),
     }
+    # ⛔ A DEGRADED CONSTRUCTION SAYS SO ON THE WIRE. The play read is best-effort — a week whose
+    # plays are not published yet must still produce a line — but "we fell back" and "this is the
+    # frozen construction" must never be the same artifact (the E9.62 lesson: a fallback that cannot
+    # announce itself is indistinguishable from a measurement).
+    if pbp_error:
+        out["constructionFallbackReason"] = pbp_error
+    return out
+
+
+def _pbp_counters(season: int, week: int, *, q, delta) -> tuple[dict[str, dict] | None, str | None]:
+    """One week's play-derived counters per team, or `(None, reason)` if the plays cannot be read.
+
+    ⚠️ AN EMPTY PLAY SET IS A FALLBACK, NOT AN EMPTY CONSTRUCTION. Counting zero sacks for every
+    defence because no plays were published would read exactly like a quiet week.
+    """
+    cols = ", ".join(DP.PBP_COLUMNS)
+    try:
+        plays = q(f"""
+            select {cols}
+            from {delta('pbp')}
+            where season = {int(season)} and week = {int(week)} and season_type = 'REG'
+        """).to_dict("records")
+    except Exception as exc:  # noqa: BLE001 — the reason rides the artifact; see the caller
+        return None, f"{type(exc).__name__}: {exc}"
+    if not plays:
+        return None, f"no REG plays published for {int(season)} week {int(week)} yet"
+    by_game: dict[str, list[dict]] = {}
+    for play in plays:
+        by_game.setdefault(str(play.get("game_id")), []).append(play)
+    counters: dict[str, dict] = {}
+    for game_plays in by_game.values():
+        for team, values in DP.team_game_counters(game_plays).items():
+            # One team plays once per week, so a collision would mean a duplicated game — sum rather
+            # than overwrite, and the harness's agreement figures are what would catch it.
+            if team in counters:
+                counters[team] = {k: counters[team][k] + values[k] for k in values}
+            else:
+                counters[team] = dict(values)
+    return counters, None
 
 
 def _clean(row: dict) -> dict:
