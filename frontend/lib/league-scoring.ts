@@ -378,6 +378,10 @@ export interface RosterMatch {
   /** The scored board row for this roster player, or `null` when no match was found in the current
    *  projection universe (an honest miss — see the module note above). */
   board: Player | null
+  /** WHICH pass matched: the primary `name|position` key, the NF-WK-ACC1 part 3 `name|team`
+   *  fallback (⇒ the two sides disagree about this player's POSITION, which matters to any
+   *  position-dependent scoring), or `null` for an honest miss. */
+  matchedOn?: "name_position" | "name_team" | null
 }
 
 /**
@@ -410,16 +414,62 @@ export function classifyUnmatched(
   return published.includes(pos) ? "unresolved" : "not-published"
 }
 
-/** Join one imported roster onto an already-`buildBoard`'d array. */
+/**
+ * The FALLBACK key: normalized name + resolved franchise, with NO position component. Empty when
+ * either half is missing, so an unresolvable row can never collide with another.
+ */
+function nameTeamKey(name: string, team: string | null | undefined): string {
+  const folded = normalizePlayerName(name)
+  const franchise = normalizeTeamAbbrev(team)
+  return folded && franchise ? `${folded}|${franchise}` : ""
+}
+
+/**
+ * Join one imported roster onto an already-`buildBoard`'d array.
+ *
+ * ⭐ TWO PASSES since NF-WK-ACC1 part 3, mirroring `league_scoring.match_roster_to_board`. The
+ * position component is something the two sides genuinely disagree about for a TWO-WAY player
+ * (measured: Travis Hunter is `WR` on Sleeper and `CB` in the realized stat line, so his seat came
+ * back unmatched in every week of 2025 while his NAME matched perfectly). The second pass keys on
+ * name + FRANCHISE, refuses an ambiguous pair rather than arbitrating it ("Josh Allen" is a QB on BUF
+ * and a linebacker on JAX — a bare-name fallback would hand over the wrong man's line, worse than the
+ * honest non-match), never overrides a primary hit, and never applies to a D/ST slot.
+ *
+ * ⚠️ THE PYTHON SIDE IS THE PRODUCTION OWNER. Server-side scoring (NF-EPIC 1) means nothing in
+ * `frontend/` calls this in production today — it backs the e2e mock. It is kept in step anyway,
+ * because a copy that silently diverges is the "one logical rule, many owners" shape this repo keeps
+ * paying for, and the next production caller would inherit the older behaviour.
+ */
 export function matchRosterToBoard(roster: ImportedPlayer[], board: Player[]): RosterMatch[] {
   const byKey = new Map<string, Player>()
   for (const p of board) {
     const key = joinKey(p.name, p.pos, p.team)
     if (!byKey.has(key)) byKey.set(key, p) // first (highest-VOR, since board is VOR-sorted) wins
   }
+
+  // Unambiguous name+team pairs only. D/ST rows are excluded: their franchise key already joins, and
+  // a rendered defence name must never become a candidate for a human player's seat.
+  const grouped = new Map<string, Player[]>()
+  for (const p of board) {
+    if (normalizePosition(p.pos ?? "") === "DST") continue
+    const fk = nameTeamKey(p.name, p.team)
+    if (!fk) continue
+    const bucket = grouped.get(fk)
+    if (bucket) bucket.push(p)
+    else grouped.set(fk, [p])
+  }
+  const byNameTeam = new Map<string, Player>()
+  for (const [k, v] of grouped) if (v.length === 1) byNameTeam.set(k, v[0])
+
   return roster.map((r) => {
-    if (!r.name) return { roster: r, board: null }
+    if (!r.name) return { roster: r, board: null, matchedOn: null }
     const key = joinKey(r.name, r.position ?? "", r.team)
-    return { roster: r, board: byKey.get(key) ?? null }
+    const primary = byKey.get(key)
+    if (primary) return { roster: r, board: primary, matchedOn: "name_position" }
+    if (normalizePosition(r.position ?? "") !== "DST") {
+      const fallback = byNameTeam.get(nameTeamKey(r.name, r.team))
+      if (fallback) return { roster: r, board: fallback, matchedOn: "name_team" }
+    }
+    return { roster: r, board: null, matchedOn: null }
   })
 }

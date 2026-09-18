@@ -29,6 +29,7 @@ import botocore.exceptions
 import pytest
 
 from app.backend.models import nfl_recap
+from betting_ml.tests import _realized_capture as _capture
 from quant_sports_intel_models.football.nfl.fantasy import realized_week as RW
 from quant_sports_intel_models.football.nfl.fantasy import run_realized_week as RUN
 
@@ -238,13 +239,45 @@ def test_publish_accepts_the_stored_week_and_writes_both_keys():
 # 4 — THE SEASON-TO-DATE ARTIFACT
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
+#: ⭐ ONE OWNER, shared with `test_nf_wvr1_fact_columns.py` — ruling ① put BOTH suites' fixtures one
+#: column behind the contract at once, and a copy of the adaptation in each file is a second owner of
+#: one rule (the repo's INC-30/36/38 shape). Read `_realized_capture`'s docstrings before trusting
+#: what a clause built on the adapted capture proves.
+_columns_the_capture_predates = _capture.columns_the_capture_predates
+_bring_up_to_contract = _capture.bring_up_to_contract
+
+
 def _served_week(week: int, *, completeness: str = "final", hashed: bool = True):
     man, players = _week1()
     for p in players:
         p["week"] = week
         p["game_id"] = p["game_id"].replace("_01_", f"_{week:02d}_")
+    man, players = _bring_up_to_contract(man, players)
     man = {**man, "week": week, "completeness": completeness}
     return (_hashed(man, players) if hashed else man), players
+
+
+def test_the_authentic_capture_is_columns_behind_until_it_is_republished():
+    """⭐ THE REAL OPERATIONAL CONSEQUENCE of widening the column contract, pinned on the UNTOUCHED
+    capture rather than on an adapted one: a week published before a column existed cannot enter the
+    season artifact, and it names itself rather than silently contributing short rows.
+
+    This is the state every already-published 2026 week is in after NF-WK-ACC1 ruling ①, which is why
+    the closeout lists a republish as an operator step. ⛔ If `_columns_the_capture_predates()` is
+    empty the clause is INERT and says so — an assertion about a gap that no longer exists would be
+    the vacuous pass, not a success.
+    """
+    missing = _columns_the_capture_predates()
+    if not missing:
+        pytest.skip("the committed capture already carries today's contract — nothing to exclude")
+    man, players = _week1()
+    man = {**man, "week": 1, "completeness": "final"}
+    built = RW.build_season(2026, {1: (_hashed(man, players), players)})
+    assert built["manifest"]["weeks"] == []
+    [excluded] = built["manifest"]["excluded"]
+    assert excluded["reason"] == "columns_behind"
+    for column in missing:
+        assert column in excluded["detail"], "the exclusion must NAME the columns it is behind on"
 
 
 def test_the_season_artifact_is_the_concatenation_of_the_served_weeks():

@@ -332,8 +332,17 @@ def test_an_uncomparable_published_week_is_not_reported_as_unchanged():
 
 
 def test_only_declared_actions_reach_the_served_keys():
-    """The write set is DERIVED, so a new action cannot become a serving write by omission."""
-    assert RW._SERVING_WRITE_ACTIONS == {"create", "upgrade", "backfill_hash"}
+    """The write set is DERIVED, so a new action cannot become a serving write by omission.
+
+    ⭐ RE-ANCHORED by NF-WK-ACC1 part 3, not weakened. `widen_columns` was ADDED deliberately (this
+    build derives a term the published week did not carry), so the literal moves — but the property
+    the guard exists for is unchanged and is now asserted TWICE over: the actions that must NEVER
+    write still must not, and `publish` itself asserts that membership here and each decision's own
+    `servingWrite` flag agree. That second clause is the one that matters: this story's new action
+    announced `servingWrite: True` while the set omitted it, which would have been a serving write
+    silently skipped — a week that simply never updates, with no error anywhere.
+    """
+    assert RW._SERVING_WRITE_ACTIONS == {"create", "upgrade", "backfill_hash", "widen_columns"}
     for action in ("unchanged", "restate", "refuse_downgrade"):
         assert action not in RW._SERVING_WRITE_ACTIONS
 

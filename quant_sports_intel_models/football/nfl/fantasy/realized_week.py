@@ -55,6 +55,19 @@ So this module classifies rather than PUTs, and the classification is a PURE fun
                                     published before this machinery existed — overwritten ONCE and
                                     logged under its own name, because "we could not compare" must
                                     never be silently reported as "unchanged" (NF1.7(a)))
+  * published FINAL, we now derive MORE → `widen_columns` (NF-WK-ACC1 part 3: this build carries a
+                                    term the published week did not, and every column it DID carry is
+                                    byte-identical. Not a restatement — nothing the vendor publishes
+                                    moved — so it overwrites, like `upgrade`. ⛔ It is decided on a
+                                    hash taken over the PUBLISHED week's own column set, so a vendor
+                                    correction that lands in the same build still falls through to
+                                    `restate`: a widen must not become a back door for one.)
+
+⚠️ WITHOUT `widen_columns`, TEACHING THE BUILD A NEW TERM WOULD BE A NO-OP FOREVER. Any new column
+changes every row's hash, so every already-published week would classify as `restate`, keep serving
+the old rows, and never show the new term — while the log filled with restatement events that named
+the vendor for a change we made ourselves. The distinction is the difference between a term shipping
+and a term being silently withheld.
 
 ⭐ THE HASH COVERS THE PLAYER ROWS ONLY. `generated_at` moves on every build, so hashing the whole
 blob would classify every routine re-run as a restatement — an event stream that fires on nothing is
@@ -70,10 +83,12 @@ import json
 import logging
 import math
 from datetime import datetime, timezone
+from typing import Iterable
 
 from app.backend.services import league_scoring
 from app.backend.services import realized_dst as D
 from quant_sports_intel_models.football.nfl.fantasy import realized_dst_pbp as DP
+from quant_sports_intel_models.football.nfl.fantasy import realized_player_pbp as PP
 from app.backend.services import realized_stat_fields as R
 from app.backend.services import weekly_recap as W
 
@@ -92,18 +107,50 @@ from app.backend.models.nfl_recap import (  # noqa: E402
 )
 
 
-#: Every lake column the artifact must carry: the scorer's realized sources, the identity columns,
-#: the source's own PPR, and whatever the explained/unexplained split needs. DERIVED — adding a
-#: term to either map widens this automatically, so a column the reader silently lacked (which is
-#: how the split shipped as a no-op once) cannot recur.
+#: Every `stats_player_week` column the artifact must carry: the scorer's realized sources, the
+#: identity columns, the source's own PPR, and whatever the explained/unexplained split needs.
+#: DERIVED — adding a term to either map widens this automatically, so a column the reader silently
+#: lacked (which is how the split shipped as a no-op once) cannot recur.
+#:
+#: ⛔ THE PLAY-DERIVED COLUMNS ARE NOT IN HERE. This is the SELECT list for the weekly line, and
+#: `stats_player_week` has no column for the 40+ yard touchdown bonuses — asking it for one would
+#: fail the read. They arrive from a second read (`_long_td_counts`) and are declared in the
+#: manifest by `served_columns` only when that read actually succeeded.
 def required_columns() -> tuple[str, ...]:
     return tuple(sorted(
         set(R.REALIZED_STAT_COLUMNS)
         | set(R.REALIZED_KEY_COLUMNS)
         | {R.REALIZED_PPR_COLUMN}
         | set(W.EXPLANATION_COLUMNS)
+        # Carried for diagnosis rather than scoring, and load-bearing for the publish path — see
+        # `realized_stat_fields.REALIZED_DIAGNOSTIC_COLUMNS` for why dropping them would silently
+        # strand the ruling-① map change on every already-published week.
+        | set(R.REALIZED_DIAGNOSTIC_COLUMNS)
     ))
 
+
+def served_columns(*, plays_joined: bool) -> tuple[str, ...]:
+    """What the artifact ACTUALLY carries — the weekly line, plus the play-derived terms iff joined.
+
+    ⭐ A FUNCTION OF THE BUILD, NOT A CONSTANT, and that is the whole point. `manifest["columns"]` is
+    a CLAIM a consumer trusts, and `contract_report` refuses to publish when a claimed column carries
+    no value on any row. Declaring the play-derived columns unconditionally would make every week
+    whose plays are not published yet fail its own contract — turning a legitimate degraded build
+    into an outage — while declaring them never would leave a consumer unable to tell whether the
+    bonuses are in the number it is reading.
+    """
+    cols = set(required_columns())
+    if plays_joined:
+        cols |= set(R.REALIZED_PBP_COLUMNS)
+    return tuple(sorted(cols))
+
+
+#: scorer key → the column the play-derived bonus is written under. ⭐ TAKEN FROM THE SCORER'S OWN
+#: MAP, never re-typed here: the column this writes and the column `flatten_realized_row` reads must
+#: be the same string, and the only way to guarantee that is to have one owner of it. `PP` declares
+#: the identical map for the models side; a guard pins the two together, because the backend cannot
+#: import `PP` (no `quant_sports_intel_models` in the Lambda) and so the duplication is unavoidable.
+_LONG_TD_COLUMN: dict[str, str] = {k: cols[0] for k, cols in R.REALIZED_PBP_SOURCE.items()}
 
 #: The canonical row order. DuckDB promises no ordering, and an ordering difference is not a
 #: content difference — without this every rebuild would hash differently and every routine re-run
@@ -116,11 +163,24 @@ def canonical_rows(players: list[dict]) -> list[dict]:
     return sorted(players, key=lambda r: tuple(str(r.get(k) or "") for k in _ORDER_KEYS))
 
 
-def content_hash(players: list[dict]) -> str:
-    """A sha256 over the ROWS ONLY — never the manifest, whose `generated_at` moves every build."""
-    return hashlib.sha256(
-        json.dumps(canonical_rows(players), sort_keys=True, default=str).encode()
-    ).hexdigest()
+def content_hash(players: list[dict], columns: Iterable[str] | None = None) -> str:
+    """A sha256 over the ROWS ONLY — never the manifest, whose `generated_at` moves every build.
+
+    ⭐ `columns` RESTRICTS THE HASH TO A NAMED SUBSET, which is what lets "we started deriving a new
+    term" be told apart from "the vendor restated this week". Both change the full-row hash; only the
+    second changes a hash taken over the columns the published week already had. Without that
+    distinction a construction change would be indistinguishable from a restatement, and the
+    conservative handling of a restatement (park it, serve the old week) would silently withhold
+    every new term forever — see `publish_decision`.
+    """
+    rows = canonical_rows(players)
+    if columns is not None:
+        keep = set(columns)
+        # ⚠️ Stripped AFTER the canonical sort, never before: the sort keys may not be in `keep`, and
+        # re-sorting a stripped row set would be ordering by a different key than the full hash uses.
+        # List order is preserved by the comprehension, so the restricted hash is stable.
+        rows = [{k: v for k, v in r.items() if k in keep} for r in rows]
+    return hashlib.sha256(json.dumps(rows, sort_keys=True, default=str).encode()).hexdigest()
 
 
 def completeness(realized_games: int, scheduled_games: int) -> str:
@@ -151,6 +211,11 @@ def build(season: int, week: int, *, q, delta) -> dict:
     scheduled = int(sched["n"].iloc[0]) if len(sched) else 0
     realized_games = len({str(p.get("game_id")) for p in players if p.get("game_id")})
     state = completeness(realized_games, scheduled)
+
+    # ── the play-derived long-touchdown bonuses (NF-WK-ACC1 part 3) ──────────────────────────────
+    long_td, long_td_error = _long_td_counts(season, week, q=q, delta=delta)
+    if long_td is not None:
+        attach_long_td_counts(players, long_td)
     players = canonical_rows(players)
 
     manifest = {
@@ -164,15 +229,71 @@ def build(season: int, week: int, *, q, delta) -> dict:
         "n_teams": len({str(p.get("team")) for p in players if p.get("team")}),
         # ⭐ SERVED, not assumed: a consumer can tell whether the artifact it holds carries the
         # columns its scorer needs, rather than discovering a missing one as a silent zero.
-        "columns": list(required_columns()),
+        "columns": list(served_columns(plays_joined=long_td is not None)),
         "source_table": R.REALIZED_SOURCE_TABLE,
+        # ⛔ THE DEGRADED PLAYER CONSTRUCTION SAYS SO ON THE WIRE, exactly as the D/ST one does: a
+        # week built without plays is missing the three 40+ yard touchdown bonuses, and "we could not
+        # read the plays" must never be the same artifact as "this week had no long touchdowns"
+        # (a fallback that cannot announce itself is indistinguishable from a measurement).
+        "playerConstruction": "pbp_joined" if long_td is not None else "player_week_only",
         # ⭐ WHAT MAKES A RE-PUBLISH DECIDABLE. Without it, "the same week, built again" and "the
         # vendor restated this week" are the same bytes-on-the-wire question with no answer.
         "content_sha256": content_hash(players),
     }
-    log.info("[realized] %s wk%s: %s (%s/%s games, %s players)",
-             season, week, state, realized_games, scheduled, len(players))
+    if long_td_error:
+        manifest["playerConstructionFallbackReason"] = long_td_error
+    log.info("[realized] %s wk%s: %s (%s/%s games, %s players) players=%s",
+             season, week, state, realized_games, scheduled, len(players),
+             manifest["playerConstruction"])
     return {"manifest": manifest, "players": players}
+
+
+def attach_long_td_counts(players: list[dict], counts: dict[str, dict[str, float]]) -> int:
+    """Write the play-derived bonus columns onto every player row. Returns the rows credited.
+
+    ⭐ ZERO ON EVERY ROW, NOT ONLY ON THE SCORERS — and this is the load-bearing detail. The term is
+    APPLIED or CAPTURED according to whether `league_scoring.available_fields` sees the field at all,
+    so populating it only for the handful of players who scored a long touchdown would leave the
+    verdict depending on whether anyone happened to score one this week. A week with no 40+ yard
+    touchdown would then report the bonus as CAPTURED — i.e. "not in this number" — when in truth it
+    was applied and correctly came to nothing. Present-and-zero says the second thing; absent says
+    the first; they are different claims and the caller is entitled to the right one.
+
+    ⛔ MUTATES IN PLACE, mirroring the read it belongs to: the rows are the artifact's own, and
+    copying 1,100 dicts to add three keys would be a second representation of the same week.
+    """
+    credited = 0
+    for row in players:
+        if not isinstance(row, dict):
+            continue
+        got = counts.get(str(row.get("player_id") or ""))
+        for key, column in _LONG_TD_COLUMN.items():
+            row[column] = float((got or {}).get(key) or 0.0)
+        if got:
+            credited += 1
+    return credited
+
+
+def _long_td_counts(season: int, week: int, *, q, delta
+                    ) -> tuple[dict[str, dict[str, float]] | None, str | None]:
+    """One week's play-derived long-touchdown counts per player, or `(None, reason)`.
+
+    ⚠️ AN EMPTY PLAY SET IS A FALLBACK, NOT A ZERO WEEK — the same distinction `_pbp_counters` makes
+    for the D/ST side. Crediting nobody with a long touchdown because no plays were published reads
+    exactly like a week in which nobody scored one, and the two must stay separable.
+    """
+    cols = ", ".join(PP.PBP_PLAYER_COLUMNS)
+    try:
+        plays = q(f"""
+            select {cols}
+            from {delta('pbp')}
+            where season = {int(season)} and week = {int(week)} and season_type = 'REG'
+        """).to_dict("records")
+    except Exception as exc:  # noqa: BLE001 — the reason rides the manifest; see the caller
+        return None, f"{type(exc).__name__}: {exc}"
+    if not plays:
+        return None, f"no REG plays published for {int(season)} week {int(week)} yet"
+    return PP.player_long_td_counts(plays), None
 
 
 # ── the publish-time contract (NF-WK-RC1 addendum, PM 2026-09-17; scope = NF-WVR1 ⑭) ─────────────
@@ -335,12 +456,17 @@ def revision_manifest_key(season: int, week: int, stamp: str) -> str:
     return f"realized/{int(season)}/{int(week)}/manifest.revision-{safe}.json"
 
 
-#: Actions that WRITE to the served keys. Derived and used by `publish`, so adding an action cannot
-#: silently become a serving write by omission.
-_SERVING_WRITE_ACTIONS: frozenset[str] = frozenset({"create", "upgrade", "backfill_hash"})
+#: Actions that WRITE to the served keys. ⚠️ THIS IS A CROSS-CHECK, NOT THE DECISION — `publish` acts
+#: on `decision["servingWrite"]`, which `publish_decision` sets beside each reason, and asserts the
+#: two agree. Two independent owners of "does this overwrite the served week" is how NF-WK-ACC1 part
+#: 3 nearly shipped a new action that announced `servingWrite: True` and then wrote nothing: the set
+#: omitted it, and the omission is silent in exactly the direction that looks like success.
+_SERVING_WRITE_ACTIONS: frozenset[str] = frozenset(
+    {"create", "upgrade", "backfill_hash", "widen_columns"})
 
 
-def publish_decision(manifest: dict, published: dict | None) -> dict:
+def publish_decision(manifest: dict, published: dict | None,
+                     players: list[dict] | None = None) -> dict:
     """PURE — what a re-publish of this week MEANS. See the header for the full table.
 
     Returns `{action, reason, servingWrite, event}`. `event` is True for the cases a caller must
@@ -377,6 +503,35 @@ def publish_decision(manifest: dict, published: dict | None) -> dict:
     if prior == manifest.get("content_sha256"):
         return {"action": "unchanged", "reason": "byte-identical player rows",
                 "servingWrite": False, "event": False}
+
+    # ⭐ OUR CONSTRUCTION WIDENING IS NOT A VENDOR RESTATEMENT (NF-WK-ACC1 part 3). When this build
+    # derives a term the published week did not carry, EVERY full-row hash differs — so without this
+    # case a new term would classify as `restate` on every already-published week, the published week
+    # would keep serving, and the term would never reach a reader. That is the shape `upgrade` already
+    # rejects for partial→final: a build that is strictly MORE than what is served is not a conflict.
+    #
+    # ⛔ AND IT MUST NOT ABSORB A COINCIDENT RESTATEMENT. A widen and a vendor correction can land in
+    # the same build, so the test is not "did columns grow" but "did anything the published week
+    # ALREADY CARRIED move" — a hash over the published column set answers exactly that. If those
+    # columns moved too, this is a restatement that happens to also widen, and a restatement needs a
+    # human (the ruling), so it falls through.
+    was_cols = set(published.get("columns") or ())
+    now_cols = set(manifest.get("columns") or ())
+    added = sorted(now_cols - was_cols)
+    if added and not (was_cols - now_cols):
+        if players is None:
+            return {"action": "restate",
+                    "reason": ("the published rows and this build differ and the column set has "
+                               f"grown by {added}, but no rows were supplied to tell a widened "
+                               "construction from a vendor restatement — refusing to assume the "
+                               "harmless one"),
+                    "servingWrite": False, "event": True}
+        if content_hash(players, was_cols) == prior:
+            return {"action": "widen_columns",
+                    "reason": (f"this build derives {added}, which the published week did not "
+                               "carry; every column it DID carry is byte-identical, so nothing the "
+                               "vendor publishes has moved — republishing to serve the new term(s)"),
+                    "servingWrite": True, "event": False, "addedColumns": added}
     return {"action": "restate",
             "reason": ("the vendor has RESTATED this week — the published rows and this build "
                        "differ. The published week keeps serving; this build is parked at a "
@@ -419,13 +574,21 @@ def publish(built: dict, *, s3, bucket: str, prefix: str = "fantasy/nfl") -> dic
     # build that does not carry what it declares is refused whole rather than half-published.
     assert_contract(man, built["players"], label=f"{season} wk{week}")
     prior = published_manifest(season, week, s3=s3, bucket=bucket, prefix=prefix)
-    decision = publish_decision(man, prior)
+    decision = publish_decision(man, prior, built["players"])
     action = decision["action"]
 
     def _put(key: str, body: dict) -> str:
         s3.put_object(Bucket=bucket, Key=f"{prefix}/{key}",
                       Body=json.dumps(body, default=str), ContentType="application/json")
         return key
+
+    # ⛔ THE TWO OWNERS MUST AGREE, and this is where it is enforced rather than hoped. A new action
+    # whose `servingWrite` flag and membership disagree is a serving write silently skipped (or, worse,
+    # silently made) — so the mismatch fails here instead of showing up as a week that never updated.
+    assert (action in _SERVING_WRITE_ACTIONS) == bool(decision["servingWrite"]), (
+        f"publish action {action!r} says servingWrite={decision['servingWrite']!r} but "
+        f"_SERVING_WRITE_ACTIONS {'contains' if action in _SERVING_WRITE_ACTIONS else 'omits'} it"
+    )
 
     written: list[str] = []
     if action in _SERVING_WRITE_ACTIONS:
