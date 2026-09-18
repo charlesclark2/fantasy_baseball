@@ -1,0 +1,8 @@
+{
+ "new": "nf_ros1b_repro_check.json",
+ "reference": "nf_ros1b_walkforward.json",
+ "max_abs_diff": 0.0,
+ "structural_mismatches": [],
+ "n_structural_mismatches": 0,
+ "reproduces": true
+}

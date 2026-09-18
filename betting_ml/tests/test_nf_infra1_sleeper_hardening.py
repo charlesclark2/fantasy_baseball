@@ -343,7 +343,12 @@ def test_the_freshness_check_runs_downstream_of_the_land_as_a_graph_edge():
     assert {n.name for n in graph.nodes} == {
         "nfl_sleeper_injuries_ingest_op", "nfl_sleeper_injuries_rebuild_op",
         "nfl_sleeper_injuries_freshness_op", "nfl_published_board_freshness_op",
-        "nfl_weekly_freshness_op"}
+        "nfl_weekly_freshness_op",
+        # RE-ANCHORED BY NF-ROS1b (2026-09-17), again REPAIRING A RED: NF-WK-RC1 added
+        # `nfl_realized_freshness_op` without moving this set (skipped on CI — no manifest — so it
+        # went unseen). NF-ROS1b adds `nfl_ros_freshness_op`. Both get the no-dependencies assertion
+        # below, not merely set membership.
+        "nfl_realized_freshness_op", "nfl_ros_freshness_op"}
 
     deps = graph.dependencies
     freshness = next(k for k in deps if k.name == "nfl_sleeper_injuries_freshness_op")
@@ -356,7 +361,8 @@ def test_the_freshness_check_runs_downstream_of_the_land_as_a_graph_edge():
     # time topologically, so an op made downstream of the Sleeper ingest is SKIPPED when that ingest
     # raises — which it does by design — and a monitor that goes quiet exactly when the box is
     # already unhealthy is worse than no monitor.
-    for independent in ("nfl_published_board_freshness_op", "nfl_weekly_freshness_op"):
+    for independent in ("nfl_published_board_freshness_op", "nfl_weekly_freshness_op",
+                        "nfl_realized_freshness_op", "nfl_ros_freshness_op"):
         leg = [k for k in deps if k.name == independent]
         assert leg, f"{independent} is not in the compiled graph at all"
         assert not deps[leg[0]], (
