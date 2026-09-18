@@ -15,7 +15,12 @@ from pathlib import Path
 
 import pytest
 
-from app.backend.services import realized_dst, weekly_recap, weekly_recap_divergence
+from app.backend.services import (
+    realized_dst,
+    realized_stat_fields,
+    weekly_recap,
+    weekly_recap_divergence,
+)
 from quant_sports_intel_models.football.nfl.fantasy import realized_week as RW
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -96,10 +101,11 @@ def test_the_lakes_LA_meets_the_platforms_LAR():
 
 # ── the recorder ─────────────────────────────────────────────────────────────────────────────────
 
-def _scored_and_seats():
+def _scored_and_seats(**kw):
+    """`kw` reaches `score_week` — used only to drive the PRE-closure map (see the split test)."""
     seats: dict = {}
     scored = weekly_recap.score_week(fetched=_fetched(), realized_rows=_REALIZED, cfg=_CFG,
-                                     realized_by_seat=seats)
+                                     realized_by_seat=seats, **kw)
     return scored, seats
 
 
@@ -112,13 +118,43 @@ def test_score_week_fills_the_seat_explanations_and_never_serves_them():
 
 def test_the_explained_split_is_actually_fed_on_the_wired_path():
     """⛔ THE RC1 NO-OP, ONE LEVEL UP. With the seat explanations wired, the fumble delta is
-    EXPLAINED; if the out-parameter stopped being filled, `unexplained` would equal `diverging`."""
-    scored, seats = _scored_and_seats()
+    EXPLAINED; if the out-parameter stopped being filled, `unexplained` would equal `diverging`.
+
+    ⭐ DRIVEN THROUGH A MAP THAT DOES NOT SCORE `fum`, ON PURPOSE (NF-WK-ACC1 part 1). Production
+    now APPLIES that term, so on today's real map this seat agrees outright and there is no
+    divergence left to explain — which would make this clause pass on nothing. Passing the
+    pre-closure map keeps it testing the MECHANISM, and the test below records the separate fact
+    that the mechanism currently has no live term to act on.
+    """
+    no_fum = {k: v for k, v in realized_stat_fields.REALIZED_STAT_FIELD.items() if k != "fum"}
+    scored, seats = _scored_and_seats(stat_field=no_fum)
     rec = weekly_recap_divergence.build_record(scored=scored, scoring=_CFG["scoring"],
                                                dst_inputs=None, realized_by_seat=seats)
     ps = rec["comparison"]["playerSeats"]
     assert ps["diverging"] == 1
     assert ps["unexplained"] == 0, ps
+
+
+def test_the_player_side_split_is_INACTIVE_on_todays_map_and_that_is_recorded_not_hidden():
+    """⭐ A MECHANISM THAT CANNOT ACT IS A FINDING, NOT AN OMISSION (NF1.9), and this one stopped
+    being able to act the moment part 1 landed: `fum` was the only captured term the realized line
+    could value, so with it APPLIED every remaining player divergence is UNEXPLAINED by
+    construction. Measured on the harness: 24 diverging, 24 unexplained on 2025 weeks 1-4.
+
+    Pinned so the reading is never mistaken for the RC1 defect it superficially resembles (a split
+    that reports nothing because nothing feeds it). The wiring is still proven by the test above and
+    by `test_score_week_fills_the_seat_explanations_and_never_serves_them`; what this records is that
+    the residual is now the honest whole of the gap.
+    """
+    explainable = set(weekly_recap.EXPLAINABLE_CAPTURED_TERMS)
+    scored, seats = _scored_and_seats()
+    captured = {t["key"] for t in scored["coverage"]["terms"] if t["verdict"] == "captured"}
+    assert explainable & captured == set(), (
+        "an explainable term is captured again — the split can act, so re-read this test's premise")
+    rec = weekly_recap_divergence.build_record(scored=scored, scoring=_CFG["scoring"],
+                                               dst_inputs=None, realized_by_seat=seats)
+    ps = rec["comparison"]["playerSeats"]
+    assert ps["diverging"] == 0 and ps["unexplained"] == 0, ps
 
 
 def test_missing_dst_inputs_are_recorded_as_not_supplied_never_as_agreement():

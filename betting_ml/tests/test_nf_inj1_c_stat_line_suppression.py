@@ -208,9 +208,21 @@ def test_points_and_games_are_never_in_the_withheld_set():
 
     `PAID_PLAYER_FIELDS` is `STAT_FIELD.values() | {fpStd, fpHalf}` — reaching for the paid set
     instead of the stat set is the natural mistake, and it withholds exactly the numbers the PM
-    ruled must still render."""
+    ruled must still render.
+
+    ⭐ RE-ANCHORED (NF-WK-ACC1 part 1, PM ruling 2026-09-18): the set is the PROJECTED stat fields,
+    i.e. the scorer's map minus `REALIZED_ONLY_KEYS` — terms scored only on a completed week, which
+    no published row can carry. Naming one as withheld would claim we suppressed a field that never
+    existed, which is precisely the distinction this module exists to preserve. The original intent
+    is unchanged and still asserted below: the DERIVED totals must not ride along.
+    """
     fields = sup.counting_stat_fields()
-    assert fields == frozenset(projection_fields.STAT_FIELD.values())
+    projected = {v for k, v in projection_fields.STAT_FIELD.items()
+                 if k not in projection_fields.REALIZED_ONLY_KEYS}
+    assert fields == frozenset(projected)
+    assert fields, "an empty withheld set would make every clause here vacuous"
+    for realized_only in projection_fields.REALIZED_ONLY_KEYS:
+        assert projection_fields.STAT_FIELD[realized_only] not in fields
     for keep in ("fpPpr", "fpStd", "fpHalf", "g", "adp", "name", "pos"):
         assert keep not in fields, f"{keep} would be withheld — the PM's ruling keeps it"
     assert projection_fields.PAID_SCORING_FIELDS & fields == frozenset()
