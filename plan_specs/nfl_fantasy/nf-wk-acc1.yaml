@@ -703,3 +703,50 @@ spec:
         `dbt/target/manifest.json` is absent, so it is GREEN BY ABSENCE in CI and red
         wherever it can execute — the vacuous-guard family with a skip in place of a
         passing assertion. Received and recorded on the hygiene bundle by the PM.
+
+      ═══ ⑭ POST-CLOSEOUT (2026-09-18): RULING ① IS A DELIBERATE DEPARTURE FROM
+      nflverse, MEASURED — AND IT PUT TWO FIXTURE SUITES BEHIND THE CONTRACT ═══
+      Found by PR #1190's CI going RED on the `core` shard AFTER the closeout was
+      written. Two families, one cause, and one of them is a real finding rather
+      than a fixture chore.
+      (a) WHICH AUTHORITY nflverse ACTUALLY BACKS, now measured instead of assumed.
+      ⑥ above recorded the per-phase reading as chosen "for nflverse-PPR parity
+      (two authorities disagree)" without saying which side nflverse takes. Over
+      2025 REG (18,539 rows) the two readings differ on 36 rows and nflverse's own
+      `fantasy_points_ppr` charges the PER-PHASE reading on EVERY ONE of them,
+      while Sleeper charges the total. So ruling ① is a deliberate, measured
+      departure from nflverse in favour of the league whose number the recap
+      exists to explain — which is exactly what the ruling instructed, and is
+      strictly more than "the parity argument is dead". It is dead only because
+      `REALIZED_PPR_COLUMN` is CARRIED VERBATIM: the moment anything recomputes a
+      PPR total from these columns rather than copying the source's, it will
+      diverge from nflverse's published figure on those 36 rows. Recorded in the
+      map header's "what is still true" clause and pinned by
+      `test_nf_wvr1_fact_columns.py::test_a_return_fumble_is_where_our_scorer_and_
+      nflverses_own_ppr_part_company`, which injects a return fumble (total 1,
+      per-phase 0) and requires the season facts to move by exactly one
+      lost-fumble weight. ⚠️ That clause had to be built deliberately: the
+      committed capture predates `fumbles_lost_total`, so the adapted fixture
+      fills it from the per-phase sum and the two readings agree BY CONSTRUCTION
+      on every real row — the WVR1 PPR identity therefore proves nothing about
+      this ruling, and its docstring now says so.
+      (b) THE CONTRACT WIDENING REACHED TWO SUITES AT ONCE, and only one was
+      adapted. `test_nf_wk_rc1_contract.py` was fixed in-session; `test_nf_wvr1_
+      fact_columns.py` builds a season from the SAME committed capture and was
+      not, so all 12 of its season-derived clauses failed with empty facts
+      (StopIteration / "0 > 300") — one `columns_behind` gap presenting as a
+      dozen unrelated join and ordering failures. `test_nf_wk_acc1_fum.py`'s
+      hand-built row carried only the per-phase column, so after ruling ① the
+      term read CAPTURED and scored 0 (8.40-shaped arithmetic in miniature).
+      ⇒ The adaptation now has ONE owner, `betting_ml/tests/_realized_capture.py`,
+      imported by both suites — a copy per file is a second owner of one rule and
+      the next widening would fix one and leave the other asserting an old
+      contract (the repo's INC-30/36/38 shape, on a test helper).
+      ⭐ THE PROCESS LESSON, which is the transferable part: the change was to a
+      SHARED instrument (`realized_stat_fields.py`) and the session ran the
+      `football` shard — the shard of the files it touched. Every guard that broke
+      lives in `core`. `uv run python scripts/ci_shards.py --shard core` is the
+      catch-all that most cross-cutting guards land in; after editing a shared
+      map/instrument, run the shard that OWNS its guards, not the shard of the
+      edit. (CLAUDE.md already carries this rule from NF-INJ3b-M; this is its
+      second instance and the first where it cost a red PR.)

@@ -39,6 +39,14 @@ BREAKS = [
      '    "fumbles_lost": ("fumbles_lost_total",),',
      '    "fumbles_lost": ("fumbles_total",),',
      "test_the_lost_fumble_term_reads_the_total"),
+    # ⭐ THE SAME BREAK, JUDGED BY A GUARD IN ANOTHER SUITE. The season facts are where the ruling
+    # parts company with nflverse's own PPR, and that divergence is pinned ONLY in the WVR1 suite —
+    # so it gets its own break rather than resting on the fact that a sibling clause happens to fire.
+    ("the term is re-narrowed, so a return fumble stops being charged on the season facts", _RSF,
+     '    "fumbles_lost": ("fumbles_lost_total",),',
+     '    "fumbles_lost": ("sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost"),',
+     "betting_ml/tests/test_nf_wvr1_fact_columns.py"
+     "::test_a_return_fumble_is_where_our_scorer_and_nflverses_own_ppr_part_company"),
 
     # ── ruling ①, the publish path it would otherwise strand ──────────────────────────────────
     ("the per-phase columns are pruned as cruft, shrinking the artifact into a refused restate",
@@ -79,10 +87,17 @@ BREAKS = [
 ]
 
 
+def _nodeid(test: str) -> str:
+    """A `test` containing `::` is already a full nodeid (a guard living in ANOTHER suite); a bare
+    name is relative to this story's own suite. ⚠️ The REPORT must use this too — a label that
+    re-prefixes an already-qualified nodeid names a test that does not exist."""
+    return test if "::" in test else f"{SUITE}::{test}"
+
+
 def _run(test: str) -> tuple[bool, str]:
     """RED = the NAMED test fails. A collection error or a NOT-SELECTED miss is a harness fault."""
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", f"{SUITE}::{test}", "-x", "-q", "--no-header",
+        [sys.executable, "-m", "pytest", _nodeid(test), "-x", "-q", "--no-header",
          "-p", "no:randomly"],
         cwd=ROOT, capture_output=True, text=True)
     out = proc.stdout + proc.stderr
@@ -116,7 +131,7 @@ def main() -> int:
                 failures.append(f"{label}: mutation did not land / anchor still present")
                 continue
             red, tail = _run(test)
-            print(f"  {'✅ RED ' if red else '❌ GREEN'} {label}  →  {SUITE}::{test}")
+            print(f"  {'✅ RED ' if red else '❌ GREEN'} {label}  →  {_nodeid(test)}")
             if not red:
                 failures.append(f"{label}: {test} stayed GREEN\n{tail}")
         except BaseException as exc:  # noqa: BLE001 — a signal must not leave source mutated

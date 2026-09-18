@@ -11,15 +11,12 @@ twin is checked against what the publisher actually writes, not against this fil
 from __future__ import annotations
 
 import copy
-import gzip
 import json
-from pathlib import Path
 
 import pytest
 
 from app.backend.services import league_scoring, waiver_facts
-
-_FIXTURE = Path(__file__).parent / "fixtures" / "nf_wk_rc1_realized_2026_wk1_stored.json.gz"
+from betting_ml.tests import _realized_capture as _capture
 
 PPR = {"pass_yds": 0.04, "pass_td": 4, "pass_int": -2, "rush_yds": 0.1, "rush_td": 6, "rec": 1,
        "rec_yds": 0.1, "rec_td": 6, "two_pt": 2, "fumbles_lost": -2, "st_td": 6}
@@ -27,13 +24,18 @@ CFG = {"n_teams": 12, "scoring": {"per_stat": PPR}, "roster": []}
 
 
 def _week(week: int) -> tuple[dict, list[dict]]:
-    fx = json.loads(gzip.decompress(_FIXTURE.read_bytes()))
-    players = [dict(zip(fx["columns"], r)) for r in fx["rows"]]
+    """The captured week, re-stamped to `week` and ADAPTED to today's column contract.
+
+    ⚠️ The adaptation is shared and documented in `_realized_capture.bring_up_to_contract` — read it
+    before concluding what a clause here proves. In particular it fills `fumbles_lost_total` from the
+    per-phase sum, so the two lost-fumble readings agree by construction on every row below.
+    """
+    man, players = _capture.week1()
     for p in players:
         p["week"] = week
         p["game_id"] = p["game_id"].replace("_01_", f"_{week:02d}_")
-    man = {**copy.deepcopy(fx["manifest"]), "week": week, "completeness": "final"}
-    return man, players
+    man, players = _capture.bring_up_to_contract(man, players)
+    return {**man, "week": week, "completeness": "final"}, players
 
 
 def _season(weeks=(1,), *, gap_after=None) -> tuple[dict, dict]:
@@ -91,7 +93,14 @@ def test_a_single_broken_lineage_property_is_refused(mutate, needle):
 
 def test_league_scored_facts_match_the_sources_own_ppr_under_a_ppr_league():
     """An INDEPENDENT correctness anchor (not our join, not our scorer's own output): under plain
-    full-PPR, every non-kicker's season total must equal nflverse's `fantasy_points_ppr` sum."""
+    full-PPR, every non-kicker's season total must equal nflverse's `fantasy_points_ppr` sum.
+
+    ⚠️ WHAT THIS DOES **NOT** PROVE, since the exact identity invites the wrong reading: it is NOT
+    evidence that NF-WK-ACC1 ruling ①'s `fumbles_lost_total` agrees with nflverse. It cannot be. The
+    adapted capture fills that column from the per-phase sum, so the two readings are equal on every
+    row here BY CONSTRUCTION, and the fumble term contributes identically either way. The two
+    authorities genuinely disagree — see the clause below, which injects a row where they differ.
+    """
     man, body = _season((1, 2))
     facts = waiver_facts.season_facts(man, body, CFG)
     cols = body["columns"]
@@ -104,6 +113,49 @@ def test_league_scored_facts_match_the_sources_own_ppr_under_a_ppr_league():
     bad = [a["name"] for a in scored if abs(a["points"] - ppr[a["player_id"]]) > 1e-6]
     assert bad == []
     assert all(a["games"] == 2 and a["weeks"] == [1, 2] for a in scored)
+
+
+def test_a_return_fumble_is_where_our_scorer_and_nflverses_own_ppr_part_company():
+    """⭐ RULING ①'s EXACT BLAST RADIUS on the season facts, measured rather than assumed.
+
+    Sleeper charges the lost-fumble rule on `fumbles_lost_total`; nflverse's `fantasy_points_ppr`
+    charges its own per-phase notion. Measured on the 2025 REG lake (18,539 rows) the two readings
+    differ on **36 rows**, and nflverse sides with the PER-PHASE reading on every one of them — a
+    fumble lost outside the three offensive phases (a kick or punt return, or a recovery-then-fumble)
+    is in the total and not in the per-phase columns.
+
+    Ruling ① is still right for this surface: the recap's registered job is to explain the LEAGUE's
+    number, and the league is the authority on its own rules. But "our season total equals nflverse's
+    PPR" is no longer an identity on such a row, and the honest thing is to pin the disagreement to
+    its exact mechanism rather than let a future reader discover it as a mystery. The gap must be
+    EXACTLY the fumble weight — anything else means ruling ① reached a term it has no business in.
+    """
+    man, body = _season((1,))
+    cols = body["columns"]
+    i_tot, i_ppr = cols.index("fumbles_lost_total"), cols.index("fantasy_points_ppr")
+    i_pos, i_pid = cols.index("position"), cols.index("player_id")
+
+    # A scoring WR who lost NO offensive fumble, then loses one on a return: the total gains 1 while
+    # the per-phase columns — and so nflverse's PPR — stay exactly as they were.
+    base = next(r for r in body["rows"]
+                if r[i_pos] == "WR" and (r[i_ppr] or 0) > 5
+                and (r[i_tot] or 0) == 0
+                and all(not r[cols.index(c)] for c in _capture.PER_PHASE_LOST_FUMBLES))
+    returner = list(base)
+    returner[i_tot] = 1.0
+
+    before = waiver_facts.season_facts(man, body, CFG)["by_id"][base[i_pid]]["points"]
+    after = waiver_facts.season_facts(
+        man, {**body, "rows": [returner if r is base else r for r in body["rows"]]},
+        CFG)["by_id"][base[i_pid]]["points"]
+
+    assert after == pytest.approx(before + PPR["fumbles_lost"]), (
+        "ruling ① must move this row by exactly one lost-fumble weight and nothing else")
+    # …and the divergence from the independent anchor is that weight, not a coincidence of zero.
+    assert base[i_ppr] == pytest.approx(before), "the untouched row must still match nflverse"
+    assert after != pytest.approx(base[i_ppr]), (
+        "the clause is vacuous — the injected return fumble changed nothing, so the readings did "
+        "not actually diverge")
 
 
 def test_only_the_covered_run_of_weeks_is_summed():

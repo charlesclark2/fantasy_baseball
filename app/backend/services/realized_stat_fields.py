@@ -115,6 +115,15 @@ first.
 genuinely mean different things, and a consumer pairing this term against the PROJECTED twin is
 still pairing two different quantities. That is a real constraint on any future projected/realized
 comparison of THIS term — it is simply not a reason to misreport a league's own scoring.
+
+⭐ AND THE CONDITION UNDER WHICH THE DEAD HALF WOULD COME BACK TO LIFE, measured 2026-09-18 on the
+2025 REG lake (18,539 rows) rather than argued: on all 36 differing rows nflverse's own
+`fantasy_points_ppr` charges the PER-PHASE reading, not the total. So the two authorities really do
+disagree, and "no served number depends on this" is TRUE ONLY BECAUSE `REALIZED_PPR_COLUMN` IS
+CARRIED VERBATIM. The moment anything recomputes a PPR total from these columns instead of copying
+the source's, it will diverge from nflverse's published figure on exactly those rows — which is a
+reason to keep carrying it, not a reason to re-narrow this map. Pinned in
+`test_nf_wvr1_fact_columns.py::test_a_return_fumble_is_where_our_scorer_and_nflverses_own_ppr_part_company`.
 """
 
 from __future__ import annotations

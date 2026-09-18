@@ -29,6 +29,7 @@ import botocore.exceptions
 import pytest
 
 from app.backend.models import nfl_recap
+from betting_ml.tests import _realized_capture as _capture
 from quant_sports_intel_models.football.nfl.fantasy import realized_week as RW
 from quant_sports_intel_models.football.nfl.fantasy import run_realized_week as RUN
 
@@ -238,40 +239,12 @@ def test_publish_accepts_the_stored_week_and_writes_both_keys():
 # 4 — THE SEASON-TO-DATE ARTIFACT
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
-#: Columns today's `required_columns()` demands that the CAPTURED week predates. ⭐ DERIVED, never a
-#: literal: it is empty whenever the capture is current, and it grows on its own the next time the
-#: contract widens — so this helper cannot silently rot into asserting yesterday's contract.
-def _columns_the_capture_predates() -> list[str]:
-    return sorted(set(RW.required_columns()) - set(_stored()["manifest"]["columns"]))
-
-
-def _bring_up_to_contract(man: dict, players: list[dict]) -> tuple[dict, list[dict]]:
-    """The captured week, ADAPTED to today's column contract — ⛔ an adaptation, not a capture.
-
-    ⚠️ WHY THIS EXISTS, because it is a real operational fact and not test scaffolding. `build_season`
-    gates each served week on `required_columns()`, so EVERY week published before a column existed is
-    legitimately `columns_behind` until it is republished. NF-WK-ACC1 ruling ① added
-    `fumbles_lost_total`, which is exactly that situation — and the clause below
-    (`test_the_authentic_capture_is_columns_behind_until_it_is_republished`) pins that real behaviour
-    on the UNTOUCHED fixture. This helper exists so the SEASON-logic clauses can test season logic
-    rather than all failing on one contract gap.
-
-    The fill is `fumbles_lost_total` ← the per-phase sum, which is exact on 1,116 of the capture's
-    1,118 rows and undercounts only the two return-fumble rows the header already names. No season
-    clause reads the VALUE — they test concatenation, gaps, hashes and exclusion — so the fill needs
-    to be present and plausible, not authoritative.
-    """
-    missing = _columns_the_capture_predates()
-    if not missing:
-        return man, players
-    per_phase = ("sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost")
-    for p in players:
-        for column in missing:
-            if column == "fumbles_lost_total":
-                p[column] = float(sum(float(p.get(c) or 0.0) for c in per_phase))
-            else:
-                p.setdefault(column, 0.0)
-    return {**man, "columns": sorted(set(man["columns"]) | set(missing))}, players
+#: ⭐ ONE OWNER, shared with `test_nf_wvr1_fact_columns.py` — ruling ① put BOTH suites' fixtures one
+#: column behind the contract at once, and a copy of the adaptation in each file is a second owner of
+#: one rule (the repo's INC-30/36/38 shape). Read `_realized_capture`'s docstrings before trusting
+#: what a clause built on the adapted capture proves.
+_columns_the_capture_predates = _capture.columns_the_capture_predates
+_bring_up_to_contract = _capture.bring_up_to_contract
 
 
 def _served_week(week: int, *, completeness: str = "final", hashed: bool = True):
