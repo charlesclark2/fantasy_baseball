@@ -203,6 +203,7 @@ def positional_need(my_roster_rows: list[dict], cfg: dict) -> dict:
       "covered"      — more than the dedicated slots require
     """
     held: dict[str, int] = {}
+    reserved: dict[str, int] = {}
     for row in my_roster_rows or []:
         if not isinstance(row, dict):
             continue
@@ -211,8 +212,16 @@ def positional_need(my_roster_rows: list[dict], cfg: dict) -> dict:
         if not isinstance(src, dict):
             src = row
         pos = league_scoring.normalize_position(src.get("pos") or src.get("position"))
-        if pos:
-            held[pos] = held.get(pos, 0) + 1
+        if not pos:
+            continue
+        # ⭐ AN IR / TAXI PLAYER IS NOT DEPTH (operator 2026-09-17: an injured WR on IR was being
+        # counted as covering WR). `slot` lives on the IMPORTED row; a row without one (a league
+        # saved before slots existed) is counted as before — unknown is not evidence of IR.
+        imported = row.get("roster") if isinstance(row.get("roster"), dict) else row
+        if imported.get("slot") in ("ir", "taxi"):
+            reserved[pos] = reserved.get(pos, 0) + 1
+            continue
+        held[pos] = held.get(pos, 0) + 1
 
     dedicated: dict[str, int] = {}
     flex_slots = 0
@@ -243,6 +252,8 @@ def positional_need(my_roster_rows: list[dict], cfg: dict) -> dict:
             "starters_required": req,          # DEDICATED slots only — see the docstring
             "flex_eligible": pos in flex_eligible,
             "held": have,
+            # Additive: rostered at this position but on IR / taxi, so NOT counted in `held`.
+            "reserved": reserved.get(pos, 0),
             "short_by": short,
             "need": "open_starter" if short > 0 else ("thin" if have == req else "covered"),
         })

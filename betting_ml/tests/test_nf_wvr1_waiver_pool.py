@@ -217,7 +217,8 @@ def test_the_roster_refresh_returns_the_stored_record_shape_and_drops_player_key
     fake = (
         C.ImportedTeam(
             team_key="1", name="Team One",
-            players=(C.ImportedPlayer(player_key="999", name="A Back", position="RB", team="SF"),),
+            players=(C.ImportedPlayer(player_key="999", name="A Back", position="RB", team="SF",
+                                      slot="ir"),),
         ),
     )
     orig = sleeper._fetch_teams
@@ -227,7 +228,7 @@ def test_the_roster_refresh_returns_the_stored_record_shape_and_drops_player_key
     finally:
         sleeper._fetch_teams = orig
 
-    assert set(out) == {"rosters", "synced_at", "note"}
+    assert set(out) == {"rosters", "synced_at", "note", "teams_full"}
     team = out["rosters"][0]
     assert set(team) == {"team_key", "team_name", "players"}
     assert set(team["players"][0]) == set(LEAGUE_ROSTER_PLAYER_FIELDS), (
@@ -235,6 +236,10 @@ def test_the_roster_refresh_returns_the_stored_record_shape_and_drops_player_key
     )
     assert "player_key" not in team["players"][0]
     assert out["synced_at"], "the fetch must stamp its own time — the caller re-stamps this"
+    # The caller's OWN-roster refresh reads `teams_full`, which is the full imported shape (id and
+    # slot kept) — a DIFFERENT object from the slim `rosters` the pool subtraction joins on.
+    assert out["teams_full"]["1"][0]["player_key"] == "999"
+    assert out["teams_full"]["1"][0]["slot"] == "ir"
 
 
 def test_the_roster_refresh_raises_rather_than_returning_a_partial_set():
@@ -333,3 +338,118 @@ def test_completeness_is_still_checked_independently_of_the_truncation_flag():
         "league_rosters_truncated": False,       # ← flag says fine; the count does not
     }
     assert "rosters_incomplete" in waiver_pool.pool_refusals(short)
+
+
+# ── 6. IR / taxi (operator 2026-09-17: an injured WR on IR was filed under Bench) ─────────────────
+
+def test_sleeper_files_reserve_and_taxi_ids_by_their_slot_not_as_bench(monkeypatch):
+    """THE DEFECT: Sleeper lists EVERY rostered id in `players` and marks IR / taxi only by repeating
+    the id under `reserve` / `taxi`. Reading `players` + `starters` alone files an IR player as bench."""
+    from app.backend.services.platform_import import sleeper
+
+    payload = [{
+        "roster_id": 1, "owner_id": "u1",
+        "players": ["10", "20", "30", "40"], "starters": ["10"],
+        "reserve": ["20"], "taxi": ["30"],
+    }]
+    monkeypatch.setattr(sleeper, "get_json",
+                        lambda url: payload if url.endswith("/rosters") else [
+                            {"user_id": "u1", "display_name": "Me", "metadata": {}}])
+    monkeypatch.setattr(sleeper.sleeper_players, "resolve", lambda ids: (
+        {i: {"full_name": f"P{i}", "position": "WR", "team": "NYJ"} for i in ids}, True))
+    teams, _ = sleeper._fetch_teams("123")
+    slots = {p.player_key: (p.slot, p.starter) for p in teams[0].players}
+    assert slots == {"10": ("starter", True), "20": ("ir", False),
+                     "30": ("taxi", False), "40": ("bench", False)}
+    assert teams[0].players[1].to_dict()["slot"] == "ir"
+
+
+def test_an_ir_player_is_not_counted_as_depth():
+    """2 WR starters, 2 healthy WR + 1 on IR: the IR player must not make WR look covered."""
+    rows = [{"roster": {"position": "WR", "slot": s}, "board": {"pos": "WR"}}
+            for s in ("starter", "starter", "ir")]
+    need = waiver_pool.positional_need(rows, {"roster": [
+        {"name": "WR", "count": 2, "eligible": ["WR"], "bench": False}]})
+    wr = next(p for p in need["positions"] if p["pos"] == "WR")
+    assert (wr["held"], wr["reserved"], wr["need"]) == (2, 1, "thin")
+
+    two_healthy_one_ir = [{"roster": {"position": "WR", "slot": s}, "board": {"pos": "WR"}}
+                          for s in ("starter", "ir", "ir")]
+    need = waiver_pool.positional_need(two_healthy_one_ir, {"roster": [
+        {"name": "WR", "count": 2, "eligible": ["WR"], "bench": False}]})
+    wr = next(p for p in need["positions"] if p["pos"] == "WR")
+    assert (wr["held"], wr["short_by"], wr["need"]) == (1, 1, "open_starter")
+
+
+def test_a_row_without_a_slot_still_counts_as_before():
+    """A league saved before `slot` existed has none; unknown must not be read as IR."""
+    rows = [{"roster": {"position": "RB"}, "board": {"pos": "RB"}}] * 2
+    need = waiver_pool.positional_need(rows, {"roster": [
+        {"name": "RB", "count": 2, "eligible": ["RB"], "bench": False}]})
+    rb = next(p for p in need["positions"] if p["pos"] == "RB")
+    assert (rb["held"], rb["reserved"]) == (2, 0)
+
+
+def _waiver_route_harness(monkeypatch, record, fresh):
+    from starlette.requests import Request
+
+    from app.backend.routers import fantasy
+    from app.backend.services.platform_import import sleeper
+
+    saved = {}
+    monkeypatch.setattr(fantasy.dynamo, "list_fantasy_leagues", lambda uid: [record])
+    monkeypatch.setattr(fantasy.dynamo, "put_fantasy_league",
+                        lambda uid, lid, cfg, quota: saved.update(cfg=cfg))
+    monkeypatch.setattr(fantasy.entitlement, "resolve_entitlement", lambda req: "subscriber")
+    monkeypatch.setattr(fantasy.entitlement, "personalized_league_quota", lambda ent: 25)
+    monkeypatch.setattr(fantasy, "_full_projections", lambda season: {"players": [
+        {"id": "00-0000001", "name": "Healthy Wideout", "pos": "WR", "team": "NYJ", "fpPpr": 100.0},
+        {"id": "00-0000002", "name": "Hurt Wideout", "pos": "WR", "team": "NYJ", "fpPpr": 100.0},
+    ]})
+    monkeypatch.setattr(fantasy, "_realized_season", lambda season: (None, None, "realized_not_published"))
+    monkeypatch.setattr(sleeper, "refresh_league_rosters", lambda lid: fresh)
+    req = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b""})
+    out = fantasy.nfl_waiver_pool(request=req, league_id="L1", season=2026, refresh=True, user_id="u")
+    return out, saved
+
+
+def _own_team_fresh():
+    rows = [
+        {"player_key": "1", "name": "Healthy Wideout", "position": "WR", "team": "NYJ",
+         "starter": True, "slot": "starter"},
+        {"player_key": "2", "name": "Hurt Wideout", "position": "WR", "team": "NYJ",
+         "starter": False, "slot": "ir"},
+    ]
+    slim = [{"name": r["name"], "position": r["position"], "team": r["team"]} for r in rows]
+    return {"rosters": [{"team_key": "7", "team_name": "Mine", "players": slim}],
+            "synced_at": "2026-09-17T12:00:00+00:00", "note": [], "teams_full": {"7": rows}}
+
+
+def test_the_waiver_refresh_rewrites_the_callers_own_roster_with_its_slots(monkeypatch):
+    """THE DEFECT: a league imported before `slot` existed kept filing an IR player under Bench (and
+    counting him as depth) until a re-import. The refresh already reads every roster; the caller's
+    own must ride the same read."""
+    record = {"league_id": "L1", "sport": "nfl", "source_platform": "sleeper",
+              "source_league_id": "123", "source_team_key": "7", "n_teams": 1,
+              "roster": [{"name": "WR", "count": 2, "eligible": ["WR"], "bench": False}],
+              "imported_roster": [{"player_key": "1", "name": "Healthy Wideout", "position": "WR",
+                                   "team": "NYJ", "starter": True},
+                                  {"player_key": "2", "name": "Hurt Wideout", "position": "WR",
+                                   "team": "NYJ", "starter": False}],
+              "roster_synced_at": "2026-08-01T00:00:00+00:00"}
+    out, saved = _waiver_route_harness(monkeypatch, record, _own_team_fresh())
+    assert out["rosters"]["own_roster_refreshed"] is True
+    assert [r.get("slot") for r in saved["cfg"]["imported_roster"]] == ["starter", "ir"]
+    assert saved["cfg"]["roster_synced_at"] == "2026-09-17T12:00:00+00:00"
+    wr = next(p for p in out["need"]["positions"] if p["pos"] == "WR")
+    assert (wr["held"], wr["reserved"], wr["need"]) == (1, 1, "open_starter")
+
+
+def test_an_unlinked_league_keeps_its_stored_roster(monkeypatch):
+    """No `source_team_key` ⇒ no own team to find ⇒ nothing about the caller's roster is replaced."""
+    record = {"league_id": "L1", "sport": "nfl", "source_platform": "sleeper",
+              "source_league_id": "123", "n_teams": 1, "roster": [],
+              "imported_roster": None}
+    out, saved = _waiver_route_harness(monkeypatch, record, _own_team_fresh())
+    assert out["rosters"]["own_roster_refreshed"] is False
+    assert saved["cfg"].get("imported_roster") is None

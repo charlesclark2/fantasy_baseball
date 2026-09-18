@@ -304,7 +304,12 @@ function LeagueCard({
   const matchedCount = roster.filter((r) => r.board).length
   const unmatchedCount = roster.length - matchedCount
   const starters = roster.filter((r) => r.roster.starter)
-  const bench = roster.filter((r) => !r.roster.starter)
+  // NF-WVR1 (operator 2026-09-17) — an injured-reserve or taxi player is NOT bench depth, and filing
+  // him there reads as a healthy backup. A row with no `slot` (saved before slots existed) stays on
+  // the bench exactly as before; opening the waiver panel re-reads the roster with its slots.
+  const bench = roster.filter((r) => !r.roster.starter && r.roster.slot !== "ir" && r.roster.slot !== "taxi")
+  const injuredReserve = roster.filter((r) => !r.roster.starter && r.roster.slot === "ir")
+  const taxi = roster.filter((r) => !r.roster.starter && r.roster.slot === "taxi")
   // NF-C6b — `null` when this team has no scoreable starters, which is a real state (pre-draft, or a
   // platform that reported no lineup) and must not render as a fabricated 0.0.
   const rollup = teamRollup(entry)
@@ -369,6 +374,13 @@ function LeagueCard({
           {rollup && <TeamTotal rollup={rollup} />}
           <RosterTable label="Starters" rows={starters} boardPositions={boardPositions} />
           <RosterTable label="Bench" rows={bench} boardPositions={boardPositions} />
+          <RosterTable
+            label="Injured reserve"
+            testId="ir-table"
+            rows={injuredReserve}
+            boardPositions={boardPositions}
+          />
+          <RosterTable label="Taxi" rows={taxi} boardPositions={boardPositions} />
           {unmatchedCount > 0 && (
             // NF-K1 — the footnote now NAMES the cause (and the positions), instead of the one
             // sentence that read as a name-resolution failure for every unmatched row.
@@ -420,17 +432,19 @@ function RosterTable({
   label,
   rows,
   boardPositions,
+  testId,
 }: {
   label: string
   rows: RosterMatch[]
   boardPositions: string[] | null
+  testId?: string
 }) {
   if (rows.length === 0) return null
   return (
     // NF-C6b — a stable hook so the rollup gate can sum THIS table rather than traversing the card's
     // DOM shape. The team total's contract is "Σ of the rows in Starters", and a spec that located
     // the wrong table would still find numbers and still add up to something.
-    <div className="mt-4" data-testid={`${label.toLowerCase()}-table`}>
+    <div className="mt-4" data-testid={testId ?? `${label.toLowerCase()}-table`}>
       <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
         {label} · {rows.length}
       </div>

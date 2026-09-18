@@ -98,6 +98,31 @@ BREAKS = [
         "test_a_successful_refresh_clears_a_stale_truncation_flag_rather_than_carrying_it_forever",
         None,
     ),
+    # ── IR / taxi + own-roster refresh (operator 2026-09-17) ─────────────────────────────────
+    (
+        "Sleeper's reserve/taxi lists are ignored again (IR filed as bench)",
+        SLEEPER,
+        "    if pid in reserve:\n        return \"ir\"\n    if pid in taxi:\n        return \"taxi\"\n",
+        "",
+        "test_sleeper_files_reserve_and_taxi_ids_by_their_slot_not_as_bench",
+        "if pid in reserve",
+    ),
+    (
+        "an IR player is counted as depth",
+        POOL,
+        '        if imported.get("slot") in ("ir", "taxi"):',
+        '        if False:',
+        "test_an_ir_player_is_not_counted_as_depth",
+        'imported.get("slot") in ("ir", "taxi")',
+    ),
+    (
+        "the waiver refresh no longer rewrites the caller's own roster",
+        ROUTER,
+        "            if own is not None and len(own) <= MAX_IMPORTED_ROSTER_PLAYERS:",
+        "            if False:",
+        "test_the_waiver_refresh_rewrites_the_callers_own_roster_with_its_slots",
+        "if own is not None and len(own)",
+    ),
     # ── Phase B fact columns (2026-09-17) ────────────────────────────────────────────────────
     (
         "the refresh is fetched but the STALE stored rosters are still used for the pool",

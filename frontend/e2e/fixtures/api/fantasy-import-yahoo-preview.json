@@ -126,6 +126,7 @@
           "name": "Ja'Marr Chase",
           "player_key": "461.p.30977",
           "position": "WR",
+          "slot": "starter",
           "starter": true,
           "team": "Cin"
         },
@@ -133,6 +134,7 @@
           "name": "Bijan Robinson",
           "player_key": "461.p.32671",
           "position": "RB",
+          "slot": "starter",
           "starter": true,
           "team": "Atl"
         },
@@ -140,6 +142,7 @@
           "name": "Trey McBride",
           "player_key": "461.p.31002",
           "position": "TE",
+          "slot": "bench",
           "starter": false,
           "team": "Ari"
         }
@@ -155,6 +158,7 @@
           "name": "Malik Nabers",
           "player_key": "461.p.33391",
           "position": "WR",
+          "slot": "starter",
           "starter": true,
           "team": "NYG"
         }

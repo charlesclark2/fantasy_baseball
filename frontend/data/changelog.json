@@ -3,6 +3,14 @@
     "week": "2026-09-14",
     "items": [
       {
+        "tag": "added",
+        "text": "My Teams now shows, for each Sleeper, ESPN or Yahoo league you've imported, the players nobody in that league has rostered — grouped by position, next to the positions where your own roster is thin. Each player shows the points he has scored so far this season under your league's settings, from completed games only, and within a position the list is ordered by those points. That is a record of what has happened, not a forecast or a pickup recommendation, and the panel says which weeks it covers. Team defences are listed without points for now, because we don't yet have validated season results for them. For Sleeper leagues, opening the list re-reads every team's roster first, so a player claimed since your import isn't offered; for ESPN and Yahoo it uses the rosters from your last import and says so. Player names link to their pages in a new tab."
+      },
+      {
+        "tag": "fixed",
+        "text": "A player in an injured-reserve or taxi slot on your league no longer appears under Bench on My Teams — he now has his own section, and he isn't counted as healthy depth when we show where your roster is thin. For Sleeper leagues imported before this change, opening the available-players list updates your roster's slots; ESPN and Yahoo leagues pick them up on your next import."
+      },
+      {
         "tag": "improved",
         "text": "In the weekly recap, a player you started who didn't play now shows his name and a score of 0, labelled as your league's own figure, instead of a sentence in place of his name. If your league scored a player but we couldn't match him to his stat line, his name still shows, with the score left blank and a note saying why — a zero there would be a number we can't stand behind."
       },
