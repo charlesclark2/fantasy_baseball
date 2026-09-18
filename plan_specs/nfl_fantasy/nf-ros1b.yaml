@@ -11,7 +11,11 @@ metadata:
   name: nf-ros1b
   vertical: nfl_fantasy
   card: https://trello.com/c/PMVQXY99   # ROS1's record; ROS1b card linked at kickoff by PM
-  status: IN_PROGRESS
+  status: SHIPPED_PENDING_VERIFICATION  # 2026-09-18 — PM accepted the final recap and the
+  # verdict is flipped below. NOT terminal yet, and deliberately so: the enablement chain is
+  # unrun (dev->main, which is what rebuilds the box; one box publish verified BY CONTENT —
+  # certified 184 not 197, 13 rookie absences, the stratum note, players_sha256; then
+  # NF_ROS_PUBLISH_ENABLED=1 + redeploy). The PM flips the terminal status when that lands.
 spec:
   description: >
     Certify an ROS value by fixing what NF-ROS1's refusal named: the
@@ -148,10 +152,24 @@ spec:
     # Ack 1 READ IN 2026-09-18: RB-rookie C9 = 0.0810 > 0.05 -> STOP_TO_PM (prereg §15); the spread
     # read BROAD (§16) and the PM ruled disposition (ii) — rookie rows are a stated absence,
     # implemented in §17 (184 certified RB rows on the live build, was 197).
-    # Verdict flips to SHIPPED-with-the-stratum-carve-out at the PM's acceptance of the final
-    # recap, not before.
-    # Proposed: SHIPPED (RB certified) · QB/WR/TE/K certified NO (CONSTRAINT_REFUSED).
-    verdict: null
+    # VERDICT FLIPPED 2026-09-18 on the PM's acceptance of the final recap (dated that day), which
+    # also ratified both flagged decisions (the rookie FLAG over the id shape; the rookie reason
+    # binding over join_unresolved with an audit-derived join list). Enablement remains an OPERATOR
+    # step and is NOT what this verdict asserts: dev->main (the box CD fires on main) -> one box
+    # publish verified BY CONTENT (certified 184, rookie absences 13, stratum note present,
+    # players_sha256) -> NF_ROS_PUBLISH_ENABLED=1 + redeploy.
+    verdict: >
+      SHIPPED with the stratum carve-out. RB CERTIFIED under the registered hurdle interval
+      (C9 0.005 vs 0.133 at the parent, cov80 0.859 against a 0.780 power floor, DSR 0.995, lift
+      +1.53 on 6/6 folds) and served by node 4 as a contracted artifact, deploy-held. RB ROOKIES
+      are a stated absence (`rookie_interval_not_certified`, no band AND no point): their C9 read
+      0.0810 against the 0.05 bar on amendment 3's pre-declared rule, and amendment 5's spread
+      showed the tilt is population-wide (z = +4.67 at the player-season level against the veteran
+      control), so the PM ruled (ii) on a mapping fixed before the spread existed. QB, WR, TE and K
+      are a certified NO with their mechanisms named (QB/WR/TE C8a: a CRPS-judged arm floored by an
+      MSE-fitted oracle; K C2/C3/C4/C9: the conditional-spread shape at a low-variance position,
+      not the zero atom). The parent's refusal is repaired at its own clause: C9 now passes at
+      QB/RB/WR/TE. Live build: 870 players, 184 certified RB rows.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
