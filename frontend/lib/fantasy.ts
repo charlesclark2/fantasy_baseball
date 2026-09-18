@@ -1134,6 +1134,8 @@ export interface WaiverNeedPosition {
   starters_required: number
   flex_eligible: boolean
   held: number
+  /** Rostered at this position but on IR / taxi — NOT counted in `held`. Additive. */
+  reserved?: number
   short_by: number
   need: "open_starter" | "thin" | "covered"
 }
@@ -1153,6 +1155,8 @@ export interface WaiverPoolPayload {
     synced_at: string | null
     refreshed: boolean
     refresh_error: string | null
+    /** This request also rewrote the caller's saved roster (slots included). Additive. */
+    own_roster_refreshed?: boolean
     can_refresh: boolean
     platform: string
     truncated: boolean

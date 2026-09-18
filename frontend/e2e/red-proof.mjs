@@ -31,6 +31,33 @@ const FRONTEND = join(dirname(fileURLToPath(import.meta.url)), "..")
 const CASES = [
   // ══ NF-WVR1 Phase B — the waiver view on My Teams ══════════════════════════════════════════
   {
+    id: "waiver-link-opens-in-place",
+    shipped: "operator 2026-09-17 — player links open in a NEW tab so the working list survives",
+    detail: "the player link loses target=_blank, so a click navigates away from the open pool.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "            target=\"_blank\"\n            rel=\"noopener noreferrer\"\n            data-testid=\"waiver-player-link\"",
+    to: "            data-testid=\"waiver-player-link\"",
+    grep: "links to his page in a new tab",
+  },
+  {
+    id: "my-teams-ir-filed-as-bench",
+    shipped: "operator 2026-09-17 — an injured-reserve player is not bench depth",
+    detail: "IR rows fall back into the Bench table (the pre-slot behaviour).",
+    file: "components/fantasy/my-teams.tsx",
+    from: "  const bench = roster.filter((r) => !r.roster.starter && r.roster.slot !== \"ir\" && r.roster.slot !== \"taxi\")",
+    to: "  const bench = roster.filter((r) => !r.roster.starter)",
+    grep: "listed under Injured reserve",
+  },
+  {
+    id: "waiver-own-refresh-not-reread",
+    shipped: "operator 2026-09-17 — the refreshed saved roster must reach the tables above",
+    detail: "the My Teams re-read after an own-roster refresh is dropped, so IR flags wait for a manual reload.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "    if (ownRefreshed) void queryClient.invalidateQueries({ queryKey: [\"nfl-fantasy-my-teams\"] })",
+    to: "    void ownRefreshed",
+    grep: "re-reads My Teams when it rewrote",
+  },
+  {
     id: "waiver-client-resorts",
     shipped: "NF-WVR1 ruling 2 — the ordering is the SERVER's stated basis, never the client's",
     detail: "the client re-sorts the list alphabetically, so the visible order no longer follows the stated basis.",
@@ -3938,7 +3965,7 @@ const CASES = [
 // player printed as 0.00; a started player's name hidden) and RE-ANCHORS one
 // (`recap-absence-becomes-a-dash`). RED-proven individually (`node e2e/red-proof.mjs recap-`). By
 // this change's own delta only: 214/208/6 -> 216/210/6.
-const RECORDED_BOARD = { total: 224, red: 217, notObservable: 7 }
+const RECORDED_BOARD = { total: 227, red: 220, notObservable: 7 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

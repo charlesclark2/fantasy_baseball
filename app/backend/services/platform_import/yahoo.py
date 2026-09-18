@@ -417,6 +417,9 @@ def _fetch_teams(league_key: str, access_token: str) -> tuple[C.ImportedTeam, ..
                         position=str(player.get("display_position") or "") or None,
                         team=str(player.get("editorial_team_abbr") or "") or None,
                         starter=bool(position) and position not in ("BN", "IR", "IR+", "IL"),
+                        slot=(None if not position else
+                              "ir" if position in ("IR", "IR+", "IL") else
+                              "bench" if position == "BN" else "starter"),
                     )
                 )
             teams.append(

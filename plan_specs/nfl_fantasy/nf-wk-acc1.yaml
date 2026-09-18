@@ -243,3 +243,28 @@ spec:
       are complete; it tags 2026 wk1 DEN + KC as `resultPending` in the wired
       recorder.
 
+
+
+      ── ⑧ (2026-09-17) THE LIVE RECORDER'S FIRST RECORDS — #1155 HOLDS ON A REAL
+      PAYLOAD, AND A CROSS-SEASON RECAP DEFECT WAS FOUND AND FIXED. First two
+      records after the post-merge box run + `deploy.sh`. (1) 2026 wk1, Sleeper
+      league 1388928316722937856: player seats 0/79 diverging; D/ST 2/10 (PHI
+      −2 unexplained; DEN +1 tagged `resultPending`, yOhLHprC). This is the
+      #1155 re-verification on a real payload: a league whose remaining open
+      terms scored nothing that week shows no gap and no contradiction. (2) 2025
+      wk1, Sleeper league 1268257036043292672: 85/85 player seats and 12/12 D/ST
+      diverging, by up to 30 points. CAUSE (pre-existing, RC1's route): the
+      saved league record carries no season and `season` is a query parameter
+      defaulting to NFL_FANTASY_SEASON (2026), so the 2025 league's week-1
+      lineups were scored against 2026 week-1 stat lines and D/ST inputs — a
+      per-player breakdown from different games, served beside the league's
+      correct standings total. The week store also missed on every view (stored
+      under 2025, looked up under 2026), re-fetching Sleeper each time.
+      FIX (branch nf-wk-acc1-recap-season): `_recap_week` refuses (422, a
+      user-ready detail the page already renders) a week whose platform-reported
+      season differs from the requested one, or cannot be placed, BEFORE it
+      stores, reads realized stats, scores or records. Power rankings already
+      skips a 422 week. 3 new RED-proof breaks (22/22 RED). OPERATOR: delete the
+      contaminated record `fantasy/nfl/recap-divergence/2025/wk1/sleeper/
+      92ec5c36-9ad9-4f09-a1fb-66716094d6ab.json` once the fix is deployed, so
+      the explained/unexplained stream carries no cross-season rows.

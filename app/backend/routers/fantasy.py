@@ -36,6 +36,7 @@ from app.backend.dependencies import (
 from app.backend.models.fantasy import (
     BigBoard,
     BigBoardSave,
+    MAX_IMPORTED_ROSTER_PLAYERS,
     bound_league_rosters,
     DraftAssistantRequest,
     FantasyPreferences,
@@ -1570,6 +1571,30 @@ def _recap_platform(record: dict) -> str:
     return str(record.get("source_platform") or "").strip().lower()
 
 
+def _refuse_a_different_season(fetched: dict, season: int) -> None:
+    """A played week is scored ONLY against the realized stats of the season it was played in.
+
+    ⛔ The saved league record carries no season, and `season` is a query parameter defaulting to
+    the current one — so a league imported from an earlier season (Sleeper gives each season its own
+    league id) had its lineups scored against THIS season's stat lines: a per-player breakdown built
+    from different games, served beside the league's correct standings total (measured 2026-09-17:
+    a 2025 league, 85 of 85 seats and 12 of 12 defences diverging). The platform's own record of
+    which season the week belongs to is the authority; a week it cannot place is refused too, since
+    "we could not tell" must not be scored as if it matched.
+    """
+    got = str(fetched.get("season") or "").strip()
+    if got == str(int(season)):
+        return
+    if not got:
+        detail = ("We could not confirm which season this league's week belongs to, so we cannot "
+                  "score it against a season's player statistics.")
+    else:
+        detail = (f"This league is from the {got} season, so its week cannot be scored against "
+                  f"{int(season)} player statistics. Each season has its own league on the "
+                  "platform — import this season's league to see its recap.")
+    raise HTTPException(status_code=422, detail=detail)
+
+
 def _recap_week(record: dict, season: int, week: int, *, record_divergence: bool = False) -> dict:
     """One league-week, scored — from the POINT-IN-TIME record, fetching it once if absent.
 
@@ -1591,7 +1616,11 @@ def _recap_week(record: dict, season: int, week: int, *, record_divergence: bool
             # 422, not 502: the platform answered and what it returned cannot carry a recap. That
             # is a different fact from "the platform is unreachable" and points at a different fix.
             raise HTTPException(status_code=422, detail=str(e)) from e
+        # Before the store: a refused week is not a capture this route should keep writing.
+        _refuse_a_different_season(fetched, season)
         weekly_recap_store.store(fetched)
+    else:
+        _refuse_a_different_season(fetched, season)
 
     realized = _load_json(nfl_recap.realized_players_key(season, week))
     manifest = _load_json(nfl_recap.realized_manifest_key(season, week))
@@ -1814,6 +1843,7 @@ def nfl_waiver_pool(
 
     # ── 1. refresh the rosters, best-effort ──────────────────────────────────────────────────────
     refreshed = False
+    own_refreshed = False
     refresh_error = None
     if refresh and can_refresh and record.get("source_league_id"):
         try:
@@ -1846,6 +1876,17 @@ def nfl_waiver_pool(
                 # clearing a stale flag cannot let a short roster set through.
                 "league_rosters_truncated": bool(truncated),
             }
+            # ⭐ THE CALLER'S OWN ROSTER RIDES THE SAME READ (operator 2026-09-17). Without this the
+            # need annotation counted the IMPORT-TIME roster — no claims since, and no IR flags on
+            # any league saved before `slot` existed — and My Teams filed IR players under Bench
+            # until a re-import. Only replaced when the team is found and within the per-team
+            # bound; otherwise the stored roster stands and says its own age.
+            own_key = str(record.get("source_team_key") or "")
+            own = (fresh.get("teams_full") or {}).get(own_key) if own_key else None
+            if own is not None and len(own) <= MAX_IMPORTED_ROSTER_PLAYERS:
+                record["imported_roster"] = own
+                record["roster_synced_at"] = fresh["synced_at"]
+                own_refreshed = True
             # ⚠️ PERSISTED BEST-EFFORT, AND A FAILED WRITE DOES NOT FAIL THE READ. The pool is
             # computed from `record` in memory either way, so a DynamoDB hiccup costs the freshness
             # STAMP, never the answer. `put_fantasy_league`'s real signature is
@@ -1937,6 +1978,9 @@ def nfl_waiver_pool(
             "synced_at": record.get("league_rosters_synced_at"),
             "refreshed": refreshed,
             "refresh_error": refresh_error,
+            # Additive: THIS request also rewrote the caller's saved roster (slots included), so a
+            # client showing that roster should re-read it.
+            "own_roster_refreshed": own_refreshed,
             "can_refresh": can_refresh,
             "platform": platform,
             "truncated": bool(record.get("league_rosters_truncated")),

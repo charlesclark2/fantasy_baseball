@@ -663,6 +663,9 @@ def translate_teams(payload: dict) -> tuple[list[ImportedTeam], list[str]]:
                     position=_player_position(player),
                     team=_PRO_TEAM_BY_ID.get(_as_int(player.get("proTeamId"), default=-1)),
                     starter=slot >= 0 and slot not in _BENCH_SLOTS,
+                    # ESPN lineup slot 21 is IR, 20 is bench (`_BENCH_SLOTS`). Unknown (<0) → None.
+                    slot=(None if slot < 0 else "ir" if slot == 21 else
+                          "bench" if slot in _BENCH_SLOTS else "starter"),
                 )
             )
 

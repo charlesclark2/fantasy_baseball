@@ -9418,6 +9418,7 @@
     "starters_required": 1,
     "flex_eligible": false,
     "held": 1,
+    "reserved": 0,
     "short_by": 0,
     "need": "thin"
    },
@@ -9426,6 +9427,7 @@
     "starters_required": 1,
     "flex_eligible": false,
     "held": 1,
+    "reserved": 0,
     "short_by": 0,
     "need": "thin"
    },
@@ -9434,6 +9436,7 @@
     "starters_required": 1,
     "flex_eligible": true,
     "held": 3,
+    "reserved": 0,
     "short_by": 0,
     "need": "covered"
    },
@@ -9442,6 +9445,7 @@
     "starters_required": 2,
     "flex_eligible": true,
     "held": 5,
+    "reserved": 0,
     "short_by": 0,
     "need": "covered"
    },
@@ -9450,6 +9454,7 @@
     "starters_required": 2,
     "flex_eligible": true,
     "held": 0,
+    "reserved": 0,
     "short_by": 2,
     "need": "open_starter"
    },
@@ -9458,6 +9463,7 @@
     "starters_required": 2,
     "flex_eligible": true,
     "held": 5,
+    "reserved": 0,
     "short_by": 0,
     "need": "covered"
    }
@@ -9480,6 +9486,7 @@
   "synced_at": "2026-09-17T12:00:00+00:00",
   "refreshed": true,
   "refresh_error": null,
+  "own_roster_refreshed": false,
   "can_refresh": true,
   "platform": "sleeper",
   "truncated": false,
