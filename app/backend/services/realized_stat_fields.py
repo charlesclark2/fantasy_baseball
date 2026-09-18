@@ -75,22 +75,46 @@ loses nothing.
   fg_made_0_39     = fg_made_0_19 + fg_made_20_29 + fg_made_30_39
   fg_made_50_plus  = fg_made_50_59 + fg_made_60_
 
-⚠️⚠️ `fumbles_lost` READS THE THREE PER-PHASE COLUMNS, NOT `fumbles_lost_total`, AND THAT WAS
-SETTLED BY MEASUREMENT AFTER THE ARMCHAIR GOT IT BACKWARDS. `fumbles_lost_total` additionally counts
-PUNT AND KICKOFF RETURN fumbles; the three phase columns do not. The parity clause is what found it:
-with the total mapped, 1,116 of 1,118 real 2026 week-1 rows agreed with nflverse's own PPR to 1e-9
-and exactly two disagreed by exactly 2.0 — Jimmy Horn Jr. and Chimere Dike, both return men, both
-carrying `fumbles_lost_total = 1` with all three phase columns at 0. Over 2025 REG the gap is 36
-rows (249 vs 213).
+⚠️⚠️ `fumbles_lost` READS `fumbles_lost_total` — AND THIS ENTRY EXISTS TO RECORD THAT IT USED TO READ
+THE THREE PER-PHASE COLUMNS UNDER A REFUSAL THAT HAS NOW BEEN OVERTURNED (PM ruling ① on
+NF-WK-ACC1's residuals, 2026-09-18, option A). The refusal is rewritten rather than deleted, because
+a reader who finds the total mapped here deserves to know it was once deliberately not.
 
-Two independent authorities agree on the narrow reading, which is why it is the mapping:
-  • the PROJECTED twin is `proj_fumbles_lost = touches x 0.006` (`season_projection.py`) — an
-    OFFENSIVE-touch heuristic that cannot mean a return fumble. A realized column that counts
-    return fumbles would be measuring a different quantity from the projection it is paired
-    against, which is precisely what boundary (i) exists to prevent.
-  • nflverse's own `fantasy_points_ppr` uses the same three columns.
+WHAT THE OLD REFUSAL CLAIMED. `fumbles_lost_total` additionally counts PUNT AND KICKOFF RETURN
+fumbles, which the three phase columns do not; the narrow reading was said to be backed by two
+independent authorities, and the comment ended "⛔ Do not 'tidy' this back to the total: it is
+shorter, it reads more natural, and it is wrong."
 
-⛔ Do not "tidy" this back to the total: it is shorter, it reads more natural, and it is wrong.
+WHICH HALF DIED, AND WHY. The nflverse-PPR-parity half is dead, by measurement rather than by
+argument: THERE IS NO LIVE PARITY GUARD. `REALIZED_PPR_COLUMN` is nflverse's own
+`fantasy_points_ppr`, CARRIED THROUGH VERBATIM and never recomputed (see its own comment below and
+`weekly_recap.realized_board`, which copies it), so no number this system serves depends on which
+column `fumbles_lost` reads. The 1,116-of-1,118 figure the old comment cited was a one-off
+in-session probe, not a clause any suite runs. A refusal resting on a guard that does not exist is
+the vacuous-check class wearing a comment's clothes.
+
+WHICH HALF IS SUPERSEDED, AND BY WHAT. The projected/realized symmetry half is REAL — the projected
+twin is `proj_fumbles_lost = touches x 0.006` (`season_projection.py`), an OFFENSIVE-touch heuristic
+that cannot mean a return fumble. It is superseded by NF-WK-ACC1 part 1's option D, which
+established that a realized-only term with no projection twin is a legitimate shape (`fum` reads
+`fumbles_total` and has no projection column at all). And on the recap surface this scorer's
+registered job is to EXPLAIN THE LEAGUE'S NUMBER: Sleeper charges `fum_lost` on the total, so
+reading the per-phase columns was not caution — it was a measured disagreement with the very
+authority we are itemising.
+
+THE MEASURED COST THAT FORCED THE AMENDMENT. Over 2025 REG the two readings differ on 36 rows
+(total 249 vs per-phase 213), 28 of them at startable offensive positions (WR 22, RB 4, QB 2); 2
+rows in 2026 week 1 (Jimmy Horn Jr. and Chimere Dike, both return men, both carrying
+`fumbles_lost_total = 1` with all three phase columns at 0 — the rows the old comment quoted as
+evidence FOR the narrow reading are the rows that prove the league charges for them). On the
+operator's own league it was 1 of 48 team-weeks: DJ Moore, 2025 week 1, ours 8.40 against the
+league's 7.40, because the league pays `fum` −1 AND `fumbles_lost` −1 and we were charging only the
+first.
+
+⛔ WHAT IS STILL TRUE, so the pendulum does not swing back on the next reading: the two columns
+genuinely mean different things, and a consumer pairing this term against the PROJECTED twin is
+still pairing two different quantities. That is a real constraint on any future projected/realized
+comparison of THIS term — it is simply not a reason to misreport a league's own scoring.
 """
 
 from __future__ import annotations
@@ -134,9 +158,11 @@ REALIZED_STAT_SOURCE: dict[str, tuple[str, ...]] = {
     "rec_yds": ("receiving_yards",),
     "rec_td": ("receiving_tds",),
     # ── misc offence ──
-    # ⚠️ NOT `fumbles_lost_total` — that counts return fumbles too. See the header; the parity
-    # clause caught this, and the projected twin is an offensive-touch heuristic.
-    "fumbles_lost": ("sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost"),
+    # ⭐ `fumbles_lost_total`, NOT the three per-phase columns — CHANGED by PM ruling ① (2026-09-18,
+    # option A) after the per-phase reading was measured as a 36-row disagreement with the platform
+    # whose scoring we are itemising. The full reasoning, including which half of the old refusal
+    # died and which is superseded, is in the header; ⛔ do not re-narrow this without reading it.
+    "fumbles_lost": ("fumbles_lost_total",),
     # ⭐ ANY fumble, lost or recovered by your own team — a DIFFERENT term from `fumbles_lost`
     # above, and the league pays both (Sleeper: `fum` −1 and `fum_lost` −1, so a lost fumble costs
     # a manager twice). `fum` is Sleeper's own key, carried through unmapped by the importer
@@ -234,6 +260,30 @@ REALIZED_SOURCE_ALL: dict[str, tuple[str, ...]] = {**REALIZED_STAT_SOURCE, **REA
 REALIZED_PBP_COLUMNS: tuple[str, ...] = tuple(sorted(
     {c for cols in REALIZED_PBP_SOURCE.values() for c in cols}
 ))
+
+#: Columns the artifact CARRIES but the scorer does not read — kept deliberately, with the reason.
+#:
+#: ⭐ THE THREE PER-PHASE LOST-FUMBLE COLUMNS. `fumbles_lost` reads `fumbles_lost_total` since PM
+#: ruling ① (see the header), so these three are no longer a scoring source. They stay in the read
+#: for two reasons, and the SECOND one is load-bearing:
+#:
+#:   1. They are the EVIDENCE for the distinction the ruling turned on. `fumbles_lost_total` minus
+#:      their sum is exactly "fumbles lost outside the three offensive phases" — the quantity that
+#:      separates DJ Moore's week-1 lateral from an ordinary strip. Dropping them would leave the
+#:      artifact unable to explain its own number.
+#:   2. ⛔ WITHOUT THEM THE MAP CHANGE WOULD NEVER REACH A READER. A column leaving the artifact makes
+#:      `realized_week.publish_decision` classify every already-published week as a vendor `restate`
+#:      rather than a `widen_columns`, so the served week keeps its old rows forever — the same
+#:      no-op-by-construction trap `widen_columns` exists to prevent, arriving from the narrowing
+#:      side. Keeping them makes the new artifact a strict SUPERSET of the old one, which is the
+#:      shape that machinery is built for.
+#:
+#: ⚠️ DECLARED, NOT INCIDENTAL. A column nothing reads is cruft that rots; a column something
+#: deliberately keeps needs a name and a reason, or the next reader prunes it and re-breaks the
+#: publish path.
+REALIZED_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
+    "sack_fumbles_lost", "rushing_fumbles_lost", "receiving_fumbles_lost",
+)
 
 #: Every `dst_*` key shares one reason, so it is stated once rather than copied thirty times.
 _DST_REASON = (
