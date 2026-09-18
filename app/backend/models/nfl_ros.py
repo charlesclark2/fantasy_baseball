@@ -30,7 +30,11 @@ and a guard pins that. The manifest states it in words as well.
 ⚠️ PAID SUBSTRATE. The ROS stat line is one optional field per `STAT_FIELD` payload name, DERIVED
 from `STAT_FIELD` (never a hand list), so `projection_fields.PAID_PLAYER_FIELDS` classifies it the
 way it classifies the season board's stat line — adding a scorable stat makes it paid here too
-(NF-EPIC1). No route serves this artifact yet; entitlement is the consumer stories' job.
+(NF-EPIC1). The three per-scoring values (`rosPts`/`rosP10`/`rosP90`) follow the same policy the
+season board applies: the PPR triple is FREE (the number never without its band), Std and Half are
+PAID (PM ack, 2026-09-18). That ruling is expressed in `projection_fields` as a rule over presets
+rather than six more names — the hand list is what let them ship free in the first place. No route
+serves this artifact yet; entitlement is the consumer stories' job.
 """
 from __future__ import annotations
 
@@ -39,7 +43,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field, create_model
 
 from app.backend.models.nfl_weekly import declared_field_names, missing_declared_fields  # noqa: F401
-from app.backend.services.projection_fields import STAT_FIELD
+from app.backend.services.projection_fields import SCORING_SUFFIX, STAT_FIELD
 
 STORY = "NF-ROS1b"
 ARTIFACT_VERSION = "nfl_ros_value_v1"
@@ -56,12 +60,27 @@ COMPARISON_NOTE = ("A rest-of-season value is published only for the certified p
                    "here. It is not a cross-position ranking input: an uncertified position "
                    "carries no number, so comparing values across positions would compare a value "
                    "with an absence.")
+#: ⭐ THE UPPER EDGE IS A TAIL, NOT A CEILING (NF-ROS1b §13 finding ⑪; PM ack 2026-09-18 ordered it
+#: carried on the artifact itself, not only in the record). Served so a display consumer cannot
+#: render the number without the caveat that belongs to it.
+UPPER_TAIL_NOTE = (
+    "The upper edge of the 80% range can exceed any full-season pace on record. On the decisive "
+    "run 9 of 197 certified RB rows carried a P90 above the largest realized per-game pace we have "
+    "observed, scaled to that player's games remaining (the widest: 664 against 482); no point "
+    "estimate does. That is the registered interval's top ratio cell spreading upward — RB "
+    "over-covers, 0.859 against a nominal 0.80 — and it is deliberately NOT clamped, because "
+    "clamping would change the interval family the certification was earned under. Render the "
+    "upper edge as a tail, never as a ceiling or a target."
+)
 HONEST_FRAMING = ("best_alpha = 0. This is a projection with a measured 80% range, not a pick, an "
                   "edge or a promise. The range reads flat on held-out seasons (randomized-PIT "
                   "max-decile deviation within 0.05) for the certified positions only.")
 
-#: The three scorings every value is published in, and the field suffix each one uses.
-PRESET_SUFFIX = {"standard": "Std", "half_ppr": "Half", "full_ppr": "Ppr"}
+#: The three scorings every value is published in, and the field suffix each one uses. ⭐ IMPORTED,
+#: not restated: `projection_fields` owns the suffix spelling because it PRICES by it
+#: (`SCORED_FIELD_STEMS × PAID_SCORING_PRESETS`), so a second copy here could silently name a field
+#: the pricing rule does not reach — which is the hand-list defect the PM's 2026-09-18 ack closed.
+PRESET_SUFFIX = SCORING_SUFFIX
 
 #: The stat-line field names — every `STAT_FIELD` payload name, in `STAT_FIELD` order.
 STAT_LINE_FIELDS: tuple[str, ...] = tuple(dict.fromkeys(STAT_FIELD.values()))
@@ -166,6 +185,7 @@ class NflRosManifest(BaseModel):
     best_alpha: float = 0.0
     framing: str = HONEST_FRAMING
     comparison_note: str = COMPARISON_NOTE
+    upper_tail_note: str = UPPER_TAIL_NOTE
     certified_positions: list[str]
     certified_weeks: list[int] = Field(description="[first, last] through-week the value was "
                                                    "certified over")

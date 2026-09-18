@@ -633,3 +633,16 @@ hurdle.
   served.
 * A one-position artifact carries a cross-position consumer hazard (the NF-W7c §4 class). It is not
   a ranking input.
+
+---
+
+## §14 Amendments after §13 (pointer, added 2026-09-18)
+
+Appended below the §13 line, editing nothing above it.
+
+* **Amendment 3** (PM R2, 2026-09-17) — the RB-rookie C9 read: the decision rule and its design
+  quantity, both committed before the number exists. GATES the rookie disposition.
+* **Amendment 4** (PM acks, 2026-09-18) — the serving decisions: R3's cadence SUPERSEDED by the
+  weekly-serving-job branch + `NF_ROS_PUBLISH_ENABLED`; the ROS Std/Half values priced PAID (PPR
+  free, with its band); §13 finding ⑪ carried on the served manifest. GATES NOTHING and moves no
+  bar — C1–C9 stand as registered and as measured.

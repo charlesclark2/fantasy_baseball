@@ -230,8 +230,11 @@ CASES = [
      "test_the_provenance_columns_survive_the_emitted_schema"),
 
     ("the citation is withheld from the free board while the capped number is shown", FIELDS,
-     'PAID_SCORING_FIELDS: frozenset[str] = frozenset({"fpStd", "fpHalf"})',
-     'PAID_SCORING_FIELDS: frozenset[str] = frozenset({"fpStd", "fpHalf", "reportedAbsence"})',
+     # ⚠️ RE-ANCHORED 2026-09-18: `PAID_SCORING_FIELDS` is no longer the hand list this break used
+     # to edit (NF-ROS1b made it a rule over presets). The break is the same in substance — price
+     # the citation as if it were a scoring — expressed against the derived form.
+     'PAID_SCORING_FIELDS: frozenset[str] = frozenset(\n',
+     'PAID_SCORING_FIELDS: frozenset[str] = frozenset({"reportedAbsence"}) | frozenset(\n',
      None,
      "test_the_provenance_fields_are_public_because_nothing_here_is_scorable"),
 
@@ -311,10 +314,17 @@ CASES = [
      "        reported_absence_log=reported_absence_log,",
      "test_the_cap_reaches_the_ROOKIE_path_not_only_the_veteran_one"),
 
+    # ⚠️ RE-ANCHORED 2026-09-18 (NF-ROS1b, in passing). This break had been reporting ANCHOR
+    # MISSING — i.e. VACUOUS — since NF-INJ4b inserted `designation_games=` into the rookie call on
+    # dev without re-anchoring this sibling story's proof. Substance unchanged: stop passing the
+    # overrides to the rookie half. (The repo's own lesson: a break that no longer bites is a guard
+    # that cannot fail.)
     ("build_projection stops passing the overrides to the rookie half", RUNNER,
      "                           reported_absence_rows=_ra.rows, reported_absence_log=_ra_log,\n"
+     "                           designation_games=_designation_games,\n"
      "                           roster_status=_rk_status)\n"
      "           if not incoming.empty else pd.DataFrame())",
+     "                           designation_games=_designation_games,\n"
      "                           roster_status=_rk_status)\n"
      "           if not incoming.empty else pd.DataFrame())",
      None,

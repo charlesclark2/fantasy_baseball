@@ -65,20 +65,41 @@ def test_no_field_invites_a_cross_position_comparison():
 def test_the_stat_line_is_derived_from_stat_field_and_is_paid():
     fields = set(C.NflRosPlayer.model_fields)
     assert set(STAT_FIELD.values()) <= fields
-    paid = fields & PAID_PLAYER_FIELDS
-    assert paid == set(STAT_FIELD.values())
+    assert set(STAT_FIELD.values()) <= fields & PAID_PLAYER_FIELDS
+    # The rest of the paid set is the alternative scorings; pinned by its own clause below.
 
 
-def test_the_paid_set_diff_is_what_the_pm_was_shown():
-    """The derived paid set of the new contract: exactly the STAT_FIELD line. The per-scoring ROS
-    points (rosPtsStd/Half) are NOT classified paid by `PAID_SCORING_FIELDS` (a hand list naming
-    fpStd/fpHalf) — surfaced to the PM as a pricing question, pinned here so a change is visible."""
+def test_the_paid_set_is_the_stat_line_plus_the_alternative_scorings():
+    """⭐ THE PM'S 2026-09-18 ACK, PINNED. The paid-set diff shown to the PM carried a pricing
+    question: the six ROS Std/Half values came out FREE because `PAID_SCORING_FIELDS` was a hand
+    list naming `fpStd`/`fpHalf` only, while the season board's Std/Half were paid — a user would
+    have paid for a format on one tab and got it free on the next. Ruling: Std/Half join the paid
+    set, the PPR triple stays free WITH its band.
+
+    Asserted as the RULE's consequence, both ways: nothing PPR is paid, nothing Std/Half is free.
+    """
     fields = set(C.NflRosPlayer.model_fields)
-    unclassified_scorings = {f for f in fields if f.startswith("ros") and
-                             (f.endswith("Std") or f.endswith("Half"))}
-    assert unclassified_scorings == {"rosPtsStd", "rosP10Std", "rosP90Std",
-                                     "rosPtsHalf", "rosP10Half", "rosP90Half"}
-    assert not unclassified_scorings & PAID_PLAYER_FIELDS
+    per_scoring = {f for f in fields if f.startswith("ros")}
+    assert per_scoring == {"rosPtsStd", "rosP10Std", "rosP90Std",
+                           "rosPtsHalf", "rosP10Half", "rosP90Half",
+                           "rosPtsPpr", "rosP10Ppr", "rosP90Ppr"}
+
+    paid_scorings = {f for f in per_scoring if f.endswith("Std") or f.endswith("Half")}
+    free_scorings = per_scoring - paid_scorings
+    assert paid_scorings <= PAID_PLAYER_FIELDS, "an alternative scoring would ship free"
+    assert not free_scorings & PAID_PLAYER_FIELDS, "the free PPR wedge would be withheld"
+
+    # The rest of the paid diff is the stat line, exactly as the PM was shown.
+    assert (fields & PAID_PLAYER_FIELDS) - paid_scorings == set(STAT_FIELD.values())
+
+
+def test_the_upper_edge_is_served_as_a_tail_not_a_ceiling():
+    """§13 finding ⑪ rides the artifact, not only the record (PM ack, 2026-09-18) — a display
+    consumer reading the P90 gets the reason it can exceed any pace on record in the same blob."""
+    note = C.NflRosManifest.model_fields["upper_tail_note"].default
+    assert note == C.UPPER_TAIL_NOTE
+    assert "not clamped" in note.lower()
+    assert "tail" in note.lower() and "ceiling" in note.lower()
 
 
 def test_missing_declared_fields_sees_an_absent_default():
