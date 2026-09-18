@@ -93,18 +93,30 @@ def test_the_free_wedge_and_contrib_stay_public():
 
 def test_the_stat_field_map_mirrors_the_frontend():
     """One logical map, two owners (INC-38's shape). A one-sided edit either un-gates a column or
-    breaks a league's scoring, and both are silent."""
+    breaks a league's scoring, and both are silent.
+
+    ⭐ RE-ANCHORED, NOT WEAKENED (NF-WK-ACC1 part 1, PM ruling 2026-09-18 option D). The Python map
+    is now a SUPERSET by exactly `REALIZED_ONLY_KEYS` — terms scored only on a completed week, which
+    no projection produces and the browser therefore cannot score. Equality still binds over every
+    projected key, and the excused set is pinned mechanically by `test_nf_wk_acc1_fum.py`
+    (`REALIZED_ONLY_KEYS` == named by the realized map, absent from the projection profile), so this
+    is not an allowlist a future edit can quietly widen.
+    """
     source = _TS_LEAGUE_CONFIG.read_text()
     block = re.search(r"export const STAT_FIELD[^{]*\{(.*?)\n\}", source, re.S)
     assert block, "could not find STAT_FIELD in the TS source — the guard would be vacuous"
     body = re.sub(r"//[^\n]*", "", block.group(1))  # strip comments before matching (INC-38)
     ts_map = dict(re.findall(r'(\w+):\s*"(\w+)"', body))
     assert ts_map, "parsed an empty STAT_FIELD — vacuous"
-    assert ts_map == projection_fields.STAT_FIELD, (
+    projected = {k: v for k, v in projection_fields.STAT_FIELD.items()
+                 if k not in projection_fields.REALIZED_ONLY_KEYS}
+    assert ts_map == projected, (
         "STAT_FIELD has drifted between Python and TypeScript: "
-        f"only in TS={set(ts_map) - set(projection_fields.STAT_FIELD)}, "
-        f"only in Python={set(projection_fields.STAT_FIELD) - set(ts_map)}"
+        f"only in TS={set(ts_map) - set(projected)}, "
+        f"only in Python={set(projected) - set(ts_map)}"
     )
+    # …and a realized-only key must be absent from the mirror, or the asymmetry is not the ruled one.
+    assert set(ts_map).isdisjoint(projection_fields.REALIZED_ONLY_KEYS)
 
 
 # ── the transform ────────────────────────────────────────────────────────────────────────────────

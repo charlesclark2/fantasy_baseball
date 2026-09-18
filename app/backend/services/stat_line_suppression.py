@@ -105,8 +105,17 @@ def counting_stat_fields() -> frozenset[str]:
 
     Derived from the scorer's own map so a new scorable stat joins it automatically (see the
     header). ⛔ Excludes `fpStd`/`fpHalf`/`fpPpr`/`g` — those are the values that must still render.
+
+    ⛔ AND EXCLUDES THE REALIZED-ONLY KEYS. `projection_fields.REALIZED_ONLY_KEYS` names terms the
+    scorer applies only to a COMPLETED week (NF-WK-ACC1 part 1): no projection produces them, so no
+    published row can carry them, so naming one as "withheld" would claim we suppressed a field that
+    was never there — the opposite of this module's job, which is to make a withheld value
+    distinguishable from one that never existed.
     """
-    return frozenset(projection_fields.STAT_FIELD.values())
+    realized_only = {projection_fields.STAT_FIELD[k]
+                     for k in projection_fields.REALIZED_ONLY_KEYS
+                     if k in projection_fields.STAT_FIELD}
+    return frozenset(projection_fields.STAT_FIELD.values()) - realized_only
 
 
 def row_is_impossible(row: dict) -> bool:
