@@ -738,3 +738,42 @@ population chosen after seeing the result, which is the post-hoc field trim this
   seeing his player absent from a certified-RB artifact deserves the real reason.
 * Either way, a **rookie-specific interval treatment is a registered-successor candidate, not an
   in-story patch.**
+
+---
+
+## §17 The disposition: rookie rows are a stated absence (PM, 2026-09-18)
+
+The PM's mapping was fixed **before** the spread existed (amendment 5 / §16): concentrated ⇒ a
+disclosed note; broad ⇒ a stated absence. The spread read broad on every statistic that matters, so
+the disposition is **(ii)**, and it cannot be argued backward from a preferred outcome.
+
+**What is served.** A rookie at a certified position carries `absence:
+"rookie_interval_not_certified"`, `certified: false`, and **no value in either direction** — no
+band and **no point estimate**. The PM's reason, recorded: serving a certified-looking number whose
+interval was just refused would split one row's honesty in half.
+
+**Two implementation details that are decisions, not mechanics:**
+
+1. **The reason is keyed on the board's `rookie` FLAG, never on the id shape.** On the live 2026
+   board all 13 RB rookies happen to carry a synthetic id (13 of 13, verified against the served
+   blob), so an id-shape rule would agree today and diverge silently the first time a rookie
+   arrives with a gsis id. The guard's fixture carries a gsis-id rookie precisely so the two rules
+   are distinguishable.
+2. **The rookie reason BINDS over `join_unresolved`,** because only one of them is the reason a
+   value is missing: fixing a join would still leave the interval uncertified, so `join_unresolved`
+   would tell that owner something false. The join failure is not lost — `join_unresolved_names` is
+   now built from the identity AUDIT rather than from the served label, so a rookie's broken join
+   is still counted and named.
+
+**Measured on the live build (dry run, week 1 of 2026):** 870 players, **184 certified RB rows**
+(was 197), **13 `rookie_interval_not_certified`**, 641 `not_certified`, 32
+`position_not_evaluated`, 10 `no_preseason_prior`, 0 `join_unresolved`, and the stratum note on the
+manifest.
+
+**Blast radius: 13 rows today, growing as rookies accumulate games** — and the growth cuts both
+ways, because every completed week adds rookie evidence for the successor (followUp ⑳).
+
+**Guards:** 51/51 RED (31 interval + 20 node 4), including the five that make this disposition
+falsifiable — the rookie branch removed, the reason keyed on the id shape, the join list reading the
+served label again, the manifest losing the stratum qualifier, and the note falling back to a
+generic "rookies are uncertain" hedge.

@@ -11,8 +11,9 @@ this contract, dry-run included; the publisher then reads the bytes back and com
 `missing_declared_fields` is IMPORTED from `nfl_weekly`, not re-implemented: one owner of the
 question "is the contract on the wire".
 
-⭐ ONLY CERTIFIED POSITIONS CARRY NUMBERS. Every other row is a stated absence, and the four
-absences are distinguishable by construction (a Literal, not free text):
+⭐ ONLY CERTIFIED POSITIONS CARRY NUMBERS — AND ONLY THEIR NON-ROOKIE ROWS. Every other row is a
+stated absence, and the five absences are distinguishable by construction (a Literal, not free
+text):
 
   * `not_certified` — an evaluated position whose ROS value did not clear the registered bar;
   * `position_not_evaluated` — D/ST (team grain; no player-level realized line exists);
@@ -20,7 +21,16 @@ absences are distinguishable by construction (a Literal, not free text):
     the manifest counts them and their share of realized points instead;
   * `join_unresolved` — a certified-position player whose identity join could not be verified to
     have found his realized line (PM amendment 1: a MISSED name-rung match is served as this,
-    never as a prior-only number that silently ignores the games he played).
+    never as a prior-only number that silently ignores the games he played);
+  * `rookie_interval_not_certified` — a ROOKIE at a certified position. The stratum's interval
+    failed C9 on the pre-declared read (0.0810 against the 0.05 bar) and the PM ruled it a stated
+    absence rather than a disclosed note, because the tilt is population-wide (prereg §15–§16).
+
+⚠️ **THE ROOKIE REASON BINDS OVER `join_unresolved`, and that ordering is deliberate.** Both can be
+true of one row, but only one is the reason a value is missing: fixing the join would still leave
+the rookie interval uncertified, so `join_unresolved` would tell that owner something false. The
+join failure is NOT lost — `join_unresolved_names` is built from the identity AUDIT, not from the
+served label, so a rookie's broken join is still counted and named in the manifest.
 
 ⛔ NO CROSS-POSITION COMPARISON FIELD (PM R4). A certified value exists for some positions only, so
 a global rank or a cross-position percentile would invite exactly the comparison the artifact
@@ -51,9 +61,26 @@ INTERVAL_FAMILY = "hurdle"
 INTERVAL_LO_LEVEL = 0.10
 INTERVAL_HI_LEVEL = 0.90
 
-ROS_ABSENCES = ("not_certified", "position_not_evaluated", "no_preseason_prior", "join_unresolved")
+ROS_ABSENCES = ("not_certified", "position_not_evaluated", "no_preseason_prior", "join_unresolved",
+                "rookie_interval_not_certified")
 RosAbsence = Literal["not_certified", "position_not_evaluated", "no_preseason_prior",
-                     "join_unresolved"]
+                     "join_unresolved", "rookie_interval_not_certified"]
+
+#: ⭐ THE STRATUM CARVE-OUT, IN PLAIN WORDS (PM disposition (ii), 2026-09-18). RB certified; RB
+#: ROOKIES' intervals did not. Served on every manifest so a rookie owner meeting the absence gets
+#: the real reason, and so the certified-positions list is never read as covering the whole
+#: position. The wording states what was MEASURED, not a generic "rookies are uncertain" — the PM's
+#: pre-recorded constraint (prereg §16), written down before the disposition was made.
+ROOKIE_STRATUM_NOTE = (
+    "A position is certified here for its NON-ROOKIE players. Rookie rows carry the absence "
+    "`rookie_interval_not_certified` and no value, in either direction: measured over 2020-2025, "
+    "rookie rest-of-season ranges have been thin on the UPSIDE — rookie outcomes land in the top "
+    "decile of their own range 18.1% of the time against a nominal 10%, and the effect is a tilt "
+    "across the whole rookie population (63.1% of rookie player-seasons sit above the middle of "
+    "their range, against 41.4% of veterans), not a handful of breakout seasons. The point "
+    "estimate is withheld with the range: serving a certified-looking number whose interval was "
+    "refused would split one row's honesty in half."
+)
 WAIVER_ABSENCE = "waiver_value_not_certified"
 
 COMPARISON_NOTE = ("A rest-of-season value is published only for the certified positions listed "

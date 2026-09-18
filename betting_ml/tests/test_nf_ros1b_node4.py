@@ -47,11 +47,23 @@ def _code(path: Path) -> str:
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # the contract
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def test_the_four_absences_are_declared_and_distinct():
+def test_the_five_absences_are_declared_and_distinct():
     assert C.ROS_ABSENCES == ("not_certified", "position_not_evaluated", "no_preseason_prior",
-                              "join_unresolved")
+                              "join_unresolved", "rookie_interval_not_certified")
     args = set(C.RosAbsence.__args__)
     assert args == set(C.ROS_ABSENCES)
+
+
+def test_the_rookie_stratum_note_says_what_was_measured():
+    """PM disposition (ii) + the constraint recorded BEFORE the choice (prereg §16): the note must
+    say rookie ranges have been thin on the UPSIDE, not a generic "rookies are uncertain"."""
+    note = C.ROOKIE_STRATUM_NOTE
+    assert "upside" in note.lower()
+    assert "rookie_interval_not_certified" in note
+    for generic in ("rookies are uncertain", "rookies are unpredictable", "use with caution"):
+        assert generic not in note.lower(), "the note fell back to a generic hedge"
+    # it must carry the measurement, not just the adjective
+    assert "18.1%" in note and "63.1%" in note
 
 
 def test_no_field_invites_a_cross_position_comparison():
@@ -128,6 +140,11 @@ def _served():
                   rushTd=5.0, rec=20.0, recYds=150.0, rushAtt=160.0, tgt=25.0),
                 p("SYN0000002", "Vocab Guy", "RB", "NE", 10.0, True, 60, rushYds=200.0,
                   rushAtt=50.0),
+                # ⭐ A ROOKIE CARRYING A GSIS ID. On the live 2026 board every RB rookie happens
+                # to have a synthetic id (13 of 13), so a board-shaped fixture cannot tell a
+                # flag-keyed rule from an id-shape-keyed one. This row can.
+                p("00-0000005", "Gsis Rookie", "RB", "KC", 15.0, True, rushYds=500.0,
+                  rushAtt=120.0, rec=15.0, recYds=110.0),
                 p("00-0000002", "Quarter Back", "QB", "KC", 17.0, passYds=4000.0, passTd=30.0,
                   passAtt=550.0, passCmp=360.0),
                 p("DST-KC", "KC D/ST", "DST", "KC", 17.0),
@@ -217,14 +234,17 @@ def test_the_build_serves_certified_rows_and_states_every_absence(built):
     rows = {r["id"]: r for r in b["payload"]["players"]}
     assert set(rows) == {r["id"] for r in served["players"]}
     assert rows["00-0000001"]["certified"] and rows["00-0000001"]["absence"] is None
-    assert rows["SYN0000001"]["certified"] and rows["SYN0000001"]["gamesPlayed"] == 1
-    assert rows["SYN0000002"]["absence"] == "join_unresolved" and not rows["SYN0000002"]["certified"]
+    assert rows["SYN0000001"]["absence"] == "rookie_interval_not_certified"
+    assert rows["SYN0000002"]["absence"] == "rookie_interval_not_certified"
     assert rows["00-0000002"]["absence"] == "not_certified" and rows["00-0000002"]["rosPtsPpr"] is None
     assert rows["00-0000004"]["absence"] == "not_certified"
     assert rows["DST-KC"]["absence"] == "position_not_evaluated"
     for r in rows.values():
         assert r["waiverValue"] is None and r["waiverAbsence"] == C.WAIVER_ABSENCE
     m = b["manifest"]
+    # ⭐ THE JOIN FAILURE SURVIVES THE ROOKIE LABEL. Vocab Guy is served as a rookie absence (that
+    # reason binds — fixing his join would not certify his interval), but the manifest still counts
+    # and names him, because this list is built from the identity AUDIT, not from the served label.
     assert m["join_unresolved_names"] == ["Vocab Guy"]
     counts = {c["reason"]: c["n"] for c in m["absence_counts"]}
     assert counts["no_preseason_prior"] == m["no_preseason_prior_players"] >= 1
@@ -519,3 +539,53 @@ def test_the_hosting_schedule_self_starts_and_is_heartbeat_checked():
     src = _code(REPO / "pipeline/schedules/sports_rollforward_schedules.py")
     block = src[src.index("NFL_WEEKLY_SERVING_CRON ="):src.index("def sports_nfl_weekly_serving_schedule(")]
     assert "default_status=DefaultScheduleStatus.RUNNING" in block
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# PM disposition (ii), 2026-09-18 — the rookie stratum is a stated absence
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_a_rookie_at_a_certified_position_is_an_absence_carrying_no_value(built):
+    """⭐ AND IT CARRIES NO POINT EITHER. The PM's constraint: serving a certified-looking number
+    whose interval we just refused would split one row's honesty in half."""
+    b, served, _ = built
+    rows = {r["id"]: r for r in b["payload"]["players"]}
+    rookies = [rows[r["id"]] for r in served["players"] if r.get("rookie")]
+    assert len(rookies) == 3, "the fixture lost its rookies — the clause would be vacuous"
+
+    for r in rookies:
+        assert r["absence"] == "rookie_interval_not_certified"
+        assert r["certified"] is False
+        for suf in C.PRESET_SUFFIX.values():
+            assert r[f"rosPts{suf}"] is None, "a refused interval must not ship a point estimate"
+            assert r[f"rosP10{suf}"] is None and r[f"rosP90{suf}"] is None
+        assert all(r[f] is None for f in C.STAT_LINE_FIELDS)
+        assert r["gamesPlayed"] is None and r["expGamesRemaining"] is None
+
+
+def test_the_rookie_absence_is_keyed_on_the_flag_not_on_the_id_shape(built):
+    """On the live 2026 board all 13 RB rookies carry a synthetic id, so an id-shape rule would
+    agree there and diverge silently the first time a rookie arrives with a gsis id. This asserts
+    the rule reads the board's `rookie` flag — the fixture carries exactly that row."""
+    b, served, _ = built
+    rows = {r["id"]: r for r in b["payload"]["players"]}
+    assert re.fullmatch(r"00-\d{7}", "00-0000005"), "the fixture's rookie is not gsis-shaped"
+    assert rows["00-0000005"]["absence"] == "rookie_interval_not_certified"
+    assert rows["00-0000005"]["rosPtsPpr"] is None
+
+    # ...and a NON-rookie with a synthetic-looking absence of its own is untouched: the flag is the
+    # only thing that moves a row into this reason.
+    non_rookie_certified = [r for r in b["payload"]["players"]
+                            if r["certified"] and not next(x for x in served["players"]
+                                                           if str(x["id"]) == r["id"]).get("rookie")]
+    assert non_rookie_certified, "no certified veteran survived — the contrast is vacuous"
+
+
+def test_the_manifest_states_the_stratum_carve_out(built):
+    b, _, _ = built
+    m = b["manifest"]
+    assert m["certified_positions"] == ["RB"]
+    assert m["rookie_stratum_note"] == C.ROOKIE_STRATUM_NOTE, (
+        "the certified-positions list would read as covering the whole position")
+    counts = {c["reason"]: c["n"] for c in m["absence_counts"]}
+    assert counts["rookie_interval_not_certified"] == 3
+    assert m["n_players"] == len(b["payload"]["players"])
