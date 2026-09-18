@@ -106,6 +106,43 @@ const CASES = [
     grep: "the waiver view never reaches a free account",
     expect: "GREEN",
   },
+  // ── ⑰ / ㉜ / ㉖-tail — PM rulings 2026-09-18 ──────────────────────────────────────────────────
+  {
+    id: "waiver-alias-pair-unnamed",
+    shipped: "⑰ — a withheld list whose reason is 'a name did not match' must NAME the names",
+    detail: "the alias pair is not rendered, so the refusal states a cause the reader cannot act on or verify.",
+    file: "components/fantasy/waiver-view.tsx",
+    from: "                  {aliasNote ? (",
+    to: "                  {false ? (",
+    grep: "names both spellings",
+  },
+  {
+    id: "waiver-captured-terms-unnamed",
+    shipped: "㉜ = (b) — the uncovered scoring terms are NAMED, not left to a generic sentence",
+    detail: "the grouping returns nothing, so the surface falls back to the generic sentence the ruling replaced.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: "  const byGroup = new Map<string, string[]>()\n  for (const key of keys ?? []) {",
+    to: "  const byGroup = new Map<string, string[]>()\n  for (const key of []) {",
+    grep: "uncovered scoring terms are named",
+  },
+  {
+    id: "waiver-captured-unknown-key-dropped",
+    shipped: "㉜ — a key our catalog does not carry is still LISTED, never silently dropped",
+    detail: "an unrecognised platform key is skipped, so the list is quietly shorter than the league's real gap.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: "    const term = SCORING_CATALOG.find((t) => t.key === key)\n    const group = term ? (_CAPTURED_GROUP_LABEL[term.group] ?? \"Other\") : _capturedFallbackGroup(key)",
+    to: "    const term = SCORING_CATALOG.find((t) => t.key === key)\n    if (!term) continue\n    const group = _CAPTURED_GROUP_LABEL[term.group] ?? \"Other\"",
+    grep: "uncovered scoring terms are named",
+  },
+  {
+    id: "my-teams-ir-still-bench-cover",
+    shipped: "㉖-tail — an IR/taxi player is not bench depth on the roster report either",
+    detail: "the fragility reading offers an injured-reserve player as the body that steps into a thin slot.",
+    file: "lib/roster-report.ts",
+    from: "      if (b.reserved) continue\n",
+    to: "",
+    grep: "on IR is NOT named as cover",
+  },
   {
     id: "waiver-excluded-week-dropped",
     shipped: "NF-WVR1 ⑯ — RC1's excluded weeks are a stated gap, never a silently short season",
@@ -3968,7 +4005,12 @@ const CASES = [
 // player printed as 0.00; a started player's name hidden) and RE-ANCHORS one
 // (`recap-absence-becomes-a-dash`). RED-proven individually (`node e2e/red-proof.mjs recap-`). By
 // this change's own delta only: 214/208/6 -> 216/210/6.
-const RECORDED_BOARD = { total: 227, red: 220, notObservable: 7 }
+// NF-WVR1's PM triage (2026-09-18) adds FOUR cases — the ⑰ alias detector's rendered pair, ㉜'s named
+// uncovered terms and their never-dropped unknown key, and ㉖-tail's IR-is-not-bench-cover. By this
+// change's own delta only: 227/220/7 -> 231/224/7. ⛔ The PRE-EXISTING gap between this total and the
+// real case count is untouched and stays reported (see the board-drift note above): editing it to
+// match a drift you did not cause is what makes a guard decorative.
+const RECORDED_BOARD = { total: 231, red: 224, notObservable: 7 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

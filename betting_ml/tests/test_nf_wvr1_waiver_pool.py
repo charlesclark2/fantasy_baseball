@@ -390,7 +390,7 @@ def test_a_row_without_a_slot_still_counts_as_before():
     assert (rb["held"], rb["reserved"]) == (2, 0)
 
 
-def _waiver_route_harness(monkeypatch, record, fresh):
+def _waiver_route_harness(monkeypatch, record, fresh, projections=None):
     from starlette.requests import Request
 
     from app.backend.routers import fantasy
@@ -402,7 +402,9 @@ def _waiver_route_harness(monkeypatch, record, fresh):
                         lambda uid, lid, cfg, quota: saved.update(cfg=cfg))
     monkeypatch.setattr(fantasy.entitlement, "resolve_entitlement", lambda req: "subscriber")
     monkeypatch.setattr(fantasy.entitlement, "personalized_league_quota", lambda ent: 25)
-    monkeypatch.setattr(fantasy, "_full_projections", lambda season: {"players": [
+    # ⑰ made the board INJECTABLE: an alias case is a property of the two spellings, so a test of it
+    # has to choose both. Default is unchanged, so every earlier caller reads exactly as before.
+    monkeypatch.setattr(fantasy, "_full_projections", lambda season: projections or {"players": [
         {"id": "00-0000001", "name": "Healthy Wideout", "pos": "WR", "team": "NYJ", "fpPpr": 100.0},
         {"id": "00-0000002", "name": "Hurt Wideout", "pos": "WR", "team": "NYJ", "fpPpr": 100.0},
     ]})
@@ -453,3 +455,160 @@ def test_an_unlinked_league_keeps_its_stored_roster(monkeypatch):
     out, saved = _waiver_route_harness(monkeypatch, record, _own_team_fresh())
     assert out["rosters"]["own_roster_refreshed"] is False
     assert saved["cfg"].get("imported_roster") is None
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# ⑰ (PM ruling 2026-09-18) — THE ALIAS DETECTOR.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# The PM refused the crosswalk fix (it re-opens a bounded 400 KB item budget for an unobserved
+# residual) AND refused accepting the residual unwatched, and ruled the middle: reconcile at every
+# build and refuse loudly. These are the two sides that make the detector a detector — it must FIRE
+# on the measured alias case and STAY SILENT on a rostered player who is genuinely off the board.
+
+_ALIAS_BOARD = [
+    {"name": "Joshua Palmer", "pos": "WR", "team": "BUF", "id": "b1"},
+    {"name": "Bijan Robinson", "pos": "RB", "team": "ATL", "id": "b2"},
+    {"name": "Somebody Else", "pos": "WR", "team": "NYJ", "id": "b3"},
+]
+
+
+def _recon(board, rosters):
+    groups = waiver_pool.free_agent_pool(board, rosters)
+    return groups, waiver_pool.reconcile_rostered(board, groups, rosters)
+
+
+def test_the_alias_detector_fires_on_the_measured_case_and_names_both_spellings():
+    """"Josh Palmer" on the roster vs "Joshua Palmer" on the board — same player, same gsis id.
+
+    THE DEFECT: the name join misses, the board row is never subtracted, and the surface offers a
+    player who is already rostered — this feature's one must-never.
+    """
+    rosters = [{"players": [
+        {"name": "Josh Palmer", "position": "WR", "team": "BUF"},
+        {"name": "Bijan Robinson", "position": "RB", "team": "ATL"},
+    ]}]
+    groups, rec = _recon(_ALIAS_BOARD, rosters)
+
+    # The alias player IS still being offered — which is exactly what the detector must catch.
+    offered = {p["name"] for g in groups for p in g["players"]}
+    assert "Joshua Palmer" in offered
+
+    assert waiver_pool.alias_refusals(rec) == ["rostered_alias_unmatched"]
+    assert len(rec["alias_suspects"]) == 1
+    suspect = rec["alias_suspects"][0]
+    assert suspect["rostered"]["name"] == "Josh Palmer"
+    assert [b["name"] for b in suspect["board"]] == ["Joshua Palmer"]
+    # The counts the ruling named, and they disagree — 1 WR implied rostered short of the live 1.
+    assert rec["implied_rostered"]["WR"] == 0
+    assert rec["live_rostered"]["WR"] == 1
+
+
+def test_a_rostered_player_genuinely_off_the_board_does_NOT_refuse():
+    """THE OTHER CAUSE OF THE SAME COUNT MISMATCH, and it is not a defect.
+
+    A deep roster reaches past the board's tail (⑦ measured 2.2% of real week-1 skill performers
+    past it). The pool is a SUBSET of the board, so an off-board player CANNOT be offered — the pool
+    is correct, and refusing here would withhold a healthy league's list for a non-defect. That is
+    how a guard gets muted, so the cause split is part of the detector, not a softening of it.
+    """
+    rosters = [{"players": [
+        {"name": "Joshua Palmer", "position": "WR", "team": "BUF"},
+        {"name": "Practice Squad Guy", "position": "WR", "team": "NYJ"},
+    ]}]
+    _, rec = _recon(_ALIAS_BOARD, rosters)
+    assert waiver_pool.alias_refusals(rec) == []
+    assert [r["name"] for r in rec["off_board"]] == ["Practice Squad Guy"]
+    assert rec["alias_suspects"] == []
+
+
+def test_the_detector_is_silent_on_a_league_that_reconciles_exactly():
+    """The ⑫ runtime-gate shape: every rostered player matched, nothing to report."""
+    rosters = [{"players": [
+        {"name": "Joshua Palmer", "position": "WR", "team": "BUF"},
+        {"name": "Bijan Robinson", "position": "RB", "team": "ATL"},
+    ]}]
+    _, rec = _recon(_ALIAS_BOARD, rosters)
+    assert waiver_pool.alias_refusals(rec) == []
+    assert (rec["off_board"], rec["alias_suspects"]) == ([], [])
+    assert rec["matched"] == 2
+    assert rec["implied_rostered"]["WR"] == 1 and rec["live_rostered"]["WR"] == 1
+
+
+def test_the_alias_comparison_does_not_fire_on_two_different_players():
+    """⛔ A DETECTOR MAY BE GENEROUS; IT MAY NOT BE FUZZY.
+
+    Same last name, same position, DIFFERENT first names that are not a prefix of each other. A
+    comparison loose enough to call these one player would refuse healthy leagues on brothers and
+    namesakes — and the refusal costs the whole list.
+    """
+    board = [{"name": "Jason Kelce", "pos": "TE", "team": "PHI", "id": "k1"}]
+    rosters = [{"players": [{"name": "Travis Kelce", "position": "TE", "team": "PHI"}]}]
+    _, rec = _recon(board, rosters)
+    assert rec["alias_suspects"] == []
+    assert [r["name"] for r in rec["off_board"]] == ["Travis Kelce"]
+
+
+def test_a_generational_suffix_is_not_an_alias_because_the_join_already_folds_it():
+    """"Tyrone Tracy" / "Tyrone Tracy Jr." was the RUNTIME CHECK's artifact, never the join's.
+
+    `normalize_player_name` strips suffixes, so these key identically and subtract normally. The
+    detector must therefore report NOTHING here — if it fired, it would be duplicating a fold that
+    already works and refusing a league for it.
+    """
+    board = [{"name": "Tyrone Tracy Jr.", "pos": "RB", "team": "NYG", "id": "t1"}]
+    rosters = [{"players": [{"name": "Tyrone Tracy", "position": "RB", "team": "NYG"}]}]
+    groups, rec = _recon(board, rosters)
+    assert [p["name"] for g in groups for p in g["players"]] == []
+    assert (rec["off_board"], rec["alias_suspects"]) == ([], [])
+
+
+def test_a_team_defence_is_never_an_alias_suspect():
+    """The D/ST key is the FRANCHISE, not the name (NF-C6P3), so no spelling can miss it."""
+    board = [{"name": "DET D/ST", "pos": "DST", "team": "DET", "id": "d1"}]
+    rosters = [{"players": [{"name": "Detroit Lions", "position": "DEF", "team": "DET"}]}]
+    groups, rec = _recon(board, rosters)
+    assert [p["name"] for g in groups for p in g["players"]] == []
+    assert rec["alias_suspects"] == []
+
+
+def test_the_endpoint_withholds_the_pool_when_the_alias_detector_fires(monkeypatch):
+    """⑰ END TO END: the detector is wired AHEAD of serving, not merely importable.
+
+    The board carries "Joshua Palmer"; the league's refreshed roster spells him "Josh Palmer". The
+    response must withhold the pool, carry the named reason, and hand back the pair — a detector that
+    computed all this and still served the list would be the defect wearing a report.
+    """
+    record = {"league_id": "L1", "season": 2026, "platform": "sleeper", "n_teams": 1,
+              "source_league_id": "S1", "source_team_key": "7", "imported_roster": [],
+              "roster": FULL_PPR_ROSTER,
+              "league_rosters": [{"team_key": "7", "players": [
+                  {"name": "Josh Palmer", "position": "WR", "team": "NYJ"}]}]}
+    fresh = {"rosters": [{"team_key": "7", "team_name": "Mine", "players": [
+        {"name": "Josh Palmer", "position": "WR", "team": "NYJ"}]}],
+        "synced_at": "2026-09-18T12:00:00+00:00", "note": [], "teams_full": {}}
+    board = {"players": [
+        {"id": "00-0000003", "name": "Joshua Palmer", "pos": "WR", "team": "NYJ", "fpPpr": 100.0},
+    ]}
+    out, _ = _waiver_route_harness(monkeypatch, record, fresh, projections=board)
+
+    assert out["pool"] is None, "the pool was served with a rostered player still in it"
+    assert out["refusals"] == ["rostered_alias_unmatched"]
+    assert out["reconciliation"]["alias_suspects"][0]["rostered"]["name"] == "Josh Palmer"
+    assert [b["name"] for b in out["reconciliation"]["alias_suspects"][0]["board"]] == ["Joshua Palmer"]
+
+
+def test_the_endpoint_still_serves_a_pool_when_a_rostered_player_is_merely_off_the_board(monkeypatch):
+    """The two-sided half at the ROUTE: an off-board rostered player must not cost the list."""
+    record = {"league_id": "L1", "season": 2026, "platform": "sleeper", "n_teams": 1,
+              "source_league_id": "S1", "source_team_key": "7", "imported_roster": [],
+              "roster": FULL_PPR_ROSTER,
+              "league_rosters": [{"team_key": "7", "players": [
+                  {"name": "Nobody On Our Board", "position": "WR", "team": "NYJ"}]}]}
+    fresh = {"rosters": record["league_rosters"], "synced_at": "2026-09-18T12:00:00+00:00",
+             "note": [], "teams_full": {}}
+    out, _ = _waiver_route_harness(monkeypatch, record, fresh)
+
+    assert out["refusals"] == []
+    assert out["pool"] is not None
+    assert [r["name"] for r in out["reconciliation"]["off_board"]] == ["Nobody On Our Board"]

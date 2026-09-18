@@ -277,7 +277,18 @@ export type MockOptions = {
    *   "ownRefreshed" — "served" with `rosters.own_roster_refreshed: true` (the route sets it when
    *                   the same read rewrote the caller's saved roster, slots included).
    */
-  waiver?: "served" | "refused" | "unpublished" | "excluded" | "espn" | "notFound" | "ownRefreshed"
+  waiver?:
+    | "served"
+    | "refused"
+    | "unpublished"
+    | "excluded"
+    | "espn"
+    | "notFound"
+    | "ownRefreshed"
+    // ⑰ the alias detector fired: the pool is withheld and the reconciliation names the pair.
+    | "aliasRefused"
+    // ㉜ a league whose scoring includes terms with no realized source, spanning all three groups.
+    | "capturedTerms"
   /**
    * ⭐ G100-C1 — how many personalized leagues this caller has SAVED.
    *
@@ -801,6 +812,40 @@ function waiverPayloadFor(
   }
   const body = structuredClone(fixture<any>("fantasy-nfl-waiver-pool.generated.json"))
   if (mode === "excluded") body.realized.excluded = [{ week: 2, reason: "not_final" }]
+  if (mode === "aliasRefused") {
+    // Shaped exactly as `waiver_pool.reconcile_rostered` emits it: the pool is WITHHELD (null), the
+    // refusal names its own cause, and the suspect pair rides on `reconciliation`.
+    body.pool = null
+    body.refusals = ["rostered_alias_unmatched"]
+    body.reconciliation = {
+      implied_rostered: { WR: 12 },
+      live_rostered: { WR: 13 },
+      matched: 12,
+      off_board: [],
+      alias_suspects: [
+        {
+          rostered: { name: "Josh Palmer", pos: "WR", team: "BUF" },
+          board: [{ name: "Joshua Palmer", pos: "WR", team: "BUF" }],
+        },
+      ],
+    }
+  }
+  if (mode === "capturedTerms") {
+    // Real keys from `league-config.SCORING_CATALOG`, deliberately spanning the editor's THREE
+    // defensive sections plus kicking plus one platform-specific key the catalog does not carry —
+    // the shape that would expose a group map written from the bucket names alone.
+    body.realized.captured_terms = [
+      "fg_made_50_59",
+      "fg_made_60p",
+      "pat_missed",
+      "def_safety",
+      "def_blocked_kick",
+      "dst_pa_g_0",
+      "dst_ya_g_550p",
+      "two_pt",
+      "fgm_55p",
+    ]
+  }
   if (mode === "ownRefreshed") body.rosters = { ...body.rosters, own_roster_refreshed: true }
   if (mode === "espn") {
     body.rosters = { ...body.rosters, platform: "espn", can_refresh: false, refreshed: false }

@@ -696,3 +696,62 @@ test.describe("the report is tabbed, not a single scroll", () => {
     }
   })
 })
+
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// ㉖-tail (PM ruling 2026-09-18) — AN IR/TAXI PLAYER IS NOT BENCH DEPTH.
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+//
+// #1172 fixed this in the adapters, the waiver need annotation and My Teams; this surface still read
+// "everyone not in my constructed lineup is bench", so the fragility reading could answer "if your
+// starter is out, the best body on your bench is X" with an X the platform has on injured reserve.
+//
+// ⭐ BOTH WAYS, AND DRIVEN OFF THE PAYLOAD RATHER THAN A HARDCODED NAME: the first case records
+// whoever the report names as cover with nobody on IR (the healthy reading, which must SURVIVE), and
+// the second flags exactly that player `slot: "ir"` and requires the sentence to stop naming them. A
+// one-sided test would pass on a report that named nobody at all.
+test.describe("injured reserve is not bench depth", () => {
+  /** The name the fragility sentence currently offers as cover, or null when it offers nobody. */
+  async function coverName(page: Page): Promise<string | null> {
+    await openTab(page, "Depth & byes")
+    const line = page.getByTestId("fragility-cover")
+    await expect(line).toBeVisible()
+    const text = (await line.innerText()).replace(/\s+/g, " ")
+    if (/nobody eligible/.test(text)) return null
+    const m = /best body on your bench is ([^,]+),/.exec(text)
+    return m ? m[1].trim() : null
+  }
+
+  test("a healthy bench player IS named as cover", async ({ page }) => {
+    const { errors } = await openReport(page)
+    const name = await coverName(page)
+    expect(
+      name,
+      "the fixture must offer SOME cover, or the IR case below would pass on a report that names nobody",
+    ).toBeTruthy()
+    expectNoPageErrors(errors)
+  })
+
+  test("the same player on IR is NOT named as cover", async ({ page }) => {
+    const { errors } = await openReport(page)
+    const healthy = await coverName(page)
+    expect(healthy).toBeTruthy()
+
+    // Re-open with ONLY that player re-flagged as reserved. Everything else about the payload — the
+    // board, the lineup, the roster — is byte-identical, so the sentence can only move for this one
+    // reason.
+    const { errors: errors2 } = await openReport(page, {
+      transform: (path: string, body: any) => {
+        if (!path.startsWith("/fantasy/nfl/league-board")) return body
+        for (const row of body.roster ?? []) {
+          if (String(row?.board?.name ?? "") === healthy) row.roster.slot = "ir"
+        }
+        return body
+      },
+    })
+    const withIr = await coverName(page)
+    expect(withIr, "an injured-reserve player was still offered as bench cover").not.toBe(healthy)
+    expectNoPageErrors(errors)
+    expectNoPageErrors(errors2)
+  })
+})

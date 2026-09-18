@@ -228,6 +228,46 @@ test.describe("waiver view", () => {
     await expect(panel.getByTestId("waiver-need-WR")).toContainText("1 on IR/taxi (not counted)")
   })
 
+  // ⑰ (PM ruling 2026-09-18) — the alias detector's refusal must NAME the pair. "A name didn't
+  // match" with no name in it sends the reader nowhere, and the generic fallback would satisfy a
+  // weaker assertion, so this checks BOTH sides' spellings are on screen.
+  test("the alias refusal withholds the list and names both spellings", async ({ page }) => {
+    const { panel } = await openPanel(page, "aliasRefused")
+    await expect(panel.getByTestId("waiver-refusal")).toBeVisible()
+    await expect(panel.getByTestId("waiver-refusal")).toContainText("spelled differently")
+    const note = panel.getByTestId("waiver-alias-note")
+    await expect(note).toBeVisible()
+    await expect(note).toContainText("Josh Palmer")
+    await expect(note).toContainText("Joshua Palmer")
+    // The pool is withheld, so no player table renders at all.
+    await expect(panel.getByTestId("waiver-row")).toHaveCount(0)
+  })
+
+  // ㉜ = (b) (PM ruling 2026-09-18) — name the uncovered scoring terms, grouped.
+  test("the uncovered scoring terms are named, grouped, beside the columns", async ({ page }) => {
+    const { panel } = await openPanel(page, "capturedTerms")
+    const block = panel.getByTestId("waiver-captured-terms")
+    await expect(block).toBeVisible()
+    // Collapsed: the summary counts them by group rather than listing 9 keys inline.
+    await expect(block).toContainText("Kicking (3)")
+    await expect(block).toContainText("Defense (4)")
+    await expect(block).toContainText("Other (2)")
+    await block.locator("summary").click()
+    // Expanded: the catalog's own LABELS, not the raw keys, for every term the catalog carries…
+    await expect(block).toContainText("FG made 50-59")
+    await expect(block).toContainText("Blocked kick")
+    await expect(block).toContainText("Points allowed 0")
+    // …and a platform-specific key the catalog does NOT carry is still listed (never dropped),
+    // grouped by its prefix rather than filed under "Other".
+    await expect(block).toContainText("fgm_55p")
+    const kicking = await block.locator("li").filter({ hasText: "Kicking:" }).innerText()
+    expect(kicking, "an unknown fg key must group as Kicking, not Other").toContain("fgm_55p")
+    // ⛔ And it must not claim a size for the gap: a captured term has no source, so there is
+    // nothing to sum (the ㉜ constraint).
+    const text = await block.innerText()
+    expect(text).not.toMatch(/\b\d+(\.\d+)?\s*(points|pts)\b/i)
+  })
+
   test("the waiver view never reaches a free account", async ({ page }) => {
     await signIn(page, { groups: [] })
     const mock = await mockApi(page, { entitlement: "free", leagues: "one" })
