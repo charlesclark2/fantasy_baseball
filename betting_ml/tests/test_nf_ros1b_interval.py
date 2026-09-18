@@ -489,3 +489,82 @@ def test_the_rb_rookie_decision_rule_has_both_branches():
     assert B.rb_rookie_decision(0.05) == "STRATUM_CHECK_PASSES"
     assert B.rb_rookie_decision(0.0501) == "STOP_TO_PM"
     assert B.rb_rookie_decision(None) == "UNEVALUABLE"
+
+
+# ══ amendment 5 — the per-player spread (descriptive; gates nothing) ═══════════════════════════
+
+
+def test_the_spread_finds_a_concentrated_excess_and_names_its_contributors():
+    """A top decile carried by TWO player-seasons must read as concentrated, not as a broad tilt —
+    that distinction is the whole reason the PM asked for the spread."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1b as B
+    import numpy as np
+
+    # 10 player-seasons × 10 rows. Two of them live entirely in the top decile; the rest are
+    # spread uniformly below it.
+    keys = np.repeat([f"2021|p{i}" for i in range(10)], 10)
+    u = np.concatenate([np.full(20, 0.95),                      # p0, p1 — entirely top-decile
+                        np.tile(np.linspace(0.01, 0.89, 10), 8)])
+    s = B.pit_spread(u, keys)
+
+    assert s["top_decile_rows"] == 20
+    assert s["top_decile_player_seasons"] == 2
+    assert s["player_seasons_entirely_in_top_decile"] == 2
+    assert s["top_decile_share_from_10_largest_contributors"] == 1.0
+    assert s["player_seasons_above_half"] == 2
+
+
+def test_the_clustered_reading_is_the_conservative_one():
+    """⭐ THE INVERSION THIS GUARD EXISTS FOR. The two z columns differ ONLY in the effective n, so
+    swapping them would report a clustered deviation as MORE significant than an independent one —
+    i.e. it would overstate exactly the evidence the PM's disposition rests on. Fewer effective
+    observations must always mean a smaller |z|."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1b as B
+    import numpy as np
+
+    keys = np.repeat([f"2021|p{i}" for i in range(12)], 12)
+    rng = np.random.default_rng(7)
+    u = np.clip(rng.beta(2.0, 1.2, size=keys.size), 0, 1 - 1e-12)   # a deliberately skewed draw
+    s = B.pit_spread(u, keys)
+
+    moved = [i for i in range(10) if abs(s["decile_z_rows_independent"][i]) > 1e-9]
+    assert moved, "the fixture produced a flat histogram — the comparison would be vacuous"
+    for i in moved:
+        assert abs(s["decile_z_fully_clustered"][i]) < abs(s["decile_z_rows_independent"][i])
+
+
+def test_the_spread_never_returns_a_verdict():
+    """Amendment 5 declares no threshold: the PM reads the spread. A verdict key appearing here
+    would be a bar invented after the stop fired (E2.1-r)."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1b as B
+    import numpy as np
+
+    s = B.pit_spread(np.linspace(0.01, 0.99, 60), np.repeat(["a", "b", "c", "d", "e"], 12))
+    for k, val in s.items():
+        assert "decision" not in k and "verdict" not in k and "pass" not in k
+        assert not isinstance(val, str), f"{k} carries prose, and prose is where a verdict hides"
+
+
+def test_a_rerun_after_the_result_is_known_must_prove_it_moved_nothing(tmp_path):
+    """The re-run that computes the spread happens AFTER its own number is public. It has to show
+    it did not move it — and a FIRST run must report `None`, never a vacuous 'reproduced'."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1b as B
+    import json
+
+    now = {"rb_rookie": {"pit_max_decile_dev": 0.081, "coverage80": 0.7637},
+           "decision": "STOP_TO_PM"}
+    jp = tmp_path / "prior.json"
+
+    assert B.reproduction_of_prior(now, jp) is None          # nothing on disk to reproduce
+
+    jp.write_text(json.dumps({"result": now}))
+    assert B.reproduction_of_prior(now, jp)["identical"] is True
+
+    moved = {**now, "rb_rookie": {**now["rb_rookie"], "pit_max_decile_dev": 0.0812}}
+    assert B.reproduction_of_prior(moved, jp)["identical"] is False
+
+    flipped = {**now, "decision": "STRATUM_CHECK_PASSES"}
+    assert B.reproduction_of_prior(flipped, jp)["identical"] is False
+
+    jp.write_text("{ not json")
+    assert B.reproduction_of_prior(now, jp)["identical"] is None   # unverified, never "the same"

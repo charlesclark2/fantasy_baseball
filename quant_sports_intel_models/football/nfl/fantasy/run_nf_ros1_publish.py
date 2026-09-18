@@ -298,15 +298,32 @@ def build(params: dict, params_sha: str, served: dict, real: pd.DataFrame, sched
     by_id = {pid: i for i, pid in enumerate(row["player_id"])}
 
     players = []
+    #: Names whose identity join could not be verified, at a certified position — collected from
+    #: the AUDIT rather than from the served absence label, so a rookie (whose label binds over
+    #: `join_unresolved`) can never hide a join failure from the manifest.
+    join_missing_names: list[str] = []
     for r in served["players"]:
         pid = str(r["id"])
         base = {"id": pid, "name": r["name"], "pos": r["pos"], "team": r.get("team"),
                 "certified": False, "absence": None,
                 "waiverValue": None, "waiverAbsence": C.WAIVER_ABSENCE}
+        if (r["pos"] in certified_positions and certified_week
+                and (pid in unresolved or pid not in by_id)):
+            join_missing_names.append(r["name"])
         if r["pos"] not in V.POSITIONS:
             base["absence"] = "position_not_evaluated"
         elif r["pos"] not in certified_positions or not certified_week:
             base["absence"] = "not_certified"
+        elif bool(r.get("rookie")):
+            # PM disposition (ii), 2026-09-18. ⚠️ KEYED ON THE BOARD'S `rookie` FLAG, never on the
+            # id shape: today every RB rookie happens to carry a synthetic id (13 of 13, verified
+            # against the served board), so an id-shape test would agree on this board and diverge
+            # silently the first time a rookie arrives with a gsis id.
+            # ⚠️ AND IT BINDS OVER `join_unresolved` (see the contract's docstring): fixing a join
+            # would not make this interval certified, so the join reason would be a false
+            # explanation. The join failure survives in `join_unresolved_names`, which is built
+            # from the audit rather than from this label.
+            base["absence"] = "rookie_interval_not_certified"
         elif pid in unresolved or pid not in by_id:
             base["absence"] = "join_unresolved"
         else:
@@ -372,9 +389,9 @@ def build(params: dict, params_sha: str, served: dict, real: pd.DataFrame, sched
         "no_preseason_prior_players": counts["no_preseason_prior"],
         "no_preseason_prior_realized_share": (float(off["pts_full_ppr"].sum()) / tot
                                               if tot > 0 else None),
-        "join_unresolved_names": sorted(x["name"] for x in players
-                                        if x["absence"] == "join_unresolved"),
-        "rookie_stratum_note": None,
+        "join_unresolved_names": sorted(join_missing_names),
+        "rookie_stratum_note": (C.ROOKIE_STRATUM_NOTE if certified_positions and certified_week
+                                else None),
         "players_sha256": hashlib.sha256(players_bytes).hexdigest(),
     }).model_dump()
     current = C.NflRosCurrent.model_validate({
