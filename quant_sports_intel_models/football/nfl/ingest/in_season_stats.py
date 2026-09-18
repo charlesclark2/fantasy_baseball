@@ -100,9 +100,12 @@ log = logging.getLogger(__name__)
 #: it (`play_by_play_2026.parquet` at 2026-09-16T14:12:07Z, ~1.36 MB for week 1, seconds before the
 #: player file), so the INC-25 ordering holds; nothing else ingests it on any cadence, so the
 #: one-owner rule holds; and `nfl_weekly_stats_freshness_op` judges its CONTENT with no new wiring.
-#: ⏱️ COST, MEASURED BEFORE WIRING IT (2026-09-18, weeks 1-2 of 2026 = 2,756 plays): 3.6 s end to
-#: end against a 900 s op budget. The file is cumulative-per-season, so this grows with the season
-#: rather than the run count; a full 2025 season is ~49k plays, i.e. still seconds.
+#: ⏱️ COST, MEASURED BEFORE WIRING IT (2026-09-18, the published 2026 file = WEEK 1 ONLY, 2,756
+#: plays): 3.6 s end to end against a 900 s op budget. The file is cumulative-per-season, so this
+#: grows with the season rather than the run count; a full 2025 season is ~49k plays, i.e. still
+#: seconds. ⚠️ The first cut of this comment said "weeks 1-2" — corrected against the live box run
+#: (2026-09-18, `pbp` max week = 1, 2,756 rows): week 2 was in progress and the vendor publishes a
+#: week the morning AFTER its Monday close, which is the cadence this whole module exists for.
 #: Ownership: NF-WK-ACC1, recorded in nf-inc-0916's ledger + nf-wk-acc1.
 WEEKLY_STAT_SOURCES: list[str] = ["stats_player_week", "snap_counts", "stats_team_week", "pbp"]
 

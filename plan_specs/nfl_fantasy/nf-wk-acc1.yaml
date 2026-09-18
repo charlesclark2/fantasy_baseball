@@ -322,7 +322,11 @@ spec:
       (a) INGEST (PM ruling ②): `pbp` joined `WEEKLY_STAT_SOURCES`, so
       `nfl_weekly_stats_ingest_op` is its one owner and the existing freshness op
       judges it — no new schedule, no new lane. Measured before wiring: 3.6 s for
-      2026 weeks 1-2 (2,756 plays) against a 900 s budget. Ownership recorded in
+      the published 2026 file (2,756 plays) against a 900 s budget. ⚠️ CORRECTED
+      2026-09-18 against the live box run: that file is WEEK 1 ONLY, not weeks
+      1-2 as first recorded (`pbp` max week = 1, 2,756 rows — week 2 was in
+      progress, and the vendor publishes a week the morning after its Monday
+      close). The cost figure is unchanged; only its scope label was wrong. Ownership recorded in
       nf-inc-0916's ledger. ⚠️ RUNTIME GATE: needs one real box run (CI mocks IO).
       (b) THE FROZEN RULES live in
       `quant_sports_intel_models/football/nfl/fantasy/realized_dst_pbp.py`, whose

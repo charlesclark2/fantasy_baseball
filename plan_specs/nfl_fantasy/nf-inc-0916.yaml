@@ -553,8 +553,10 @@ spec:
       2026-09-16T14:12:07Z, ~1.36 MB for week 1, seconds before the player
       file), so the INC-25 ordering holds for free, exactly as it does for
       `stats_team_week`.
-      ⏱️ COST MEASURED BEFORE WIRING: 3.6 s for 2026 weeks 1-2 (2,756 plays)
-      against the op's 900 s budget; the file is cumulative-per-season, so a full
+      ⏱️ COST MEASURED BEFORE WIRING: 3.6 s for the published 2026 file (2,756
+      plays — WEEK 1 ONLY; "weeks 1-2" in the first cut of this entry was wrong,
+      corrected against the live box run of 2026-09-18) against the op's 900 s
+      budget; the file is cumulative-per-season, so a full
       2025 season (~49k plays) is still seconds. It is NOT a training feed — the
       frozen D/ST construction reads it for the terms no player- or team-grain
       table carries (blocked kicks, special-teams play classification, safeties
