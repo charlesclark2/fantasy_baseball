@@ -38,7 +38,10 @@ def test_the_two_training_feeds_are_registered_free_nflverse_sources():
     assert WEEKLY_STAT_SOURCES, "the training-feed set is empty — every clause below is vacuous"
     # stats_team_week added 2026-09-17 by NF-WK-ACC1 (PM rider ⑧): the D/ST construction's
     # team-grain input, same vendor run as stats_player_week — see in_season_stats.py.
-    assert set(WEEKLY_STAT_SOURCES) == {"stats_player_week", "snap_counts", "stats_team_week"}, (
+    # pbp added 2026-09-18 by NF-WK-ACC1 part 2 (PM ruling ②): its PLAY-level input, same vendor
+    # run again, measured at 3.6 s for weeks 1-2 against a 900 s op budget.
+    assert set(WEEKLY_STAT_SOURCES) == {"stats_player_week", "snap_counts", "stats_team_week",
+                                        "pbp"}, (
         f"the training-feed set has changed to {WEEKLY_STAT_SOURCES}. That is a real decision — "
         "this set is pulled before every daily weekly build — so it should be a deliberate edit "
         "here as well as there."

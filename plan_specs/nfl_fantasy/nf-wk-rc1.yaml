@@ -637,3 +637,24 @@ spec:
       Week-2 first-run watch → an operator card.
       ⑫ is noted by ACC1 and NOT duplicated: the season build's
       `columns_behind` already catches a stale box image one run later.
+
+
+      ── 📌 CORRECTION TO THIS RECORD (NF-WK-ACC1 part 2, 2026-09-18, at the PM's
+      instruction — it belongs here and on card fXIYuvMN's thread).
+      RC1's D/ST residual analysis concluded of SEA 2025 week 1 (ours 6.00 vs
+      the league's 8.00) that "nothing in the 56-key settings can supply the 2".
+      THAT CLAIM WAS WRONG. It was a BLOCKED FIELD GOAL, and `blk_kick` (2
+      points) IS one of those 56 keys — the league was not inventing a rule and
+      no settings term had to be invented to agree with it (MH2.2 held).
+      Why it read as unexplainable: the term inventory the claim was measured
+      against was incomplete. A blocked kick has NO player stat column in the
+      seasons we hold (`def_*_blocks` exists only in the 2026 file, NaN for
+      ≤2025), so the construction could not produce the term, and the absence
+      was read as the settings' rather than the construction's.
+      ⭐ THE TRANSFERABLE LESSON: a "nothing can explain this" claim inherits the
+      COMPLETENESS OF THE INVENTORY THAT PRODUCED IT — the scan-boundary rule
+      wearing a settings hat. State the inventory beside the claim, or the claim
+      is about the scan and not about the world.
+      Under the frozen play-derived rules the same seat reproduces exactly, and
+      all 13 of RC1's residual team-weeks are accounted for: 48/48 on 2025 weeks
+      1-4 and 154/155 on weeks 5-17.
