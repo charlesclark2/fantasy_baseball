@@ -144,9 +144,10 @@ spec:
         desc: "Verdict + tables + the consumer unlock state (WVR1/trade) into closeout.followUps."
   closeout:
     # PM acks 2026-09-18: paid set (ack 2) and the R3 cadence supersession (ack 3) are GRANTED and
-    # recorded in amendment 4. Ack 1 (the RB-rookie C9 read) is an operator run that does not exist
-    # yet, and it is the remaining merge gate — so the verdict stays null until the number is read
-    # against amendment 3's pre-declared rule.
+    # recorded in amendment 4.
+    # Ack 1 READ IN 2026-09-18: RB-rookie C9 = 0.0810 > 0.05 -> STOP_TO_PM (prereg §15). The
+    # certification is untouched; what is open is how ROOKIE ROWS ARE SERVED, and that disposition
+    # is the PM's on amendment 3's pre-declared trigger. Verdict stays null until they rule.
     # Proposed: SHIPPED (RB certified) · QB/WR/TE/K certified NO (CONSTRAINT_REFUSED).
     verdict: null
     followUps: >
@@ -182,6 +183,7 @@ spec:
       - "⑫ (node 4) app/backend/models/nfl_ros.py is box-reached (widened deliberately in test_nf_wk_rc1_cadence). An app-only edit to it will not rebuild the box — the nfl_weekly hazard, one contract over."
       - "⑬ (pre-existing, repaired) test_nf_infra1_sleeper_hardening's exhaustive node set was already RED on dev (NF-WK-RC1 added nfl_realized_freshness_op without moving it; skipped on CI for lack of a manifest, so unseen). Re-anchored with no-dependency assertions for both new leaves."
       - "⑭ (node 4 design, flagged against R3; PM-RULED 2026-09-18 APPROVED — R3 is SUPERSEDED by ruling, recorded in amendment 4 §1, not quietly deviated from) the cadence rides sports_nfl_weekly_serving_job as an independent branch off its stats ingest (INC-25 by construction, the schedule is already RUNNING + heartbeat-checked) and is deploy-held by NF_ROS_PUBLISH_ENABLED, instead of a separate 09:30 default_status=STOPPED schedule (a STOPPED default cannot be heartbeat-checked — NCAAF-P1.2W/NF-CAP1)."
+      - "⑱ (amendment 3 outcome, 2026-09-18) RB-rookie C9 = 0.0810 vs the 0.05 bar -> STOP_TO_PM. 1,464 rows / 122 player-seasons; cov80 0.7637 against a flat veteran control (C9 0.0120, cov80 0.8704). The decile shares ramp upward with the excess in the top two deciles (0.130, 0.181 vs 0.100), i.e. rookie outcomes land high in their own predictive. The magnitude sits inside amendment 3's fully-clustered range and outside its independent one, so the SHAPE is the discriminating evidence — amendment 5 defines the per-player spread the PM asked to decide on, gating nothing. PM disposition owed: a disclosed rookie-stratum note, or rookie rows as a stated absence."
       - "⑯ (census family; PM ack 2, 2026-09-18) `projection_fields.PAID_SCORING_FIELDS` was a HAND LIST (fpStd/fpHalf) inside the module whose own header explains why hand lists leak — so NF-ROS1b's six per-scoring ROS values (rosPts/rosP10/rosP90 x Std/Half) came out FREE while the season board's identical formats were paid, and the guard pinning the set held green because a membership pin cannot see a field nobody added. Ruled paid; re-expressed as SCORED_FIELD_STEMS x PAID_SCORING_PRESETS so a new per-scoring surface prices its formats by declaring one stem. Sibling risk for the census: any other pricing/entitlement set still spelled as names rather than derived."
       - "⑰ (pre-existing, repaired in passing) nf_inj_news_1_red_proof's `build_projection stops passing the overrides to the rookie half` break had been reporting ANCHOR MISSING (vacuous) on dev since NF-INJ4b inserted designation_games into the rookie call without re-anchoring the sibling story's proof. Re-anchored, substance unchanged; that proof is now 39/39 RED (was 38 + 1 vacuous)."
       - "⑮ (amendment 3) RB-rookie C9 design quantity: 1,464 rows / 122 player-seasons; P(>0.05 | calibrated) ~0.00 if rows independent, ~0.51 fully clustered — a reading above the bar is not by itself evidence of rookie miscalibration."

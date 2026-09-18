@@ -646,3 +646,30 @@ Appended below the §13 line, editing nothing above it.
   weekly-serving-job branch + `NF_ROS_PUBLISH_ENABLED`; the ROS Std/Half values priced PAID (PPR
   free, with its band); §13 finding ⑪ carried on the served manifest. GATES NOTHING and moves no
   bar — C1–C9 stand as registered and as measured.
+
+---
+
+## §15 The RB-rookie read fired the STOP (amendment 3; appended 2026-09-18)
+
+`nf_ros1b_rb_rookie_c9.{json,md}`, generated from committed code at `8fca7a81`:
+
+| stratum | rows | player-seasons | C9 (PIT max-decile dev) | cov80 |
+|---|---|---|---|---|
+| RB rookie | 1,464 | 122 | **0.0810** | 0.7637 |
+| RB veteran (context only) | 11,676 | 973 | 0.0120 | 0.8704 |
+
+**0.0810 > 0.05 ⇒ `STOP_TO_PM`**, the branch amendment 3 declared before the number existed. The
+certification is untouched: this is a stratum inside a certified position, and the decision it
+gates is how rookie rows are SERVED, not whether RB certified.
+
+**What the number alone does not settle.** Amendment 3 bounded how often a calibrated predictive
+produces a max-decile deviation this large — ≈0.000 if rows were independent, ≈0.51 if a
+player-season's rows moved as one — so 0.0810 sits inside the range a calibrated predictive can
+produce under strong clustering, and outside it under independence. The reading is therefore about
+the SHAPE, which amendment 3 did not ask for and which amendment 5 defines before computing:
+the rookie decile shares ramp upward and the excess is in the top two deciles (0.130, 0.181 against
+0.100), against a veteran control that is flat (max deviation 0.0120). Rookie coverage is 0.7637.
+
+⛔ Nothing here re-scores the gate, and no new bar is declared. The disposition — a disclosed
+rookie-stratum note, or rookie rows served as a stated absence — is the PM's, on amendment 3's
+pre-declared trigger.
