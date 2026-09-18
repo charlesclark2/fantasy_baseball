@@ -967,3 +967,20 @@ spec:
       position as covered by an injured body, which is precisely the ㉖ defect one surface over.
       And `roster-report.ts` (NF-C6P2) still splits on `starter` alone (㉖-tail), so any trade
       surface reusing it inherits that bug until the PM triages it.
+
+      ㉜ 📌 OWED TO THE PM AS A PRODUCT CALL, NOT A DEFECT — THE UNCOVERED-TERM DISCLOSURE IS A
+      GENERIC SENTENCE, AND IT CANNOT HONESTLY BE MADE A NUMBER. `waiver_facts.captured_terms`
+      returns the league's NON-ZERO-weight scoring terms whose `resolve_scoring` verdict is
+      `captured` — i.e. the league scores them and the realized artifact has no column for them
+      (`league_scoring.py`: "no projection backs this scoring term"). The operator's real league
+      returned 18 such terms at the ⑫ gate (the served list was dominated by D/ST and kicking
+      terms — read from that gate's output, not re-measured here). The surface discloses this with
+      ONE fixed sentence (`WAIVER_CAPTURED_NOTE`: "Your league also scores some things these totals
+      don't include yet, so a player's figure here can differ from your league's page") which
+      neither names the terms nor bounds the difference.
+      ⭐ THE MEASURED CONSTRAINT THAT NARROWS THE CHOICE: the gap CANNOT be quantified, by
+      construction — a `captured` term is precisely one with no realized source, so there is no
+      value to sum. "Your total is missing about N points" is not available at any effort; only a
+      LIST is. ⇒ the real options are (a) leave the generic sentence, or (b) name the terms (the
+      payload already carries them). ⛔ Not (c) "quantify it" — that reads as the obvious ask and is
+      impossible here. No change made either way; the sentence as shipped is true and non-forecast.
