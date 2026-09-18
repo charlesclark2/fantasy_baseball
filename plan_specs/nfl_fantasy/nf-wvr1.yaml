@@ -10,7 +10,17 @@ metadata:
   name: nf-wvr1
   vertical: nfl_fantasy
   card: https://trello.com/c/3D2HnxXv   # EPIC NF-SEASON; WVR1 card linked at kickoff by PM
-  status: IN_PROGRESS
+  status: SHIPPED
+  # ✅ PM RATIFICATION 2026-09-18 — closeout verdict ACCEPTED AS WRITTEN: SHIPPED (scope-reduced by
+  #   PM ruling, not by omission). The PM weighed both questions the closeout posed rather than
+  #   waving them through, and ratified on WHEN and HOW the basis changed: the substitution was ruled
+  #   FORWARD (Ruling 1, 2026-09-17), the spec was amended with dated comments BEFORE the build, the
+  #   replacement (realized facts) claims nothing the substrate cannot support, and the refused
+  #   substitute (`fpPpr` / a prorated prior) was held out under pressure — "a basis that had drifted
+  #   DURING the build would close differently." The value ordering is NOT an implicit park: the
+  #   unlock is carded separately (CdsPkjyW) with its own acceptance shape so NF-ROS1b's landing
+  #   cannot strand it. Card decision taken PM-side (Done record 72r3DHnC).
+  #   Post-ratification triage work shipped in the same window — see followUps ㉞–㊳.
   # ✅ PHASE A COMPLETE AND ACCEPTED (PM, 2026-09-16). Shipped + deployed + runtime-gated:
   #   GET /fantasy/nfl/waiver-pool, `sleeper.refresh_league_rosters` (the one roster-refresh
   #   owner), `waiver_pool.py`, 18 guards RED-proven over 7 breaks, and the my-teams copy hotfix.
@@ -967,3 +977,112 @@ spec:
       position as covered by an injured body, which is precisely the ㉖ defect one surface over.
       And `roster-report.ts` (NF-C6P2) still splits on `starter` alone (㉖-tail), so any trade
       surface reusing it inherits that bug until the PM triages it.
+
+      ㉜ 📌 OWED TO THE PM AS A PRODUCT CALL, NOT A DEFECT — THE UNCOVERED-TERM DISCLOSURE IS A
+      GENERIC SENTENCE, AND IT CANNOT HONESTLY BE MADE A NUMBER. `waiver_facts.captured_terms`
+      returns the league's NON-ZERO-weight scoring terms whose `resolve_scoring` verdict is
+      `captured` — i.e. the league scores them and the realized artifact has no column for them
+      (`league_scoring.py`: "no projection backs this scoring term"). The operator's real league
+      returned 18 such terms at the ⑫ gate (the served list was dominated by D/ST and kicking
+      terms — read from that gate's output, not re-measured here). The surface discloses this with
+      ONE fixed sentence (`WAIVER_CAPTURED_NOTE`: "Your league also scores some things these totals
+      don't include yet, so a player's figure here can differ from your league's page") which
+      neither names the terms nor bounds the difference.
+      ⭐ THE MEASURED CONSTRAINT THAT NARROWS THE CHOICE: the gap CANNOT be quantified, by
+      construction — a `captured` term is precisely one with no realized source, so there is no
+      value to sum. "Your total is missing about N points" is not available at any effort; only a
+      LIST is. ⇒ the real options are (a) leave the generic sentence, or (b) name the terms (the
+      payload already carries them). ⛔ Not (c) "quantify it" — that reads as the obvious ask and is
+      impossible here. No change made either way; the sentence as shipped is true and non-forecast.
+
+      ㉝ ✅ E2E RED PROOF RUN (operator laptop, 2026-09-17) — ALL 12 OF THIS STORY'S CASES NOW MATCH
+      THEIR DECLARATIONS: 11 RED + 1 NOT-OBSERVABLE (the `waiver` filter's 10 RED, the separate
+      `my-teams-ir-filed-as-bench` RED, and `waiver-renderer-ungated` NOT-OBSERVABLE). ㉓ is
+      DISCHARGED. Two notes worth keeping, because the run found a defect in the INSTRUMENT rather
+      than in the story:
+      ⚠️ `waiver-renderer-ungated` (DECLARED not-observable) came back RED on the operator's run and
+      the harness KEPT NO OUTPUT for that direction, so "the declaration is stale" and "an unrelated
+      test flaked" were indistinguishable. Reproduced deliberately: with the break applied, that
+      clause PASSED 9/9 executions (1 + 8 `--repeat-each`), and its clean-source control also passed
+      8/8 ⇒ the declaration is CORRECT and the RED is UNREPRODUCED. Contributing cause found: the
+      case's `grep` ("never reaches a free account") also matched `fantasy-my-teams.spec.ts`'s
+      ROLLUP test, so a failure in a DIFFERENT spec was attributable to this case. ⛔ The single RED's
+      identity is permanently unrecoverable — the harness discarded it — which is the whole point of
+      the fix. TWO FIXES SHIPPED: the tail now prints on EITHER mismatch direction (a declared-GREEN
+      case is where it matters MOST, since its entire content is a claim about what the suite CANNOT
+      see), and this case's grep is scoped to the waiver clause's full title.
+      📌 STILL OPEN, PRE-EXISTING, NOT THIS STORY: `RECORDED_BOARD` (227) has drifted from the real
+      case count (266) and the harness's own comment already reports it to the PM as the muted-monitor
+      pattern landing on the instrument that polices vacuity elsewhere. ⛔ NOT "fixed" here — editing
+      the board to match a drift you did not cause is exactly what its comment forbids. A wider
+      observation from a static scan of all 266 case greps (boundary stated: a regex title scan, which
+      missed some `test(` forms, so treat it as a SCREEN not a census): ~46 greps resolve to more than
+      one test title and several cross spec FILES — i.e. the mis-attribution above is a general
+      property of the harness, not a one-off. Owner: the board-drift item already with the PM.
+
+      ── PM RATIFICATION + TRIAGE, 2026-09-18 (the rulings, and what they cost) ──
+
+      ㉞ ⚖️ ⑰ RULED: **NO CROSSWALK RUNG — BUILD THE DETECTOR, AND THE DETECTOR REFUSES.** The PM
+      rejected BOTH ends: the crosswalk re-opens a deliberately bounded budget (the shared 400 KB
+      item; `LEAGUE_ROSTER_PLAYER_FIELDS` drops `player_key` for a measured 40% saving) against a
+      residual that is league-dependent and unobserved, and "accept with nothing watching" fails
+      because the failure mode is the feature's one must-never. SHIPPED: `waiver_pool
+      .reconcile_rostered` + `alias_refusals`, run at every build inside the endpoint, withholding
+      the pool under `rostered_alias_unmatched`, naming the pair on the surface (`waiverAliasNote`)
+      and logging it with the league id. The comparison is a DETECTOR's, never the subtraction's —
+      same position, same last name, same team where both state one, first name a PREFIX of the
+      other. A non-prefix nickname ("Mike"/"Michael") is a MISS, not a wrong answer.
+      ⚠️⚠️ **DEVIATION FROM THE RULING AS LITERALLY STATED, DELIBERATE AND REPORTED: the prescribed
+      count mismatch has TWO causes and only one is a defect.** (a) ALIAS — the player is on the
+      board under another spelling and IS being offered ⇒ refuses. (b) OFF-BOARD — genuinely absent
+      from the board; the pool is a SUBSET of the board, so an off-board player CANNOT be offered, and
+      refusing there would withhold a CORRECT list for a non-defect (⑦ measured 2.2% of real week-1
+      skill performers past the board's tail, and `PLAYER_ABSENCE_REASONS.no_board_row` already
+      exists for the pool side of that same fact). A detector that fires on healthy leagues is how a
+      guard gets muted, so the causes are SPLIT and reported separately. Both sides are tested and
+      RED-proven; the PM's intent ("convert the residual from invisible to attributed") is met, and
+      the crosswalk reopens only if the detector ever fires with a real alias — which is the evidence
+      the budget trade currently lacks. ⭐ The ruling's RED-proof requirement is discharged with a
+      PLANTED alias divergence plus three siblings (detector inert / detector refusing an off-board
+      row / comparison gone fuzzy on Kelce-vs-Kelce) — 26/26 RED.
+
+      ㉟ ⚖️ ㉖-tail RULED MINE, SHIPPED: `roster-report.ts`'s fragility reading now excludes IR/taxi
+      from "the best body on your bench" (`ReportPlayer.reserved`, carried from the platform slot and
+      named APART from the LINEUP `slot` this file already had — conflating the two is the bug the
+      field exists to fix). Both-ways E2E per the ruling: a healthy bench player IS still named, and
+      the SAME player re-flagged `ir` is not — driven off the payload, never a hardcoded name, so a
+      report that named nobody could not pass it. Nothing else about the report moved, as ruled.
+      📌 TWO SIBLINGS RECORDED RATHER THAN CHANGED UNILATERALLY (same exposure, different readings):
+      `benchQuality.startable` (the "optionality" count) and `tradeIdeas` (which proposes trading a
+      bench player who would start elsewhere) both still treat a reserved player as ordinary bench
+      depth. Neither is the fragility sentence the ruling named; both are one edit each if the PM
+      wants them.
+
+      ㊱ ⚖️ ㉜ RULED = (b), SHIPPED: the uncovered terms are NAMED, grouped Kicking / Defense /
+      Other, expandable beside the columns (never a distant panel), with the catalog's OWN labels so
+      a term reads under the name the user set it under. ⭐ AND A MEASUREMENT THE OBVIOUS
+      IMPLEMENTATION WOULD HAVE GOT WRONG: `SCORING_CATALOG`'s `group` values are EDITOR SECTIONS,
+      not these three buckets — the defensive terms live under `defense` AND `dst_points_allowed`
+      AND `dst_yards_allowed` — so a map written from the bucket names alone files 18 of the 20
+      defensive terms under "Other". Read off `league-config.ts`, not assumed. A key the catalog does
+      not carry keeps its RAW key (a humanised guess could misname a term the user set) and is
+      grouped by prefix, never dropped. ⛔ No figure is claimed for the gap, and a guard asserts the
+      panel prints no points figure — the ㉜ constraint holds in code, not just in prose.
+
+      ㊲ ⚖️ ㉑ ACCEPTED AS-IS for WVR1; the general question is ROUTED, not dropped — every
+      dict-returning fantasy route joins the serving-writer contract census (card **cg5FRtch**),
+      whose scope the PM widened from writers to writers-AND-routes under the same
+      measured-first/never-blanket constraint. Not a WVR1 debt. No code here.
+
+      ㊳ ⚖️ ㉒ → the hygiene/toolchain bundle beside the already-carded type-check gap; recorded, not
+      mine. ✅ ㉙ VERIFIED CLOSED, NOT CARDED: the PM asked for a check against current `dev` once
+      NF-ROS1b's #1173 landed, and it IS closed — on `dev` at 81780faf the exhaustive node set now
+      carries `nfl_realized_freshness_op` AND `nfl_ros_freshness_op`, and
+      `test_the_freshness_check_runs_downstream_of_the_land_as_a_graph_edge` PASSES with the dbt
+      manifest present (28/28 in that file). No duplicate fix, no card. ⚠️ Measured on a tree MERGED
+      with `origin/dev`: the first run was on a branch BEHIND dev and would have proved nothing about
+      "current dev" in either direction.
+
+      📌 ⑮/㉘ FORWARD, from the ratification: ACC1's D/ST flip is gated on a pre-registered
+      three-week 2026 out-of-sample trigger (~2026-10-08) and WVR1's defence-facts unlock rides that
+      SAME certification — one ruling, both surfaces. Nothing to do here until it fires.

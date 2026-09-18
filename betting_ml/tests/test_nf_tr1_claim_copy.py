@@ -786,8 +786,17 @@ def _ts_string_literals(src: str) -> list[str]:
 
     Crude on purpose: this is a screening pass over prose constants, not a parser. It is checked by
     `test_the_copy_module_scan_actually_finds_strings` — an extractor that silently returned nothing
-    would make every screening clause below vacuously true (NF1.7 (a))."""
-    return re.findall(r'"((?:[^"\\]|\\.)*)"', _strip_ts_comments(src))
+    would make every screening clause below vacuously true (NF1.7 (a)).
+
+    ⚠️ MODULE SPECIFIERS ARE DROPPED, AND THAT IS A RE-ANCHOR, NOT A LOOSENING (NF-WVR1, 2026-09-18).
+    An `import { … } from "@/lib/league-config"` path is not copy, but it IS a double-quoted string
+    containing "league" — so the first time this module needed an import, the "first hook mentions
+    your league" clause below started reading the import path and failed for a reason that has
+    nothing to do with the copy it defends. The clause's PROPERTY is unchanged; only what counts as
+    a candidate string is corrected."""
+    body = re.sub(r'^\s*(?:import|export)\b[^;\n]*?\bfrom\s*"[^"]*"\s*;?', "",
+                  _strip_ts_comments(src), flags=re.MULTILINE)
+    return re.findall(r'"((?:[^"\\]|\\.)*)"', body)
 
 
 def test_the_copy_module_scan_actually_finds_strings():

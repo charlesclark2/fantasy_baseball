@@ -34,6 +34,7 @@ import { useWaiverPool } from "@/lib/fantasy-queries"
 import type { WaiverGroup, WaiverNeedPosition, WaiverPlayer, WaiverPoolPayload } from "@/lib/fantasy"
 import {
   WAIVER_CAPTURED_NOTE,
+  WAIVER_CAPTURED_SUMMARY_LABEL,
   WAIVER_CLOSE_LABEL,
   WAIVER_ERROR_FALLBACK,
   WAIVER_FACTS_ABSENCE_TEXT,
@@ -52,6 +53,9 @@ import {
   WAIVER_REFUSAL_TEXT,
   WAIVER_SHOW_ALL,
   WAIVER_SHOW_FEWER,
+  waiverAliasNote,
+  waiverCapturedGroups,
+  waiverCapturedSummary,
   waiverCoverageNote,
   waiverExcludedNote,
   waiverFreshnessNote,
@@ -212,6 +216,7 @@ function PoolBody({ data }: { data: WaiverPoolPayload }) {
   const realized = data.realized
   const factsShown = !!realized && realized.absence === null
   const excluded = waiverExcludedNote(realized?.excluded ?? [])
+  const capturedGroups = waiverCapturedGroups(realized?.captured_terms)
 
   return (
     <>
@@ -224,6 +229,23 @@ function PoolBody({ data }: { data: WaiverPoolPayload }) {
           {excluded ? ` ${excluded}` : ""}
           {realized!.captured_terms.length ? ` ${WAIVER_CAPTURED_NOTE}` : ""}
         </p>
+      )}
+      {/* ⭐ ㉜ = (b) — NAME the uncovered terms, grouped, WITH the columns they describe (never in a
+          distant panel). The gap is unquantifiable by construction, so a named list is the maximum
+          disclosure available; the expansion keeps 18 of them from becoming a wall. */}
+      {factsShown && capturedGroups.length > 0 && (
+        <details className="mt-1" data-testid="waiver-captured-terms">
+          <summary className="cursor-pointer text-[11px] text-gray-500">
+            {WAIVER_CAPTURED_SUMMARY_LABEL} {waiverCapturedSummary(capturedGroups)}
+          </summary>
+          <ul className="mt-1 space-y-0.5 pl-3">
+            {capturedGroups.map((g) => (
+              <li key={g.group} className="text-[11px] text-gray-500">
+                <span className="text-gray-400">{g.group}:</span> {g.terms.join(", ")}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       {!factsShown && realized?.absence && (
         <p className="mt-1 text-[11px] text-gray-400" data-testid="waiver-facts-absence">
@@ -271,6 +293,9 @@ export function WaiverView({ leagueId }: { leagueId: string }) {
     if (ownRefreshed) void queryClient.invalidateQueries({ queryKey: ["nfl-fantasy-my-teams"] })
   }, [ownRefreshed, queryClient])
 
+  // ⑰ Read straight off the payload; `waiverAliasNote` returns null when there is nothing to name.
+  const aliasNote = waiverAliasNote(data?.reconciliation?.alias_suspects)
+
   if (!entitled) return null
 
   return (
@@ -309,6 +334,13 @@ export function WaiverView({ leagueId }: { leagueId: string }) {
                       {WAIVER_REFUSAL_TEXT[r] ?? WAIVER_REFUSAL_FALLBACK}
                     </p>
                   ))}
+                  {/* ⑰ Name the pair when the detector supplied one — a withheld list whose reason
+                      is "a name didn't match" is not diagnosable without the names. */}
+                  {aliasNote ? (
+                    <p className="text-xs text-gray-500" data-testid="waiver-alias-note">
+                      {aliasNote}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <PoolBody data={data} />

@@ -60,6 +60,16 @@ POOL_REFUSAL_REASONS: tuple[str, ...] = (
     # Stored rosters exist but cover fewer teams than the league declares, so some team's roster is
     # missing and its players would read as available.
     "rosters_incomplete",
+    # ⭐ PM RULING ⑰ (2026-09-18): THE ALIAS DETECTOR. A rostered player whose platform name is an
+    # ALIAS of the board's spelling ("Josh Palmer" vs the board's "Joshua Palmer" — measured, same
+    # gsis id) does not subtract, so the board row stays in the pool and the feature OFFERS A PLAYER
+    # WHO IS ALREADY ROSTERED. The PM refused the crosswalk fix (it re-opens a deliberately bounded
+    # 400 KB item budget for a residual that is league-dependent and unobserved) AND refused
+    # accepting it unwatched, and ruled the middle: reconcile at every build, refuse loudly on a
+    # mismatch, and record the names. A false refusal blocks ONE league visibly until it is fixed;
+    # the alternative is silently recommending a rostered player to anyone (the `rosters_truncated`
+    # precedent, which exists for the same must-never).
+    "rostered_alias_unmatched",
 )
 
 #: Reasons the pool is SERVED but comes with something the reader must be told. A caveat never
@@ -100,7 +110,17 @@ def _rostered_keys(league_rosters: list[dict] | None) -> set[str]:
     A roster row with no usable name contributes NOTHING — it cannot be matched, so it cannot
     subtract. That is deliberate: a blank row must not silently remove an arbitrary board player.
     """
-    keys: set[str] = set()
+    return {e["key"] for e in _rostered_entries(league_rosters)}
+
+
+def _rostered_entries(league_rosters: list[dict] | None) -> list[dict]:
+    """Every named roster row as `{name, pos, team, key}` — ONE reading of the roster shape.
+
+    `_rostered_keys` and the ⑰ reconciliation both need this, and two readings of the same shape is
+    how the subtraction and its own detector drift apart (the repo's one-owner rule). The key is
+    produced HERE so the detector can never be measuring a key the subtraction did not use.
+    """
+    out: list[dict] = []
     for entry in league_rosters or []:
         if not isinstance(entry, dict):
             continue
@@ -110,8 +130,13 @@ def _rostered_keys(league_rosters: list[dict] | None) -> set[str]:
             name = str(p.get("name") or "").strip()
             if not name:
                 continue
-            keys.add(league_scoring._join_key(name, p.get("position"), p.get("team")))
-    return keys
+            out.append({
+                "name": name,
+                "pos": league_scoring.normalize_position(p.get("position")),
+                "team": league_scoring.normalize_team(str(p.get("team") or "")) or "",
+                "key": league_scoring._join_key(name, p.get("position"), p.get("team")),
+            })
+    return out
 
 
 def pool_refusals(record: dict) -> list[str]:
@@ -172,6 +197,123 @@ def free_agent_pool(board_players: list[dict], league_rosters: list[dict] | None
             continue
         by_pos.setdefault(league_scoring.normalize_position(row.get("pos")), []).append(row)
     return [{"pos": pos, "players": players} for pos, players in by_pos.items()]
+
+
+def _name_parts(name: str) -> tuple[str, str]:
+    """`(first, last)` of a normalized name; last is `""` for a single token."""
+    parts = league_scoring.normalize_player_name(name).split()
+    if not parts:
+        return "", ""
+    return parts[0], parts[-1] if len(parts) > 1 else ""
+
+
+def _alias_plausible(rostered: dict, board_row: dict) -> bool:
+    """Could these two names denote the SAME player under different spellings?
+
+    ⛔ THIS IS A DETECTOR'S COMPARISON AND MUST NEVER BECOME THE SUBTRACTION'S. A detector may be
+    generous because its false positive costs one visibly-refused league; the subtraction may not,
+    because its false positive silently deletes a real available player (ruling ⑥).
+
+    Deliberately TIGHT rather than fuzzy: same position, same last name, same team where both sides
+    state one, and a first name that is a PREFIX of the other's. `normalize_player_name` already
+    folds accents, punctuation and generational suffixes, so "Tyrone Tracy" / "Tyrone Tracy Jr."
+    never reaches here — what remains is the first-name FORM class, which is what was measured
+    ("Josh" / "Joshua", same gsis id) and which prefix-matching catches along with "Chig" /
+    "Chigoziem" and "Ray-Ray" / "Ray Ray".
+    ⚠️ It does NOT catch a nickname that is not a prefix ("Mike" / "Michael"). That is a MISS, not a
+    wrong answer — the detector stays silent exactly as today, and no pool is corrupted by it. A
+    nickname table would widen sensitivity; it is not carried until something measures the need.
+    """
+    if rostered["pos"] == "DST" or rostered["pos"] != league_scoring.normalize_position(board_row.get("pos")):
+        return False
+    r_first, r_last = _name_parts(rostered["name"])
+    b_first, b_last = _name_parts(str(board_row.get("name") or ""))
+    if not r_last or not b_last or r_last != b_last:
+        return False
+    b_team = league_scoring.normalize_team(str(board_row.get("team") or "")) or ""
+    if rostered["team"] and b_team and rostered["team"] != b_team:
+        return False
+    if len(r_first) < 3 or len(b_first) < 3:
+        return False
+    return r_first.startswith(b_first) or b_first.startswith(r_first)
+
+
+def reconcile_rostered(
+    board_players: list[dict],
+    pool_groups: list[dict],
+    league_rosters: list[dict] | None,
+) -> dict:
+    """PM RULING ⑰ — reconcile what the pool IMPLIES is rostered against what the refresh SAYS is.
+
+    The runtime gate did this by hand on one real league and it is the reason we know the join holds
+    there: board 828 − pool 681 = 147 = 136 players + 11 defences, exactly. This runs it at every
+    build so the residual is attributed instead of invisible.
+
+    ⭐ THE RULING PRESCRIBED THE COUNT MISMATCH AS THE TRIGGER; A COUNT MISMATCH HAS **TWO** CAUSES
+    AND ONLY ONE OF THEM IS A DEFECT, so this reports them separately and only the defect refuses:
+
+      (a) ALIAS — the player IS on the board under another spelling, so the board row was never
+          removed and IS BEING OFFERED. This is the must-never. It REFUSES.
+      (b) OFF-BOARD — the player is genuinely absent from the board (a deep roster reaching past its
+          tail; `PLAYER_ABSENCE_REASONS.no_board_row` exists for the pool side of the same fact, and
+          ⑦ measured 2.2% of real week-1 skill performers past the tail). The pool is a SUBSET of the
+          board, so an off-board player CANNOT be offered — the pool is correct and withholding it
+          would refuse a healthy league for a non-defect, which is how a guard gets muted.
+
+    ⇒ an alias suspect is an unmatched roster row with a plausible board row STILL IN THE POOL. That
+    is the sharpest available form of the test: a board row already removed by some other roster row
+    is not a suspect, and a suspect by definition sits in what we are about to serve.
+    """
+    entries = _rostered_entries(league_rosters)
+    board_keys = {
+        league_scoring._join_key(str(r.get("name") or ""), r.get("pos"), r.get("team"))
+        for r in board_players or []
+        if str(r.get("name") or "")
+    }
+
+    live_rostered: dict[str, int] = {}
+    for e in entries:
+        live_rostered[e["pos"]] = live_rostered.get(e["pos"], 0) + 1
+
+    pooled = {g["pos"]: g.get("players") or [] for g in pool_groups or []}
+    board_by_pos: dict[str, int] = {}
+    for r in board_players or []:
+        if str(r.get("name") or ""):
+            pos = league_scoring.normalize_position(r.get("pos"))
+            board_by_pos[pos] = board_by_pos.get(pos, 0) + 1
+    implied_rostered = {
+        pos: n - len(pooled.get(pos) or []) for pos, n in sorted(board_by_pos.items())
+    }
+
+    off_board: list[dict] = []
+    alias_suspects: list[dict] = []
+    for e in entries:
+        if e["key"] in board_keys:
+            continue
+        hits = [
+            {"name": p.get("name"), "pos": p.get("pos"), "team": p.get("team")}
+            for p in (pooled.get(e["pos"]) or [])
+            if _alias_plausible(e, p)
+        ]
+        row = {"name": e["name"], "pos": e["pos"], "team": e["team"]}
+        if hits:
+            alias_suspects.append({"rostered": row, "board": hits})
+        else:
+            off_board.append(row)
+
+    return {
+        "implied_rostered": implied_rostered,
+        "live_rostered": dict(sorted(live_rostered.items())),
+        "matched": len(entries) - len(off_board) - len(alias_suspects),
+        # A stated, NON-refusing observation — see (b) above.
+        "off_board": off_board,
+        "alias_suspects": alias_suspects,
+    }
+
+
+def alias_refusals(reconciliation: dict) -> list[str]:
+    """`["rostered_alias_unmatched"]` when the ⑰ detector fires, else `[]`."""
+    return ["rostered_alias_unmatched"] if reconciliation.get("alias_suspects") else []
 
 
 def positional_need(my_roster_rows: list[dict], cfg: dict) -> dict:
