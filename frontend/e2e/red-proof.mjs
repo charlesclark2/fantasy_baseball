@@ -100,7 +100,10 @@ const CASES = [
     file: "components/fantasy/waiver-view.tsx",
     from: "  if (!entitled) return null\n",
     to: "",
-    grep: "never reaches a free account",
+    // ⚠️ SCOPED TO THE WAIVER CLAUSE'S FULL TITLE. The bare "never reaches a free account" also
+    // matched `fantasy-my-teams.spec.ts`'s rollup test, so a flake in THAT test was attributable to
+    // this case — which is how 2026-09-17's unreproducible RED arrived (see the tail comment below).
+    grep: "the waiver view never reaches a free account",
     expect: "GREEN",
   },
   {
@@ -4067,8 +4070,16 @@ for (const c of selected) {
     )
   } else {
     console.log(ok ? "RED ✅ (the suite caught it)" : "GREEN ❌ (THE SUITE MISSED IT)")
-    if (!ok) console.log(test.stdout.split("\n").slice(-12).join("\n"))
   }
+  // ⚠️ THE TAIL PRINTS ON EITHER MISMATCH DIRECTION, and it was missing on one of them
+  // (NF-WVR1, 2026-09-17). `waiver-renderer-ungated` — declared NOT-OBSERVABLE — came back RED on
+  // the operator's run with NO output kept, so "the note is stale" and "an unrelated test flaked"
+  // were indistinguishable and cost a reproduction session to separate: 9 broken-source executions
+  // of that clause all PASSED, i.e. the declaration was right and the RED was never reproduced.
+  // A declared-GREEN case is exactly where the tail matters most, because its whole content is a
+  // claim about what the suite CANNOT see — and `--grep` can match tests in OTHER specs (that case
+  // matched two, in two files), so the tail is the only thing that says WHICH test failed.
+  if (!ok) console.log(test.stdout.split("\n").slice(-12).join("\n"))
   results.push({ id: c.id, verdict: ok ? (wanted === "GREEN" ? "NOT-OBSERVABLE" : "RED") : "MISMATCH" })
 }
 

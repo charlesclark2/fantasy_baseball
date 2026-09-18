@@ -984,3 +984,28 @@ spec:
       LIST is. ⇒ the real options are (a) leave the generic sentence, or (b) name the terms (the
       payload already carries them). ⛔ Not (c) "quantify it" — that reads as the obvious ask and is
       impossible here. No change made either way; the sentence as shipped is true and non-forecast.
+
+      ㉝ ✅ E2E RED PROOF RUN (operator laptop, 2026-09-17) — ALL 12 OF THIS STORY'S CASES NOW MATCH
+      THEIR DECLARATIONS: 11 RED + 1 NOT-OBSERVABLE (the `waiver` filter's 10 RED, the separate
+      `my-teams-ir-filed-as-bench` RED, and `waiver-renderer-ungated` NOT-OBSERVABLE). ㉓ is
+      DISCHARGED. Two notes worth keeping, because the run found a defect in the INSTRUMENT rather
+      than in the story:
+      ⚠️ `waiver-renderer-ungated` (DECLARED not-observable) came back RED on the operator's run and
+      the harness KEPT NO OUTPUT for that direction, so "the declaration is stale" and "an unrelated
+      test flaked" were indistinguishable. Reproduced deliberately: with the break applied, that
+      clause PASSED 9/9 executions (1 + 8 `--repeat-each`), and its clean-source control also passed
+      8/8 ⇒ the declaration is CORRECT and the RED is UNREPRODUCED. Contributing cause found: the
+      case's `grep` ("never reaches a free account") also matched `fantasy-my-teams.spec.ts`'s
+      ROLLUP test, so a failure in a DIFFERENT spec was attributable to this case. ⛔ The single RED's
+      identity is permanently unrecoverable — the harness discarded it — which is the whole point of
+      the fix. TWO FIXES SHIPPED: the tail now prints on EITHER mismatch direction (a declared-GREEN
+      case is where it matters MOST, since its entire content is a claim about what the suite CANNOT
+      see), and this case's grep is scoped to the waiver clause's full title.
+      📌 STILL OPEN, PRE-EXISTING, NOT THIS STORY: `RECORDED_BOARD` (227) has drifted from the real
+      case count (266) and the harness's own comment already reports it to the PM as the muted-monitor
+      pattern landing on the instrument that polices vacuity elsewhere. ⛔ NOT "fixed" here — editing
+      the board to match a drift you did not cause is exactly what its comment forbids. A wider
+      observation from a static scan of all 266 case greps (boundary stated: a regex title scan, which
+      missed some `test(` forms, so treat it as a SCREEN not a census): ~46 greps resolve to more than
+      one test title and several cross spec FILES — i.e. the mis-attribution above is a general
+      property of the harness, not a one-off. Owner: the board-drift item already with the PM.
