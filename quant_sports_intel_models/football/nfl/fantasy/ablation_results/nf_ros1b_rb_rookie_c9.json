@@ -1,7 +1,7 @@
 {
  "meta": {
-  "commit": "8fca7a81",
-  "generated_at": "2026-09-18T01:34:16+00:00",
+  "commit": "e702a625",
+  "generated_at": "2026-09-18T02:12:54+00:00",
   "prior_sha16": {
    "nf1_5_season_projections_2019.parquet": "e7640a1026b5ac9d",
    "nf1_5_season_projections_2020.parquet": "c0a7aa5d3d8277ce",
@@ -40,7 +40,52 @@
    ],
    "pit_max_decile_dev": 0.08101092896174864,
    "player_seasons": 122,
-   "rows": 1464
+   "rows": 1464,
+   "spread": {
+    "decile_z_fully_clustered": [
+     -0.3621429841700742,
+     -0.7896728960375228,
+     -1.1166075345243955,
+     -0.8399705327278109,
+     -0.31184534747978604,
+     0.19113101942309466,
+     -0.7645240776923786,
+     -0.08550598237349001,
+     1.09648847984828,
+     2.9826498557340826
+    ],
+    "decile_z_rows_independent": [
+     -1.2545000963743602,
+     -2.7355071545940906,
+     -3.8680419638209447,
+     -2.9097432790905295,
+     -1.0802639718779212,
+     0.6620972730864677,
+     -2.648389092345871,
+     -0.29620141164394714,
+     3.7983475140223675,
+     10.332202182638826
+    ],
+    "player_season_mean_pit_deciles": [
+     5,
+     7,
+     19,
+     5,
+     9,
+     17,
+     15,
+     14,
+     15,
+     16
+    ],
+    "player_season_mean_pit_mean": 0.5671157967314001,
+    "player_season_mean_pit_median": 0.5942170926824147,
+    "player_seasons_above_half": 77,
+    "player_seasons_entirely_in_top_decile": 1,
+    "top_decile_player_seasons": 54,
+    "top_decile_rows": 265,
+    "top_decile_share_from_10_largest_contributors": 0.37735849056603776
+   }
   },
   "rb_veteran_context_only": {
    "coverage80": 0.8704179513532031,
@@ -58,7 +103,65 @@
    ],
    "pit_max_decile_dev": 0.012041795135320318,
    "player_seasons": 973,
-   "rows": 11676
+   "rows": 11676,
+   "spread": {
+    "decile_z_fully_clustered": [
+     0.3864833675259371,
+     0.03918264555562476,
+     0.29743190035406225,
+     0.6091120354556264,
+     0.30633704707125076,
+     0.36867307409156297,
+     0.2885267536368752,
+     -0.3793592501521883,
+     -0.6643239451021898,
+     -1.2520636284365656
+    ],
+    "decile_z_rows_independent": [
+     1.3388176576704771,
+     0.13573266575460988,
+     1.0303343264099987,
+     2.1100259858216805,
+     1.06118265953605,
+     1.2771209914183843,
+     0.9994859932839523,
+     -1.314138991169643,
+     -2.3012856512031807,
+     -4.337275637522344
+    ],
+    "player_season_mean_pit_deciles": [
+     29,
+     55,
+     119,
+     229,
+     138,
+     98,
+     89,
+     78,
+     91,
+     47
+    ],
+    "player_season_mean_pit_mean": 0.487837201113648,
+    "player_season_mean_pit_median": 0.43540838393975206,
+    "player_seasons_above_half": 403,
+    "player_seasons_entirely_in_top_decile": 6,
+    "top_decile_player_seasons": 225,
+    "top_decile_rows": 1027,
+    "top_decile_share_from_10_largest_contributors": 0.11295034079844206
+   }
+  },
+  "reproduction": {
+   "identical": true,
+   "now": {
+    "coverage80": 0.7636612021857924,
+    "pit_max_decile_dev": 0.08101092896174864
+   },
+   "prior": {
+    "coverage80": 0.7636612021857924,
+    "pit_max_decile_dev": 0.08101092896174864
+   },
+   "prior_decision": "STOP_TO_PM",
+   "prior_generated_at": null
   },
   "winner": "eb_rate_avail"
  }

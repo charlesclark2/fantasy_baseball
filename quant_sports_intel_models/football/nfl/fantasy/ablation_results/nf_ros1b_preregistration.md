@@ -673,3 +673,68 @@ the rookie decile shares ramp upward and the excess is in the top two deciles (0
 ⛔ Nothing here re-scores the gate, and no new bar is declared. The disposition — a disclosed
 rookie-stratum note, or rookie rows served as a stated absence — is the PM's, on amendment 3's
 pre-declared trigger.
+
+---
+
+## §16 The per-player spread (amendment 5; appended 2026-09-18)
+
+Generated at `e702a625`. **It reproduces the fired read exactly** — `pit_max_decile_dev`
+0.08101092896174864, `coverage80` 0.7636612021857924, decision `STOP_TO_PM`
+(`reproduction.identical: true`) — so what follows describes the same reading the rule already
+fired on, not a second one.
+
+### Concentration of the top-decile mass
+
+| | rookie | veteran (control) |
+|---|---|---|
+| rows in the top PIT decile | 265 | 1,027 |
+| distinct player-seasons contributing | **54 of 122 (44.3%)** | 225 of 973 (23.1%) |
+| player-seasons entirely inside it | 1 | 6 |
+| share carried by the ten largest contributors | 37.7% | 11.3% |
+
+⚠️ The last row is **not comparable across strata**: ten player-seasons are 8.2% of the rookie
+stratum and 1.0% of the veteran one, so the rookie figure is mechanically larger. The comparable
+statement is the second row — and 62.3% of the rookie top-decile mass comes from contributors
+*outside* its ten largest.
+
+### Where the player-seasons themselves sit
+
+| | rookie | veteran (control) |
+|---|---|---|
+| median per-player-season mean PIT | **0.594** | 0.435 |
+| mean | 0.567 | 0.488 |
+| share above 0.5 | **63.1%** (77/122) | 41.4% (403/973) |
+| decile histogram of those means | [5, 7, 19, 5, 9, 17, 15, 14, 15, 16] | [29, 55, 119, 229, 138, 98, 89, 78, 91, 47] |
+
+⭐ **The veteran control, not 0.5, is the calibrated reference for this statistic.** Veterans sit at
+41.4% above half, so comparing rookies against a naive 0.5 understates the gap. The two-sample
+reading, **at the player-season level — where within-player clustering is handled by construction
+because the player-season IS the unit** — is **+0.217, z = 4.67**.
+
+The histograms say the same thing in shape: veteran player-season means pile up in the middle as
+rows accumulate, which is what calibration looks like; rookie means do not, and their upper half is
+heavier than their lower.
+
+### What this settles, and what it does not
+
+The excess is **not** carried by a small set of breakout seasons while the bulk sits near-uniform:
+44.3% of rookie player-seasons contribute to it, the bulk are **not** near-uniform, and the tilt is
+visible in the whole distribution rather than its tail alone. Within-player clustering is real and
+large (4.91 top-decile rows per contributing player-season against 1.67 under calibrated
+independence) — but that describes how one player-season's rows co-move, not how many
+player-seasons are tilted, and it is present in the veteran control too.
+
+⛔ **No trimmed re-read was computed.** "Drop the K largest contributors and recompute C9" is an
+available-looking concentration measure and it is inadmissible: it re-reads a fired gate on a
+population chosen after seeing the result, which is the post-hoc field trim this program refuses
+(MH2.2). The concentration evidence above is descriptive and needs no re-reading.
+
+### The PM's anticipatory constraints on either disposition (2026-09-18, recorded before the choice)
+
+* If **(i) a disclosed note**: it must say what the evidence says — that rookie rest-of-season
+  ranges have historically been thin on the upside — not a generic "rookies are uncertain".
+* If **(ii) a stated absence**: the reason code names the stratum honestly
+  (`rookie_interval_not_certified` or similar) and renders distinguishably, because a rookie owner
+  seeing his player absent from a certified-RB artifact deserves the real reason.
+* Either way, a **rookie-specific interval treatment is a registered-successor candidate, not an
+  in-story patch.**
