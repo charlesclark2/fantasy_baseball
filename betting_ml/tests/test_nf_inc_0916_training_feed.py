@@ -39,7 +39,8 @@ def test_the_two_training_feeds_are_registered_free_nflverse_sources():
     # stats_team_week added 2026-09-17 by NF-WK-ACC1 (PM rider ⑧): the D/ST construction's
     # team-grain input, same vendor run as stats_player_week — see in_season_stats.py.
     # pbp added 2026-09-18 by NF-WK-ACC1 part 2 (PM ruling ②): its PLAY-level input, same vendor
-    # run again, measured at 3.6 s for weeks 1-2 against a 900 s op budget.
+    # run again, measured at 3.6 s for the published 2026 file (week 1 only, 2,756 plays) against a
+    # 900 s op budget — the live box run of 2026-09-18 is what corrected that scope label.
     assert set(WEEKLY_STAT_SOURCES) == {"stats_player_week", "snap_counts", "stats_team_week",
                                         "pbp"}, (
         f"the training-feed set has changed to {WEEKLY_STAT_SOURCES}. That is a real decision — "
