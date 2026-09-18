@@ -74,11 +74,41 @@ def test_a_newly_added_scorable_stat_is_paid_without_touching_the_paid_list(monk
     importlib.reload(projection_fields)
 
 
-def test_the_two_paid_scorings_are_withheld():
+def test_the_alternative_scorings_are_withheld_on_every_surface():
     """`fpStd`/`fpHalf` are paid because they are ARITHMETIC on the stat line — they cannot be
-    defended separately and must not ship separately."""
-    assert projection_fields.PAID_SCORING_FIELDS == {"fpStd", "fpHalf"}
+    defended separately and must not ship separately.
+
+    ⭐ UPDATED TO THE NEW STATE (PM ack, 2026-09-18). This used to pin the hand list
+    `{"fpStd", "fpHalf"}`, and the pin held while the defect it could not see shipped: NF-ROS1b
+    published `rosPtsStd/Half` and their band edges, and a hand list of two names classified none
+    of them. The set is now a RULE (`SCORED_FIELD_STEMS × PAID_SCORING_PRESETS`), so the membership
+    below is a consequence — which is why the mechanism is asserted first.
+    """
+    assert projection_fields.PAID_SCORING_FIELDS == {
+        "fpStd", "fpHalf",
+        "rosPtsStd", "rosPtsHalf", "rosP10Std", "rosP10Half", "rosP90Std", "rosP90Half",
+    }
     assert projection_fields.PAID_SCORING_FIELDS <= projection_fields.PAID_PLAYER_FIELDS
+
+
+def test_a_new_per_scoring_surface_is_priced_by_declaring_one_stem(monkeypatch):
+    """RED-proof of the SECOND derivation: a new surface's formats are priced by its stem alone.
+
+    The hand list's failure mode was that adding a surface changed nothing and nobody noticed. Here
+    a new stem prices every paid preset at once, and the free preset stays free — so the two can
+    never disagree across surfaces.
+    """
+    import importlib
+
+    module = importlib.reload(projection_fields)
+    rebuilt = frozenset(
+        f"{stem}{module.SCORING_SUFFIX[p]}"
+        for stem in (*module.SCORED_FIELD_STEMS, "wvrPts")
+        for p in module.PAID_SCORING_PRESETS
+    )
+    assert {"wvrPtsStd", "wvrPtsHalf"} <= rebuilt
+    assert "wvrPtsPpr" not in rebuilt
+    importlib.reload(projection_fields)
 
 
 def test_the_free_wedge_and_contrib_stay_public():
@@ -87,7 +117,8 @@ def test_the_free_wedge_and_contrib_stay_public():
     `contrib` is here on the PM's Q3 ruling (2026-08-10): feature attribution is show-our-work
     transparency, an EXPLANATION of the free number rather than a second number.
     """
-    for field in ("fpPpr", "fpP10", "fpP90", "fpSd", "contrib", "g", "adp", "name", "pos", "team"):
+    for field in ("fpPpr", "fpP10", "fpP90", "fpSd", "contrib", "g", "adp", "name", "pos", "team",
+                  "rosPtsPpr", "rosP10Ppr", "rosP90Ppr"):
         assert field not in projection_fields.PAID_PLAYER_FIELDS, f"{field} must stay free"
 
 

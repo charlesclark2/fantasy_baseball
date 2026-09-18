@@ -1,0 +1,4266 @@
+{
+ "diagnostics": {
+  "league_median_basis_rows": 2083,
+  "off_board_realized_share_full_ppr": {
+   "2019": 0.03778219024827555,
+   "2020": 0.02453428411698705,
+   "2021": 0.02168225602715416,
+   "2022": 0.03166330583882277,
+   "2023": 0.0282257494650788,
+   "2024": 0.011682040091956346,
+   "2025": 0.02037854988906187
+  },
+  "pace_capped_player_seasons": 76,
+  "player_seasons": 5493,
+  "scoring_terms": {
+   "full_ppr": {
+    "applied": [
+     "fg_made_0_39",
+     "fg_made_40_49",
+     "fg_made_50_plus",
+     "fumbles_lost",
+     "pass_int",
+     "pass_td",
+     "pass_yds",
+     "pat_made",
+     "rec",
+     "rec_td",
+     "rec_yds",
+     "rush_td",
+     "rush_yds"
+    ],
+    "captured": [
+     "def_blocked_kick",
+     "def_fumble_rec",
+     "def_int",
+     "def_sacks",
+     "def_safety",
+     "def_td",
+     "dst_pa_g_0",
+     "dst_pa_g_14_17",
+     "dst_pa_g_1_6",
+     "dst_pa_g_28_34",
+     "dst_pa_g_35_45",
+     "dst_pa_g_46p",
+     "dst_pa_g_7_13",
+     "st_td",
+     "two_pt"
+    ]
+   },
+   "half_ppr": {
+    "applied": [
+     "fg_made_0_39",
+     "fg_made_40_49",
+     "fg_made_50_plus",
+     "fumbles_lost",
+     "pass_int",
+     "pass_td",
+     "pass_yds",
+     "pat_made",
+     "rec",
+     "rec_td",
+     "rec_yds",
+     "rush_td",
+     "rush_yds"
+    ],
+    "captured": [
+     "def_blocked_kick",
+     "def_fumble_rec",
+     "def_int",
+     "def_sacks",
+     "def_safety",
+     "def_td",
+     "dst_pa_g_0",
+     "dst_pa_g_14_17",
+     "dst_pa_g_1_6",
+     "dst_pa_g_28_34",
+     "dst_pa_g_35_45",
+     "dst_pa_g_46p",
+     "dst_pa_g_7_13",
+     "st_td",
+     "two_pt"
+    ]
+   },
+   "standard": {
+    "applied": [
+     "fg_made_0_39",
+     "fg_made_40_49",
+     "fg_made_50_plus",
+     "fumbles_lost",
+     "pass_int",
+     "pass_td",
+     "pass_yds",
+     "pat_made",
+     "rec_td",
+     "rec_yds",
+     "rush_td",
+     "rush_yds"
+    ],
+    "captured": [
+     "def_blocked_kick",
+     "def_fumble_rec",
+     "def_int",
+     "def_sacks",
+     "def_safety",
+     "def_td",
+     "dst_pa_g_0",
+     "dst_pa_g_14_17",
+     "dst_pa_g_1_6",
+     "dst_pa_g_28_34",
+     "dst_pa_g_35_45",
+     "dst_pa_g_46p",
+     "dst_pa_g_7_13",
+     "st_td",
+     "two_pt"
+    ]
+   }
+  },
+  "seasons": {
+   "2019": {
+    "ambiguous_dropped": 0,
+    "board_rows": 745,
+    "by_id": 528,
+    "by_name": 0,
+    "doubly_claimed_dropped": 0,
+    "no_realized_row": 217
+   },
+   "2020": {
+    "ambiguous_dropped": 0,
+    "board_rows": 771,
+    "by_id": 579,
+    "by_name": 0,
+    "doubly_claimed_dropped": 0,
+    "no_realized_row": 192
+   },
+   "2021": {
+    "ambiguous_dropped": 0,
+    "board_rows": 787,
+    "by_id": 607,
+    "by_name": 0,
+    "doubly_claimed_dropped": 0,
+    "no_realized_row": 180
+   },
+   "2022": {
+    "ambiguous_dropped": 0,
+    "board_rows": 812,
+    "by_id": 599,
+    "by_name": 0,
+    "doubly_claimed_dropped": 0,
+    "no_realized_row": 213
+   },
+   "2023": {
+    "ambiguous_dropped": 0,
+    "board_rows": 789,
+    "by_id": 560,
+    "by_name": 0,
+    "doubly_claimed_dropped": 0,
+    "no_realized_row": 229
+   },
+   "2024": {
+    "ambiguous_dropped": 0,
+    "board_rows": 772,
+    "by_id": 576,
+    "by_name": 0,
+    "doubly_claimed_dropped": 0,
+    "no_realized_row": 196
+   },
+   "2025": {
+    "ambiguous_dropped": 0,
+    "board_rows": 817,
+    "by_id": 594,
+    "by_name": 0,
+    "doubly_claimed_dropped": 0,
+    "no_realized_row": 223
+   }
+  },
+  "unresolved_team_rows": 0
+ },
+ "meta": {
+  "commit": "b8d98343",
+  "generated_at": "2026-09-17T06:05:23+00:00",
+  "interval": "hurdle",
+  "prior_sha16": {
+   "nf1_5_season_projections_2019.parquet": "e7640a1026b5ac9d",
+   "nf1_5_season_projections_2020.parquet": "c0a7aa5d3d8277ce",
+   "nf1_5_season_projections_2021.parquet": "a6645484fd204937",
+   "nf1_5_season_projections_2022.parquet": "b76490e08c123f5a",
+   "nf1_5_season_projections_2023.parquet": "abebdff5be7e9bbc",
+   "nf1_5_season_projections_2024.parquet": "3aa7150e245a54af",
+   "nf1_5_season_projections_2025.parquet": "3580273de0469b1d",
+   "nfl_fantasy_kdst_projections_2019.parquet": "8c5955a8eb134254",
+   "nfl_fantasy_kdst_projections_2020.parquet": "ab4513d2cafc5692",
+   "nfl_fantasy_kdst_projections_2021.parquet": "83a11dc70dfa2527",
+   "nfl_fantasy_kdst_projections_2022.parquet": "317bc59367da943f",
+   "nfl_fantasy_kdst_projections_2023.parquet": "f0593e8c851e70dc",
+   "nfl_fantasy_kdst_projections_2024.parquet": "5efac9750e2901a9",
+   "nfl_fantasy_kdst_projections_2025.parquet": "509633c49b466bce"
+  },
+  "rows": 65916,
+  "schedules_version": 36,
+  "smoke": false,
+  "stats_player_week_version": 28,
+  "story": "NF-ROS1b"
+ },
+ "result": {
+  "arm_pooled_mean_crps": {
+   "eb_avail": 15.477896897955263,
+   "eb_rate": 14.581648069286608,
+   "eb_rate_avail": 14.37138404972182
+  },
+  "field_pbo": 0.0,
+  "field_pbo_ok": true,
+  "flip_distribution": {
+   "eb_rate": 3,
+   "eb_rate_avail": 3
+  },
+  "folds": [
+   2020,
+   2021,
+   2022,
+   2023,
+   2024,
+   2025
+  ],
+  "hurdle": {
+   "counts": {
+    "K": {
+     "mean_pi": 0.25934412980095795,
+     "point_zero_realized_zero_share": null,
+     "point_zero_rows": 0,
+     "realized_zero_share": 0.23433806146572103,
+     "rows": 3384,
+     "y_negative_rows": 0
+    },
+    "QB": {
+     "mean_pi": 0.3965845668439588,
+     "point_zero_realized_zero_share": null,
+     "point_zero_rows": 0,
+     "realized_zero_share": 0.3616023579849946,
+     "rows": 7464,
+     "y_negative_rows": 329
+    },
+    "RB": {
+     "mean_pi": 0.3382672265432185,
+     "point_zero_realized_zero_share": null,
+     "point_zero_rows": 0,
+     "realized_zero_share": 0.34421613394216133,
+     "rows": 13140,
+     "y_negative_rows": 47
+    },
+    "TE": {
+     "mean_pi": 0.3798410226029033,
+     "point_zero_realized_zero_share": null,
+     "point_zero_rows": 0,
+     "realized_zero_share": 0.3717208814270724,
+     "rows": 11436,
+     "y_negative_rows": 0
+    },
+    "WR": {
+     "mean_pi": 0.3994996022327797,
+     "point_zero_realized_zero_share": null,
+     "point_zero_rows": 0,
+     "realized_zero_share": 0.379779138827023,
+     "rows": 21552,
+     "y_negative_rows": 20
+    }
+   },
+   "mechanism_check": {
+    "hurdle": {
+     "K": {
+      "lowest_pit_decile_mass": 0.11436170212765957,
+      "top_tercile_q05_zero_share": 0.02127659574468085,
+      "top_tercile_realized_zero_share": 0.008865248226950355,
+      "top_tercile_rows": 1128
+     },
+     "QB": {
+      "lowest_pit_decile_mass": 0.1302250803858521,
+      "top_tercile_q05_zero_share": 0.352491961414791,
+      "top_tercile_realized_zero_share": 0.0635048231511254,
+      "top_tercile_rows": 2488
+     },
+     "RB": {
+      "lowest_pit_decile_mass": 0.10471841704718417,
+      "top_tercile_q05_zero_share": 0.16210045662100456,
+      "top_tercile_realized_zero_share": 0.04223744292237443,
+      "top_tercile_rows": 4380
+     },
+     "TE": {
+      "lowest_pit_decile_mass": 0.09356418328086744,
+      "top_tercile_q05_zero_share": 0.3948058761804827,
+      "top_tercile_realized_zero_share": 0.030430220356768102,
+      "top_tercile_rows": 3812
+     },
+     "WR": {
+      "lowest_pit_decile_mass": 0.0915460282108389,
+      "top_tercile_q05_zero_share": 0.37820155902004454,
+      "top_tercile_realized_zero_share": 0.04440423162583519,
+      "top_tercile_rows": 7184
+     }
+    },
+    "location_shift_reference": {
+     "K": {
+      "lowest_pit_decile_mass": 0.17612293144208038,
+      "top_tercile_q05_zero_share": 0.004432624113475178,
+      "top_tercile_realized_zero_share": 0.008865248226950355,
+      "top_tercile_rows": 1128
+     },
+     "QB": {
+      "lowest_pit_decile_mass": 0.22802786709539122,
+      "top_tercile_q05_zero_share": 0.2745176848874598,
+      "top_tercile_realized_zero_share": 0.0635048231511254,
+      "top_tercile_rows": 2488
+     },
+     "RB": {
+      "lowest_pit_decile_mass": 0.19550989345509892,
+      "top_tercile_q05_zero_share": 0.37031963470319634,
+      "top_tercile_realized_zero_share": 0.04223744292237443,
+      "top_tercile_rows": 4380
+     },
+     "TE": {
+      "lowest_pit_decile_mass": 0.19630989856593214,
+      "top_tercile_q05_zero_share": 0.5293809024134313,
+      "top_tercile_realized_zero_share": 0.030430220356768102,
+      "top_tercile_rows": 3812
+     },
+     "WR": {
+      "lowest_pit_decile_mass": 0.19316072754268745,
+      "top_tercile_q05_zero_share": 0.39448775055679286,
+      "top_tercile_realized_zero_share": 0.04440423162583519,
+      "top_tercile_rows": 7184
+     }
+    }
+   },
+   "pi_fits": {
+    "dropped_features": 36,
+    "n": 180,
+    "single_class": 0
+   },
+   "pi_reliability": {
+    "K": [
+     {
+      "pred": 0.013368172272171186,
+      "realized": 0.0058997050147492625,
+      "rows": 339
+     },
+     {
+      "pred": 0.017364638142911747,
+      "realized": 0.011799410029498525,
+      "rows": 339
+     },
+     {
+      "pred": 0.019494811503481608,
+      "realized": 0.008849557522123894,
+      "rows": 339
+     },
+     {
+      "pred": 0.021674568683035127,
+      "realized": 0.008849557522123894,
+      "rows": 339
+     },
+     {
+      "pred": 0.024116460047959188,
+      "realized": 0.0,
+      "rows": 338
+     },
+     {
+      "pred": 0.036453737332545824,
+      "realized": 0.03550295857988166,
+      "rows": 338
+     },
+     {
+      "pred": 0.20326835103490926,
+      "realized": 0.26627218934911245,
+      "rows": 338
+     },
+     {
+      "pred": 0.609801989440822,
+      "realized": 0.5769230769230769,
+      "rows": 338
+     },
+     {
+      "pred": 0.7572217665393377,
+      "realized": 0.6686390532544378,
+      "rows": 338
+     },
+     {
+      "pred": 0.8935332359372645,
+      "realized": 0.7633136094674556,
+      "rows": 338
+     }
+    ],
+    "QB": [
+     {
+      "pred": 0.02575504252713361,
+      "realized": 0.009370816599732263,
+      "rows": 747
+     },
+     {
+      "pred": 0.03632899131709246,
+      "realized": 0.01740294511378849,
+      "rows": 747
+     },
+     {
+      "pred": 0.06594269764616889,
+      "realized": 0.06693440428380187,
+      "rows": 747
+     },
+     {
+      "pred": 0.18310307767469697,
+      "realized": 0.19410977242302543,
+      "rows": 747
+     },
+     {
+      "pred": 0.3607373638714114,
+      "realized": 0.3605898123324397,
+      "rows": 746
+     },
+     {
+      "pred": 0.48600436365143396,
+      "realized": 0.46380697050938335,
+      "rows": 746
+     },
+     {
+      "pred": 0.5724504769860163,
+      "realized": 0.5683646112600537,
+      "rows": 746
+     },
+     {
+      "pred": 0.6491476029732157,
+      "realized": 0.6032171581769437,
+      "rows": 746
+     },
+     {
+      "pred": 0.7376899001945394,
+      "realized": 0.6206434316353887,
+      "rows": 746
+     },
+     {
+      "pred": 0.8503955463139798,
+      "realized": 0.7131367292225201,
+      "rows": 746
+     }
+    ],
+    "RB": [
+     {
+      "pred": 0.01410280731108426,
+      "realized": 0.0121765601217656,
+      "rows": 1314
+     },
+     {
+      "pred": 0.021194847424064203,
+      "realized": 0.01141552511415525,
+      "rows": 1314
+     },
+     {
+      "pred": 0.029415095411314186,
+      "realized": 0.030441400304414,
+      "rows": 1314
+     },
+     {
+      "pred": 0.0512802546337723,
+      "realized": 0.0639269406392694,
+      "rows": 1314
+     },
+     {
+      "pred": 0.12172653377333366,
+      "realized": 0.14687975646879756,
+      "rows": 1314
+     },
+     {
+      "pred": 0.3128264447828828,
+      "realized": 0.3082191780821918,
+      "rows": 1314
+     },
+     {
+      "pred": 0.5326666163035115,
+      "realized": 0.563165905631659,
+      "rows": 1314
+     },
+     {
+      "pred": 0.6525580173599053,
+      "realized": 0.6948249619482496,
+      "rows": 1314
+     },
+     {
+      "pred": 0.7629322381992263,
+      "realized": 0.7633181126331812,
+      "rows": 1314
+     },
+     {
+      "pred": 0.8839694102330905,
+      "realized": 0.84779299847793,
+      "rows": 1314
+     }
+    ],
+    "TE": [
+     {
+      "pred": 0.016260192997864395,
+      "realized": 0.013986013986013986,
+      "rows": 1144
+     },
+     {
+      "pred": 0.030848620837868778,
+      "realized": 0.01048951048951049,
+      "rows": 1144
+     },
+     {
+      "pred": 0.05222917180037147,
+      "realized": 0.044580419580419584,
+      "rows": 1144
+     },
+     {
+      "pred": 0.0895964660212206,
+      "realized": 0.08216783216783216,
+      "rows": 1144
+     },
+     {
+      "pred": 0.16121456298689943,
+      "realized": 0.16695804195804195,
+      "rows": 1144
+     },
+     {
+      "pred": 0.3270839307371507,
+      "realized": 0.29632867132867136,
+      "rows": 1144
+     },
+     {
+      "pred": 0.5762844570994793,
+      "realized": 0.5520559930008749,
+      "rows": 1143
+     },
+     {
+      "pred": 0.7398539395471562,
+      "realized": 0.7550306211723534,
+      "rows": 1143
+     },
+     {
+      "pred": 0.8603635036077588,
+      "realized": 0.868766404199475,
+      "rows": 1143
+     },
+     {
+      "pred": 0.9460767917582992,
+      "realized": 0.9282589676290464,
+      "rows": 1143
+     }
+    ],
+    "WR": [
+     {
+      "pred": 0.018782144762959887,
+      "realized": 0.010667903525046383,
+      "rows": 2156
+     },
+     {
+      "pred": 0.03388452938880158,
+      "realized": 0.02504638218923933,
+      "rows": 2156
+     },
+     {
+      "pred": 0.055046034693658506,
+      "realized": 0.04918793503480278,
+      "rows": 2155
+     },
+     {
+      "pred": 0.09273927760633607,
+      "realized": 0.08909512761020881,
+      "rows": 2155
+     },
+     {
+      "pred": 0.17246573199806883,
+      "realized": 0.17633410672853828,
+      "rows": 2155
+     },
+     {
+      "pred": 0.36870109726589134,
+      "realized": 0.33410672853828305,
+      "rows": 2155
+     },
+     {
+      "pred": 0.6370695784038244,
+      "realized": 0.6204176334106729,
+      "rows": 2155
+     },
+     {
+      "pred": 0.7848016273873439,
+      "realized": 0.7698375870069606,
+      "rows": 2155
+     },
+     {
+      "pred": 0.8811096712809461,
+      "realized": 0.8361948955916473,
+      "rows": 2155
+     },
+     {
+      "pred": 0.9507426555401114,
+      "realized": 0.8872389791183295,
+      "rows": 2155
+     }
+    ]
+   },
+   "post_smoke_companion_diagnostic": {
+    "label": "POST-SMOKE COMPANION DIAGNOSTIC \u2014 top-tercile atom calibration (gates nothing; not a clause, not in V/PBO/DSR, not in any verdict)",
+    "top_tercile_atom_calibration": {
+     "K": {
+      "difference": 0.01440652083611599,
+      "mean_predicted_p_zero": 0.023271769063066345,
+      "realized_zero_share": 0.008865248226950355,
+      "top_tercile_rows": 1128
+     },
+     "QB": {
+      "difference": 0.011613146576250927,
+      "mean_predicted_p_zero": 0.07511796972737633,
+      "realized_zero_share": 0.0635048231511254,
+      "top_tercile_rows": 2488
+     },
+     "RB": {
+      "difference": 0.0012518614561187053,
+      "mean_predicted_p_zero": 0.04348930437849313,
+      "realized_zero_share": 0.04223744292237443,
+      "top_tercile_rows": 4380
+     },
+     "TE": {
+      "difference": 0.04212676669987351,
+      "mean_predicted_p_zero": 0.07255698705664161,
+      "realized_zero_share": 0.030430220356768102,
+      "top_tercile_rows": 3812
+     },
+     "WR": {
+      "difference": 0.01993616224143145,
+      "mean_predicted_p_zero": 0.06434039386726664,
+      "realized_zero_share": 0.04440423162583519,
+      "top_tercile_rows": 7184
+     }
+    }
+   },
+   "reference_only_winner_at_location_shift": {
+    "arm": "eb_rate_avail",
+    "calibration": {
+     "K": {
+      "coverage80": 0.7322695035460993,
+      "pit_max_decile_dev": 0.08203309692671396,
+      "pooled_crps": 14.395763155805442
+     },
+     "QB": {
+      "coverage80": 0.739951768488746,
+      "pit_max_decile_dev": 0.13285101822079312,
+      "pooled_crps": 21.12732908423617
+     },
+     "RB": {
+      "coverage80": 0.8017503805175038,
+      "pit_max_decile_dev": 0.0963470319634703,
+      "pooled_crps": 15.489230494012412
+     },
+     "TE": {
+      "coverage80": 0.8058761804826863,
+      "pit_max_decile_dev": 0.09989506820566632,
+      "pooled_crps": 10.289412077381701
+     },
+     "WR": {
+      "coverage80": 0.8108296213808464,
+      "pit_max_decile_dev": 0.09116555308092056,
+      "pooled_crps": 14.037209458837818
+     }
+    },
+    "label": "reference only \u2014 not a trial, not in V, gates nothing",
+    "per_fold_crps": {
+     "K": [
+      12.962793406895017,
+      15.350923803362718,
+      10.208540622832091,
+      12.11785582399849,
+      18.5340223178046,
+      17.171206132346878
+     ],
+     "QB": [
+      20.285677902625274,
+      17.71355910127598,
+      21.801885720602858,
+      22.03155402932593,
+      23.19279157217769,
+      21.81153822362461
+     ],
+     "RB": [
+      16.220056695774286,
+      18.179020079697253,
+      15.20727316175654,
+      13.978029212663488,
+      14.092126736357525,
+      15.253114646071474
+     ],
+     "TE": [
+      9.701240375578816,
+      10.28678355306017,
+      10.753941262422437,
+      9.972166572074258,
+      10.574010525019807,
+      10.421979350069186
+     ],
+     "WR": [
+      15.041043053630174,
+      15.131996488178592,
+      13.060351470426241,
+      12.813056926641702,
+      15.253994640283155,
+      13.08692654276276
+     ]
+    }
+   },
+   "strata_c9": {
+    "k1": {
+     "coverage80": 0.8435130581297389,
+     "pit_max_decile_dev": 0.013100252737994936,
+     "rows": 4748
+    },
+    "k10": {
+     "coverage80": 0.8473041280539174,
+     "pit_max_decile_dev": 0.011415332771693334,
+     "rows": 4748
+    },
+    "k11": {
+     "coverage80": 0.8553074978938501,
+     "pit_max_decile_dev": 0.009730412805391733,
+     "rows": 4748
+    },
+    "k12": {
+     "coverage80": 0.8662594776748105,
+     "pit_max_decile_dev": 0.011204717775905634,
+     "rows": 4748
+    },
+    "k2": {
+     "coverage80": 0.8527801179443977,
+     "pit_max_decile_dev": 0.010151642796967134,
+     "rows": 4748
+    },
+    "k3": {
+     "coverage80": 0.8515164279696714,
+     "pit_max_decile_dev": 0.011625947767481035,
+     "rows": 4748
+    },
+    "k4": {
+     "coverage80": 0.8477253580454929,
+     "pit_max_decile_dev": 0.008045492839090132,
+     "rows": 4748
+    },
+    "k5": {
+     "coverage80": 0.8550968828980623,
+     "pit_max_decile_dev": 0.007329401853411965,
+     "rows": 4748
+    },
+    "k6": {
+     "coverage80": 0.8555181128896377,
+     "pit_max_decile_dev": 0.005433866891322664,
+     "rows": 4748
+    },
+    "k7": {
+     "coverage80": 0.8443555181128897,
+     "pit_max_decile_dev": 0.012468407750631835,
+     "rows": 4748
+    },
+    "k8": {
+     "coverage80": 0.8519376579612469,
+     "pit_max_decile_dev": 0.008887952822240933,
+     "rows": 4748
+    },
+    "k9": {
+     "coverage80": 0.8626790227464195,
+     "pit_max_decile_dev": 0.0060657118786857644,
+     "rows": 4748
+    },
+    "rookie": {
+     "coverage80": 0.7701271186440678,
+     "pit_max_decile_dev": 0.08220338983050846,
+     "rows": 5664
+    },
+    "veteran": {
+     "coverage80": 0.8619621141253508,
+     "pit_max_decile_dev": 0.007078266292485189,
+     "rows": 51312
+    }
+   }
+  },
+  "other_presets": {
+   "half_ppr": {
+    "eb_rate_avail": [
+     13.0508673812584,
+     13.334460110643937,
+     12.329174226262277,
+     12.034486144154599,
+     13.508881130896553,
+     12.759813487869504
+    ],
+    "prior_prorated": [
+     14.451066761380035,
+     14.340934555627,
+     12.751864316095649,
+     13.30569054633881,
+     14.410473036255443,
+     13.401062692651008
+    ]
+   },
+   "standard": {
+    "eb_rate_avail": [
+     11.514402844087265,
+     11.729380566665025,
+     10.905946446164322,
+     10.658608966034256,
+     11.978301406543462,
+     11.326107071856592
+    ],
+    "prior_prorated": [
+     12.663413853771843,
+     12.55183172652124,
+     11.216571879611122,
+     11.762477211213119,
+     12.741917035253723,
+     11.836580911262535
+    ]
+   }
+  },
+  "params": {
+   "2020": {
+    "eb_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 543.7108887251808
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 6,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 2617.2033793258547
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 6,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1326.2211457793994
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 691.7824996717319
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1330.8415483218266
+     }
+    },
+    "eb_permuted": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 24
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 48
+     }
+    },
+    "eb_rate": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 32,
+      "m_r_edge": false,
+      "mse": 780.9472374401673
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 6,
+      "m_r_edge": false,
+      "mse": 3116.2349463284518
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 2,
+      "m_r_edge": false,
+      "mse": 1196.0824792069047
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 6,
+      "m_r_edge": false,
+      "mse": 798.8631988683662
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1317.2377134303981
+     }
+    },
+    "eb_rate_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 64,
+      "m_r_edge": true,
+      "mse": 542.4874448216459
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 2,
+      "m_r_edge": false,
+      "mse": 2141.177405368459
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": 2,
+      "m_r_edge": false,
+      "mse": 1019.5735811178768
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": 12,
+      "m_r_edge": false,
+      "mse": 653.5455563370416
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1064.7419281577718
+     }
+    },
+    "matched_n_eb_avail": {
+     "K": {
+      "m_a": 2,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 6,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 6,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 3,
+      "m_r": "inf"
+     }
+    },
+    "matched_n_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 32
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 6
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 2
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 4
+     }
+    },
+    "matched_n_eb_rate_avail": {
+     "K": {
+      "m_a": 2,
+      "m_r": 64
+     },
+     "QB": {
+      "m_a": 2,
+      "m_r": 2
+     },
+     "RB": {
+      "m_a": 4,
+      "m_r": 2
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": 12
+     },
+     "WR": {
+      "m_a": 2,
+      "m_r": 4
+     }
+    },
+    "oracle_eb_avail": {
+     "K": {
+      "m_a": 0.5,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 8,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 3,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 3,
+      "m_r": "inf"
+     }
+    },
+    "oracle_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 32
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 16
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 4
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 2
+     }
+    },
+    "oracle_eb_rate_avail": {
+     "K": {
+      "m_a": 0.5,
+      "m_r": 64
+     },
+     "QB": {
+      "m_a": 4,
+      "m_r": 4
+     },
+     "RB": {
+      "m_a": 2,
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": 4
+     },
+     "WR": {
+      "m_a": 3,
+      "m_r": 2
+     }
+    },
+    "prior_prorated": {
+     "K": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    }
+   },
+   "2021": {
+    "eb_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 548.6762706372959
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 6,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 2457.4370101097347
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1370.4953937167757
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 636.8693591615408
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1321.3394573337446
+     }
+    },
+    "eb_permuted": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 16
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 12
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 64
+     }
+    },
+    "eb_rate": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 32,
+      "m_r_edge": false,
+      "mse": 782.3519948124871
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 8,
+      "m_r_edge": false,
+      "mse": 2833.4593304519735
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 2,
+      "m_r_edge": false,
+      "mse": 1329.8074596993422
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 700.6633187527173
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1271.2279189487579
+     }
+    },
+    "eb_rate_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": 64,
+      "m_r_edge": true,
+      "mse": 547.4334838442106
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 2102.6216533077304
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1096.8987159618805
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": 6,
+      "m_r_edge": false,
+      "mse": 553.269477983374
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1042.6493587810664
+     }
+    },
+    "matched_n_eb_avail": {
+     "K": {
+      "m_a": 0.5,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 8,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 3,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 3,
+      "m_r": "inf"
+     }
+    },
+    "matched_n_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 32
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 16
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 4
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 2
+     }
+    },
+    "matched_n_eb_rate_avail": {
+     "K": {
+      "m_a": 0.5,
+      "m_r": 64
+     },
+     "QB": {
+      "m_a": 4,
+      "m_r": 4
+     },
+     "RB": {
+      "m_a": 2,
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": 4
+     },
+     "WR": {
+      "m_a": 3,
+      "m_r": 2
+     }
+    },
+    "oracle_eb_avail": {
+     "K": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 8,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 2,
+      "m_r": "inf"
+     }
+    },
+    "oracle_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 2
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 16
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 8
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 4
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 3
+     }
+    },
+    "oracle_eb_rate_avail": {
+     "K": {
+      "m_a": 6,
+      "m_r": 2
+     },
+     "QB": {
+      "m_a": 4,
+      "m_r": 6
+     },
+     "RB": {
+      "m_a": 3,
+      "m_r": 8
+     },
+     "TE": {
+      "m_a": 2,
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": 2,
+      "m_r": 4
+     }
+    },
+    "prior_prorated": {
+     "K": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    }
+   },
+   "2022": {
+    "eb_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 667.755591877022
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 6,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 2211.3484313659637
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1414.2888922772493
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 635.3769324729863
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1296.8734963836614
+     }
+    },
+    "eb_permuted": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 24
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 16
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    },
+    "eb_rate": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 6,
+      "m_r_edge": false,
+      "mse": 817.6428205298279
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 12,
+      "m_r_edge": false,
+      "mse": 2590.574775376856
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1475.48944990009
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 675.6249896837921
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1301.4788227631632
+     }
+    },
+    "eb_rate_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 12,
+      "m_r_edge": false,
+      "mse": 648.3320302118145
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1929.98007031474
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1221.2261856657656
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": 6,
+      "m_r_edge": false,
+      "mse": 548.6156627887261
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1059.0274041335388
+     }
+    },
+    "matched_n_eb_avail": {
+     "K": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 8,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 2,
+      "m_r": "inf"
+     }
+    },
+    "matched_n_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 2
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 16
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 8
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 4
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 3
+     }
+    },
+    "matched_n_eb_rate_avail": {
+     "K": {
+      "m_a": 6,
+      "m_r": 2
+     },
+     "QB": {
+      "m_a": 4,
+      "m_r": 6
+     },
+     "RB": {
+      "m_a": 3,
+      "m_r": 8
+     },
+     "TE": {
+      "m_a": 2,
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": 2,
+      "m_r": 4
+     }
+    },
+    "oracle_eb_avail": {
+     "K": {
+      "m_a": 0.5,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 24,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 4,
+      "m_r": "inf"
+     }
+    },
+    "oracle_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 48
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 2
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 6
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 4
+     }
+    },
+    "oracle_eb_rate_avail": {
+     "K": {
+      "m_a": 0.5,
+      "m_r": 64
+     },
+     "QB": {
+      "m_a": 12,
+      "m_r": 2
+     },
+     "RB": {
+      "m_a": 3,
+      "m_r": 8
+     },
+     "TE": {
+      "m_a": 4,
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": 4,
+      "m_r": 6
+     }
+    },
+    "prior_prorated": {
+     "K": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    }
+   },
+   "2023": {
+    "eb_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 607.9583077580747
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 8,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 2233.2059192355246
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1368.3445897406286
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 625.4888991418446
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1217.0934836377735
+     }
+    },
+    "eb_permuted": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 16
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 16
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 64
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    },
+    "eb_rate": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 8,
+      "m_r_edge": false,
+      "mse": 776.6093983663869
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 8,
+      "m_r_edge": false,
+      "mse": 2459.175137367512
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1463.4156622538217
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 653.7060374745686
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1236.5301641104595
+     }
+    },
+    "eb_rate_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 1,
+      "m_a_edge": false,
+      "m_r": 16,
+      "m_r_edge": false,
+      "mse": 595.8493408358445
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1951.2552982958225
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1210.2755686666449
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 6,
+      "m_r_edge": false,
+      "mse": 549.0760253487914
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1017.0320150980976
+     }
+    },
+    "matched_n_eb_avail": {
+     "K": {
+      "m_a": 0.5,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 24,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 4,
+      "m_r": "inf"
+     }
+    },
+    "matched_n_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 48
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 2
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 6
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 4
+     }
+    },
+    "matched_n_eb_rate_avail": {
+     "K": {
+      "m_a": 0.5,
+      "m_r": 64
+     },
+     "QB": {
+      "m_a": 12,
+      "m_r": 2
+     },
+     "RB": {
+      "m_a": 3,
+      "m_r": 8
+     },
+     "TE": {
+      "m_a": 4,
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": 4,
+      "m_r": 6
+     }
+    },
+    "oracle_eb_avail": {
+     "K": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 8,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 8,
+      "m_r": "inf"
+     }
+    },
+    "oracle_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 2
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 4
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 2
+     }
+    },
+    "oracle_eb_rate_avail": {
+     "K": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 3,
+      "m_r": 1
+     },
+     "RB": {
+      "m_a": 2,
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": 4,
+      "m_r": 3
+     }
+    },
+    "prior_prorated": {
+     "K": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    }
+   },
+   "2024": {
+    "eb_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 590.8903957384847
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 8,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 2330.729240485367
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1345.1793522941507
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 617.7599314030227
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1198.803531880897
+     }
+    },
+    "eb_permuted": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 24
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 12
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 64
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    },
+    "eb_rate": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 16,
+      "m_r_edge": false,
+      "mse": 741.5710401401
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 6,
+      "m_r_edge": false,
+      "mse": 2516.7427491968497
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1429.821959827774
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 649.6678182529247
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1174.0501611921588
+     }
+    },
+    "eb_rate_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 24,
+      "m_r_edge": false,
+      "mse": 584.5407001197133
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1985.3807929438303
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1169.7126065987143
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 6,
+      "m_r_edge": false,
+      "mse": 544.2276934158639
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 976.7373299886648
+     }
+    },
+    "matched_n_eb_avail": {
+     "K": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 8,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 8,
+      "m_r": "inf"
+     }
+    },
+    "matched_n_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 2
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 4
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 2
+     }
+    },
+    "matched_n_eb_rate_avail": {
+     "K": {
+      "m_a": 4,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 3,
+      "m_r": 1
+     },
+     "RB": {
+      "m_a": 2,
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": 1,
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": 4,
+      "m_r": 3
+     }
+    },
+    "oracle_eb_avail": {
+     "K": {
+      "m_a": 3,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 48,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 2,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 2,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 12,
+      "m_r": "inf"
+     }
+    },
+    "oracle_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 12
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 4
+     }
+    },
+    "oracle_eb_rate_avail": {
+     "K": {
+      "m_a": 4,
+      "m_r": 24
+     },
+     "QB": {
+      "m_a": 8,
+      "m_r": 2
+     },
+     "RB": {
+      "m_a": 2,
+      "m_r": 4
+     },
+     "TE": {
+      "m_a": 2,
+      "m_r": 3
+     },
+     "WR": {
+      "m_a": 6,
+      "m_r": 4
+     }
+    },
+    "prior_prorated": {
+     "K": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    }
+   },
+   "2025": {
+    "eb_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 675.001929066732
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 12,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 2379.9912808477457
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1321.575926177295
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 631.0247267248347
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": "inf",
+      "m_r_edge": false,
+      "mse": 1224.432358899004
+     }
+    },
+    "eb_permuted": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 64
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 16
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 48
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    },
+    "eb_rate": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 16,
+      "m_r_edge": false,
+      "mse": 821.4457321271584
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 2467.4405100034282
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1414.6438868421462
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 655.1830361763913
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": "inf",
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 1186.1716667503285
+     }
+    },
+    "eb_rate_avail": {
+     "K": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 24,
+      "m_r_edge": false,
+      "mse": 668.6294517242801
+     },
+     "QB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 4,
+      "m_a_edge": false,
+      "m_r": 3,
+      "m_r_edge": false,
+      "mse": 2010.5406083098458
+     },
+     "RB": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1144.3332583861004
+     },
+     "TE": {
+      "collapsed_to_incumbent": false,
+      "m_a": 2,
+      "m_a_edge": false,
+      "m_r": 6,
+      "m_r_edge": false,
+      "mse": 552.7460222224528
+     },
+     "WR": {
+      "collapsed_to_incumbent": false,
+      "m_a": 3,
+      "m_a_edge": false,
+      "m_r": 4,
+      "m_r_edge": false,
+      "mse": 1008.1245796484751
+     }
+    },
+    "matched_n_eb_avail": {
+     "K": {
+      "m_a": 3,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 48,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 2,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 2,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 12,
+      "m_r": "inf"
+     }
+    },
+    "matched_n_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 12
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 3
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 4
+     }
+    },
+    "matched_n_eb_rate_avail": {
+     "K": {
+      "m_a": 4,
+      "m_r": 24
+     },
+     "QB": {
+      "m_a": 8,
+      "m_r": 2
+     },
+     "RB": {
+      "m_a": 2,
+      "m_r": 4
+     },
+     "TE": {
+      "m_a": 2,
+      "m_r": 3
+     },
+     "WR": {
+      "m_a": 6,
+      "m_r": 4
+     }
+    },
+    "oracle_eb_avail": {
+     "K": {
+      "m_a": 1,
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": 24,
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": 6,
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": 6,
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": 6,
+      "m_r": "inf"
+     }
+    },
+    "oracle_eb_rate": {
+     "K": {
+      "m_a": "inf",
+      "m_r": 64
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": 4
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": 2
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": 4
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": 6
+     }
+    },
+    "oracle_eb_rate_avail": {
+     "K": {
+      "m_a": 1,
+      "m_r": 48
+     },
+     "QB": {
+      "m_a": 12,
+      "m_r": 3
+     },
+     "RB": {
+      "m_a": 4,
+      "m_r": 3
+     },
+     "TE": {
+      "m_a": 8,
+      "m_r": 6
+     },
+     "WR": {
+      "m_a": 4,
+      "m_r": 6
+     }
+    },
+    "prior_prorated": {
+     "K": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "QB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "RB": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "TE": {
+      "m_a": "inf",
+      "m_r": "inf"
+     },
+     "WR": {
+      "m_a": "inf",
+      "m_r": "inf"
+     }
+    }
+   }
+  },
+  "pooled_per_fold_crps": {
+   "eb_avail": [
+    15.994808359703699,
+    15.784430488117806,
+    14.539879032075158,
+    15.079079496283363,
+    16.366282424364933,
+    15.102901587186627
+   ],
+   "eb_permuted": [
+    18.669503606904488,
+    18.66022145327522,
+    16.157126499073502,
+    16.348437889974583,
+    17.455141030878785,
+    15.890425146603011
+   ],
+   "eb_rate": [
+    15.197960505611295,
+    15.539063116437816,
+    13.781475551419149,
+    13.796671760493446,
+    14.971579728613621,
+    14.203137753144322
+   ],
+   "eb_rate_avail": [
+    14.647499857690496,
+    14.9830824057981,
+    13.817691547442024,
+    13.454835820934406,
+    15.08540486128849,
+    14.239789805177411
+   ],
+   "frozen_full": [
+    16.244209314259336,
+    16.19622867179392,
+    14.561202395705308,
+    15.060231911778628,
+    16.275940161310483,
+    15.13789255186495
+   ],
+   "last3_pace": [
+    16.396033925209995,
+    16.841423568157126,
+    15.980239269806525,
+    15.711505740214966,
+    17.308977706508212,
+    15.981916117992897
+   ],
+   "matched_n_eb_avail": [
+    15.994808359703699,
+    15.821147548454487,
+    14.544307002654898,
+    15.05705374911165,
+    16.26334221045244,
+    15.051320976282062
+   ],
+   "matched_n_eb_rate": [
+    15.197960505611295,
+    15.514026762300151,
+    13.816667861407167,
+    13.690922721159547,
+    15.051881473374674,
+    14.202794053384169
+   ],
+   "matched_n_eb_rate_avail": [
+    14.647499857690496,
+    14.983525392525788,
+    13.825997359376485,
+    13.55599578366798,
+    15.042778487836546,
+    14.20580299338528
+   ],
+   "naive_pace": [
+    15.830817471173479,
+    16.451053273737617,
+    15.641656812029316,
+    15.222293186064766,
+    16.985922458424696,
+    15.750739666607611
+   ],
+   "nihilist_zero": [
+    39.62923259835711,
+    39.63825921219822,
+    37.005607553366175,
+    38.56010561892691,
+    41.60220423143351,
+    37.33215422276621
+   ],
+   "oracle_eb_avail": [
+    15.95305065788481,
+    15.785530497394026,
+    14.439150117585033,
+    14.914113638941341,
+    16.097697679719065,
+    15.018456933693601
+   ],
+   "oracle_eb_rate": [
+    15.15258690889608,
+    15.47086184089362,
+    13.666571189459427,
+    13.68268646844624,
+    14.981387791182305,
+    14.205621571094412
+   ],
+   "oracle_eb_rate_avail": [
+    14.478851302390545,
+    14.916918731451306,
+    13.655852072762647,
+    13.332762379810923,
+    14.897839300968354,
+    14.164019284698368
+   ],
+   "prior_prorated": [
+    16.26344955354883,
+    16.176776647345815,
+    14.346621995808427,
+    14.908468607370894,
+    16.117845046971745,
+    15.01704926574777
+   ]
+  },
+  "positions": {
+   "K": {
+    "bootstrap_ci_lift": [
+     -0.1302408418511722,
+     0.890292200394828
+    ],
+    "channel_2x2": {
+     "interaction": 0.008084937555508098,
+     "lift_avail": 0.3438779434947155,
+     "lift_both": 0.3580746129814945,
+     "lift_rate": 0.006111731931270903
+    },
+    "clauses": {
+     "C1_beats_incumbent": true,
+     "C2_fold_consistency": false,
+     "C3_significant_bh": false,
+     "C4_dsr_ok": false,
+     "C5_beats_matched_foil": true,
+     "C6_degenerates_lose": true,
+     "C7_coverage_floor": true,
+     "C8a_oracle_floor": true,
+     "C8b_matched_n": true,
+     "C9_pit_flat": false
+    },
+    "collapsed_to_incumbent": [
+     false,
+     false,
+     false,
+     false,
+     false,
+     false
+    ],
+    "coverage80": 0.7718676122931442,
+    "coverage_floor": 0.7588652482269503,
+    "coverage_n_player_seasons": 282,
+    "degenerate_pooled_crps": {
+     "frozen_full": 15.678059737453792,
+     "last3_pace": 17.420029994362565,
+     "max_width": 45.1264714643832,
+     "naive_pace": 16.994735449013024,
+     "nihilist_zero": 55.2423859202772,
+     "zero_width": 18.7064874348816
+    },
+    "dsr": 0.6955,
+    "foil_lift_per_fold": [
+     2.399366239063168,
+     1.4288412932435097,
+     0.8948799961617588,
+     0.5039430680688071,
+     1.8723431254323408,
+     2.0238458900962932
+    ],
+    "folds_won": 4,
+    "lift_per_fold": [
+     1.401747167795813,
+     0.12641644273417363,
+     -0.6819691431085673,
+     -0.12909953594408208,
+     1.134674468750216,
+     0.29667827766141386
+    ],
+    "matched_n_pair_inactive": false,
+    "max_width_coverage80": 0.9973404255319149,
+    "mean_lift": 0.3580746129814945,
+    "null": {
+     "binding_half": "anchor",
+     "classify_null_reason": "`crps_q19_full_ppr`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 61 folds against 6 (the BH-FDR requirement is separate and may be larger). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+     "classify_null_state": "POWER_LIMITED",
+     "failed_clauses": [
+      "C2_fold_consistency",
+      "C3_significant_bh",
+      "C4_dsr_ok",
+      "C9_pit_flat"
+     ],
+     "reported_state": "CONSTRAINT_REFUSED"
+    },
+    "oracle_minus_matched_n": -0.11745844295125885,
+    "p_one_sided": 0.1569,
+    "p_winner_beats_oracle": 0.4826,
+    "per_fold_crps": {
+     "eb_avail": [
+      12.949805633968465,
+      15.845455674917101,
+      9.927976917821004,
+      11.993700762969185,
+      19.380162857324795,
+      17.977811207491747
+     ],
+     "eb_permuted": [
+      15.290868285696492,
+      17.135794241779426,
+      10.994935101914878,
+      12.752877672073994,
+      21.04729375390551,
+      19.8911835942672
+     ],
+     "eb_rate": [
+      14.211891301614745,
+      15.62834587906021,
+      9.919629038196755,
+      12.642474778255568,
+      19.825492660970493,
+      17.873676665775193
+     ],
+     "eb_rate_avail": [
+      12.891502046633324,
+      15.706952948535916,
+      10.10005510575312,
+      12.248934604005187,
+      19.17495062847317,
+      17.867337704170907
+     ],
+     "frozen_full": [
+      14.609098689584807,
+      16.375426883030368,
+      10.171305820753405,
+      12.69704706646792,
+      21.213126812153423,
+      19.00235315273282
+     ],
+     "last3_pace": [
+      15.362992144159874,
+      17.621028414072295,
+      13.555145726822449,
+      15.966028772211484,
+      21.92672023701848,
+      20.08826467189081
+     ],
+     "matched_n_eb_avail": [
+      12.949805633968465,
+      16.292976427251922,
+      9.63306989719262,
+      11.993551316860222,
+      19.249922721616606,
+      17.891708039272174
+     ],
+     "matched_n_eb_rate": [
+      14.211891301614745,
+      15.62834587906021,
+      10.72275427966483,
+      12.1575125898959,
+      20.309625097223385,
+      17.85981516267954
+     ],
+     "matched_n_eb_rate_avail": [
+      12.891502046633324,
+      16.133404164184576,
+      10.879810562409775,
+      12.008172669243992,
+      19.249922721616606,
+      17.588358264566082
+     ],
+     "max_width": [
+      40.62764052989617,
+      45.870339912280706,
+      46.077399380804955,
+      45.313815789473686,
+      46.50631578947369,
+      46.36331738437001
+     ],
+     "naive_pace": [
+      14.861495678196416,
+      16.898553774454765,
+      13.178675000588267,
+      15.340425463094551,
+      21.96198913332016,
+      19.72727364442399
+     ],
+     "nihilist_zero": [
+      48.86734693877551,
+      52.463541666666664,
+      48.529411764705884,
+      63.1625,
+      56.88,
+      61.551515151515154
+     ],
+     "oracle_eb_avail": [
+      12.696690979491363,
+      15.516926920001534,
+      10.94857794729948,
+      11.822460341653166,
+      19.179689716259055,
+      18.225384886330996
+     ],
+     "oracle_eb_rate": [
+      14.211891301614745,
+      15.448439869776378,
+      9.452498820266568,
+      12.119835068061105,
+      19.761073050836853,
+      18.05470329043855
+     ],
+     "oracle_eb_rate_avail": [
+      12.664052576764265,
+      15.397189972087757,
+      11.014796672076557,
+      11.822460341653166,
+      19.003454032791506,
+      18.144466175573555
+     ],
+     "prior_prorated": [
+      14.293249214429137,
+      15.83336939127009,
+      9.418085962644552,
+      12.119835068061105,
+      20.309625097223385,
+      18.16401598183232
+     ],
+     "zero_width": [
+      17.472552402613317,
+      19.60217434317611,
+      13.787978093979987,
+      15.742466347801829,
+      23.54130150948604,
+      22.092451912232313
+     ]
+    },
+    "pit_max_decile_dev": 0.05691489361702126,
+    "ships": false,
+    "trial_sharpes": [
+     0.014471498319806105,
+     0.5103658609025494,
+     0.4570592604405671
+    ],
+    "winner_beats_oracle_per_fold": [
+     -0.22744946986905923,
+     -0.30976297644815887,
+     0.9147415663234373,
+     -0.4264742623520217,
+     -0.17149659568166342,
+     0.27712847140264785
+    ],
+    "winner_pooled_crps": 14.664955506261938
+   },
+   "QB": {
+    "bootstrap_ci_lift": [
+     0.73204549617856,
+     2.4732613697034664
+    ],
+    "channel_2x2": {
+     "interaction": 0.7364184712750355,
+     "lift_avail": 0.1595583317554219,
+     "lift_both": 1.5794617022675137,
+     "lift_rate": 0.6834848992370564
+    },
+    "clauses": {
+     "C1_beats_incumbent": true,
+     "C2_fold_consistency": true,
+     "C3_significant_bh": true,
+     "C4_dsr_ok": true,
+     "C5_beats_matched_foil": true,
+     "C6_degenerates_lose": true,
+     "C7_coverage_floor": true,
+     "C8a_oracle_floor": false,
+     "C8b_matched_n": true,
+     "C9_pit_flat": true
+    },
+    "collapsed_to_incumbent": [
+     false,
+     false,
+     false,
+     false,
+     false,
+     false
+    ],
+    "coverage80": 0.7986334405144695,
+    "coverage_floor": 0.7733118971061094,
+    "coverage_n_player_seasons": 622,
+    "degenerate_pooled_crps": {
+     "frozen_full": 22.267978202708203,
+     "last3_pace": 23.503925332177726,
+     "max_width": 109.39757665668854,
+     "naive_pace": 23.208382198375503,
+     "nihilist_zero": 54.01528211063371,
+     "zero_width": 29.65954247111108
+    },
+    "dsr": 0.9943,
+    "foil_lift_per_fold": [
+     5.974765997128294,
+     5.917608384433489,
+     2.3475262668612125,
+     5.530773820535025,
+     1.551128777430769,
+     1.3283228834097116
+    ],
+    "folds_won": 6,
+    "lift_per_fold": [
+     1.7440272614685064,
+     1.9877847661884829,
+     0.8785962138805381,
+     3.320336574294025,
+     0.518533271050039,
+     1.0274921267234909
+    ],
+    "matched_n_pair_inactive": false,
+    "max_width_coverage80": 0.9555198285101822,
+    "mean_lift": 1.5794617022675137,
+    "null": {
+     "binding_half": "anchor",
+     "classify_null_reason": "`crps_q19_full_ppr`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 8 folds against 6 (the BH-FDR requirement is separate and may be larger). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+     "classify_null_state": "POWER_LIMITED",
+     "failed_clauses": [
+      "C8a_oracle_floor"
+     ],
+     "reported_state": "CONSTRAINT_REFUSED"
+    },
+    "oracle_minus_matched_n": -0.32772316766336473,
+    "p_one_sided": 0.0062,
+    "p_winner_beats_oracle": 0.9503,
+    "per_fold_crps": {
+     "eb_avail": [
+      21.15620658979029,
+      17.944665454401004,
+      22.731628412252306,
+      23.906068537745416,
+      24.424094444931107,
+      22.073190501587042
+     ],
+     "eb_permuted": [
+      26.11455944510808,
+      23.21283777793835,
+      23.86275840731832,
+      26.843096384418907,
+      24.145403420315933,
+      22.187904412333527
+     ],
+     "eb_rate": [
+      21.972295332101712,
+      19.24882884203499,
+      21.493069035043632,
+      23.455545157553523,
+      21.978548118347213,
+      20.94400805073629
+     ],
+     "eb_rate_avail": [
+      20.139793447979784,
+      17.29522939350486,
+      21.51523214045711,
+      21.312322563883882,
+      22.594274642885164,
+      20.859581528923815
+     ],
+     "frozen_full": [
+      21.305545896595742,
+      18.801484452318128,
+      22.92198277411063,
+      24.89417412296637,
+      23.731000124248123,
+      21.95368184601021
+     ],
+     "last3_pace": [
+      22.875421128521754,
+      20.345707809721148,
+      24.740091751956896,
+      23.458449045058913,
+      26.554686398323565,
+      23.049195859484065
+     ],
+     "matched_n_eb_avail": [
+      21.15620658979029,
+      17.847343290422113,
+      22.52450071482185,
+      24.15080447980139,
+      24.424094444931107,
+      21.939700067988557
+     ],
+     "matched_n_eb_rate": [
+      21.972295332101712,
+      19.130362653728927,
+      21.641182503615855,
+      22.77705422688951,
+      22.174991681919014,
+      20.98314875746783
+     ],
+     "matched_n_eb_rate_avail": [
+      20.139793447979784,
+      17.29393915318535,
+      21.543178066090174,
+      21.520041726703248,
+      22.49202185218848,
+      20.93102832754415
+     ],
+     "max_width": [
+      107.70760711875843,
+      107.85905026990554,
+      108.79663914688682,
+      108.94622315133627,
+      108.40606769448874,
+      114.66987255875537
+     ],
+     "naive_pace": [
+      22.26487487255519,
+      19.8887798963796,
+      24.33080911105017,
+      23.139548524660967,
+      26.22089417787508,
+      23.40538660773201
+     ],
+     "nihilist_zero": [
+      55.71065705128205,
+      53.309198717948725,
+      53.34535947712419,
+      50.48091900311526,
+      60.5679797979798,
+      50.67757861635221
+     ],
+     "oracle_eb_avail": [
+      20.96791488641437,
+      17.847343290422113,
+      22.26290941332006,
+      23.942815301158806,
+      23.329971329286582,
+      22.032711515188165
+     ],
+     "oracle_eb_rate": [
+      21.8140451111371,
+      19.130362653728927,
+      21.049203788251365,
+      22.77705422688951,
+      21.97555306877434,
+      20.93230413764062
+     ],
+     "oracle_eb_rate_avail": [
+      20.255755642237204,
+      17.212984752481162,
+      20.76864583966152,
+      20.838417528103093,
+      22.00240347467474,
+      20.87545633055331
+     ],
+     "prior_prorated": [
+      21.88382070944829,
+      19.283014159693344,
+      22.393828354337646,
+      24.632659138177907,
+      23.112807913935203,
+      21.887073655647306
+     ],
+     "zero_width": [
+      27.961372014417677,
+      26.395395954719618,
+      29.36346596978099,
+      31.473113141976285,
+      31.549167215740624,
+      31.214740530031293
+     ]
+    },
+    "pit_max_decile_dev": 0.03357449088960343,
+    "ships": false,
+    "trial_sharpes": [
+     1.2162617899837476,
+     0.16700582629933636,
+     1.5569086870248503
+    ],
+    "winner_beats_oracle_per_fold": [
+     0.11596219425742049,
+     -0.08224464102369922,
+     -0.7465863007955882,
+     -0.47390503578078835,
+     -0.5918711682104245,
+     0.015874801629493618
+    ],
+    "winner_pooled_crps": 20.619405619605768
+   },
+   "RB": {
+    "bootstrap_ci_lift": [
+     1.0755861685506594,
+     1.9556826795891271
+    ],
+    "channel_2x2": {
+     "interaction": 0.326536224508787,
+     "lift_avail": 0.3096251635099125,
+     "lift_both": 1.5254695559628926,
+     "lift_rate": 0.8893081679441931
+    },
+    "clauses": {
+     "C1_beats_incumbent": true,
+     "C2_fold_consistency": true,
+     "C3_significant_bh": true,
+     "C4_dsr_ok": true,
+     "C5_beats_matched_foil": true,
+     "C6_degenerates_lose": true,
+     "C7_coverage_floor": true,
+     "C8a_oracle_floor": true,
+     "C8b_matched_n": true,
+     "C9_pit_flat": true
+    },
+    "collapsed_to_incumbent": [
+     false,
+     false,
+     false,
+     false,
+     false,
+     false
+    ],
+    "coverage80": 0.8585235920852359,
+    "coverage_floor": 0.7799086757990867,
+    "coverage_n_player_seasons": 1095,
+    "degenerate_pooled_crps": {
+     "frozen_full": 16.84333367901873,
+     "last3_pace": 17.17430158761334,
+     "max_width": 121.86654019109284,
+     "naive_pace": 16.833699306630418,
+     "nihilist_zero": 40.21258638310935,
+     "zero_width": 21.79811355598611
+    },
+    "dsr": 0.9949,
+    "foil_lift_per_fold": [
+     4.8979932442538185,
+     3.53162388634842,
+     2.4810807381051134,
+     3.1108712394253537,
+     3.1411300782419698,
+     2.48250780647556
+    ],
+    "folds_won": 6,
+    "lift_per_fold": [
+     2.6821276680616,
+     1.247412847611308,
+     0.673077503986697,
+     1.6221792174016318,
+     1.4257512728800243,
+     1.5022688258360937
+    ],
+    "matched_n_pair_inactive": false,
+    "max_width_coverage80": 0.9964231354642313,
+    "mean_lift": 1.5254695559628926,
+    "oracle_minus_matched_n": -0.0511273536211192,
+    "p_one_sided": 0.0012,
+    "p_winner_beats_oracle": 0.4263,
+    "per_fold_crps": {
+     "eb_avail": [
+      17.28826100257565,
+      18.35622978774921,
+      15.499903346623164,
+      15.589745986265239,
+      15.157830887369872,
+      16.448828769572014
+     ],
+     "eb_permuted": [
+      20.502174724848505,
+      21.079847710899692,
+      17.449905134849644,
+      17.018749152425812,
+      17.042052264073128,
+      17.598211431190723
+     ],
+     "eb_rate": [
+      16.926307340360108,
+      18.41924780096595,
+      15.306341939247355,
+      14.45378888105576,
+      14.352729155395602,
+      15.404286636524688
+     ],
+     "eb_rate_avail": [
+      15.604181480594686,
+      17.548223824551272,
+      14.96882439674453,
+      13.907877913000458,
+      13.900922185831158,
+      15.115703624715163
+     ],
+     "frozen_full": [
+      18.430602814625427,
+      18.958578283069965,
+      15.783400974540875,
+      15.58161293839462,
+      15.434191578423393,
+      16.871615485058083
+     ],
+     "last3_pace": [
+      17.39653178112888,
+      19.572106245304052,
+      17.067552426914688,
+      16.471474397116094,
+      15.824070890010352,
+      16.71407378520597
+     ],
+     "matched_n_eb_avail": [
+      17.28826100257565,
+      18.45153867593782,
+      15.490369484886521,
+      15.589745986265239,
+      15.157830887369872,
+      16.616563710246833
+     ],
+     "matched_n_eb_rate": [
+      16.926307340360108,
+      18.294511081363055,
+      15.18710593804566,
+      14.419151835088616,
+      14.371740172637523,
+      15.392287134321368
+     ],
+     "matched_n_eb_rate_avail": [
+      15.604181480594686,
+      17.55072235820037,
+      14.91606262380288,
+      14.185327406607362,
+      13.967437579719551,
+      15.165042546794163
+     ],
+     "max_width": [
+      121.85059159526725,
+      121.78706760106787,
+      122.01001142178363,
+      121.8741642300195,
+      121.81320837008724,
+      121.86419792833146
+     ],
+     "naive_pace": [
+      16.60382175629178,
+      19.284113835763215,
+      17.08536038978123,
+      16.128664733133384,
+      15.696247113069736,
+      16.203988011743167
+     ],
+     "nihilist_zero": [
+      40.490697674418605,
+      41.70567934782609,
+      37.45978298611111,
+      40.063101851851854,
+      41.29587523277467,
+      40.26038120567376
+     ],
+     "oracle_eb_avail": [
+      17.287038718378618,
+      18.394570177561977,
+      15.490369484886521,
+      15.589745986265239,
+      15.316517560238696,
+      16.406984437611953
+     ],
+     "oracle_eb_rate": [
+      16.901006858061102,
+      18.226378134682903,
+      15.174455109179583,
+      14.515607236430036,
+      14.371740172637523,
+      15.37070195078607
+     ],
+     "oracle_eb_rate_avail": [
+      15.571264411613445,
+      17.5664462143288,
+      14.91606262380288,
+      14.037404303218379,
+      13.94967100772031,
+      15.041161313308494
+     ],
+     "prior_prorated": [
+      18.286309148656287,
+      18.79563667216258,
+      15.641901900731227,
+      15.53005713040209,
+      15.326673458711182,
+      16.617972450551257
+     ],
+     "zero_width": [
+      22.139143468292485,
+      24.784867065021714,
+      21.967317297430217,
+      20.492529805415636,
+      19.823061586497,
+      21.581762113259593
+     ]
+    },
+    "pit_max_decile_dev": 0.005403348554033474,
+    "ships": true,
+    "trial_sharpes": [
+     2.0525501263392867,
+     0.8305894408266004,
+     2.320079357397474
+    ],
+    "winner_beats_oracle_per_fold": [
+     -0.03291706898124147,
+     0.018222389777527326,
+     -0.05276177294165052,
+     0.12952639021792045,
+     0.04874882188915208,
+     -0.07454231140666856
+    ],
+    "winner_pooled_crps": 15.174288904239546
+   },
+   "TE": {
+    "bootstrap_ci_lift": [
+     0.28396346524556804,
+     0.9474576066083338
+    ],
+    "channel_2x2": {
+     "interaction": -0.13784288559623992,
+     "lift_avail": -0.03534304807292177,
+     "lift_both": 0.6171865400165082,
+     "lift_rate": 0.7903724736856699
+    },
+    "clauses": {
+     "C1_beats_incumbent": true,
+     "C2_fold_consistency": true,
+     "C3_significant_bh": true,
+     "C4_dsr_ok": false,
+     "C5_beats_matched_foil": true,
+     "C6_degenerates_lose": true,
+     "C7_coverage_floor": true,
+     "C8a_oracle_floor": false,
+     "C8b_matched_n": true,
+     "C9_pit_flat": true
+    },
+    "collapsed_to_incumbent": [
+     false,
+     false,
+     false,
+     false,
+     false,
+     false
+    ],
+    "coverage80": 0.8754809373906961,
+    "coverage_floor": 0.7785939139559287,
+    "coverage_n_player_seasons": 953,
+    "degenerate_pooled_crps": {
+     "frozen_full": 10.779790105246937,
+     "last3_pace": 11.882031480650403,
+     "max_width": 81.7403835664483,
+     "naive_pace": 11.552316699968761,
+     "nihilist_zero": 26.277696225943533,
+     "zero_width": 13.8150757605582
+    },
+    "dsr": 0.4509,
+    "foil_lift_per_fold": [
+     3.1159201587273415,
+     2.730205212909908,
+     1.7150103811358317,
+     2.14543906697887,
+     2.151939805402993,
+     0.9499168290680196
+    ],
+    "folds_won": 6,
+    "lift_per_fold": [
+     0.8741975575914047,
+     0.725066912573876,
+     0.044272123193364266,
+     0.7881828559536448,
+     0.9512206607648128,
+     0.32017913002194653
+    ],
+    "matched_n_pair_inactive": false,
+    "max_width_coverage80": 0.9993878978663868,
+    "mean_lift": 0.6171865400165082,
+    "null": {
+     "binding_half": "anchor",
+     "classify_null_reason": "`crps_q19_full_ppr`: the winner's per-fold Sharpe 1.732 sits at or BELOW the 3-arm field's deflated benchmark SR0 1.828, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, PRE-REGISTERED field, not more seasons \u2014 and \u26d4 only if such a field was pre-registered; this is NOT a licence to re-cut a field you have already scored (MH2.7). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+     "classify_null_state": "DSR_UNREACHABLE",
+     "failed_clauses": [
+      "C4_dsr_ok",
+      "C8a_oracle_floor"
+     ],
+     "reported_state": "CONSTRAINT_REFUSED"
+    },
+    "oracle_minus_matched_n": -0.15760238731304632,
+    "p_one_sided": 0.0041,
+    "p_winner_beats_oracle": 0.9838,
+    "per_fold_crps": {
+     "eb_avail": [
+      10.662093945102185,
+      10.967115492799346,
+      11.067051790467788,
+      10.093465844325372,
+      11.214593311114774,
+      10.944865620541178
+     ],
+     "eb_permuted": [
+      12.897748318315609,
+      12.98747425946025,
+      12.351037580247908,
+      11.75427859459307,
+      12.56607503715997,
+      11.285826140260221
+     ],
+     "eb_rate": [
+      9.90391322423317,
+      9.929412862089045,
+      10.083840790339641,
+      9.759861931446602,
+      10.366557679685062,
+      9.951306386005573
+     ],
+     "eb_rate_avail": [
+      9.781828159588267,
+      10.257269046550341,
+      10.636027199112077,
+      9.6088395276142,
+      10.414135231756978,
+      10.335909311192202
+     ],
+     "frozen_full": [
+      10.527333585073677,
+      10.91566798671661,
+      10.659995847991832,
+      10.499760639500716,
+      11.311923153014604,
+      10.764059419184186
+     ],
+     "last3_pace": [
+      11.395990451041337,
+      11.852720120527307,
+      11.967201271895775,
+      11.76294929671256,
+      12.363266906591752,
+      11.950060837133679
+     ],
+     "matched_n_eb_avail": [
+      10.662093945102185,
+      10.967115492799346,
+      11.067051790467788,
+      10.105092543562087,
+      11.309091244793468,
+      10.93675400807874
+     ],
+     "matched_n_eb_rate": [
+      9.90391322423317,
+      9.931095241606036,
+      10.070291848010244,
+      9.76484122402936,
+      10.374952639697653,
+      9.992166335865113
+     ],
+     "matched_n_eb_rate_avail": [
+      9.781828159588267,
+      10.206420456628619,
+      10.473042281698586,
+      9.525260236074121,
+      10.51587370233738,
+      10.401178322016186
+     ],
+     "max_width": [
+      68.94679149797571,
+      84.2479711375212,
+      84.39451727478205,
+      84.35441669460276,
+      84.2391652518393,
+      84.2594395419687
+     ],
+     "naive_pace": [
+      10.861314331727915,
+      11.26416044573552,
+      11.842885116973887,
+      11.598356876171072,
+      12.171162179589135,
+      11.576021249615039
+     ],
+     "nihilist_zero": [
+      25.120363247863253,
+      25.97220430107527,
+      25.054171779141107,
+      25.816082802547772,
+      28.005860215053765,
+      27.697495009980038
+     ],
+     "oracle_eb_avail": [
+      10.662093945102185,
+      10.967115492799346,
+      10.720633788114775,
+      10.135893611520364,
+      11.20168558328438,
+      10.705963209580526
+     ],
+     "oracle_eb_rate": [
+      9.912615429199423,
+      9.931095241606036,
+      10.101979687068694,
+      9.75618514534852,
+      10.366028924234636,
+      9.951306386005573
+     ],
+     "oracle_eb_rate_avail": [
+      9.562250209580773,
+      10.054666256754194,
+      10.275438965270986,
+      9.660799037886047,
+      10.349937909578244,
+      10.054896455394632
+     ],
+     "prior_prorated": [
+      10.656025717179672,
+      10.982335959124217,
+      10.68029932230544,
+      10.397022383567844,
+      11.36535589252179,
+      10.656088441214148
+     ],
+     "zero_width": [
+      13.058486642307697,
+      13.776514054045442,
+      14.276096101527113,
+      13.359478796268881,
+      14.567926306300949,
+      13.851952662899103
+     ]
+    },
+    "pit_max_decile_dev": 0.007834907310248343,
+    "ships": false,
+    "trial_sharpes": [
+     4.1399463345828655,
+     -0.13541112301450048,
+     1.7319276046942893
+    ],
+    "winner_beats_oracle_per_fold": [
+     -0.21957795000749414,
+     -0.20260278979614732,
+     -0.3605882338410904,
+     0.051959510271847975,
+     -0.06419732217873353,
+     -0.2810128557975702
+    ],
+    "winner_pooled_crps": 10.172334745969012
+   },
+   "WR": {
+    "bootstrap_ci_lift": [
+     0.7052842865380636,
+     1.3660901911464098
+    ],
+    "channel_2x2": {
+     "interaction": 0.18621668720845558,
+     "lift_avail": -0.2996602744221774,
+     "lift_both": 1.0440287180841221,
+     "lift_rate": 1.157472305297844
+    },
+    "clauses": {
+     "C1_beats_incumbent": true,
+     "C2_fold_consistency": true,
+     "C3_significant_bh": true,
+     "C4_dsr_ok": false,
+     "C5_beats_matched_foil": true,
+     "C6_degenerates_lose": true,
+     "C7_coverage_floor": true,
+     "C8a_oracle_floor": false,
+     "C8b_matched_n": true,
+     "C9_pit_flat": true
+    },
+    "collapsed_to_incumbent": [
+     false,
+     false,
+     false,
+     false,
+     false,
+     false
+    ],
+    "coverage80": 0.8688288789903489,
+    "coverage_floor": 0.784521158129176,
+    "coverage_n_player_seasons": 1796,
+    "degenerate_pooled_crps": {
+     "frozen_full": 15.030238794607191,
+     "last3_pace": 15.638820708275395,
+     "max_width": 112.26110294968527,
+     "naive_pace": 15.157538692955304,
+     "nihilist_zero": 37.24602079692013,
+     "zero_width": 20.01287607689383
+    },
+    "dsr": 0.9376,
+    "foil_lift_per_fold": [
+     3.563730684329057,
+     3.8408519365492495,
+     2.82440930216889,
+     2.5387237847227926,
+     2.375240359320644,
+     1.5813142662412947
+    ],
+    "folds_won": 6,
+    "lift_per_fold": [
+     1.372868935176557,
+     1.2997649586276339,
+     0.7835786174680095,
+     1.2494008818677909,
+     0.990749570283521,
+     0.5678093450812209
+    ],
+    "matched_n_pair_inactive": false,
+    "max_width_coverage80": 0.9989792130660727,
+    "mean_lift": 1.0440287180841221,
+    "null": {
+     "binding_half": "anchor",
+     "classify_null_reason": "`crps_q19_full_ppr`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 10 folds against 6 (the BH-FDR requirement is separate and may be larger). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+     "classify_null_state": "POWER_LIMITED",
+     "failed_clauses": [
+      "C4_dsr_ok",
+      "C8a_oracle_floor"
+     ],
+     "reported_state": "CONSTRAINT_REFUSED"
+    },
+    "oracle_minus_matched_n": -0.11116339331042369,
+    "p_one_sided": 0.0002,
+    "p_winner_beats_oracle": 0.9864,
+    "per_fold_crps": {
+     "eb_avail": [
+      16.759805986379153,
+      15.939427473531198,
+      13.820782792067511,
+      14.652026044010556,
+      16.596065213264048,
+      13.743962638216976
+     ],
+     "eb_permuted": [
+      18.588268145868327,
+      18.774292372279444,
+      15.66198275668426,
+      15.107522912742306,
+      17.41986250347053,
+      14.622277834718707
+     ],
+     "eb_rate": [
+      14.7578994344355,
+      15.368254330636812,
+      12.861448434437538,
+      12.249676636766313,
+      14.584614860061668,
+      12.947380972811484
+     ],
+     "eb_rate_avail": [
+      15.02453746153927,
+      14.933440435730194,
+      12.83757345451537,
+      12.568799128019513,
+      15.044622144149885,
+      13.040963568477412
+     ],
+     "frozen_full": [
+      16.48391396162507,
+      16.29983158530177,
+      13.81225393144897,
+      13.960038410703524,
+      16.0516680635585,
+      13.57372681500532
+     ],
+     "last3_pace": [
+      16.343219886862737,
+      16.39864258187673,
+      14.91292310206815,
+      14.544375079524837,
+      16.91510645088515,
+      14.718657148434758
+     ],
+     "matched_n_eb_avail": [
+      16.759805986379153,
+      15.939427473531198,
+      13.957602847179814,
+      14.503224489078509,
+      16.292933662830723,
+      13.56966019170554
+     ],
+     "matched_n_eb_rate": [
+      14.7578994344355,
+      15.419969399756031,
+      12.85358983059361,
+      12.295623995519044,
+      14.631792096951024,
+      12.920497906485537
+     ],
+     "matched_n_eb_rate_avail": [
+      15.02453746153927,
+      14.89099097101133,
+      12.840281048363776,
+      12.668473808308415,
+      14.85704824404924,
+      12.902370194426858
+     ],
+     "max_width": [
+      99.8976309739867,
+      99.97529042200095,
+      118.45490218144043,
+      118.39648001150417,
+      118.23311145510836,
+      118.60920265407105
+     ],
+     "naive_pace": [
+      15.901991784364302,
+      16.12565344988095,
+      14.26444377666429,
+      13.759799775802378,
+      16.34258057630598,
+      14.550762794713922
+     ],
+     "nihilist_zero": [
+      39.59501149425288,
+      38.626238738738735,
+      35.71124451754386,
+      36.82453005464482,
+      39.943950403690884,
+      32.77514957264957
+     ],
+     "oracle_eb_avail": [
+      16.759805986379153,
+      16.00598815212778,
+      13.72954411660265,
+      14.213004707207078,
+      16.19672336553283,
+      13.65476291329541
+     ],
+     "oracle_eb_rate": [
+      14.704344671999575,
+      15.376730066944642,
+      12.85539970279981,
+      12.226790322056848,
+      14.611494789909175,
+      12.95256893270583
+     ],
+     "oracle_eb_rate_avail": [
+      14.710650619299585,
+      14.931419376690965,
+      12.728996059383443,
+      12.372007229410634,
+      14.780241551379353,
+      12.993406531672365
+     ],
+     "prior_prorated": [
+      16.397406396715827,
+      16.233205394357828,
+      13.62115207198338,
+      13.818200009887304,
+      16.035371714433406,
+      13.608772913558633
+     ],
+     "zero_width": [
+      20.92108971743737,
+      21.60979240949781,
+      18.802361367373884,
+      18.551394801499896,
+      21.432025373508026,
+      18.760592792045976
+     ]
+    },
+    "pit_max_decile_dev": 0.008871566443949527,
+    "ships": false,
+    "trial_sharpes": [
+     2.6181788984802403,
+     -0.7754621188069063,
+     3.258860569902832
+    ],
+    "winner_beats_oracle_per_fold": [
+     -0.3138868422396843,
+     -0.0020210590392295558,
+     -0.10857739513192755,
+     -0.19679189860887902,
+     -0.2643805927705323,
+     -0.047557036805047304
+    ],
+    "winner_pooled_crps": 13.908322698738608
+   }
+  },
+  "residual_fallbacks": {
+   "2020": {
+    "full_ppr:eb_avail": 1125,
+    "full_ppr:eb_permuted": 879,
+    "full_ppr:eb_rate": 523,
+    "full_ppr:eb_rate_avail": 1100,
+    "full_ppr:frozen_full": 906,
+    "full_ppr:last3_pace": 501,
+    "full_ppr:matched_n_eb_avail": 1125,
+    "full_ppr:matched_n_eb_rate": 523,
+    "full_ppr:matched_n_eb_rate_avail": 1100,
+    "full_ppr:naive_pace": 466,
+    "full_ppr:nihilist_zero": 0,
+    "full_ppr:oracle_eb_avail": 1005,
+    "full_ppr:oracle_eb_rate": 596,
+    "full_ppr:oracle_eb_rate_avail": 1078,
+    "full_ppr:prior_prorated": 865,
+    "half_ppr:eb_avail": 1136,
+    "half_ppr:eb_permuted": 879,
+    "half_ppr:eb_rate": 524,
+    "half_ppr:eb_rate_avail": 1107,
+    "half_ppr:frozen_full": 906,
+    "half_ppr:last3_pace": 504,
+    "half_ppr:matched_n_eb_avail": 1136,
+    "half_ppr:matched_n_eb_rate": 524,
+    "half_ppr:matched_n_eb_rate_avail": 1107,
+    "half_ppr:naive_pace": 531,
+    "half_ppr:nihilist_zero": 0,
+    "half_ppr:oracle_eb_avail": 1015,
+    "half_ppr:oracle_eb_rate": 597,
+    "half_ppr:oracle_eb_rate_avail": 1083,
+    "half_ppr:prior_prorated": 867,
+    "standard:eb_avail": 1136,
+    "standard:eb_permuted": 883,
+    "standard:eb_rate": 523,
+    "standard:eb_rate_avail": 1112,
+    "standard:frozen_full": 906,
+    "standard:last3_pace": 471,
+    "standard:matched_n_eb_avail": 1136,
+    "standard:matched_n_eb_rate": 523,
+    "standard:matched_n_eb_rate_avail": 1112,
+    "standard:naive_pace": 508,
+    "standard:nihilist_zero": 0,
+    "standard:oracle_eb_avail": 1015,
+    "standard:oracle_eb_rate": 597,
+    "standard:oracle_eb_rate_avail": 1089,
+    "standard:prior_prorated": 869
+   },
+   "2021": {
+    "full_ppr:eb_avail": 413,
+    "full_ppr:eb_permuted": 203,
+    "full_ppr:eb_rate": 204,
+    "full_ppr:eb_rate_avail": 385,
+    "full_ppr:frozen_full": 192,
+    "full_ppr:last3_pace": 71,
+    "full_ppr:matched_n_eb_avail": 410,
+    "full_ppr:matched_n_eb_rate": 205,
+    "full_ppr:matched_n_eb_rate_avail": 394,
+    "full_ppr:naive_pace": 118,
+    "full_ppr:nihilist_zero": 0,
+    "full_ppr:oracle_eb_avail": 424,
+    "full_ppr:oracle_eb_rate": 192,
+    "full_ppr:oracle_eb_rate_avail": 296,
+    "full_ppr:prior_prorated": 158,
+    "half_ppr:eb_avail": 414,
+    "half_ppr:eb_permuted": 203,
+    "half_ppr:eb_rate": 204,
+    "half_ppr:eb_rate_avail": 385,
+    "half_ppr:frozen_full": 192,
+    "half_ppr:last3_pace": 71,
+    "half_ppr:matched_n_eb_avail": 414,
+    "half_ppr:matched_n_eb_rate": 205,
+    "half_ppr:matched_n_eb_rate_avail": 392,
+    "half_ppr:naive_pace": 118,
+    "half_ppr:nihilist_zero": 0,
+    "half_ppr:oracle_eb_avail": 363,
+    "half_ppr:oracle_eb_rate": 192,
+    "half_ppr:oracle_eb_rate_avail": 238,
+    "half_ppr:prior_prorated": 158,
+    "standard:eb_avail": 355,
+    "standard:eb_permuted": 203,
+    "standard:eb_rate": 204,
+    "standard:eb_rate_avail": 382,
+    "standard:frozen_full": 192,
+    "standard:last3_pace": 71,
+    "standard:matched_n_eb_avail": 351,
+    "standard:matched_n_eb_rate": 205,
+    "standard:matched_n_eb_rate_avail": 394,
+    "standard:naive_pace": 118,
+    "standard:nihilist_zero": 0,
+    "standard:oracle_eb_avail": 366,
+    "standard:oracle_eb_rate": 192,
+    "standard:oracle_eb_rate_avail": 236,
+    "standard:prior_prorated": 158
+   },
+   "2022": {
+    "full_ppr:eb_avail": 5,
+    "full_ppr:eb_permuted": 108,
+    "full_ppr:eb_rate": 108,
+    "full_ppr:eb_rate_avail": 51,
+    "full_ppr:frozen_full": 0,
+    "full_ppr:last3_pace": 44,
+    "full_ppr:matched_n_eb_avail": 2,
+    "full_ppr:matched_n_eb_rate": 110,
+    "full_ppr:matched_n_eb_rate_avail": 101,
+    "full_ppr:naive_pace": 38,
+    "full_ppr:nihilist_zero": 0,
+    "full_ppr:oracle_eb_avail": 5,
+    "full_ppr:oracle_eb_rate": 108,
+    "full_ppr:oracle_eb_rate_avail": 58,
+    "full_ppr:prior_prorated": 108,
+    "half_ppr:eb_avail": 5,
+    "half_ppr:eb_permuted": 108,
+    "half_ppr:eb_rate": 108,
+    "half_ppr:eb_rate_avail": 51,
+    "half_ppr:frozen_full": 0,
+    "half_ppr:last3_pace": 44,
+    "half_ppr:matched_n_eb_avail": 2,
+    "half_ppr:matched_n_eb_rate": 110,
+    "half_ppr:matched_n_eb_rate_avail": 101,
+    "half_ppr:naive_pace": 38,
+    "half_ppr:nihilist_zero": 0,
+    "half_ppr:oracle_eb_avail": 5,
+    "half_ppr:oracle_eb_rate": 108,
+    "half_ppr:oracle_eb_rate_avail": 58,
+    "half_ppr:prior_prorated": 108,
+    "standard:eb_avail": 5,
+    "standard:eb_permuted": 108,
+    "standard:eb_rate": 108,
+    "standard:eb_rate_avail": 51,
+    "standard:frozen_full": 0,
+    "standard:last3_pace": 44,
+    "standard:matched_n_eb_avail": 2,
+    "standard:matched_n_eb_rate": 110,
+    "standard:matched_n_eb_rate_avail": 101,
+    "standard:naive_pace": 38,
+    "standard:nihilist_zero": 0,
+    "standard:oracle_eb_avail": 5,
+    "standard:oracle_eb_rate": 108,
+    "standard:oracle_eb_rate_avail": 58,
+    "standard:prior_prorated": 108
+   },
+   "2023": {
+    "full_ppr:eb_avail": 3,
+    "full_ppr:eb_permuted": 0,
+    "full_ppr:eb_rate": 1,
+    "full_ppr:eb_rate_avail": 2,
+    "full_ppr:frozen_full": 0,
+    "full_ppr:last3_pace": 12,
+    "full_ppr:matched_n_eb_avail": 29,
+    "full_ppr:matched_n_eb_rate": 0,
+    "full_ppr:matched_n_eb_rate_avail": 29,
+    "full_ppr:naive_pace": 3,
+    "full_ppr:nihilist_zero": 0,
+    "full_ppr:oracle_eb_avail": 4,
+    "full_ppr:oracle_eb_rate": 0,
+    "full_ppr:oracle_eb_rate_avail": 4,
+    "full_ppr:prior_prorated": 0,
+    "half_ppr:eb_avail": 3,
+    "half_ppr:eb_permuted": 0,
+    "half_ppr:eb_rate": 1,
+    "half_ppr:eb_rate_avail": 2,
+    "half_ppr:frozen_full": 0,
+    "half_ppr:last3_pace": 12,
+    "half_ppr:matched_n_eb_avail": 29,
+    "half_ppr:matched_n_eb_rate": 0,
+    "half_ppr:matched_n_eb_rate_avail": 29,
+    "half_ppr:naive_pace": 3,
+    "half_ppr:nihilist_zero": 0,
+    "half_ppr:oracle_eb_avail": 4,
+    "half_ppr:oracle_eb_rate": 0,
+    "half_ppr:oracle_eb_rate_avail": 4,
+    "half_ppr:prior_prorated": 0,
+    "standard:eb_avail": 3,
+    "standard:eb_permuted": 0,
+    "standard:eb_rate": 1,
+    "standard:eb_rate_avail": 2,
+    "standard:frozen_full": 0,
+    "standard:last3_pace": 12,
+    "standard:matched_n_eb_avail": 29,
+    "standard:matched_n_eb_rate": 0,
+    "standard:matched_n_eb_rate_avail": 29,
+    "standard:naive_pace": 3,
+    "standard:nihilist_zero": 0,
+    "standard:oracle_eb_avail": 4,
+    "standard:oracle_eb_rate": 0,
+    "standard:oracle_eb_rate_avail": 4,
+    "standard:prior_prorated": 0
+   },
+   "2024": {
+    "full_ppr:eb_avail": 15,
+    "full_ppr:eb_permuted": 0,
+    "full_ppr:eb_rate": 0,
+    "full_ppr:eb_rate_avail": 16,
+    "full_ppr:frozen_full": 0,
+    "full_ppr:last3_pace": 14,
+    "full_ppr:matched_n_eb_avail": 15,
+    "full_ppr:matched_n_eb_rate": 0,
+    "full_ppr:matched_n_eb_rate_avail": 15,
+    "full_ppr:naive_pace": 11,
+    "full_ppr:nihilist_zero": 0,
+    "full_ppr:oracle_eb_avail": 15,
+    "full_ppr:oracle_eb_rate": 0,
+    "full_ppr:oracle_eb_rate_avail": 16,
+    "full_ppr:prior_prorated": 0,
+    "half_ppr:eb_avail": 15,
+    "half_ppr:eb_permuted": 0,
+    "half_ppr:eb_rate": 0,
+    "half_ppr:eb_rate_avail": 16,
+    "half_ppr:frozen_full": 0,
+    "half_ppr:last3_pace": 14,
+    "half_ppr:matched_n_eb_avail": 15,
+    "half_ppr:matched_n_eb_rate": 0,
+    "half_ppr:matched_n_eb_rate_avail": 15,
+    "half_ppr:naive_pace": 11,
+    "half_ppr:nihilist_zero": 0,
+    "half_ppr:oracle_eb_avail": 15,
+    "half_ppr:oracle_eb_rate": 0,
+    "half_ppr:oracle_eb_rate_avail": 16,
+    "half_ppr:prior_prorated": 0,
+    "standard:eb_avail": 15,
+    "standard:eb_permuted": 0,
+    "standard:eb_rate": 0,
+    "standard:eb_rate_avail": 16,
+    "standard:frozen_full": 0,
+    "standard:last3_pace": 14,
+    "standard:matched_n_eb_avail": 15,
+    "standard:matched_n_eb_rate": 0,
+    "standard:matched_n_eb_rate_avail": 15,
+    "standard:naive_pace": 11,
+    "standard:nihilist_zero": 0,
+    "standard:oracle_eb_avail": 15,
+    "standard:oracle_eb_rate": 0,
+    "standard:oracle_eb_rate_avail": 16,
+    "standard:prior_prorated": 0
+   },
+   "2025": {
+    "full_ppr:eb_avail": 0,
+    "full_ppr:eb_permuted": 0,
+    "full_ppr:eb_rate": 0,
+    "full_ppr:eb_rate_avail": 0,
+    "full_ppr:frozen_full": 0,
+    "full_ppr:last3_pace": 6,
+    "full_ppr:matched_n_eb_avail": 0,
+    "full_ppr:matched_n_eb_rate": 0,
+    "full_ppr:matched_n_eb_rate_avail": 0,
+    "full_ppr:naive_pace": 8,
+    "full_ppr:nihilist_zero": 0,
+    "full_ppr:oracle_eb_avail": 6,
+    "full_ppr:oracle_eb_rate": 0,
+    "full_ppr:oracle_eb_rate_avail": 6,
+    "full_ppr:prior_prorated": 0,
+    "half_ppr:eb_avail": 0,
+    "half_ppr:eb_permuted": 0,
+    "half_ppr:eb_rate": 0,
+    "half_ppr:eb_rate_avail": 0,
+    "half_ppr:frozen_full": 0,
+    "half_ppr:last3_pace": 6,
+    "half_ppr:matched_n_eb_avail": 0,
+    "half_ppr:matched_n_eb_rate": 0,
+    "half_ppr:matched_n_eb_rate_avail": 0,
+    "half_ppr:naive_pace": 8,
+    "half_ppr:nihilist_zero": 0,
+    "half_ppr:oracle_eb_avail": 6,
+    "half_ppr:oracle_eb_rate": 0,
+    "half_ppr:oracle_eb_rate_avail": 6,
+    "half_ppr:prior_prorated": 0,
+    "standard:eb_avail": 0,
+    "standard:eb_permuted": 0,
+    "standard:eb_rate": 0,
+    "standard:eb_rate_avail": 0,
+    "standard:frozen_full": 0,
+    "standard:last3_pace": 6,
+    "standard:matched_n_eb_avail": 0,
+    "standard:matched_n_eb_rate": 0,
+    "standard:matched_n_eb_rate_avail": 0,
+    "standard:naive_pace": 8,
+    "standard:nihilist_zero": 0,
+    "standard:oracle_eb_avail": 6,
+    "standard:oracle_eb_rate": 0,
+    "standard:oracle_eb_rate_avail": 6,
+    "standard:prior_prorated": 0
+   }
+  },
+  "strata": {
+   "k1": {
+    "mean_lift": 0.6120075914370297,
+    "rows": 4748
+   },
+   "k10": {
+    "mean_lift": 1.0408263018155686,
+    "rows": 4748
+   },
+   "k11": {
+    "mean_lift": 0.921274616677796,
+    "rows": 4748
+   },
+   "k12": {
+    "mean_lift": 0.7527160862564827,
+    "rows": 4748
+   },
+   "k2": {
+    "mean_lift": 0.9319656262160988,
+    "rows": 4748
+   },
+   "k3": {
+    "mean_lift": 1.070077965427307,
+    "rows": 4748
+   },
+   "k4": {
+    "mean_lift": 1.2334715715246587,
+    "rows": 4748
+   },
+   "k5": {
+    "mean_lift": 1.2627974162176878,
+    "rows": 4748
+   },
+   "k6": {
+    "mean_lift": 1.3693564418799313,
+    "rows": 4748
+   },
+   "k7": {
+    "mean_lift": 1.3813057686834838,
+    "rows": 4748
+   },
+   "k8": {
+    "mean_lift": 1.3376172224648453,
+    "rows": 4748
+   },
+   "k9": {
+    "mean_lift": 1.2133075164459344,
+    "rows": 4748
+   },
+   "rookie": {
+    "mean_lift": 3.265369490433776,
+    "rows": 5664
+   },
+   "veteran": {
+    "mean_lift": 0.854198498439067,
+    "rows": 51312
+   }
+  },
+  "waiver": {
+   "reason": "only 1 position(s) ship the value",
+   "shipped_positions": [
+    "RB"
+   ],
+   "state": "INACTIVE"
+  },
+  "winner": "eb_rate_avail"
+ }
+}

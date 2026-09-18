@@ -80,6 +80,14 @@ NFL_REALIZED_PUBLISH_TIMEOUT_SECONDS = int(
     os.environ.get("NFL_REALIZED_PUBLISH_TIMEOUT_SECONDS", "900"))
 
 
+# NF-ROS1b node 4 — the certified rest-of-season publish. Measured at ~5 s on a laptop (lake reads
+# plus a closed-form update over ~870 rows); this is headroom, not a fit. INC-32: finite.
+NFL_ROS_PUBLISH_TIMEOUT_SECONDS = int(os.environ.get("NFL_ROS_PUBLISH_TIMEOUT_SECONDS", "900"))
+
+#: Mirrors `run_nf_ros1_publish.EXIT_NO_FINAL_WEEK` (pinned equal by the NF-ROS1b guards).
+EXIT_ROS_NO_FINAL_WEEK = 3
+
+
 def _page(context, title: str, body: str, *, severity: str, dedup_key: str) -> None:
     """Page, and mirror it into the step log. Distinct `dedup_key` per failure mode so one noisy
     leg cannot occupy another's 1-hour rate-limit slot (INC-39)."""
@@ -499,6 +507,99 @@ def _verify_published(context, started: datetime) -> None:
                      man.get("generated_at"))
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def nfl_ros_value_publish_op(context):
+    """NF-ROS1b node 4 — publish the CERTIFIED rest-of-season value (RB only today).
+
+    ⭐ WHY THIS JOB, NOT A SCHEDULE OF ITS OWN (the NF-WK-RC1 reasoning). It reads the
+    `stats_player_week` that `nfl_weekly_stats_ingest_op` refreshes, so it runs downstream of that
+    ingest IN THE SAME RUN (INC-25) rather than on a clock racing it, and it inherits this job's
+    self-starting, heartbeat-checked schedule instead of adding an instigator that could silently
+    revert to STOPPED.
+
+    ⭐ DEPLOY-HELD BY A FLAG, READ HERE AT RUN TIME. `NF_ROS_PUBLISH_ENABLED` unset ⇒ a loud skip and
+    nothing written; `nfl_ros_freshness_op` reports that state daily (WARN) from the artifact side.
+
+    ⚖️ TIER — pages and RAISES on a failed publish (never a green run that shipped nothing,
+    NF-FRESH1), and VERIFIES what it served by reading the manifest back. Exit 3 is the builder's
+    clean "no REG week is final yet" skip, which writes nothing and is not a failure.
+    """
+    from betting_ml.monitoring import nfl_ros_freshness as RF
+    from betting_ml.utils.bounded_subprocess import run_bounded
+
+    if not RF.publish_enabled():
+        context.log.warning(
+            "[nfl ros] %s is not '1' — the certified ROS publish is ARMED BUT NOT FIRING "
+            "(NF-ROS1b deploy-held state). Nothing was built or written. To enable: set it in "
+            "services/dagster/aws/.env and redeploy after the post-merge box run.",
+            RF.PUBLISH_ENABLED_FLAG)
+        return
+
+    season = int(os.environ.get("NFL_FANTASY_SEASON", "2026"))
+    started = datetime.now(timezone.utc)
+    cmd = [sys.executable, "-m", f"{_FANTASY}.run_nf_ros1_publish", "--season", str(season),
+           "--s3-bucket", NFL_WEEKLY_CACHE_BUCKET, "--board-bucket", NFL_WEEKLY_CACHE_BUCKET,
+           "--publish"]
+    context.log.info("[nfl ros] %s", " ".join(cmd))
+    try:
+        proc = run_bounded(cmd, cwd=str(_APP_DIR), env={**os.environ},
+                           timeout=NFL_ROS_PUBLISH_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        proc = subprocess.CompletedProcess(cmd, returncode=124, stdout=(exc.stdout or ""),
+                                           stderr="timeout")
+    for line in ((proc.stdout or "") + (proc.stderr or "")).splitlines()[-40:]:
+        context.log.info("[ros] %s", line)
+    context.log.info("[METRIC] nfl_ros_publish_exit=%d", proc.returncode)
+
+    if proc.returncode == EXIT_ROS_NO_FINAL_WEEK:
+        context.log.info("[nfl ros] no REG week of %s is final yet — nothing to update", season)
+        return
+    if proc.returncode != 0:
+        _page(context, "NFL ROS value: the publish failed",
+              f"`run_nf_ros1_publish` exited {proc.returncode}. The previously served ROS value "
+              f"(if any) keeps serving; consumers keep their stated absences.\n\n"
+              f"tail:\n{((proc.stdout or '') + (proc.stderr or ''))[-1500:]}",
+              severity="CRITICAL", dedup_key="nfl_ros_publish:failed")
+        raise Exception(f"NFL ROS publish failed (exit {proc.returncode})")
+
+    import hashlib
+
+    import boto3
+
+    from app.backend.models import nfl_ros as RC
+
+    fatal = []
+    try:
+        s3 = boto3.client("s3", region_name="us-east-1")
+        cur = json.loads(s3.get_object(Bucket=NFL_WEEKLY_CACHE_BUCKET,
+                                       Key=f"fantasy/nfl/{RC.ros_current_key(season)}")["Body"].read())
+        man = json.loads(s3.get_object(Bucket=NFL_WEEKLY_CACHE_BUCKET,
+                                       Key=f"fantasy/nfl/{cur['manifest_key']}")["Body"].read())
+        body = s3.get_object(Bucket=NFL_WEEKLY_CACHE_BUCKET,
+                             Key=f"fantasy/nfl/{cur['players_key']}")["Body"].read()
+        gen = RF._parse(man.get("generated_at"))
+        if gen is None or gen < started - timedelta(seconds=1):
+            fatal.append(f"manifest generated_at={man.get('generated_at')} predates this run")
+        if hashlib.sha256(body).hexdigest() != man.get("players_sha256"):
+            fatal.append("served players bytes do not match manifest.players_sha256")
+        certified = sum(1 for p in json.loads(body)["players"] if p.get("certified"))
+        if man.get("certified_for_this_week") and not certified:
+            fatal.append("a certified week was published with ZERO certified rows (the NF-K1 class)")
+        missing = RC.missing_declared_fields(man, RC.NflRosManifest, where="manifest")
+        if missing:
+            fatal.append(f"served manifest is short of its contract: {missing[:8]}")
+        context.log.info("[METRIC] nfl_ros_through_week=%s certified_rows=%d",
+                         man.get("throughWeek"), certified)
+    except Exception as exc:  # noqa: BLE001
+        fatal.append(f"could not read back the served artifact ({type(exc).__name__}: {exc})")
+    context.log.info("[METRIC] nfl_ros_verify_fatal_count=%d", len(fatal))
+    if fatal:
+        _page(context, "NFL ROS value: the served artifact failed verification",
+              "\n".join(f"- {f}" for f in fatal),
+              severity="CRITICAL", dedup_key="nfl_ros_publish:verify_failed")
+        raise Exception("NFL ROS verification failed: " + "; ".join(fatal))
+
+
 @job(executor_def=in_process_executor)
 def sports_nfl_weekly_serving_job():
     """Refresh the training feeds, judge them, then rebuild + publish + verify the weekly
@@ -522,6 +623,10 @@ def sports_nfl_weekly_serving_job():
     """
     landed = nfl_weekly_stats_ingest_op()
     nfl_weekly_serving_op(start=nfl_weekly_stats_freshness_op(start=landed))
+    # NF-ROS1b node 4 — a third INDEPENDENT branch off the same ingest (the RC1 reasoning): it reads
+    # the `stats_player_week` this run just refreshed, and neither it nor the build can withhold the
+    # other. Deploy-held by NF_ROS_PUBLISH_ENABLED, checked inside the op at run time.
+    nfl_ros_value_publish_op(start=landed)
     # NF-WK-RC1 ① — an INDEPENDENT branch off the same ingest: it must not be withheld by a
     # refused projection build, and must not withhold one. See the op's own docstring.
     nfl_realized_week_publish_op(start=landed)
@@ -627,6 +732,63 @@ def nfl_weekly_freshness_op(context):
         _page(context, f"NFL weekly projection is {verdict['verdict']}", verdict["detail"],
               severity=verdict["severity"],
               dedup_key=f"nfl_weekly_freshness:{verdict['verdict']}")
+
+
+@op(out=Out(None))
+def nfl_ros_freshness_op(context):
+    """NF-ROS1b — is the PUBLISHED ROS value advancing (and is the deploy-held flag still off)?
+
+    DEFINED HERE, INVOKED from `sports_nfl_sleeper_injuries_job` (a monitor hosted inside its own
+    subject cannot see its subject stop). ALERT-tier, never HALT. The policy is
+    `betting_ml.monitoring.nfl_ros_freshness`; this op only reads and pages."""
+    import boto3
+    from botocore.exceptions import ClientError
+
+    from app.backend.models import nfl_ros as RC
+    from betting_ml.monitoring import nfl_ros_freshness as RF
+
+    season = int(os.environ.get("NFL_FANTASY_SEASON", "2026"))
+    expected, commit, lake_error = None, None, None
+    try:
+        from quant_sports_intel_models.football.nfl.fantasy import run_nf_ros1_publish as PUB
+
+        real, sched, _, _ = PUB.lake_reads(season)
+        expected = PUB.final_through_week(real, sched)
+        from deltalake import DeltaTable
+
+        from quant_sports_intel_models.football.nfl.ingest import s3io
+        hist = DeltaTable(s3io.table_uri("nfl", "stats_player_week"),
+                          storage_options=s3io.storage_options()).history(1)
+        if hist and hist[0].get("timestamp") is not None:
+            commit = datetime.fromtimestamp(hist[0]["timestamp"] / 1000, tz=timezone.utc)
+    except Exception as exc:  # noqa: BLE001
+        lake_error = f"{type(exc).__name__}: {exc}"
+
+    blob = None
+    read_error = None
+    s3 = boto3.client("s3", region_name="us-east-1")
+    try:
+        cur = json.loads(s3.get_object(Bucket=NFL_WEEKLY_CACHE_BUCKET,
+                                       Key=f"fantasy/nfl/{RC.ros_current_key(season)}")["Body"].read())
+        blob = json.loads(s3.get_object(Bucket=NFL_WEEKLY_CACHE_BUCKET,
+                                        Key=f"fantasy/nfl/{cur['manifest_key']}")["Body"].read())
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code not in ("NoSuchKey", "404"):
+            read_error = f"{code}: {exc}"
+    except Exception as exc:  # noqa: BLE001
+        read_error = f"{type(exc).__name__}: {exc}"
+
+    reading = (RF.RosReading(season=season, error=read_error) if read_error
+               else RF.reading_from_manifest(season, blob))
+    verdict = RF.classify(reading, enabled=RF.publish_enabled(), expected_through_week=expected,
+                          lake_commit=commit, lake_error=lake_error)
+    context.log.info("[METRIC] nfl_ros_freshness=%s lag_hours=%s", verdict["verdict"],
+                     verdict["lag_hours"])
+    context.log.info("[nfl ros freshness] %s", verdict["detail"])
+    if RF.is_problem(verdict):
+        _page(context, f"NFL ROS value is {verdict['verdict']}", verdict["detail"],
+              severity=verdict["severity"], dedup_key=f"nfl_ros_freshness:{verdict['verdict']}")
 
 
 @job(executor_def=in_process_executor)

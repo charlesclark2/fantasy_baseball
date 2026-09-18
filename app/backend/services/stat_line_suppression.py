@@ -74,7 +74,8 @@ multiply. Deriving from it rather than hand-listing keeps the NF-EPIC 1 safety d
 scorable stat is withheld on a violating row automatically, on the same publish that introduces it,
 with no code change here.
 
-⚠️ `PAID_SCORING_FIELDS` (`fpStd`/`fpHalf`) is deliberately NOT included, and neither is `fpPpr` or
+⚠️ `PAID_SCORING_FIELDS` (the alternative-scoring totals, `fpStd`/`fpHalf` among them) is
+deliberately NOT included, and neither is `fpPpr` or
 `g`. The PM's ruling is explicit — "points + expected games still render". A drafter needs the
 number and the availability figure; what they must not be shown is a per-game rate no human has
 ever posted.

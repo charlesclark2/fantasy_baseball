@@ -39,12 +39,21 @@ league weight) rather than listed by hand. That direction is the whole safety pr
 ⚠️ So the rule for a future field is mechanical: **if it goes in `STAT_FIELD`, it is paid.** If it
 is a display value with no scoring weight behind it (`g`, `adp`, `contrib`), it stays public.
 
+⭐ AND THE SAME DIRECTION NOW COVERS THE PER-SCORING TOTALS (PM ack, 2026-09-18). `PAID_SCORING_FIELDS`
+used to be the hand list `{"fpStd", "fpHalf"}` — the one place this module still ran the way it
+tells you not to — and it failed on its first new surface: NF-ROS1b published `rosPtsStd/Half` (and
+their band edges) and they came out FREE, because nobody had remembered to add six names. It is now
+`SCORED_FIELD_STEMS × PAID_SCORING_PRESETS`, so a NEW surface prices its formats by declaring one
+stem and cannot price the same value differently in two places.
+
 ───────────────────────────────────────────────────────────────────────────────────────────────────
 WHAT STAYS PUBLIC, AND WHY EACH ONE
 ───────────────────────────────────────────────────────────────────────────────────────────────────
 
   fpPpr, fpP10, fpP90, fpSd   the free wedge — our number and its 80% band. `fpPpr` is the ONE
                               scoring the free tier shows, and the band is what makes it honest.
+  rosPtsPpr, rosP10Ppr,       the same wedge for NF-ROS1b's rest-of-season value: the PPR number
+  rosP90Ppr                   and its band, never the number without the band.
   contrib                     ⭐ PM ruling (Q3, 2026-08-10): FREE. Feature attribution is
                               show-our-work transparency and on-brand for honest analytics. It is
                               an EXPLANATION of the free number, not a second number.
@@ -135,10 +144,35 @@ STAT_FIELD: dict[str, str] = {
 #: true. A new member therefore needs a ruling, not an edit.
 REALIZED_ONLY_KEYS: frozenset[str] = frozenset({"fum"})
 
-#: The two reference scorings the player page padlocks. Paid because they are derivable from the
-#: stat line (see the header) — they cannot be defended separately, and must not be shipped
-#: separately either.
-PAID_SCORING_FIELDS: frozenset[str] = frozenset({"fpStd", "fpHalf"})
+#: ⭐ THE SECOND DERIVATION (PM ack, 2026-09-18 — NF-ROS1b). The per-scoring values were the one
+#: half of this module still spelled as a HAND LIST of two field names (`{"fpStd", "fpHalf"}`), and
+#: it failed exactly the way the header says a hand list fails: NF-ROS1b published the same two
+#: scorings for the rest-of-season value and they came out FREE, so a user would have paid for
+#: Std/Half on the season board and got them free one tab over. The ruling is the existing freemium
+#: policy applied, not a new boundary — ONE free format (the PPR number and its band), every
+#: alternative preset paid, on every surface — so it is expressed as a rule rather than a list.
+FREE_SCORING_PRESET = "full_ppr"
+PAID_SCORING_PRESETS: tuple[str, ...] = ("standard", "half_ppr")
+
+#: preset → the suffix a published field name uses for it. The one owner of that spelling;
+#: `app/backend/models/nfl_ros.py` imports it rather than keeping a second copy.
+SCORING_SUFFIX: dict[str, str] = {"standard": "Std", "half_ppr": "Half", "full_ppr": "Ppr"}
+
+#: Field STEMS that carry one value per scoring preset. Pricing a new per-scoring surface is one
+#: stem here, and a stem cannot be priced inconsistently ACROSS formats — which is the defect the
+#: hand list produced. A stem's FREE-preset spelling (`fpPpr`, `rosPtsPpr`, …) is never paid.
+SCORED_FIELD_STEMS: tuple[str, ...] = (
+    "fp",                          # the season board's scoring total
+    "rosPts", "rosP10", "rosP90",  # NF-ROS1b's rest-of-season value and its 80% band
+)
+
+#: The paid per-scoring values: every stem × every PAID preset. `fpStd`/`fpHalf` are additionally
+#: un-defendable on their own — they are ARITHMETIC on the stat line (see the header).
+PAID_SCORING_FIELDS: frozenset[str] = frozenset(
+    f"{stem}{SCORING_SUFFIX[preset]}"
+    for stem in SCORED_FIELD_STEMS
+    for preset in PAID_SCORING_PRESETS
+)
 
 #: ⭐ THE PAID SET, DERIVED. Every scorable stat field, plus the two derived totals.
 PAID_PLAYER_FIELDS: frozenset[str] = frozenset(STAT_FIELD.values()) | PAID_SCORING_FIELDS
